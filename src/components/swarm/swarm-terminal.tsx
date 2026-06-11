@@ -2,29 +2,16 @@
 
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import type { Terminal } from 'xterm'
-import type * as XtermModule from 'xterm'
 import type { FitAddon } from 'xterm-addon-fit'
-import type * as FitAddonModule from 'xterm-addon-fit'
-import type * as WebLinksAddonModule from 'xterm-addon-web-links'
+import type { XtermClientCtors } from '@/lib/xterm-client'
 import { cn } from '@/lib/utils'
 
-let xtermLoaded = false
-let TerminalCtor: typeof XtermModule.Terminal
-let FitAddonCtor: typeof FitAddonModule.FitAddon
-let WebLinksAddonCtor: typeof WebLinksAddonModule.WebLinksAddon
+let xtermCtors: XtermClientCtors | null = null
 
 async function ensureXterm() {
-  if (xtermLoaded) return
-  const [xtermMod, fitMod, linksMod] = await Promise.all([
-    import('xterm'),
-    import('xterm-addon-fit'),
-    import('xterm-addon-web-links'),
-  ])
-  await import('xterm/css/xterm.css')
-  TerminalCtor = xtermMod.Terminal
-  FitAddonCtor = fitMod.FitAddon
-  WebLinksAddonCtor = linksMod.WebLinksAddon
-  xtermLoaded = true
+  if (xtermCtors) return
+  const { loadXtermClient } = await import('@/lib/xterm-client')
+  xtermCtors = await loadXtermClient()
 }
 
 type SwarmTerminalProps = {
@@ -137,9 +124,10 @@ export const SwarmTerminal = memo(function SwarmTerminal({
     async function bootstrap() {
       if (!containerRef.current) return
       await ensureXterm()
-      if (cancelled || !containerRef.current) return
+      if (cancelled || !containerRef.current || !xtermCtors) return
 
-      const terminal = new TerminalCtor({
+      const { Terminal, FitAddon, WebLinksAddon } = xtermCtors
+      const terminal = new Terminal({
         cursorBlink: true,
         cursorStyle: 'bar',
         fontFamily: 'JetBrains Mono, Menlo, monospace',
@@ -155,8 +143,8 @@ export const SwarmTerminal = memo(function SwarmTerminal({
         },
       })
       terminalRef.current = terminal
-      const fit = new FitAddonCtor()
-      const links = new WebLinksAddonCtor()
+      const fit = new FitAddon()
+      const links = new WebLinksAddon()
       fitRef.current = fit
       terminal.loadAddon(fit)
       terminal.loadAddon(links)

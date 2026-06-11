@@ -55,6 +55,100 @@ workers:
   mcpServers:
   - gbrain
   wrapper: orchestrator:plan
+- id: architect
+  name: Architect
+  role: System Architecture & Technical Specification Agent
+  specialty: architecture design, data modeling, interface definition, technology selection, coder review
+  model: GPT-5.5
+  mission: Translate strategy into architecture, data models, interfaces, and technology choices. Review coder implementations for architectural consistency.
+  profile: architect
+  modes:
+  - design
+  - review
+  tools:
+  - terminal
+  - file
+  - web
+  - session_search
+  - skills
+  - todo
+  - vision
+  skills:
+  - designer-core
+  - gstack-for-hermes
+  - architecture-diagram
+  - writing-plans
+  - systematic-debugging
+  capabilities:
+  - architecture-design
+  - data-modeling
+  - interface-definition
+  - technology-selection
+  - coder-review
+  preferredTaskTypes:
+  - architecture
+  - design
+  - review
+  - specification
+  - data-modeling
+  greenlightRequiredFor:
+  - architecture-change
+  - technology-switch
+  - breaking-interface-change
+  maxConcurrentTasks: 1
+  acceptsBroadcast: true
+  plugins: []
+  pluginToolsets: []
+  mcpServers: []
+  wrapper: architect:design
+- id: developer
+  name: Developer
+  role: Implementation & Testing Agent
+  specialty: code implementation, testing, build verification, TDD workflow
+  model: GPT-5.5
+  mission: "Implement features based on design specifications, write tests, verify builds. Follow TDD: RED -> GREEN -> REFACTOR."
+  profile: developer
+  modes:
+  - implement
+  tools:
+  - terminal
+  - file
+  - web
+  - session_search
+  - skills
+  - todo
+  skills:
+  - coder-core
+  - gstack-for-hermes
+  - test-driven-development
+  - systematic-debugging
+  - github-pr-workflow
+  - requesting-code-review
+  - codebase-inspection
+  capabilities:
+  - implementation
+  - testing
+  - build-verification
+  - tdd
+  - code-review-request
+  preferredTaskTypes:
+  - implementation
+  - bugfix
+  - feature
+  - refactor
+  - testing
+  greenlightRequiredFor:
+  - merge
+  - push
+  - destructive
+  - external-write
+  - production-deploy
+  maxConcurrentTasks: 1
+  acceptsBroadcast: true
+  plugins: []
+  pluginToolsets: []
+  mcpServers: []
+  wrapper: developer:implement
 - id: km-agent
   name: KM Agent
   role: RAZSOC / GBrain Knowledge Steward

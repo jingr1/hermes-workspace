@@ -477,6 +477,11 @@ const config = defineConfig(({ mode, command }) => {
         'playwright-core',
         'playwright-extra',
         'puppeteer-extra-plugin-stealth',
+        // xterm is pre-minified CJS; pre-bundling often 504/timeouts and breaks lazy chunks.
+        'xterm',
+        'xterm-addon-fit',
+        'xterm-addon-search',
+        'xterm-addon-web-links',
       ],
     },
     server: {

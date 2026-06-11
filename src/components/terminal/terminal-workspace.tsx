@@ -11,10 +11,8 @@ import {
   SidebarLeft01Icon,
 } from '@hugeicons/core-free-icons'
 import type { FitAddon } from 'xterm-addon-fit'
-import type * as FitAddonModule from 'xterm-addon-fit'
 import type { Terminal } from 'xterm'
-import type * as XtermModule from 'xterm'
-import type * as WebLinksAddonModule from 'xterm-addon-web-links'
+import type { XtermClientCtors } from '@/lib/xterm-client'
 import type { DebugAnalysis } from '@/components/terminal/debug-panel'
 import type { TerminalTab } from '@/stores/terminal-panel-store'
 import { DebugPanel } from '@/components/terminal/debug-panel'
@@ -23,24 +21,12 @@ import { cn } from '@/lib/utils'
 import { useTerminalPanelStore } from '@/stores/terminal-panel-store'
 
 // Dynamic imports to avoid SSR crash (xterm uses `self` which doesn't exist on server)
-let xtermLoaded = false
-let TerminalCtor: typeof XtermModule.Terminal
-let FitAddonCtor: typeof FitAddonModule.FitAddon
-let WebLinksAddonCtor: typeof WebLinksAddonModule.WebLinksAddon
+let xtermCtors: XtermClientCtors | null = null
 
 async function ensureXterm() {
-  if (xtermLoaded) return
-  const [xtermMod, fitMod, linksMod] = await Promise.all([
-    import('xterm'),
-    import('xterm-addon-fit'),
-    import('xterm-addon-web-links'),
-  ])
-  // Load CSS on client only
-  await import('xterm/css/xterm.css')
-  TerminalCtor = xtermMod.Terminal
-  FitAddonCtor = fitMod.FitAddon
-  WebLinksAddonCtor = linksMod.WebLinksAddon
-  xtermLoaded = true
+  if (xtermCtors) return
+  const { loadXtermClient } = await import('@/lib/xterm-client')
+  xtermCtors = await loadXtermClient()
 }
 
 type ContextMenuState = {
@@ -524,7 +510,7 @@ export function TerminalWorkspace({
       if (!container) return
 
       // Guard: xterm must be loaded first
-      if (!xtermLoaded) {
+      if (!xtermCtors) {
         void ensureXterm().then(() => {
           // Re-trigger after load
           if (
@@ -537,8 +523,9 @@ export function TerminalWorkspace({
         return
       }
 
+      const { Terminal, FitAddon, WebLinksAddon } = xtermCtors
       const isMobile = window.matchMedia('(max-width: 767px)').matches
-      const terminal = new TerminalCtor({
+      const terminal = new Terminal({
         cursorBlink: true,
         fontSize: isMobile ? 11 : 13,
         fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
@@ -549,8 +536,8 @@ export function TerminalWorkspace({
           selectionBackground: '#2b2b2b',
         },
       })
-      const fitAddon = new FitAddonCtor()
-      const webLinks = new WebLinksAddonCtor()
+      const fitAddon = new FitAddon()
+      const webLinks = new WebLinksAddon()
       terminal.loadAddon(fitAddon)
       terminal.loadAddon(webLinks)
       terminal.open(container)
