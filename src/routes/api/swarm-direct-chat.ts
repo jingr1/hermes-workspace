@@ -1,18 +1,16 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { execFile } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { isAuthenticated } from '../../server/auth-middleware'
 import { readWorkerMessages, type SwarmChatMessage } from '../../server/swarm-chat-reader'
-import { rosterByWorkerId } from '../../server/swarm-roster'
+import { ensureLiveTmuxSession } from './swarm-dispatch'
 
 type DirectChatRequest = {
   workerId?: unknown
   prompt?: unknown
   limit?: unknown
-  timeoutMs?: unknown
 }
 
 type DirectChatResponse = {
@@ -30,15 +28,6 @@ type DirectChatResponse = {
 
 const MAX_OUTPUT_CHARS = 200_000
 const DEFAULT_LIMIT = 30
-const DEFAULT_TIMEOUT_MS = 90_000
-const MAX_TIMEOUT_MS = 180_000
-
-const TMUX_BIN_CANDIDATES = [
-  join(homedir(), '.local', 'bin', 'tmux'),
-  '/opt/homebrew/bin/tmux',
-  '/usr/local/bin/tmux',
-  'tmux',
-]
 
 function validateWorkerId(workerId: string): boolean {
   return /^[a-z0-9][a-z0-9_-]{0,63}$/i.test(workerId)
@@ -58,44 +47,6 @@ function getProfilesDir(): string {
 
 function getProfilePath(workerId: string): string {
   return join(getProfilesDir(), workerId)
-}
-
-function getWrapperPath(workerId: string): string {
-  const worker = rosterByWorkerId([workerId]).get(workerId)
-  const wrapperName = worker?.wrapper?.trim() || workerId
-  return join(homedir(), '.local', 'bin', wrapperName)
-}
-
-function resolveWorkerCwd(workerId: string): string {
-  const wrapperPath = getWrapperPath(workerId)
-  if (existsSync(wrapperPath)) {
-    try {
-      const text = readFileSync(wrapperPath, 'utf8')
-      const m = text.match(/cd\s+([^\n]+?)\s+\|\|\s+exit\s+1/)
-      if (m?.[1]) {
-        const raw = m[1].trim().replace(/^['"]|['"]$/g, '')
-        if (raw && existsSync(raw)) return raw
-      }
-    } catch {
-      /* noop */
-    }
-  }
-  return homedir()
-}
-
-function resolveTmuxBin(): string | null {
-  for (const candidate of TMUX_BIN_CANDIDATES) {
-    if (candidate.includes('/')) {
-      if (existsSync(candidate)) return candidate
-    } else {
-      return candidate
-    }
-  }
-  return null
-}
-
-function sessionNameFor(workerId: string): string {
-  return `swarm-${workerId}`
 }
 
 function sleep(ms: number): Promise<void> {
@@ -124,39 +75,6 @@ function execFileAsync(
   })
 }
 
-function tmuxHasSession(tmuxBin: string, name: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    execFile(tmuxBin, ['has-session', '-t', name], (error) => {
-      resolve(!error)
-    })
-  })
-}
-
-async function ensureLiveTmuxSession(workerId: string): Promise<{ ok: true; tmuxBin: string; sessionName: string } | { ok: false; error: string }> {
-  const tmuxBin = resolveTmuxBin()
-  if (!tmuxBin) return { ok: false, error: 'tmux not installed' }
-
-  const sessionName = sessionNameFor(workerId)
-  if (await tmuxHasSession(tmuxBin, sessionName)) {
-    return { ok: true, tmuxBin, sessionName }
-  }
-
-  const profilePath = getProfilePath(workerId)
-  const cwd = resolveWorkerCwd(workerId)
-  const started = await execFileAsync(tmuxBin, [
-    'new-session',
-    '-d',
-    '-s',
-    sessionName,
-    '-c',
-    cwd,
-    `HERMES_HOME='${profilePath.replace(/'/g, `'\\''`)}' exec hermes chat --continue`,
-  ])
-  if (!started.ok) return { ok: false, error: started.error }
-  await sleep(1200)
-  return { ok: true, tmuxBin, sessionName }
-}
-
 async function sendPromptToLiveSession(workerId: string, prompt: string): Promise<{ ok: true; delivery: 'tmux' } | { ok: false; error: string }> {
   const ensured = await ensureLiveTmuxSession(workerId)
   if (!ensured.ok) return { ok: false, error: ensured.error }
@@ -180,65 +98,6 @@ async function sendPromptToLiveSession(workerId: string, prompt: string): Promis
   return { ok: true, delivery: 'tmux' }
 }
 
-function messagesAfterBaseline(messages: Array<SwarmChatMessage>, baselineLastId: string | null) {
-  const baselineIndex = baselineLastId
-    ? messages.findIndex((message) => message.id === baselineLastId)
-    : -1
-  return baselineIndex >= 0 ? messages.slice(baselineIndex + 1) : messages
-}
-
-function promptMatched(content: string, prompt: string): boolean {
-  const trimmedContent = content.trim()
-  const trimmedPrompt = prompt.trim()
-  return trimmedContent === trimmedPrompt || trimmedContent.includes(trimmedPrompt) || trimmedPrompt.includes(trimmedContent)
-}
-
-async function waitForReply(workerId: string, baselineLastId: string | null, prompt: string, limit: number, timeoutMs: number): Promise<DirectChatResponse> {
-  const startedAt = Date.now()
-  const profilePath = getProfilePath(workerId)
-
-  while (Date.now() - startedAt < timeoutMs) {
-    const chat = readWorkerMessages(profilePath, limit)
-    const response: DirectChatResponse = {
-      ok: chat.ok,
-      workerId,
-      delivered: true,
-      delivery: 'tmux',
-      error: chat.ok ? null : (chat.error ?? 'Failed to read worker messages'),
-      sessionId: chat.sessionId,
-      sessionTitle: chat.sessionTitle,
-      messages: chat.messages,
-      source: chat.ok ? 'state.db' : 'unavailable',
-      fetchedAt: Date.now(),
-    }
-    if (chat.ok) {
-      const newMessages = messagesAfterBaseline(chat.messages, baselineLastId)
-      const userEchoIndex = newMessages.findIndex((message) =>
-        message.role === 'user' && promptMatched(message.content, prompt),
-      )
-      const hasAssistantReply = newMessages.some((message, index) =>
-        message.role === 'assistant' && (userEchoIndex < 0 || index > userEchoIndex),
-      )
-      if (hasAssistantReply) return response
-    }
-    await sleep(1000)
-  }
-
-  const finalChat = readWorkerMessages(profilePath, limit)
-  return {
-    ok: finalChat.ok,
-    workerId,
-    delivered: true,
-    delivery: 'tmux',
-    error: finalChat.ok ? null : (finalChat.error ?? 'Timed out waiting for worker reply'),
-    sessionId: finalChat.sessionId,
-    sessionTitle: finalChat.sessionTitle,
-    messages: finalChat.messages,
-    source: finalChat.ok ? 'state.db' : 'unavailable',
-    fetchedAt: Date.now(),
-  }
-}
-
 export const Route = createFileRoute('/api/swarm-direct-chat')({
   server: {
     handlers: {
@@ -257,7 +116,6 @@ export const Route = createFileRoute('/api/swarm-direct-chat')({
         const workerId = typeof body.workerId === 'string' ? body.workerId.trim() : ''
         const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : ''
         const limit = typeof body.limit === 'number' && Number.isFinite(body.limit) ? Math.max(1, Math.min(100, Math.floor(body.limit))) : DEFAULT_LIMIT
-        const timeoutMs = typeof body.timeoutMs === 'number' && Number.isFinite(body.timeoutMs) ? Math.max(1_000, Math.min(MAX_TIMEOUT_MS, Math.floor(body.timeoutMs))) : DEFAULT_TIMEOUT_MS
 
         if (!workerId || !validateWorkerId(workerId)) {
           return json({ error: 'Invalid workerId' }, { status: 400 })
@@ -268,7 +126,6 @@ export const Route = createFileRoute('/api/swarm-direct-chat')({
 
         const profilePath = getProfilePath(workerId)
         const baselineChat = readWorkerMessages(profilePath, limit)
-        const baselineLastId = baselineChat.messages.length ? baselineChat.messages[baselineChat.messages.length - 1].id : null
 
         const delivered = await sendPromptToLiveSession(workerId, prompt)
         if (!delivered.ok) {
@@ -285,8 +142,22 @@ export const Route = createFileRoute('/api/swarm-direct-chat')({
           } satisfies DirectChatResponse, { status: 500 })
         }
 
-        const reply = await waitForReply(workerId, baselineLastId, prompt, limit, timeoutMs)
-        return json(reply)
+        // Return immediately after tmux delivery. Swarm2LiveChat polls
+        // /api/swarm-chat for replies — blocking here for up to 120s tripped the
+        // dev server's 15s socket timeout and surfaced as HTTP 502.
+        const chat = readWorkerMessages(profilePath, limit)
+        return json({
+          ok: chat.ok,
+          workerId,
+          delivered: true,
+          delivery: 'tmux',
+          error: chat.ok ? null : (chat.error ?? 'Failed to read worker messages'),
+          sessionId: chat.sessionId,
+          sessionTitle: chat.sessionTitle,
+          messages: chat.messages,
+          source: chat.ok ? 'state.db' : 'unavailable',
+          fetchedAt: Date.now(),
+        } satisfies DirectChatResponse)
       },
     },
   },

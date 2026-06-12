@@ -803,12 +803,14 @@ const config = defineConfig(({ mode, command }) => {
             if (!socket) { next(); return }
             const method = req.method?.toUpperCase() ?? 'GET'
             const path = req.url?.split('?')[0] ?? ''
-            // SSE routes need no timeout; regular API routes get 15s.
-            const isSSE =
+            // SSE and long-running swarm routes need no socket timeout.
+            const isLongRunning =
               path.startsWith('/api/sse') ||
               path.startsWith('/sse') ||
-              path.startsWith('/api/live')
-            const timeout = isSSE ? 0 : 15_000
+              path.startsWith('/api/live') ||
+              path === '/api/swarm-direct-chat' ||
+              path === '/api/swarm-dispatch'
+            const timeout = isLongRunning ? 0 : 15_000
             socket.setTimeout(timeout)
             next()
           })

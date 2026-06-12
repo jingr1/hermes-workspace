@@ -54,7 +54,7 @@ async function sendDirectChat(
   const res = await fetch('/api/swarm-direct-chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ workerId, prompt, limit, timeoutMs: 120_000 }),
+    body: JSON.stringify({ workerId, prompt, limit }),
   })
   const data = (await res.json().catch(() => null)) as DirectChatResponse | { error?: string } | null
   if (!res.ok) {
