@@ -1,0 +1,64 @@
+name: cdc_research_design_implement
+version: 1
+entry: researcher
+description: |
+  Research → Design → Implement → Review loop for CDC + airspring modeling.
+  Matches the current Hermes Swarm roster: researcher, architect, developer, learning.
+  Orchestrator is reserved for human greenlight gates and is not part of the auto loop.
+
+transitions:
+  - from: researcher
+    "on":
+      verdict: DONE
+    to: architect
+    reason: "调研完成，进入设计"
+
+  - from: architect
+    "on":
+      verdict: DONE
+      review_outcome: approved
+    to: null
+    reason: "设计审查通过，任务完成"
+
+  - from: architect
+    "on":
+      verdict: DONE
+    to: developer
+    reason: "设计完成，进入实现"
+
+  - from: developer
+    "on":
+      verdict: DONE
+    to: architect
+    max_iterations: 3
+    reason: "实现完成，交回 architect 审查"
+
+  # Optional terminal documentation lane; enabled when the workflow ends and
+  # the user has configured `terminal_docs: true`.
+  - from: architect
+    "on":
+      verdict: DONE
+      review_outcome: approved
+    to: learning
+    terminal_docs: true
+    reason: "设计审查通过，进入复盘/文档化"
+
+  - from: learning
+    "on":
+      verdict: DONE
+    to: null
+    reason: "复盘/文档化完成"
+
+blockers:
+  escalate:
+    - architecture_decision
+    - missing_credential
+  retry:
+    - missing_dependency
+    - test_failure
+    - timeout
+
+settings:
+  max_iterations: 5
+  # If true, route approved architect output to learning before terminating.
+  terminal_docs: false

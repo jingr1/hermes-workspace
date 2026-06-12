@@ -5,7 +5,7 @@ Phase 1 (对比): LangGraph 图结构 vs Swarm 规则引擎
 Phase 2 (执行): LangGraph 图结构真实编排，替代 Swarm orchestrator-loop
 """
 
-from typing import TypedDict, Annotated
+from typing import TypedDict, Annotated, Any
 from dataclasses import dataclass, field
 import operator
 
@@ -45,6 +45,12 @@ class OrchestratorState(TypedDict, total=False):
     mission_id: str
     mission_goal: str
     swarm_api_url: str
+    thread_id: str
+
+    # --- roster / workflow ---
+    roster_snapshot: list[str]
+    workflow_spec: Any  # WorkflowSpec loaded from YAML
+    terminal_docs_enabled: bool
 
     # --- 收集 ---
     checkpoints: list[WorkerCheckpoint] | None
@@ -56,6 +62,11 @@ class OrchestratorState(TypedDict, total=False):
     langgraph_needs_human: bool
     langgraph_decision: DispatchDecision | None
     dispatched_workers: Annotated[list[str], operator.add]
+    active_worker: str | None
+    pending_assignments: list[dict]
+    pending_human_assignments: list[dict]
+    dispatch_counts: dict[str, int]
+    transition_counts: dict[str, int]
 
     # --- Swarm 规则引擎 (Phase 1 only) ---
     swarm_decision: DispatchDecision | None
@@ -73,6 +84,10 @@ class OrchestratorState(TypedDict, total=False):
     iteration: int
     max_iterations: int
     phase: str
+
+    # --- human gate ---
+    human_resume_action: str | None
+    human_resume_payload: dict | None
 
     # --- 日志 ---
     log_entries: Annotated[list[str], operator.add]
