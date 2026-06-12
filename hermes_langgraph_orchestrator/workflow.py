@@ -207,6 +207,14 @@ def route_by_workflow(
             reason=f"verdict {classification.verdict} → human gate",
         )
 
+    # IN_PROGRESS / SKIP: nothing to route yet, keep polling.
+    if classification.verdict == "SKIP":
+        return RouteDecision(
+            action="wait",
+            worker_id=classification.worker_id,
+            reason="worker still in progress",
+        )
+
     # DONE / terminal routing
     for transition in wf.transitions:
         if not _transition_matches(transition, classification):

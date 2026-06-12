@@ -22,6 +22,7 @@ from .nodes import (
     init_mission,
     ensure_sessions,
     dispatch_assignments,
+    wait_for_checkpoints,
     human_approval_node,
     finalize_mission,
 )
@@ -88,6 +89,7 @@ def build_phase2_graph(
     graph.add_node("init_error", _init_error_node)  # type: ignore[arg-type]
     graph.add_node("ensure_sessions", ensure_fn if ensure_fn else ensure_sessions)  # type: ignore[arg-type]
     graph.add_node("dispatch_assignments", dispatch_fn if dispatch_fn else dispatch_assignments)  # type: ignore[arg-type]
+    graph.add_node("wait_for_checkpoints", wait_for_checkpoints)  # type: ignore[arg-type]
     graph.add_node("classify", classify_fn if classify_fn else classify_workers)  # type: ignore[arg-type]
     graph.add_node("route", route_workflow)  # type: ignore[arg-type]
     graph.add_node("human_approval", human_approval_node)  # type: ignore[arg-type]
@@ -105,12 +107,15 @@ def build_phase2_graph(
         _route_after_init,
         {"init_error": "init_error", "continue": "dispatch_assignments"},
     )
-    graph.add_edge("dispatch_assignments", "classify")
+    graph.add_edge("dispatch_assignments", "wait_for_checkpoints")
+    graph.add_edge("wait_for_checkpoints", "classify")
     graph.add_edge("classify", "route")
 
     def route_after_route(state: OrchestratorState) -> str:
         if state.get("langgraph_needs_human", False):
             return "human_approval"
+        if state.get("awaiting_checkpoint", False):
+            return "wait_for_checkpoints"
         iteration = state.get("iteration", 0)
         max_iter = state.get("max_iterations", 5)
         if state.get("all_done", False) or iteration >= max_iter:

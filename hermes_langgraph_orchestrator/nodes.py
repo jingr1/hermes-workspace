@@ -338,6 +338,7 @@ async def route_workflow(state: OrchestratorState) -> dict:
     pending_human: list[dict] = []
     needs_human = False
     terminal = False
+    awaiting_checkpoint = False
     analysis_parts: list[str] = []
 
     for c in classifications:
@@ -348,6 +349,11 @@ async def route_workflow(state: OrchestratorState) -> dict:
             f"{c.worker_id}: {c.verdict} {outcome_str}{target_str} | "
             f"{decision.action} | {decision.reason}"
         )
+
+        if decision.action == "wait":
+            # Worker still in progress; wait_for_checkpoints will keep polling.
+            awaiting_checkpoint = True
+            continue
 
         if decision.action == "done":
             terminal = True
@@ -424,6 +430,7 @@ async def route_workflow(state: OrchestratorState) -> dict:
         "langgraph_assignments": assignments,
         "pending_human_assignments": pending_human,
         "langgraph_needs_human": needs_human,
+        "awaiting_checkpoint": awaiting_checkpoint,
         "dispatched_workers": list(dispatched),
         "dispatch_counts": dispatch_counts,
         "transition_counts": transition_counts,
@@ -716,16 +723,120 @@ async def dispatch_assignments(state: OrchestratorState) -> dict:
     checkpoints = _parse_dispatch_checkpoints(data)
     log(f"[dispatch] {len(checkpoints)} checkpoints")
     dispatch_counts = dict(state.get("dispatch_counts", {}) or {})
+    dispatched_workers = list(state.get("dispatched_workers", []) or [])
     for a in assignments:
         wid = a.get("worker_id")
         if wid:
             dispatch_counts[wid] = dispatch_counts.get(wid, 0) + 1
+            if wid not in dispatched_workers:
+                dispatched_workers.append(wid)
     return {
         "dispatch_results": data,
         "dispatch_error": None,
         "checkpoints": checkpoints,
         "dispatch_counts": dispatch_counts,
+        "dispatched_workers": dispatched_workers,
         "log_entries": [f"[dispatch] {len(assignments)} tasks, {len(checkpoints)} checkpoints"],
+    }
+
+
+async def wait_for_checkpoints(state: OrchestratorState) -> dict:
+    """Poll until all dispatched workers reach a terminal checkpoint.
+
+    Dispatch returns the first fresh checkpoint, which may be IN_PROGRESS.
+    This node polls Swarm missions until every tracked worker is DONE,
+    BLOCKED, NEEDS_INPUT, or HANDOFF (or max polls reached).
+    """
+    swarm_url = _swarm_api_url(state)
+    mission_id = state.get("mission_id", "")
+
+    # Workers we care about: current assignments + historically dispatched.
+    assignments = state.get("langgraph_assignments", []) or []
+    dispatched = set(state.get("dispatched_workers", []))
+    for a in assignments:
+        dispatched.add(a.get("worker_id", ""))
+    dispatched.discard("")
+
+    if not dispatched:
+        return {"awaiting_checkpoint": False, "log_entries": ["[wait] 无 tracked workers"]}
+
+    terminal_states = {"DONE", "BLOCKED", "NEEDS_INPUT", "HANDOFF"}
+    current_checkpoints = state.get("checkpoints", []) or []
+
+    def _all_terminal(cp_map: dict[str, WorkerCheckpoint]) -> bool:
+        return len(cp_map) == len(dispatched) and all(
+            cp["state"] in terminal_states for cp in cp_map.values()
+        )
+
+    cp_map: dict[str, WorkerCheckpoint] = {
+        cp["worker_id"]: cp for cp in current_checkpoints if cp["worker_id"] in dispatched
+    }
+
+    # If everything is already terminal, skip polling.
+    if _all_terminal(cp_map):
+        return {
+            "awaiting_checkpoint": False,
+            "log_entries": [f"[wait] {len(cp_map)} checkpoints already terminal"],
+        }
+
+    max_polls = 30
+    poll_interval = 10
+
+    for attempt in range(max_polls):
+        missing = dispatched - set(cp_map.keys())
+        log(f"[wait] 第 {attempt + 1}/{max_polls} 次轮询 (等待: {missing})...")
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.get(f"{swarm_url}/swarm-missions", params={"id": mission_id})
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception as e:
+            log(f"[wait] API 失败: {e}")
+            await asyncio.sleep(poll_interval)
+            continue
+
+        mission = data.get("mission")
+        if not mission or not isinstance(mission, dict):
+            await asyncio.sleep(poll_interval)
+            continue
+
+        # Collect latest checkpoints for tracked workers.
+        for assignment in mission.get("assignments", []):
+            wid = assignment.get("workerId")
+            if wid not in dispatched:
+                continue
+            checkpoint = assignment.get("checkpoint")
+            if not checkpoint:
+                continue
+            cp_map[wid] = WorkerCheckpoint(
+                worker_id=wid,
+                state=checkpoint.get("stateLabel", "IN_PROGRESS"),
+                result=checkpoint.get("result", ""),
+                files_changed=checkpoint.get("filesChanged", ""),
+                commands_run=checkpoint.get("commandsRun", ""),
+                blocker=checkpoint.get("blocker", ""),
+                next_action=checkpoint.get("nextAction", ""),
+                raw=checkpoint.get("raw", ""),
+            )
+
+        terminal_count = sum(1 for cp in cp_map.values() if cp["state"] in terminal_states)
+        log(f"[wait] {terminal_count}/{len(dispatched)} terminal, {len(cp_map)} seen")
+
+        if _all_terminal(cp_map):
+            return {
+                "checkpoints": list(cp_map.values()),
+                "awaiting_checkpoint": False,
+                "log_entries": [f"[wait] all {len(dispatched)} workers terminal after {attempt + 1} polls"],
+            }
+
+        await asyncio.sleep(poll_interval)
+
+    log(f"[wait] {max_polls} 次轮询后仍有 worker 未完成")
+    return {
+        "checkpoints": list(cp_map.values()),
+        "awaiting_checkpoint": False,
+        "langgraph_needs_human": True,
+        "log_entries": [f"[wait] timeout after {max_polls} polls, {len(cp_map)} checkpoints"],
     }
 
 

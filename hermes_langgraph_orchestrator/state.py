@@ -67,6 +67,7 @@ class OrchestratorState(TypedDict, total=False):
     pending_human_assignments: list[dict]
     dispatch_counts: dict[str, int]
     transition_counts: dict[str, int]
+    awaiting_checkpoint: bool
 
     # --- Swarm 规则引擎 (Phase 1 only) ---
     swarm_decision: DispatchDecision | None

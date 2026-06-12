@@ -499,6 +499,7 @@ async def main():
                     "pending_human_assignments": [],
                     "dispatch_counts": {},
                     "transition_counts": {},
+                    "awaiting_checkpoint": False,
                     "dispatch_results": None,
                     "dispatch_error": None,
                     "wait_attempts": 0,
