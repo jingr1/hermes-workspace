@@ -10,6 +10,20 @@ from dataclasses import dataclass, field
 import operator
 
 
+def _merge_checkpoints(existing, new):
+    """Merge checkpoint lists by worker_id, with newer values overriding older ones."""
+    if not existing:
+        existing = []
+    if not new:
+        new = []
+    merged = {cp["worker_id"]: cp for cp in existing}
+    for cp in new:
+        wid = cp.get("worker_id")
+        if wid:
+            merged[wid] = cp
+    return list(merged.values())
+
+
 class WorkerCheckpoint(TypedDict):
     worker_id: str
     state: str
@@ -54,6 +68,7 @@ class OrchestratorState(TypedDict, total=False):
 
     # --- 收集 ---
     checkpoints: list[WorkerCheckpoint] | None
+    terminal_checkpoints: Annotated[list[WorkerCheckpoint] | None, _merge_checkpoints]
     collection_error: str | None
 
     # --- LangGraph 编排 ---
@@ -61,7 +76,7 @@ class OrchestratorState(TypedDict, total=False):
     langgraph_assignments: list[dict]
     langgraph_needs_human: bool
     langgraph_decision: DispatchDecision | None
-    dispatched_workers: Annotated[list[str], operator.add]
+    dispatched_workers: list[str]
     active_worker: str | None
     pending_assignments: list[dict]
     pending_human_assignments: list[dict]

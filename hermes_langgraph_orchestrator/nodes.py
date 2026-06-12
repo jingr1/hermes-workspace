@@ -72,14 +72,14 @@ def _parse_dispatch_checkpoints(data: dict[str, Any]) -> list[WorkerCheckpoint]:
             continue
         checkpoints.append(
             WorkerCheckpoint(
-                worker_id=r.get("workerId", "unknown"),
-                state=cp.get("stateLabel", "IN_PROGRESS"),
-                result=cp.get("result", ""),
-                files_changed=cp.get("filesChanged", ""),
-                commands_run=cp.get("commandsRun", ""),
-                blocker=cp.get("blocker", ""),
-                next_action=cp.get("nextAction", ""),
-                raw=cp.get("raw", ""),
+                worker_id=r.get("workerId") or "unknown",
+                state=cp.get("stateLabel") or "IN_PROGRESS",
+                result=cp.get("result") or "",
+                files_changed=cp.get("filesChanged") or "",
+                commands_run=cp.get("commandsRun") or "",
+                blocker=cp.get("blocker") or "",
+                next_action=cp.get("nextAction") or "",
+                raw=cp.get("raw") or "",
             )
         )
     return checkpoints
@@ -746,45 +746,76 @@ async def wait_for_checkpoints(state: OrchestratorState) -> dict:
     Dispatch returns the first fresh checkpoint, which may be IN_PROGRESS.
     This node polls Swarm missions until every tracked worker is DONE,
     BLOCKED, NEEDS_INPUT, or HANDOFF (or max polls reached).
+
+    The returned ``checkpoints`` only contains workers from the current
+    assignment batch, so downstream classify/route acts on the latest workers.
+    ``terminal_checkpoints`` accumulates terminal checkpoints across the whole
+    mission so we do not lose already-terminal workers when dispatch overwrites
+    the checkpoint list.
     """
     swarm_url = _swarm_api_url(state)
     mission_id = state.get("mission_id", "")
 
-    # Workers we care about: current assignments + historically dispatched.
     assignments = state.get("langgraph_assignments", []) or []
-    dispatched = set(state.get("dispatched_workers", []))
-    for a in assignments:
-        dispatched.add(a.get("worker_id", ""))
+    current_workers = set(_active_assignments_to_workers(assignments))
+    dispatched = set(state.get("dispatched_workers", []) or [])
+    dispatched.update(current_workers)
     dispatched.discard("")
 
-    if not dispatched:
-        return {"awaiting_checkpoint": False, "log_entries": ["[wait] 无 tracked workers"]}
+    if not current_workers:
+        return {"awaiting_checkpoint": False, "log_entries": ["[wait] 无 current workers"]}
 
     terminal_states = {"DONE", "BLOCKED", "NEEDS_INPUT", "HANDOFF"}
     current_checkpoints = state.get("checkpoints", []) or []
+    terminal_history = state.get("terminal_checkpoints", []) or []
 
     def _all_terminal(cp_map: dict[str, WorkerCheckpoint]) -> bool:
-        return len(cp_map) == len(dispatched) and all(
+        return current_workers.issubset(cp_map.keys()) and all(
             cp["state"] in terminal_states for cp in cp_map.values()
+            if cp["worker_id"] in current_workers
         )
 
     cp_map: dict[str, WorkerCheckpoint] = {
-        cp["worker_id"]: cp for cp in current_checkpoints if cp["worker_id"] in dispatched
+        cp["worker_id"]: cp for cp in terminal_history if cp["worker_id"] in dispatched
     }
+    for cp in current_checkpoints:
+        wid = cp.get("worker_id")
+        if wid in dispatched:
+            cp_map[wid] = cp
 
-    # If everything is already terminal, skip polling.
+    # If current workers are already terminal, skip polling.
     if _all_terminal(cp_map):
         return {
             "awaiting_checkpoint": False,
-            "log_entries": [f"[wait] {len(cp_map)} checkpoints already terminal"],
+            "checkpoints": [cp_map[wid] for wid in current_workers if wid in cp_map],
+            "terminal_checkpoints": list(cp_map.values()),
+            "log_entries": [f"[wait] {len(current_workers)} current workers already terminal"],
         }
 
     max_polls = 30
     poll_interval = 10
 
     for attempt in range(max_polls):
-        missing = dispatched - set(cp_map.keys())
+        missing = current_workers - set(cp_map.keys())
         log(f"[wait] 第 {attempt + 1}/{max_polls} 次轮询 (等待: {missing})...")
+
+        # Drive the Swarm harvester so chat checkpoints get recorded to the
+        # mission store even when no UI autopilot is running.
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                await client.post(
+                    f"{swarm_url}/swarm-orchestrator-loop",
+                    json={
+                        "workerIds": sorted(current_workers),
+                        "missionId": mission_id,
+                        "dryRun": False,
+                        "autoContinue": False,
+                        "allowExecution": False,
+                    },
+                )
+        except Exception as e:
+            log(f"[wait] harvester probe failed: {e}")
+
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.get(f"{swarm_url}/swarm-missions", params={"id": mission_id})
@@ -808,36 +839,45 @@ async def wait_for_checkpoints(state: OrchestratorState) -> dict:
             checkpoint = assignment.get("checkpoint")
             if not checkpoint:
                 continue
-            cp_map[wid] = WorkerCheckpoint(
-                worker_id=wid,
-                state=checkpoint.get("stateLabel", "IN_PROGRESS"),
-                result=checkpoint.get("result", ""),
-                files_changed=checkpoint.get("filesChanged", ""),
-                commands_run=checkpoint.get("commandsRun", ""),
-                blocker=checkpoint.get("blocker", ""),
-                next_action=checkpoint.get("nextAction", ""),
-                raw=checkpoint.get("raw", ""),
-            )
+            cp_map[wid] = _checkpoint_from_parsed(checkpoint, wid)
 
-        terminal_count = sum(1 for cp in cp_map.values() if cp["state"] in terminal_states)
+        terminal_count = sum(
+            1 for cp in cp_map.values() if cp["state"] in terminal_states
+        )
         log(f"[wait] {terminal_count}/{len(dispatched)} terminal, {len(cp_map)} seen")
 
         if _all_terminal(cp_map):
             return {
-                "checkpoints": list(cp_map.values()),
+                "checkpoints": [cp_map[wid] for wid in current_workers if wid in cp_map],
+                "terminal_checkpoints": list(cp_map.values()),
                 "awaiting_checkpoint": False,
-                "log_entries": [f"[wait] all {len(dispatched)} workers terminal after {attempt + 1} polls"],
+                "log_entries": [f"[wait] all {len(current_workers)} current workers terminal after {attempt + 1} polls"],
             }
 
         await asyncio.sleep(poll_interval)
 
     log(f"[wait] {max_polls} 次轮询后仍有 worker 未完成")
     return {
-        "checkpoints": list(cp_map.values()),
+        "checkpoints": [cp_map[wid] for wid in current_workers if wid in cp_map],
+        "terminal_checkpoints": list(cp_map.values()),
         "awaiting_checkpoint": False,
         "langgraph_needs_human": True,
         "log_entries": [f"[wait] timeout after {max_polls} polls, {len(cp_map)} checkpoints"],
     }
+
+
+def _checkpoint_from_parsed(checkpoint: dict[str, Any], worker_id: str) -> WorkerCheckpoint:
+    """Convert a Workspace ParsedSwarmCheckpoint dict into a WorkerCheckpoint."""
+    return WorkerCheckpoint(
+        worker_id=worker_id,
+        state=checkpoint.get("stateLabel") or "IN_PROGRESS",
+        result=checkpoint.get("result") or "",
+        files_changed=checkpoint.get("filesChanged") or "",
+        commands_run=checkpoint.get("commandsRun") or "",
+        blocker=checkpoint.get("blocker") or "",
+        next_action=checkpoint.get("nextAction") or "",
+        raw=checkpoint.get("raw") or "",
+    )
 
 
 async def human_approval_node(state: OrchestratorState) -> dict:

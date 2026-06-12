@@ -572,7 +572,13 @@ async function waitForFreshCheckpoint(
     const runtimeSnapshot = readRuntimeCheckpointSnapshot(profilePath)
     if (runtimeSnapshotIsFresh(runtimeSnapshot, baselineRuntimeSignature, dispatchedAt)) {
       const runtimeCheckpoint = checkpointFromRuntimeSnapshot(runtimeSnapshot)
-      if (runtimeCheckpoint && runtimeCheckpoint.raw !== previousRaw) return runtimeCheckpoint
+      // Trust the runtime snapshot when it is fresh (post-dispatch).  The
+      // previousRaw guard is intentionally omitted here: an already-running
+      // worker may not have produced a new structured checkpoint yet, and the
+      // dispatch control message itself is a valid IN_PROGRESS checkpoint for
+      // the orchestrator to poll on.  Returning null instead causes the
+      // LangGraph orchestrator to see zero checkpoints and finalize empty.
+      if (runtimeCheckpoint) return runtimeCheckpoint
     }
 
     const chat = readWorkerMessages(profilePath, 50)
