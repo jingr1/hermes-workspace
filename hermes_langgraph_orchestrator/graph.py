@@ -27,10 +27,25 @@ from .nodes import (
 )
 
 
+def _route_after_init(state: OrchestratorState) -> str:
+    """If init failed (e.g. roster API unreachable), stop immediately."""
+    return "init_error" if state.get("collection_error") else "continue"
+
+
+async def _init_error_node(state: OrchestratorState) -> dict:
+    error = state.get("collection_error", "unknown init error")
+    print(f"[{datetime.now(timezone.utc).strftime('%H:%M:%S')}] [init_error] {error}")
+    return {
+        "log_entries": [f"[init_error] {error}"],
+        "all_done": True,
+    }
+
+
 def build_phase1_graph(collect_fn=None, swarm_fn=None, init_fn=None) -> CompiledStateGraph:
     """Phase 1: compare LangGraph routing against Swarm orchestrator-loop."""
     graph = StateGraph(OrchestratorState)
     graph.add_node("init", init_fn if init_fn else init_mission)  # type: ignore[arg-type]
+    graph.add_node("init_error", _init_error_node)  # type: ignore[arg-type]
     graph.add_node("collect", collect_fn if collect_fn else collect_checkpoints)  # type: ignore[arg-type]
     graph.add_node("classify", classify_workers)  # type: ignore[arg-type]
     graph.add_node("route", route_workflow)  # type: ignore[arg-type]
@@ -38,9 +53,15 @@ def build_phase1_graph(collect_fn=None, swarm_fn=None, init_fn=None) -> Compiled
     graph.add_node("compare_and_log", _compare_and_log)  # type: ignore[arg-type]
 
     graph.add_edge(START, "init")
-    graph.add_edge("init", "collect")
-    graph.add_edge("init", "swarm")
+    graph.add_conditional_edges(
+        "init",
+        _route_after_init,
+        {"init_error": "init_error", "continue": "collect"},
+    )
+    graph.add_edge("init_error", END)
+    # Fan-out from init is replaced by continuing to collect, which then fans to classify.
     graph.add_edge("collect", "classify")
+    graph.add_edge("collect", "swarm")
     graph.add_edge("classify", "route")
     graph.add_edge("route", "compare_and_log")
     graph.add_edge("swarm", "compare_and_log")
@@ -64,6 +85,7 @@ def build_phase2_graph(
     graph = StateGraph(OrchestratorState)
 
     graph.add_node("init", init_fn if init_fn else init_mission)  # type: ignore[arg-type]
+    graph.add_node("init_error", _init_error_node)  # type: ignore[arg-type]
     graph.add_node("ensure_sessions", ensure_fn if ensure_fn else ensure_sessions)  # type: ignore[arg-type]
     graph.add_node("dispatch_assignments", dispatch_fn if dispatch_fn else dispatch_assignments)  # type: ignore[arg-type]
     graph.add_node("classify", classify_fn if classify_fn else classify_workers)  # type: ignore[arg-type]
@@ -72,8 +94,17 @@ def build_phase2_graph(
     graph.add_node("finalize_mission", finalize_mission)  # type: ignore[arg-type]
 
     graph.add_edge(START, "init")
-    graph.add_edge("init", "ensure_sessions")
-    graph.add_edge("ensure_sessions", "dispatch_assignments")
+    graph.add_conditional_edges(
+        "init",
+        _route_after_init,
+        {"init_error": "init_error", "continue": "ensure_sessions"},
+    )
+    graph.add_edge("init_error", END)
+    graph.add_conditional_edges(
+        "ensure_sessions",
+        _route_after_init,
+        {"init_error": "init_error", "continue": "dispatch_assignments"},
+    )
     graph.add_edge("dispatch_assignments", "classify")
     graph.add_edge("classify", "route")
 

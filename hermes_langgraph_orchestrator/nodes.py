@@ -110,7 +110,8 @@ async def init_mission(state: OrchestratorState) -> dict:
     else:
         workflow_spec = state.get("workflow_spec") or load_default_workflow()
 
-    # Fetch roster.
+    # Fetch roster. The Workspace API returns { ok: true, roster: SwarmRoster }
+    # where SwarmRoster = { version, workers: [{ id, ... }] }.
     roster_ids: set[str] = set()
     try:
         async with httpx.AsyncClient(timeout=30) as client:
@@ -119,9 +120,14 @@ async def init_mission(state: OrchestratorState) -> dict:
             data = resp.json()
             roster = data.get("roster", {})
             if isinstance(roster, dict):
-                roster_ids = set(roster.keys())
+                workers = roster.get("workers", [])
+                if isinstance(workers, list):
+                    roster_ids = {str(w.get("id", w.get("workerId", ""))).strip() for w in workers if w}
+                else:
+                    # Fallback: dict keyed by worker id
+                    roster_ids = {k.strip() for k in roster.keys() if isinstance(k, str)}
             elif isinstance(roster, list):
-                roster_ids = {str(w.get("id", w.get("workerId", ""))).strip() for w in roster}
+                roster_ids = {str(w.get("id", w.get("workerId", ""))).strip() for w in roster if w}
     except Exception as e:
         return {
             "collection_error": f"Failed to fetch roster: {e}",
@@ -627,6 +633,7 @@ async def ensure_sessions(state: OrchestratorState) -> dict:
 
     log(f"[ensure_sessions] 预热 {len(workers)} 个 session: {workers}")
     results: list[str] = []
+    session_errors: list[str] = []
     async with httpx.AsyncClient(timeout=30) as client:
         for wid in workers:
             try:
@@ -642,11 +649,24 @@ async def ensure_sessions(state: OrchestratorState) -> dict:
                     results.append(f"{wid}: started")
                 else:
                     results.append(f"{wid}: ok")
+            except httpx.HTTPStatusError as e:
+                try:
+                    body = e.response.json()
+                    detail = body.get("error", body)
+                except Exception:
+                    detail = e.response.text or str(e)
+                msg = f"{wid}: error ({detail})"
+                results.append(msg)
+                session_errors.append(msg)
             except Exception as e:
                 results.append(f"{wid}: error ({e})")
+                session_errors.append(f"{wid}: error ({e})")
 
     log(f"[ensure_sessions] {', '.join(results)}")
-    return {"log_entries": [f"[ensure_sessions] {', '.join(results)}"]}
+    return {
+        "log_entries": [f"[ensure_sessions] {', '.join(results)}"],
+        "collection_error": "; ".join(session_errors) if session_errors else None,
+    }
 
 
 async def dispatch_assignments(state: OrchestratorState) -> dict:
