@@ -11,7 +11,8 @@ import { createOrUpdateMission, getSwarmMission, markMissionAssignmentDispatched
 import { appendSwarmMemoryEvent, buildSwarmStartupSnapshot } from '../../server/swarm-memory'
 import { rosterByWorkerId, type SwarmRosterWorker } from '../../server/swarm-roster'
 import { publishSwarmCheckpointNotification } from '../../server/swarm-notifications'
-import { ensureSwarmProfileConfig } from '../../server/swarm-profile-config'
+import { ensureSwarmProfileConfig, syncSwarmProfileModel } from '../../server/swarm-profile-config'
+import { parseSwarmModelLabel } from '../../server/swarm-model-resolver'
 
 const HERMES_BIN_CANDIDATES = [
   process.env.HERMES_CLI_BIN,
@@ -623,6 +624,16 @@ async function ensureLiveTmuxSession(workerId: string): Promise<{ ok: true; tmux
 
   const profilePath = getProfilePath(workerId)
   ensureSwarmProfileConfig(profilePath)
+
+  // Sync the worker's profile config.yaml model section to the roster's
+  // model field before launching tmux. Hermes Agent reads config.yaml on
+  // every invocation, and the wrapper does not pass --model.
+  const roster = rosterByWorkerId([workerId]).get(workerId)
+  const resolvedModel = parseSwarmModelLabel(roster?.model ?? null)
+  if (resolvedModel) {
+    syncSwarmProfileModel(profilePath, resolvedModel)
+  }
+
   const cwd = resolveWorkerCwd(workerId)
   const hermesBin = resolveHermesBin()
   const launchCommand = buildHermesTmuxLaunchCommand({

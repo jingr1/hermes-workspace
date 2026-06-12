@@ -642,12 +642,7 @@ function displayTaskTitle(runtime: RuntimeEntry | undefined, fallback: string): 
 
 
 function formatAssignedModel(model?: string | null, provider?: string | null): string {
-  const value = `${model || ''} ${provider || ''}`.toLowerCase()
-  if (value.includes('claude-opus-4-7') || value.includes('opus-4-7')) return 'Opus 4.7'
-  if (value.includes('claude-opus-4-6') || value.includes('opus-4-6')) return 'Opus 4.6'
-  if (value.includes('gpt-5.5')) return 'GPT-5.5'
-  if (value.includes('gpt-5.4')) return 'GPT-5.4'
-  if (value.includes('gpt-5.3')) return 'GPT-5.3'
+  // model is now "provider/model-id" format from swarm.yaml
   if (model && model !== 'unknown') return model
   if (provider && provider !== 'unknown') return provider.replace(/^custom:/, '').replace(/[-_]/g, ' ')
   return 'Worker'
@@ -688,6 +683,7 @@ type ControlPlaneStageProps = {
   onClearFocusedRuntimeWorker: () => void
   onStartAgentSession: (workerId: string) => void
   onScrollTmuxSession: (workerId: string, direction: 'up' | 'down', session?: string | null) => void
+  availableModels: Array<{ id: string; name: string; provider: string }>
 }
 
 function ControlPlaneStage({
@@ -725,6 +721,7 @@ function ControlPlaneStage({
   onClearFocusedRuntimeWorker,
   onStartAgentSession,
   onScrollTmuxSession,
+  availableModels,
 }: ControlPlaneStageProps) {
   const stageRef = useRef<HTMLDivElement | null>(null)
   const anchorRef = useRef<HTMLDivElement | null>(null)
@@ -853,6 +850,7 @@ function ControlPlaneStage({
                       onToggleRoom={() => onToggleRoom(member.id)}
                       onOpenTui={() => onOpenTui(member.id)}
                       onOpenTasks={() => onOpenTasks(member.id)}
+                      availableModels={availableModels}
                     />
                   )
                 })
@@ -1643,6 +1641,7 @@ export function Swarm2Screen() {
             onClearFocusedRuntimeWorker={() => setFocusedRuntimeWorkerId(null)}
             onStartAgentSession={(workerId) => { void startAgentSession(workerId) }}
             onScrollTmuxSession={(workerId, direction, session) => { void scrollTmuxSession(workerId, direction, session) }}
+            availableModels={availableModels}
           />
         </div>
 

@@ -107,6 +107,35 @@ describe('models route', () => {
     expect(json.models[0].provider).toBe('nous')
   })
 
+  it('indexes provider defaults and fallback_providers with Hermes provider keys', async () => {
+    const envHome = '/mock/profiles/jarvis'
+    process.env.CLAUDE_HOME = envHome
+
+    const configYaml = [
+      'providers:',
+      '  nvidia:',
+      '    base_url: https://integrate.api.nvidia.com/v1',
+      '    model: minimaxai/minimax-m2.7',
+      'fallback_providers:',
+      '  - provider: nvidia',
+      '    model: minimaxai/minimax-m2.7',
+    ].join('\n')
+    existsSync.mockImplementation((p: string) => p === `${envHome}/config.yaml`)
+    readFileSync.mockImplementation((p: string) => {
+      if (p === `${envHome}/config.yaml`) return configYaml
+      return ''
+    })
+
+    const get = await getHandler()
+    const request = new Request('http://localhost/api/models')
+    const res = await get({ request })
+    expect(res.status).toBe(200)
+    const json = await res.json()
+    expect(json.ok).toBe(true)
+    const match = json.models.find((m: { id: string }) => m.id === 'minimaxai/minimax-m2.7')
+    expect(match?.provider).toBe('nvidia')
+  })
+
   it('reads nested model object syntax from config using YAML.parse', async () => {
     const envHome = '/mock/profiles/jarvis'
     process.env.CLAUDE_HOME = envHome

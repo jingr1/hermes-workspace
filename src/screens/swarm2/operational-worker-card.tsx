@@ -19,6 +19,11 @@ import { Swarm2TaskQueue } from './swarm2-task-queue'
 import type { CrewMember } from '@/hooks/use-crew-status'
 import { getOnlineStatus } from '@/hooks/use-crew-status'
 import { cn } from '@/lib/utils'
+import {
+  resolveSwarmModelKey,
+  swarmModelKeyFromOption,
+  type SwarmModelOption,
+} from '@/server/swarm-model-resolver'
 
 type WorkerState =
   | 'active'
@@ -163,14 +168,13 @@ function colorForWorker(workerId: string) {
   return WORKER_COLORS[0]
 }
 
-function formatAssignedModel(model?: string | null, provider?: string | null): string {
-  const value = `${model || ''} ${provider || ''}`.toLowerCase()
-  if (value.includes('claude-opus-4-7') || value.includes('opus-4-7')) return 'Opus 4.7'
-  if (value.includes('claude-opus-4-6') || value.includes('opus-4-6')) return 'Opus 4.6'
-  if (value.includes('gpt-5.5')) return 'GPT-5.5'
-  if (value.includes('gpt-5.4')) return 'GPT-5.4'
-  if (value.includes('gpt-5.3')) return 'GPT-5.3'
-  if (model && model !== 'unknown') return model
+function formatAssignedModel(
+  model?: string | null,
+  provider?: string | null,
+  availableModels?: Array<SwarmModelOption>,
+): string {
+  const resolved = resolveSwarmModelKey(model, provider, availableModels)
+  if (resolved) return resolved
   if (provider && provider !== 'unknown') return provider.replace(/^custom:/, '').replace(/[-_]/g, ' ')
   return 'Worker'
 }
@@ -187,25 +191,15 @@ const ROLE_OPTIONS = [
   'Profile',
   'PR / Issues',
   'Builder',
-  'Reviewer',
-  'BenchLoop',
+  'Backend Foundation',
   'Research',
+  'Reviewer',
   'Docs',
   'Ops',
+  'Hackathon',
+  'Main Session Mirror',
   'Qwen PC1',
   'Hackathon',
-  'Worker',
-]
-const MODEL_OPTIONS = [
-  'GPT-5.5',
-  'GPT-5.4',
-  'GPT-5.3',
-  'Opus 4.7',
-  'Opus 4.6',
-  'Opus 4.5',
-  'MiniMax',
-  'Qwen3 8B',
-  'Qwen3 14B',
   'Worker',
 ]
 const AVATAR_OPTIONS = ['','🤖','🧠','🛠️','📊','🧪','📝','⚙️','🔬','🚀']
@@ -227,6 +221,7 @@ export type OperationalWorkerCardProps = {
   onOpenTui: () => void
   onOpenTasks: () => void
   cardRef?: (node: HTMLElement | null) => void
+  availableModels?: Array<{ id: string; name: string; provider: string }>
 }
 
 export function OperationalWorkerCard({
@@ -245,6 +240,7 @@ export function OperationalWorkerCard({
   onOpenTui,
   onOpenTasks,
   cardRef,
+  availableModels = [],
 }: OperationalWorkerCardProps) {
   const chatAnchorRef = useRef<HTMLDivElement | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -253,6 +249,8 @@ export function OperationalWorkerCard({
   const [draftRole, setDraftRole] = useState('')
   const [draftModel, setDraftModel] = useState('')
   const [draftAvatar, setDraftAvatar] = useState('')
+  const [settingsError, setSettingsError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
   const [taskComposerOpen, setTaskComposerOpen] = useState(false)
   const state = deriveWorkerState(member, currentTask, checkpointStatus, runtimeState)
   const status = statusStyles(state)
@@ -277,7 +275,7 @@ export function OperationalWorkerCard({
   const hasPreview = Boolean(previewUrl)
   const progressValue =
     state === 'idle' || state === 'offline' ? 8 : state === 'waiting' ? 38 : 68
-  const baseModelLabel = formatAssignedModel(member.model, member.provider)
+  const baseModelLabel = formatAssignedModel(member.model, member.provider, availableModels)
   const modelLabel = settings.modelLabel || baseModelLabel
   const avatarGlyph = settings.avatarGlyph || ''
   const outputFreshness = relativeOutputTime(recentOutputAt)
@@ -341,11 +339,18 @@ export function OperationalWorkerCard({
 
   useEffect(() => {
     if (!settingsOpen) return
+    setSettingsError(null)
     setDraftName(settings.displayName || member.displayName || '')
     setDraftRole(settings.role || member.role || roleFromId(member.id))
-    setDraftModel(settings.modelLabel || baseModelLabel)
+    setDraftModel(
+      resolveSwarmModelKey(
+        settings.modelLabel || member.model,
+        member.provider,
+        availableModels,
+      ) || baseModelLabel,
+    )
     setDraftAvatar(settings.avatarGlyph || '')
-  }, [settingsOpen, settings, member.displayName, member.role, member.id, baseModelLabel])
+  }, [settingsOpen, settings, member.displayName, member.role, member.id, member.model, member.provider, baseModelLabel, availableModels])
 
   useEffect(() => {
     if (!selected) return
@@ -663,19 +668,25 @@ export function OperationalWorkerCard({
                 </select>
               </label>
               <label className="block">
-                <span className="mb-1 block text-[var(--theme-muted)]">Model label</span>
+                <span className="mb-1 block text-[var(--theme-muted)]">Model</span>
                 <select
                   value={draftModel}
                   onChange={(event) => setDraftModel(event.target.value)}
                   className="w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-[var(--theme-text)] outline-none"
                 >
-                  {Array.from(new Set([draftModel || baseModelLabel, ...MODEL_OPTIONS].filter(Boolean))).map((option) => (
-                    <option key={option} value={option}>
-                      {option}
+                  <option value="">—</option>
+                  {availableModels.map((m) => (
+                    <option key={swarmModelKeyFromOption(m)} value={swarmModelKeyFromOption(m)}>
+                      {m.provider} / {m.name}
                     </option>
                   ))}
                 </select>
               </label>
+              {settingsError ? (
+                <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-[11px] text-red-200">
+                  Save failed: {settingsError}
+                </div>
+              ) : null}
             </div>
             <div className="mt-4 flex items-center justify-between gap-2">
               <button
@@ -704,8 +715,13 @@ export function OperationalWorkerCard({
                 </button>
                 <button
                   type="button"
-                  className="rounded-xl bg-[var(--theme-accent)] px-3 py-2 text-[11px] font-semibold text-primary-950 hover:bg-[var(--theme-accent-strong)]"
-                  onClick={() => {
+                  disabled={saving}
+                  className="rounded-xl bg-[var(--theme-accent)] px-3 py-2 text-[11px] font-semibold text-primary-950 hover:bg-[var(--theme-accent-strong)] disabled:opacity-50"
+                  onClick={async (e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    if (saving) return
+                    setSettingsError(null)
                     const next: WorkerCardSettings = {
                       displayName: draftName.trim() || undefined,
                       avatarGlyph: draftAvatar.trim() || undefined,
@@ -718,10 +734,41 @@ export function OperationalWorkerCard({
                     } catch {
                       /* noop */
                     }
-                    setSettingsOpen(false)
+                    // Persist model to swarm.yaml via PATCH API
+                    if (draftModel.trim()) {
+                      setSaving(true)
+                      try {
+                        const res = await fetch('/api/swarm-roster', {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ workerId: member.id, patch: { model: draftModel.trim() } }),
+                        })
+                        if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`)
+                        // Use text()+parse instead of res.json() — TanStack Start SSR dev middleware
+                        // can hang res.json() (Promise never resolves) even when the HTTP response
+                        // is complete and valid. text() bypasses this issue.
+                        let data: { ok?: boolean; path?: string; savedAt?: number; error?: string }
+                        try {
+                          const text = await res.text()
+                          data = JSON.parse(text)
+                        } catch {
+                          throw new Error('Invalid response from server')
+                        }
+                        // Zod validation failures return 200 with {ok: false} — catch them here.
+                        if (data?.ok === false) throw new Error(data?.error || 'Save failed')
+                        setSettingsOpen(false)
+                      } catch (err) {
+                        console.error('[swarm] PATCH error:', err)
+                        setSettingsError(err instanceof Error ? err.message : String(err))
+                      } finally {
+                        setSaving(false)
+                      }
+                    } else {
+                      setSettingsOpen(false)
+                    }
                   }}
                 >
-                  Save
+                  {saving ? 'Saving…' : 'Save'}
                 </button>
               </div>
             </div>

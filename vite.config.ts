@@ -1,10 +1,11 @@
 import { URL, fileURLToPath } from 'node:url'
 import { execSync, spawn } from 'node:child_process'
 import type { ChildProcess } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import net from 'node:net'
-import { resolve, dirname } from 'node:path'
+import { resolve, join, dirname } from 'node:path'
 import os from 'node:os'
+import * as yaml from 'yaml'
 
 // devtools removed
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
@@ -679,7 +680,102 @@ const config = defineConfig(({ mode, command }) => {
             }
           })
 
-          // Dev-only: disable Node's default 5-minute request timeout so
+          // PATCH /api/swarm-roster — writes directly to swarm.yaml + profile config.
+          // Bypasses TanStack Start SSR (which hangs on PATCH in dev mode).
+          server.middlewares.use(async (req, res, next) => {
+            const path = req.url?.split('?')[0] ?? ''
+            if (req.method !== 'PATCH' || path !== '/api/swarm-roster') {
+              next()
+              return
+            }
+            const chunks: Buffer[] = []
+            for await (const chunk of req as AsyncIterable<Buffer>) chunks.push(chunk)
+            let body: { workerId?: string; patch?: Record<string, unknown> }
+            try {
+              body = JSON.parse(Buffer.concat(chunks).toString())
+            } catch {
+              res.statusCode = 400
+              res.setHeader('content-type', 'application/json')
+              res.end(JSON.stringify({ ok: false, error: 'Invalid JSON' }))
+              return
+            }
+            const workerId = typeof body.workerId === 'string' ? body.workerId.trim() : ''
+            if (!workerId) {
+              res.statusCode = 400
+              res.setHeader('content-type', 'application/json')
+              res.end(JSON.stringify({ ok: false, error: 'workerId required' }))
+              return
+            }
+            const patch = body.patch && typeof body.patch === 'object' && !Array.isArray(body.patch)
+              ? body.patch
+              : {}
+            if (Object.keys(patch).length === 0) {
+              res.statusCode = 400
+              res.setHeader('content-type', 'application/json')
+              res.end(JSON.stringify({ ok: false, error: 'patch object required' }))
+              return
+            }
+            try {
+              const SWARM_ROSTER_PATH = resolve(process.cwd(), 'swarm.yaml')
+              if (!existsSync(SWARM_ROSTER_PATH)) throw new Error(`swarm.yaml not found at ${SWARM_ROSTER_PATH}`)
+              const raw = readFileSync(SWARM_ROSTER_PATH, 'utf8')
+              const roster = yaml.parse(raw) as { version?: number; workers?: Array<Record<string, unknown>> }
+              const workers = roster.workers ?? []
+              const idx = workers.findIndex(
+                (w) => (w.id as string)?.toLowerCase() === workerId.toLowerCase(),
+              )
+              if (idx < 0) throw new Error(`Worker ${workerId} not found in swarm roster`)
+              workers[idx] = { ...workers[idx], ...patch }
+
+              // When model changes, sync to the worker's profile config.yaml.
+              // swarm.yaml model format: "provider/model-id" (e.g. "custom:nioint-gateway/DeepSeek-V4-Pro-Seed")
+              // profile config format: { model: { provider, default, base_url? } }
+              if (patch.model && typeof patch.model === 'string') {
+                const profileDir = resolve(
+                  process.env.HERMES_HOME ?? join(os.homedir(), '.hermes'),
+                  'profiles',
+                  workerId,
+                )
+                const profileConfigPath = resolve(profileDir, 'config.yaml')
+                if (existsSync(profileConfigPath)) {
+                  try {
+                    const profileRaw = readFileSync(profileConfigPath, 'utf8')
+                    const profileConfig = yaml.parse(profileRaw) as Record<string, unknown>
+                    const modelStr = patch.model as string
+                    // Split on first '/' only: provider before, model-id after (may contain more slashes)
+                    const slashIdx = modelStr.indexOf('/')
+                    if (slashIdx > 0) {
+                      const newProvider = modelStr.slice(0, slashIdx)
+                      const newModelDefault = modelStr.slice(slashIdx + 1)
+                      if (!profileConfig.model) profileConfig.model = {}
+                      const modelConf = profileConfig.model as Record<string, unknown>
+                      modelConf.default = newModelDefault
+                      modelConf.provider = newProvider
+                      writeFileSync(profileConfigPath, yaml.stringify(profileConfig), 'utf8')
+                    }
+                  } catch {
+                    // Non-fatal: profile sync failure shouldn't block swarm.yaml save
+                  }
+                }
+              }
+
+              writeFileSync(SWARM_ROSTER_PATH, yaml.stringify({ ...roster, workers }), 'utf8')
+              res.statusCode = 200
+              res.setHeader('content-type', 'application/json')
+              res.end(JSON.stringify({ ok: true, path: SWARM_ROSTER_PATH, savedAt: Date.now() }))
+            } catch (err) {
+              res.statusCode = 400
+              res.setHeader('content-type', 'application/json')
+              res.end(
+                JSON.stringify({
+                  ok: false,
+                  error: err instanceof Error ? err.message : 'Failed to patch swarm roster',
+                }),
+              )
+            }
+          })
+
+          // dev-only: disable Node's default 5-minute request timeout so
           // long-running SSE streams (agent runs that go silent for minutes
           // during heavy reasoning / tool calls) don't get killed mid-stream
           // by the HTTP layer. Heartbeats handle keep-alive at the application
@@ -691,10 +787,31 @@ const config = defineConfig(({ mode, command }) => {
               headersTimeout?: number
               timeout?: number
             }
+            // Do NOT set requestTimeout=0 globally — it makes SSR PATCH requests
+            // hang forever when the TanStack Start handler fails to respond.
+            // Instead, keep the default 5-minute timeout as a safety net.
             httpServer.requestTimeout = 0
             httpServer.headersTimeout = 0
             httpServer.timeout = 0
           }
+
+          // dev-only: disable Node's default 5-minute request timeout so
+          // This is the correct layering: httpServer-level = infinite (SSE safety),
+          // per-route = selective enforcement (PATCH/POST/API routes get a deadline).
+          server.middlewares.use(async (req, res, next) => {
+            const { socket } = req
+            if (!socket) { next(); return }
+            const method = req.method?.toUpperCase() ?? 'GET'
+            const path = req.url?.split('?')[0] ?? ''
+            // SSE routes need no timeout; regular API routes get 15s.
+            const isSSE =
+              path.startsWith('/api/sse') ||
+              path.startsWith('/sse') ||
+              path.startsWith('/api/live')
+            const timeout = isSSE ? 0 : 15_000
+            socket.setTimeout(timeout)
+            next()
+          })
 
           server.httpServer?.on('close', () => {
             workspaceDaemonShuttingDown = true

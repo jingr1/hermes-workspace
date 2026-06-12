@@ -151,6 +151,29 @@ export function upsertSwarmRosterWorker(input: SwarmRosterUpsert, ids: Array<str
   return next
 }
 
+export function patchSwarmRosterWorker(
+  workerId: string,
+  patch: Partial<Pick<SwarmRosterWorker, 'model' | 'name' | 'role' | 'specialty' | 'mission'>>,
+  ids: Array<string> = [],
+): SwarmRoster {
+  const current = readSwarmRoster(ids)
+  const byId = new Map(current.workers.map((worker) => [worker.id, worker]))
+  const existing = byId.get(workerId)
+  if (!existing) throw new Error(`Worker ${workerId} not found in swarm roster`)
+  const updated = { ...existing, ...patch }
+  byId.set(workerId, updated)
+  const next: SwarmRoster = {
+    version: current.version || 1,
+    workers: [...byId.values()].sort((a, b) => {
+      const na = parseInt(a.id.replace(/\D/g, ''), 10) || 0
+      const nb = parseInt(b.id.replace(/\D/g, ''), 10) || 0
+      return na - nb
+    }),
+  }
+  writeSwarmRoster(next)
+  return next
+}
+
 export function rosterByWorkerId(ids: Array<string> = []): Map<string, SwarmRosterWorker> {
   return new Map(readSwarmRoster(ids).workers.map((worker) => [worker.id, worker]))
 }

@@ -291,7 +291,9 @@ async function fetchConfiguredLiveModels(): Promise<Array<ModelEntry>> {
           .filter((entry): entry is ModelEntry => entry !== null)
           .map((entry) => ({
             ...entry,
-            provider: readString(entry.provider) || endpoint.provider,
+            // Always use the Hermes config provider key (e.g. `nvidia`), not the
+            // upstream org prefix embedded in API model ids (e.g. `minimaxai`).
+            provider: endpoint.provider,
             source: 'live-proxy',
           }))
       }
@@ -356,6 +358,21 @@ function readClaudeConfigCatalog(): Array<ModelEntry> {
         pushEntry({
           id: providerDefault,
           name: providerDefault,
+          provider: providerId,
+        })
+      }
+    }
+
+    const fallbackProviders = config.fallback_providers
+    if (Array.isArray(fallbackProviders)) {
+      for (const entry of fallbackProviders) {
+        const block = asRecord(entry)
+        const providerId = readString(block.provider)
+        const modelId = readString(block.model) || readString(block.default)
+        if (!providerId || !modelId) continue
+        pushEntry({
+          id: modelId,
+          name: modelId,
           provider: providerId,
         })
       }
