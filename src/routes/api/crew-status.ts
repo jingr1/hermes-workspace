@@ -187,19 +187,20 @@ function readConfig(claudeHome: string): { model: string; provider: string } {
   try {
     const raw = yaml.parse(readFileSync(configPath, 'utf-8')) as Record<string, unknown>
     const modelVal = raw.model
-    const providerVal = raw.provider
 
     if (typeof modelVal === 'object' && modelVal !== null) {
       const modelObj = modelVal as Record<string, unknown>
       return {
         model: String(modelObj.default ?? modelObj.name ?? 'unknown'),
-        provider: String(modelObj.provider ?? providerVal ?? 'unknown'),
+        provider: String(modelObj.provider ?? 'unknown'),
       }
     }
 
     return {
       model: String(modelVal ?? 'unknown'),
-      provider: String(providerVal ?? 'unknown'),
+      // provider only lives under model.{provider} in Hermes config schema;
+      // root-level 'provider' is not a valid key, so we have no fallback.
+      provider: 'unknown',
     }
   } catch {
     return { model: 'unknown', provider: 'unknown' }

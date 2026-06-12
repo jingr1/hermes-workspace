@@ -74,7 +74,7 @@ type RuntimeEntry = {
 }
 
 function listWorkerIds(): Array<string> {
-  return listSwarmWorkerIds()
+  return listSwarmWorkerIds({ swarmOnly: true }).filter((id) => id !== 'workspace')
 }
 
 function lastLogTail(
