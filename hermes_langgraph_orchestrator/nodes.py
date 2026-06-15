@@ -89,6 +89,65 @@ def _active_assignments_to_workers(assignments: list[dict]) -> list[str]:
     return sorted({a.get("worker_id", "").strip() for a in assignments if a.get("worker_id")})
 
 
+def _build_task_for_transition(
+    source_id: str,
+    target_id: str,
+    checkpoint: WorkerCheckpoint,
+    classification: WorkerClassification,
+    decision: Any,
+    state: OrchestratorState,
+) -> str:
+    """Build an actionable task prompt for the next worker in the workflow.
+
+    The prompt is intentionally explicit: it states the mission goal, the
+    previous worker's concrete result, the workflow transition rationale, and
+    exactly what the target worker should do next.  This avoids vague prompts
+    like "Continue researcher's work."
+    """
+    mission_goal = state.get("mission_goal", "")
+    result = (checkpoint.get("result") or "").strip()
+    files = (checkpoint.get("files_changed") or "").strip() or "none"
+    commands = (checkpoint.get("commands_run") or "").strip() or "none"
+    next_action = (checkpoint.get("next_action") or "").strip()
+    reason = (decision.reason or f"{source_id} finished; hand off to {target_id}").strip()
+
+    if decision.action == "retry":
+        return (
+            f"## Mission\n{mission_goal}\n\n"
+            f"## Retry context\n"
+            f"You ({source_id}) were previously blocked. The orchestrator has approved a retry.\n"
+            f"Blocker: {classification.blocker_summary or 'unknown'}\n"
+            f"Blocker type: {classification.blocker_type or 'unknown'}\n\n"
+            f"## Your task\n"
+            f"Re-attempt your previous task. Address the blocker above directly. "
+            f"Return the required checkpoint format (STATE, FILES_CHANGED, COMMANDS_RUN, RESULT, BLOCKER, NEXT_ACTION)."
+        )
+
+    lines = [
+        f"## Mission",
+        mission_goal,
+        "",
+        f"## Context from {source_id}",
+        f"{source_id} has completed their task and is handing off to you ({target_id}).",
+    ]
+    if result:
+        lines.extend([f"Result: {result}", ""])
+    if next_action:
+        lines.extend([f"Suggested next action: {next_action}", ""])
+    lines.extend(
+        [
+            f"Files changed: {files}",
+            f"Commands run: {commands}",
+            "",
+            f"## Your task",
+            f"{reason}.",
+            f"As {target_id}, take ownership of this step and produce concrete artifacts.",
+            "Return the required checkpoint format (STATE, FILES_CHANGED, COMMANDS_RUN, RESULT, BLOCKER, NEXT_ACTION).",
+        ]
+    )
+    return "\n".join(lines)
+
+
 # ============================================================
 # Node: init_mission — load roster + workflow, validate
 # ============================================================
@@ -380,14 +439,14 @@ async def route_workflow(state: OrchestratorState) -> dict:
                 transition_counts[key] = transition_counts.get(key, 0) + 1
                 dispatched.add(target)
                 cp = cp_map.get(c.worker_id, {})
-                if decision.action == "retry":
-                    task = f"Retry previous task. Blocker was: {c.blocker_summary}"
-                else:
-                    task = (
-                        f"Continue {c.worker_id}'s work.\n"
-                        f"Result: {cp.get('result', '')[:200]}\n"
-                        f"Files: {cp.get('files_changed', '')}"
-                    )
+                task = _build_task_for_transition(
+                    source_id=c.worker_id,
+                    target_id=target,
+                    checkpoint=cp,
+                    classification=c,
+                    decision=decision,
+                    state=state,
+                )
                 assignments.append(
                     {
                         "worker_id": target,
@@ -690,7 +749,11 @@ async def dispatch_assignments(state: OrchestratorState) -> dict:
             "log_entries": ["[dispatch] 无 assignments"],
         }
 
-    log(f"[dispatch] 派发 {len(assignments)} 个任务 (waitForCheckpoint)")
+    task_lines = "\n".join(
+        f"  → {a.get('worker_id')} | {a.get('reason') or a.get('task', '')[:80]}"
+        for a in assignments
+    )
+    log(f"[dispatch] 派发 {len(assignments)} 个任务 (waitForCheckpoint):\n{task_lines}")
 
     try:
         async with httpx.AsyncClient(timeout=600) as client:
@@ -713,11 +776,18 @@ async def dispatch_assignments(state: OrchestratorState) -> dict:
             resp.raise_for_status()
             data = resp.json()
     except Exception as e:
-        log(f"[dispatch] 失败: {e}")
+        detail = str(e) or type(e).__name__
+        if isinstance(e, httpx.HTTPStatusError) and e.response is not None:
+            try:
+                body = e.response.json()
+                detail = f"{detail} | {body}"
+            except Exception:
+                detail = f"{detail} | {e.response.text}"
+        log(f"[dispatch] 失败: {detail}")
         return {
             "dispatch_results": None,
-            "dispatch_error": str(e),
-            "log_entries": [f"[dispatch] ERROR: {e}"],
+            "dispatch_error": detail,
+            "log_entries": [f"[dispatch] ERROR: {detail}"],
         }
 
     checkpoints = _parse_dispatch_checkpoints(data)
@@ -857,11 +927,24 @@ async def wait_for_checkpoints(state: OrchestratorState) -> dict:
         await asyncio.sleep(poll_interval)
 
     log(f"[wait] {max_polls} 次轮询后仍有 worker 未完成")
+    # Surface the timeout as a BLOCKED checkpoint so the downstream classifier
+    # routes to the human gate instead of looping on SKIP/IN_PROGRESS.
+    for wid in current_workers:
+        if wid not in cp_map or cp_map[wid]["state"] not in terminal_states:
+            cp_map[wid] = WorkerCheckpoint(
+                worker_id=wid,
+                state="BLOCKED",
+                result=f"Checkpoint poll timeout after {max_polls} attempts",
+                files_changed="",
+                commands_run="",
+                blocker="Worker did not produce a terminal checkpoint within the poll window",
+                next_action="Orchestrator should verify worker state and retry or escalate",
+                raw=f"STATE: BLOCKED\nBLOCKER: Timeout after {max_polls} polls\nNEXT_ACTION: Verify worker and retry",
+            )
     return {
-        "checkpoints": [cp_map[wid] for wid in current_workers if wid in cp_map],
+        "checkpoints": [cp_map[wid] for wid in current_workers],
         "terminal_checkpoints": list(cp_map.values()),
         "awaiting_checkpoint": False,
-        "langgraph_needs_human": True,
         "log_entries": [f"[wait] timeout after {max_polls} polls, {len(cp_map)} checkpoints"],
     }
 

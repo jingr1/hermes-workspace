@@ -80,8 +80,8 @@ def build_phase2_graph(
 ) -> CompiledStateGraph:
     """Phase 2: deterministic LangGraph loop with workflow-driven routing.
 
-    START → init_mission → ensure_sessions → dispatch_assignments → classify
-      → route_workflow → [human_approval | finalize_mission | dispatch_assignments]
+    START → init_mission → ensure_sessions → dispatch_assignments → wait → classify
+      → route_workflow → [human_approval | finalize_mission | ensure_sessions]
     """
     graph = StateGraph(OrchestratorState)
 
@@ -120,7 +120,7 @@ def build_phase2_graph(
         max_iter = state.get("max_iterations", 5)
         if state.get("all_done", False) or iteration >= max_iter:
             return "finalize_mission"
-        return "dispatch_assignments"
+        return "ensure_sessions"
 
     graph.add_conditional_edges(
         "route",
@@ -128,11 +128,12 @@ def build_phase2_graph(
         {
             "human_approval": "human_approval",
             "finalize_mission": "finalize_mission",
-            "dispatch_assignments": "dispatch_assignments",
+            "ensure_sessions": "ensure_sessions",
+            "wait_for_checkpoints": "wait_for_checkpoints",
         },
     )
 
-    graph.add_edge("human_approval", "dispatch_assignments")
+    graph.add_edge("human_approval", "ensure_sessions")
     graph.add_edge("finalize_mission", END)
 
     saver = checkpointer if checkpointer is not None else MemorySaver()

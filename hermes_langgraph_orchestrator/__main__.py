@@ -204,7 +204,7 @@ def _find_scenario_checkpoint(scenario: str, worker_id: str, call: int) -> dict 
             cp = next((cp for cp in SCENARIO_CDC if cp["worker_id"] == "architect"), None)
             if cp and call >= 2:
                 cp2 = dict(cp)
-                cp2["result"] = "最终审查通过: 实现符合设计，测试通过"
+                cp2["result"] = "[approved] 最终审查通过: 实现符合设计，测试通过"
                 cp2["next_action"] = "任务完成"
                 cp2["raw"] = "STATE: DONE\nRESULT: approved\nNEXT_ACTION: done"
                 return cp2

@@ -696,7 +696,20 @@ export async function ensureLiveTmuxSession(workerId: string): Promise<{ ok: tru
 async function sendPromptToLiveSession(workerId: string, prompt: string): Promise<WorkerResult | null> {
   const startedAt = Date.now()
   const ensured = await ensureLiveTmuxSession(workerId)
-  if (!ensured.ok) return null
+  if (!ensured.ok) {
+    // Surface the live-session failure instead of silently falling back to the
+    // wrapper. For TUI workers the wrapper fallback usually fails anyway, and
+    // hiding the original error makes debugging much harder.
+    return {
+      workerId,
+      ok: false,
+      output: '',
+      error: `Live tmux session unavailable: ${ensured.error}`,
+      durationMs: Date.now() - startedAt,
+      exitCode: null,
+      delivery: 'tmux',
+    }
+  }
 
   const { tmuxBin, sessionName } = ensured
   const normalizedPrompt = prompt.replace(/\r\n/g, '\n')

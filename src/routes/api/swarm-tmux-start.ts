@@ -97,6 +97,10 @@ function resolveHermesBin(): string {
   return 'hermes'
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 function startSession(
   tmuxBin: string,
   sessionName: string,
@@ -116,7 +120,7 @@ function startSession(
         `HERMES_HOME='${profilePath.replace(/'/g, `'\\''`)}' HERMES_CLI_BIN='${resolveHermesBin().replace(/'/g, `'\\''`)}' exec '${resolveHermesBin().replace(/'/g, `'\\''`)}' chat --tui`,
       ],
       { timeout: 8_000 },
-      (error, _stdout, stderr) => {
+      async (error, _stdout, stderr) => {
         if (error) {
           resolve({
             ok: false,
@@ -124,7 +128,17 @@ function startSession(
           })
           return
         }
-        resolve({ ok: true })
+        // Give the agent a moment to render its prompt. If the Hermes process
+        // exits immediately, the session dies before dispatch can use it.
+        await sleep(1_500)
+        if (await tmuxHasSession(tmuxBin, sessionName)) {
+          resolve({ ok: true })
+          return
+        }
+        resolve({
+          ok: false,
+          error: `Hermes worker session ${sessionName} exited during startup. Check the profile and Hermes logs.`,
+        })
       },
     )
     child.on('error', (error) => {
