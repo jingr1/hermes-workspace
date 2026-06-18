@@ -13,6 +13,7 @@ import { rosterByWorkerId, type SwarmRosterWorker } from '../../server/swarm-ros
 import { publishSwarmCheckpointNotification } from '../../server/swarm-notifications'
 import { ensureSwarmProfileConfig, syncSwarmProfileModel } from '../../server/swarm-profile-config'
 import { parseSwarmModelLabel } from '../../server/swarm-model-resolver'
+import { buildHandoff, writeHandoff } from '../../server/handoff'
 
 const HERMES_BIN_CANDIDATES = [
   process.env.HERMES_CLI_BIN,
@@ -100,6 +101,10 @@ function getProfilesDir(): string {
 function getWrapperPath(workerId: string): string {
   const worker = rosterByWorkerId([workerId]).get(workerId)
   const wrapperName = worker?.wrapper?.trim() || workerId
+  const mockBinDir = process.env.HERMES_SWARM_MOCK_BIN
+  if (mockBinDir && existsSync(join(mockBinDir, wrapperName))) {
+    return join(mockBinDir, wrapperName)
+  }
   return join(homedir(), '.local', 'bin', wrapperName)
 }
 
@@ -133,12 +138,7 @@ function resolveTmuxBin(): string | null {
   }
   for (const candidate of TMUX_BIN_CANDIDATES) {
     if (candidate.includes('/')) {
-      if (
-        candidate === process.env.TMUX_BIN ||
-        candidate === '/opt/homebrew/bin/tmux' ||
-        candidate === '/usr/local/bin/tmux' ||
-        existsSync(candidate)
-      ) {
+      if (existsSync(candidate)) {
         return candidate
       }
       continue
@@ -245,6 +245,20 @@ function readRuntimeJson(profilePath: string): Record<string, unknown> {
   }
 }
 
+/**
+ * Build and persist a structured handoff for a completed worker checkpoint.
+ * Non-blocking: failures are logged but do not break dispatch.
+ */
+async function recordHandoffForWorker(workerId: string, checkpoint: ParsedSwarmCheckpoint): Promise<void> {
+  try {
+    const runtime = readRuntimeJson(getProfilePath(workerId))
+    const handoff = await buildHandoff(workerId, checkpoint, runtime)
+    await writeHandoff(handoff)
+  } catch (err) {
+    console.error(`[handoff] failed for ${workerId}:`, err)
+  }
+}
+
 function writeRuntimePatch(workerId: string, patch: Record<string, unknown>): void {
   const profilePath = getProfilePath(workerId)
   mkdirSync(profilePath, { recursive: true })
@@ -337,9 +351,12 @@ export function runtimeSnapshotIsFresh(snapshot: RuntimeCheckpointSnapshot, base
   if (!changed) return false
   const outputAt = snapshot.lastOutputAt
   const checkInAt = isoToMs(snapshot.lastCheckIn)
+  // Allow a small clock skew between Date.now() used for dispatchedAt and the
+  // ISO timestamp written by markDispatchStarted.
+  const freshThreshold = dispatchedAt - 1000
   return Boolean(
-    (typeof outputAt === 'number' && outputAt >= dispatchedAt) ||
-    (typeof checkInAt === 'number' && checkInAt >= dispatchedAt),
+    (typeof outputAt === 'number' && outputAt >= freshThreshold) ||
+    (typeof checkInAt === 'number' && checkInAt >= freshThreshold),
   )
 }
 
@@ -355,10 +372,6 @@ function formatRuntimeCheckpointRaw(checkpoint: ParsedSwarmCheckpoint): string {
 }
 
 export function checkpointFromRuntimeSnapshot(snapshot: RuntimeCheckpointSnapshot): ParsedSwarmCheckpoint | null {
-  if (snapshot.checkpointRaw) {
-    const parsed = newestCheckpointFromMessages([{ role: 'assistant', content: snapshot.checkpointRaw }])
-    if (parsed) return parsed
-  }
   const stateLabel = stateLabelForRuntimeSnapshot(snapshot)
   if (!stateLabel || !runtimeSnapshotHasMeaningfulCheckpoint(snapshot)) return null
   const result = snapshot.lastResult ?? snapshot.lastSummary
@@ -388,6 +401,7 @@ export function checkpointFromRuntimeSnapshot(snapshot: RuntimeCheckpointSnapsho
     result,
     blocker,
     nextAction: snapshot.nextAction,
+    reviewOutcome: null,
     raw: '',
   }
   checkpoint.raw = formatRuntimeCheckpointRaw(checkpoint)
@@ -572,18 +586,24 @@ async function waitForFreshCheckpoint(
     const runtimeSnapshot = readRuntimeCheckpointSnapshot(profilePath)
     if (runtimeSnapshotIsFresh(runtimeSnapshot, baselineRuntimeSignature, dispatchedAt)) {
       const runtimeCheckpoint = checkpointFromRuntimeSnapshot(runtimeSnapshot)
-      // Trust the runtime snapshot when it is fresh (post-dispatch).  The
-      // previousRaw guard is intentionally omitted here: an already-running
-      // worker may not have produced a new structured checkpoint yet, and the
-      // dispatch control message itself is a valid IN_PROGRESS checkpoint for
-      // the orchestrator to poll on.  Returning null instead causes the
-      // LangGraph orchestrator to see zero checkpoints and finalize empty.
-      if (runtimeCheckpoint) return runtimeCheckpoint
+      // Trust the runtime snapshot when it is fresh (post-dispatch) and the
+      // checkpoint content has actually changed.  The runtime checkpointRaw can
+      // persist across assignments, so a stale DONE from a previous task would
+      // otherwise be returned immediately for a freshly dispatched worker.
+      if (runtimeCheckpoint && runtimeCheckpoint.raw !== previousRaw) return runtimeCheckpoint
     }
 
     const chat = readWorkerMessages(profilePath, 50)
     if (chat.ok) {
-      const checkpoint = newestCheckpointFromMessages(chat.messages)
+      // Ignore chat checkpoints produced before this dispatch; otherwise a stale
+      // assistant message is mistaken for a fresh response.
+      const postDispatchMessages = chat.messages.filter(
+        (m) =>
+          m.role === 'assistant' &&
+          typeof m.timestamp === 'number' &&
+          m.timestamp * 1000 >= dispatchedAt - 5_000,
+      )
+      const checkpoint = newestCheckpointFromMessages(postDispatchMessages)
       if (checkpoint && checkpoint.raw !== previousRaw) return checkpoint
     }
     await sleep(2_000)
@@ -712,33 +732,31 @@ async function sendPromptToLiveSession(workerId: string, prompt: string): Promis
   }
 
   const { tmuxBin, sessionName } = ensured
-  const normalizedPrompt = prompt.replace(/\r\n/g, '\n')
-
-  // Use tmux paste-buffer instead of send-keys -l line-by-line. This is more
-  // reliable for live TUI delivery because it preserves multiline content and
-  // avoids key translation/terminal timing issues. Enter submits the composed
-  // prompt after paste.
-  const loaded = await execFileAsync(tmuxBin, [
-    'load-buffer',
-    '-b',
-    `swarm-dispatch-${workerId}`,
-    '-',
-  ], 8_000, normalizedPrompt)
-  if (!loaded.ok) {
+  const profilePath = getProfilePath(workerId)
+  const taskFilePath = join(profilePath, 'swarm-task.md')
+  // Persist the full prompt to disk and deliver a short, single-line instruction
+  // to the TUI. Multiline pastes into prompt_toolkit can enter continuation mode
+  // and never submit; pointing the agent at a file keeps the pasted input short.
+  try {
+    writeFileSync(taskFilePath, prompt, 'utf8')
+  } catch (err) {
     return {
       workerId,
       ok: false,
       output: '',
-      error: loaded.error,
+      error: `Failed to write task file ${taskFilePath}: ${err instanceof Error ? err.message : String(err)}`,
       durationMs: Date.now() - startedAt,
       exitCode: null,
       delivery: 'tmux',
     }
   }
+  const instruction = `Execute the task in ${taskFilePath} and return the required checkpoint format.`
 
   // Ensure we are sending a fresh prompt, not appending onto a partially typed
-  // line left in the agent TUI. Ctrl-U clears readline-style input in the
-  // current prompt without disrupting the session.
+  // or multi-line input left in the agent TUI. Ctrl-C cancels any pending
+  // input mode; Ctrl-U clears the current line.
+  await execFileAsync(tmuxBin, ['send-keys', '-t', sessionName, 'C-c'])
+  await sleep(200)
   const cleared = await execFileAsync(tmuxBin, ['send-keys', '-t', sessionName, 'C-u'])
   if (!cleared.ok) {
     return {
@@ -746,6 +764,24 @@ async function sendPromptToLiveSession(workerId: string, prompt: string): Promis
       ok: false,
       output: '',
       error: cleared.error,
+      durationMs: Date.now() - startedAt,
+      exitCode: null,
+      delivery: 'tmux',
+    }
+  }
+
+  const loaded = await execFileAsync(
+    tmuxBin,
+    ['load-buffer', '-b', `swarm-dispatch-${workerId}`, '-'],
+    8_000,
+    instruction,
+  )
+  if (!loaded.ok) {
+    return {
+      workerId,
+      ok: false,
+      output: '',
+      error: loaded.error,
       durationMs: Date.now() - startedAt,
       exitCode: null,
       delivery: 'tmux',
@@ -806,7 +842,7 @@ async function sendPromptToLiveSession(workerId: string, prompt: string): Promis
   return {
     workerId,
     ok: true,
-    output: `Delivered to live tmux session ${sessionName}`,
+    output: `Delivered task file ${taskFilePath} to live tmux session ${sessionName}`,
     error: null,
     durationMs: Date.now() - startedAt,
     exitCode: 0,
@@ -819,7 +855,19 @@ export function buildHermesChatQueryArgs(prompt: string): string[] {
   // Keeping the prompt adjacent to -q prevents argparse from interpreting
   // following flags (for example -Q) as a missing query and failing with:
   // "argument -q/--query: expected one argument".
-  return ['chat', '-q', prompt, '-Q', '--yolo', '--ignore-rules', '--source', 'swarm-dispatch']
+  return [
+    'chat',
+    '-q',
+    prompt,
+    '-Q',
+    '--yolo',
+    '--ignore-rules',
+    '--accept-hooks',
+    '--max-turns',
+    '15',
+    '--source',
+    'swarm-dispatch',
+  ]
 }
 
 function runWorker(assignment: AssignmentRequest, timeoutMs: number, roster: SwarmRosterWorker | undefined, options?: { waitForCheckpoint?: boolean; checkpointPollMs?: number; missionId?: string | null; notifySessionKey?: string | null }): Promise<WorkerResult> {
@@ -836,7 +884,14 @@ function runWorker(assignment: AssignmentRequest, timeoutMs: number, roster: Swa
     })
     const profilePath = getProfilePath(workerId)
     const runtimeBeforeDispatch = readRuntimeCheckpointSnapshot(profilePath)
-    const previousRaw = runtimeBeforeDispatch.checkpointRaw
+    // Use the worker's chat history as the authoritative previous checkpoint
+    // so waitForFreshCheckpoint does not confuse a stale runtime snapshot with
+    // a newly produced checkpoint.
+    const chatBeforeDispatch = readWorkerMessages(profilePath, 40)
+    const previousChatCheckpoint = chatBeforeDispatch.ok
+      ? newestCheckpointFromMessages(chatBeforeDispatch.messages)
+      : null
+    const previousRaw = previousChatCheckpoint?.raw ?? runtimeBeforeDispatch.checkpointRaw
     const baselineRuntimeSignature = runtimeCheckpointSignature(runtimeBeforeDispatch)
     markDispatchStarted(workerId, assignment.task, options?.missionId ?? null, assignment.assignmentId ?? null, options?.notifySessionKey ?? 'main')
     if (options?.missionId) {
@@ -864,8 +919,12 @@ function runWorker(assignment: AssignmentRequest, timeoutMs: number, roster: Swa
     const startedAt = Date.now()
     const wrapperPath = getWrapperPath(workerId)
 
-    // Prefer the persistent live agent session when available/startable.
-    const liveResult = await sendPromptToLiveSession(workerId, prompt)
+    // The wrapper (`hermes chat -q`) is more reliable than live tmux paste for
+    // long, structured prompts. Live TUI delivery can wedge on multiline input
+    // or prompt_toolkit continuation mode. Use the live session only when
+    // explicitly requested via HERMES_SWARM_USE_LIVE=1.
+    const useLive = process.env.HERMES_SWARM_USE_LIVE === '1' || process.env.HERMES_SWARM_USE_LIVE === 'true'
+    const liveResult = useLive ? await sendPromptToLiveSession(workerId, prompt) : null
     if (liveResult) {
       markDispatchResult(workerId, liveResult)
       if (options?.waitForCheckpoint && liveResult.ok) {
@@ -920,6 +979,7 @@ function runWorker(assignment: AssignmentRequest, timeoutMs: number, roster: Swa
             checkpoint,
             notifySessionKey: options?.notifySessionKey ?? 'main',
           })
+          await recordHandoffForWorker(workerId, checkpoint)
           liveResult.checkpoint = checkpoint
           liveResult.checkpointStatus = 'checkpointed'
           liveResult.output = `${liveResult.output}\nCheckpoint ${checkpoint.stateLabel}: ${checkpoint.result ?? 'no result'}`
@@ -1039,6 +1099,9 @@ function runWorker(assignment: AssignmentRequest, timeoutMs: number, roster: Swa
               assignmentId: assignment.assignmentId ?? null,
               checkpoint,
               notifySessionKey: options?.notifySessionKey ?? 'main',
+            })
+            void recordHandoffForWorker(workerId, checkpoint).catch((err) => {
+              console.error(`[handoff] failed for ${workerId}:`, err)
             })
             result.checkpoint = checkpoint
             result.checkpointStatus = 'checkpointed'

@@ -32,6 +32,7 @@ class WorkerCheckpoint(TypedDict):
     commands_run: str
     blocker: str
     next_action: str
+    review_outcome: str
     raw: str
 
 

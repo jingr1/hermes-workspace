@@ -19,6 +19,7 @@ from langgraph.types import Command
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from hermes_langgraph_orchestrator.graph import build_phase1_graph, build_phase2_graph
+from hermes_langgraph_orchestrator.resume import build_resume_command, list_active_gates, read_mission_state
 from hermes_langgraph_orchestrator.state import OrchestratorState
 from hermes_langgraph_orchestrator.workflow import (
     load_default_workflow,
@@ -173,29 +174,6 @@ async def mock_classify(state: OrchestratorState) -> dict:
         "classifications": classifications,
         "log_entries": [f"[mock-classify] {wid}={label}"],
     }
-
-
-def build_resume_command(state: OrchestratorState, action: str) -> Command:
-    pending = state.get("pending_human_assignments", []) or []
-    if action == "approved":
-        return Command(
-            update={
-                "langgraph_assignments": pending,
-                "pending_human_assignments": [],
-                "human_resume_action": "approved",
-            }
-        )
-    if action == "abort":
-        return Command(
-            update={
-                "pending_human_assignments": [],
-                "langgraph_assignments": [],
-                "human_resume_action": "abort",
-                "all_done": True,
-            },
-            goto="finalize_mission",
-        )
-    raise ValueError(f"Unsupported resume action: {action}")
 
 
 # ============================================================
@@ -375,3 +353,42 @@ async def test_phase2_resume_abort() -> None:
             command = build_resume_command(current.values, "abort")  # type: ignore[arg-type]
             result = await graph.ainvoke(command, config)  # type: ignore[arg-type]
             assert result.get("all_done") is True
+
+
+@pytest.mark.asyncio
+async def test_read_mission_state() -> None:
+    """read_mission_state returns a JSON-serializable paused state."""
+    mission_id = "test-read-state"
+    with tempfile.TemporaryDirectory() as tmpdir:
+        checkpoint_path = os.path.join(tmpdir, "checkpoints.db")
+        async with AsyncSqliteSaver.from_conn_string(checkpoint_path) as saver:
+            graph = build_phase2_graph(
+                init_fn=mock_init_mission,
+                ensure_fn=mock_ensure_sessions,
+                dispatch_fn=mock_dispatch,
+                classify_fn=mock_classify,
+                checkpointer=saver,
+            )
+            config = {"configurable": {"thread_id": mission_id}}
+            initial: OrchestratorState = {
+                "mission_id": mission_id,
+                "mission_goal": "CDC model",
+                "swarm_api_url": "http://localhost:3000/api",
+                "checkpoints": [],
+                "classifications": [],
+                "langgraph_assignments": [],
+                "pending_human_assignments": [],
+                "dispatch_counts": {},
+                "transition_counts": {},
+                "log_entries": [],
+            }
+            await graph.ainvoke(initial, config)  # type: ignore[arg-type]
+            state = await read_mission_state(checkpoint_path, mission_id)
+            assert state is not None
+            assert state["mission_id"] == mission_id
+            assert state["langgraph_needs_human"] is True
+            assert isinstance(state["classifications"], list)
+            assert state["all_done"] is False
+
+            gates = await list_active_gates(checkpoint_path)
+            assert any(g["mission_id"] == mission_id and g["langgraph_needs_human"] is True for g in gates)

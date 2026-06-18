@@ -81,6 +81,9 @@ import { Route as ApiPlaygroundNpcRouteImport } from './routes/api/playground-np
 import { Route as ApiPlaygroundAdminRouteImport } from './routes/api/playground-admin'
 import { Route as ApiPingRouteImport } from './routes/api/ping'
 import { Route as ApiPathsRouteImport } from './routes/api/paths'
+import { Route as ApiOrchestratorStateRouteImport } from './routes/api/orchestrator-state'
+import { Route as ApiOrchestratorResumeRouteImport } from './routes/api/orchestrator-resume'
+import { Route as ApiOrchestratorActiveGatesRouteImport } from './routes/api/orchestrator-active-gates'
 import { Route as ApiModelsRouteImport } from './routes/api/models'
 import { Route as ApiMemoryRouteImport } from './routes/api/memory'
 import { Route as ApiMediaRouteImport } from './routes/api/media'
@@ -531,6 +534,22 @@ const ApiPathsRoute = ApiPathsRouteImport.update({
   path: '/api/paths',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiOrchestratorStateRoute = ApiOrchestratorStateRouteImport.update({
+  id: '/api/orchestrator-state',
+  path: '/api/orchestrator-state',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiOrchestratorResumeRoute = ApiOrchestratorResumeRouteImport.update({
+  id: '/api/orchestrator-resume',
+  path: '/api/orchestrator-resume',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiOrchestratorActiveGatesRoute =
+  ApiOrchestratorActiveGatesRouteImport.update({
+    id: '/api/orchestrator-active-gates',
+    path: '/api/orchestrator-active-gates',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiModelsRoute = ApiModelsRouteImport.update({
   id: '/api/models',
   path: '/api/models',
@@ -1035,6 +1054,9 @@ export interface FileRoutesByFullPath {
   '/api/media': typeof ApiMediaRoute
   '/api/memory': typeof ApiMemoryRouteWithChildren
   '/api/models': typeof ApiModelsRoute
+  '/api/orchestrator-active-gates': typeof ApiOrchestratorActiveGatesRoute
+  '/api/orchestrator-resume': typeof ApiOrchestratorResumeRoute
+  '/api/orchestrator-state': typeof ApiOrchestratorStateRoute
   '/api/paths': typeof ApiPathsRoute
   '/api/ping': typeof ApiPingRoute
   '/api/playground-admin': typeof ApiPlaygroundAdminRoute
@@ -1196,6 +1218,9 @@ export interface FileRoutesByTo {
   '/api/media': typeof ApiMediaRoute
   '/api/memory': typeof ApiMemoryRouteWithChildren
   '/api/models': typeof ApiModelsRoute
+  '/api/orchestrator-active-gates': typeof ApiOrchestratorActiveGatesRoute
+  '/api/orchestrator-resume': typeof ApiOrchestratorResumeRoute
+  '/api/orchestrator-state': typeof ApiOrchestratorStateRoute
   '/api/paths': typeof ApiPathsRoute
   '/api/ping': typeof ApiPingRoute
   '/api/playground-admin': typeof ApiPlaygroundAdminRoute
@@ -1359,6 +1384,9 @@ export interface FileRoutesById {
   '/api/media': typeof ApiMediaRoute
   '/api/memory': typeof ApiMemoryRouteWithChildren
   '/api/models': typeof ApiModelsRoute
+  '/api/orchestrator-active-gates': typeof ApiOrchestratorActiveGatesRoute
+  '/api/orchestrator-resume': typeof ApiOrchestratorResumeRoute
+  '/api/orchestrator-state': typeof ApiOrchestratorStateRoute
   '/api/paths': typeof ApiPathsRoute
   '/api/ping': typeof ApiPingRoute
   '/api/playground-admin': typeof ApiPlaygroundAdminRoute
@@ -1523,6 +1551,9 @@ export interface FileRouteTypes {
     | '/api/media'
     | '/api/memory'
     | '/api/models'
+    | '/api/orchestrator-active-gates'
+    | '/api/orchestrator-resume'
+    | '/api/orchestrator-state'
     | '/api/paths'
     | '/api/ping'
     | '/api/playground-admin'
@@ -1684,6 +1715,9 @@ export interface FileRouteTypes {
     | '/api/media'
     | '/api/memory'
     | '/api/models'
+    | '/api/orchestrator-active-gates'
+    | '/api/orchestrator-resume'
+    | '/api/orchestrator-state'
     | '/api/paths'
     | '/api/ping'
     | '/api/playground-admin'
@@ -1846,6 +1880,9 @@ export interface FileRouteTypes {
     | '/api/media'
     | '/api/memory'
     | '/api/models'
+    | '/api/orchestrator-active-gates'
+    | '/api/orchestrator-resume'
+    | '/api/orchestrator-state'
     | '/api/paths'
     | '/api/ping'
     | '/api/playground-admin'
@@ -2009,6 +2046,9 @@ export interface RootRouteChildren {
   ApiMediaRoute: typeof ApiMediaRoute
   ApiMemoryRoute: typeof ApiMemoryRouteWithChildren
   ApiModelsRoute: typeof ApiModelsRoute
+  ApiOrchestratorActiveGatesRoute: typeof ApiOrchestratorActiveGatesRoute
+  ApiOrchestratorResumeRoute: typeof ApiOrchestratorResumeRoute
+  ApiOrchestratorStateRoute: typeof ApiOrchestratorStateRoute
   ApiPathsRoute: typeof ApiPathsRoute
   ApiPingRoute: typeof ApiPingRoute
   ApiPlaygroundAdminRoute: typeof ApiPlaygroundAdminRoute
@@ -2589,6 +2629,27 @@ declare module '@tanstack/react-router' {
       path: '/api/paths'
       fullPath: '/api/paths'
       preLoaderRoute: typeof ApiPathsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/orchestrator-state': {
+      id: '/api/orchestrator-state'
+      path: '/api/orchestrator-state'
+      fullPath: '/api/orchestrator-state'
+      preLoaderRoute: typeof ApiOrchestratorStateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/orchestrator-resume': {
+      id: '/api/orchestrator-resume'
+      path: '/api/orchestrator-resume'
+      fullPath: '/api/orchestrator-resume'
+      preLoaderRoute: typeof ApiOrchestratorResumeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/orchestrator-active-gates': {
+      id: '/api/orchestrator-active-gates'
+      path: '/api/orchestrator-active-gates'
+      fullPath: '/api/orchestrator-active-gates'
+      preLoaderRoute: typeof ApiOrchestratorActiveGatesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/models': {
@@ -3478,6 +3539,9 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMediaRoute: ApiMediaRoute,
   ApiMemoryRoute: ApiMemoryRouteWithChildren,
   ApiModelsRoute: ApiModelsRoute,
+  ApiOrchestratorActiveGatesRoute: ApiOrchestratorActiveGatesRoute,
+  ApiOrchestratorResumeRoute: ApiOrchestratorResumeRoute,
+  ApiOrchestratorStateRoute: ApiOrchestratorStateRoute,
   ApiPathsRoute: ApiPathsRoute,
   ApiPingRoute: ApiPingRoute,
   ApiPlaygroundAdminRoute: ApiPlaygroundAdminRoute,

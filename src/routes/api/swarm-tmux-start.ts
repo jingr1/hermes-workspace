@@ -1,13 +1,14 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { json } from '@tanstack/react-start'
 import { execFile } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { json } from '@tanstack/react-start'
+import { createFileRoute } from '@tanstack/react-router'
 import { isAuthenticated } from '../../server/auth-middleware'
 import { rosterByWorkerId } from '../../server/swarm-roster'
 import { parseSwarmModelLabel } from '../../server/swarm-model-resolver'
 import { syncSwarmProfileModel } from '../../server/swarm-profile-config'
+import { handoffPath, readHandoff } from '../../server/handoff'
 
 // Inlined to avoid SSR module-resolution races against freshly-written
 // helpers; mirrors `src/server/claude-paths.ts` getProfilesDir().
@@ -106,7 +107,12 @@ function startSession(
   sessionName: string,
   profilePath: string,
   cwd: string,
+  workerId: string,
 ): Promise<{ ok: boolean; error?: string }> {
+  const handoff = readHandoff(workerId)
+  const handoffEnv = handoff
+    ? `HERMES_HANDOFF_PATH='${handoffPath(workerId).replace(/'/g, `'\\''`)}' `
+    : ''
   return new Promise((resolve) => {
     const child = execFile(
       tmuxBin,
@@ -117,14 +123,14 @@ function startSession(
         sessionName,
         '-c',
         cwd,
-        `HERMES_HOME='${profilePath.replace(/'/g, `'\\''`)}' HERMES_CLI_BIN='${resolveHermesBin().replace(/'/g, `'\\''`)}' exec '${resolveHermesBin().replace(/'/g, `'\\''`)}' chat --tui`,
+        `${handoffEnv}HERMES_HOME='${profilePath.replace(/'/g, `'\\''`)}' HERMES_CLI_BIN='${resolveHermesBin().replace(/'/g, `'\\''`)}' exec '${resolveHermesBin().replace(/'/g, `'\\''`)}' chat --tui`,
       ],
       { timeout: 8_000 },
       async (error, _stdout, stderr) => {
         if (error) {
           resolve({
             ok: false,
-            error: stderr?.toString().trim() || error.message,
+            error: stderr.toString().trim() || error.message,
           })
           return
         }
@@ -132,6 +138,11 @@ function startSession(
         // exits immediately, the session dies before dispatch can use it.
         await sleep(1_500)
         if (await tmuxHasSession(tmuxBin, sessionName)) {
+          // If a previous handoff exists for this worker, paste it into the
+          // session so the agent can ground itself on restart.
+          if (handoff) {
+            await injectHandoffPrompt(tmuxBin, sessionName, workerId)
+          }
           resolve({ ok: true })
           return
         }
@@ -145,6 +156,55 @@ function startSession(
       resolve({ ok: false, error: error.message })
     })
   })
+}
+
+async function injectHandoffPrompt(
+  tmuxBin: string,
+  sessionName: string,
+  workerId: string,
+): Promise<void> {
+  const handoff = readHandoff(workerId)
+  if (!handoff) return
+  const prompt =
+    `CONTEXT_HANDOFF. Your latest structured handoff is at ${handoffPath(workerId)}. ` +
+    `Read it (and the matching .md file) to re-ground, then wait for the next assignment.`
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const child = execFile(tmuxBin, ['load-buffer', '-b', `swarm-start-${workerId}`, '-'], {
+        encoding: 'utf8',
+      })
+      child.stdin?.write(prompt)
+      child.stdin?.end()
+      child.on('close', (code) => {
+        if (code !== 0) return reject(new Error(`load-buffer exited ${code}`))
+        resolve()
+      })
+      child.on('error', reject)
+    })
+    await new Promise<void>((resolve, reject) => {
+      execFile(tmuxBin, ['send-keys', '-t', sessionName, 'C-c'], () => {
+        setTimeout(() => {
+          execFile(tmuxBin, ['send-keys', '-t', sessionName, 'C-u'], () => {
+            execFile(
+              tmuxBin,
+              ['paste-buffer', '-d', '-b', `swarm-start-${workerId}`, '-t', sessionName],
+              (err) => {
+                if (err) return reject(err)
+                setTimeout(() => {
+                  execFile(tmuxBin, ['send-keys', '-t', sessionName, 'Enter'], (enterErr) => {
+                    if (enterErr) return reject(enterErr)
+                    resolve()
+                  })
+                }, 150)
+              },
+            )
+          })
+        }, 200)
+      })
+    })
+  } catch (err) {
+    console.error(`[swarm-tmux-start] failed to inject handoff for ${workerId}:`, err)
+  }
 }
 
 function resolveWorkerCwd(workerId: string): string {
@@ -217,7 +277,7 @@ export const Route = createFileRoute('/api/swarm-tmux-start')({
         // pass `--model`, so this is the only way the roster value is
         // honored. Best-effort: unrecognised labels (typos, custom
         // models) are left as-is so a worker never gets wedged. See #236.
-        let modelSync: {
+        const modelSync: {
           attempted: boolean
           changed: boolean
           target?: string
@@ -263,6 +323,7 @@ export const Route = createFileRoute('/api/swarm-tmux-start')({
           sessionName,
           profilePath,
           cwd,
+          workerId,
         )
         if (!result.ok) {
           return json(

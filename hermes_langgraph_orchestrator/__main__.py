@@ -40,6 +40,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from langgraph.types import Command
 
+from hermes_langgraph_orchestrator.resume import (
+    build_resume_command,
+    list_active_gates,
+    print_gates_json,
+    print_state_json,
+    read_mission_state,
+)
 from hermes_langgraph_orchestrator.state import (
     DispatchDecision,
     OrchestratorState,
@@ -354,35 +361,6 @@ async def make_mock_ensure_sessions():
 
 
 # ============================================================
-# Resume helpers
-# ============================================================
-def build_resume_command(state: OrchestratorState, action: str) -> Command:
-    """Build a LangGraph Command to resume from the human_approval interrupt."""
-    pending = state.get("pending_human_assignments", []) or []
-    if action == "approved":
-        # Move pending human assignments into the dispatch queue and clear pending.
-        return Command(
-            update={
-                "langgraph_assignments": pending,
-                "pending_human_assignments": [],
-                "human_resume_action": "approved",
-            }
-        )
-    if action == "abort":
-        # Clear pending work and jump straight to finalize.
-        return Command(
-            update={
-                "pending_human_assignments": [],
-                "langgraph_assignments": [],
-                "human_resume_action": "abort",
-                "all_done": True,
-            },
-            goto="finalize_mission",
-        )
-    raise ValueError(f"Unsupported resume action: {action}")
-
-
-# ============================================================
 # CLI
 # ============================================================
 async def main():
@@ -416,6 +394,16 @@ async def main():
         choices=["", "approved", "abort"],
         help="从 human_approval 中断点恢复",
     )
+    parser.add_argument(
+        "--get-state",
+        action="store_true",
+        help="读取当前 mission 的 LangGraph 状态并输出 JSON",
+    )
+    parser.add_argument(
+        "--list-active-gates",
+        action="store_true",
+        help="扫描所有处于 human gate 的 mission 并输出 JSON",
+    )
     args = parser.parse_args()
 
     scenario = args.scenario
@@ -428,16 +416,33 @@ async def main():
     phase = "Phase 2 (执行)" if args.execute else "Phase 1 (对比)"
     mode = "全部 mock" if args.mock else "mock services" if args.mock_services else "真实 LLM + mock collect" if args.mock_collect else "真实 LLM + 真实 API"
 
-    print("=" * 60)
-    print(f"LangGraph Orchestrator — {phase}")
-    print(f"场景: {scenario}")
-    print("=" * 60)
-    print(f"  Goal: {goal}")
-    print(f"  Mode: {mode}")
-    print(f"  Max iterations: {args.max_iterations}")
-    if args.workflow:
-        print(f"  Workflow: {args.workflow}")
-    print()
+    if not args.get_state and not args.list_active_gates:
+        print("=" * 60)
+        print(f"LangGraph Orchestrator — {phase}")
+        print(f"场景: {scenario}")
+        print("=" * 60)
+        print(f"  Goal: {goal}")
+        print(f"  Mode: {mode}")
+        print(f"  Max iterations: {args.max_iterations}")
+        if args.workflow:
+            print(f"  Workflow: {args.workflow}")
+        print()
+
+    checkpoint_path = getattr(args, "checkpoint_path", None)
+    if not checkpoint_path:
+        checkpoint_dir = os.path.expanduser("~/.hermes")
+        os.makedirs(checkpoint_dir, exist_ok=True)
+        checkpoint_path = os.path.join(checkpoint_dir, "langgraph-checkpoints.db")
+
+    if args.get_state:
+        state = await read_mission_state(checkpoint_path, mission_id)
+        print_state_json(state)
+        return
+
+    if args.list_active_gates:
+        gates = await list_active_gates(checkpoint_path)
+        print_gates_json(gates)
+        return
 
     if args.execute:
         from hermes_langgraph_orchestrator.graph import build_phase2_graph
@@ -450,12 +455,6 @@ async def main():
                 {"worker_id": w, "task": goal, "reason": f"初始派发: {w}"}
                 for w in workers
             ]
-
-        checkpoint_path = getattr(args, "checkpoint_path", None)
-        if not checkpoint_path:
-            checkpoint_dir = os.path.expanduser("~/.hermes")
-            os.makedirs(checkpoint_dir, exist_ok=True)
-            checkpoint_path = os.path.join(checkpoint_dir, "langgraph-checkpoints.db")
 
         config = {"configurable": {"thread_id": mission_id}}
 

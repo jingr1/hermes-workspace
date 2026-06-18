@@ -13,12 +13,19 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 from datetime import datetime, timezone
 from typing import Any
 
 import httpx
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
+from pathlib import Path
+
+# Shared swarm handoff directory. Workers are expected to write their latest
+# deliverable report here so downstream workers can locate context even when
+# their cwd differs from the source worker's cwd.
+_HANDOFF_DIR = Path(__file__).resolve().parents[1] / "memory" / "handoffs" / "swarm"
 
 from .state import (
     DispatchDecision,
@@ -79,6 +86,7 @@ def _parse_dispatch_checkpoints(data: dict[str, Any]) -> list[WorkerCheckpoint]:
                 commands_run=cp.get("commandsRun") or "",
                 blocker=cp.get("blocker") or "",
                 next_action=cp.get("nextAction") or "",
+                review_outcome=cp.get("reviewOutcome") or "",
                 raw=cp.get("raw") or "",
             )
         )
@@ -87,6 +95,159 @@ def _parse_dispatch_checkpoints(data: dict[str, Any]) -> list[WorkerCheckpoint]:
 
 def _active_assignments_to_workers(assignments: list[dict]) -> list[str]:
     return sorted({a.get("worker_id", "").strip() for a in assignments if a.get("worker_id")})
+
+
+def _read_handoff(source_id: str) -> str:
+    """Read the latest structured handoff for a source worker, if available."""
+    path = _HANDOFF_DIR / f"{source_id}-latest.md"
+    try:
+        if path.exists():
+            return path.read_text(encoding="utf-8")
+    except Exception:
+        pass
+    return ""
+
+
+def _transition_instructions(
+    source_id: str,
+    target_id: str,
+    classification: WorkerClassification,
+    decision: Any,
+) -> str:
+    """Return role-specific, actionable instructions for a workflow transition.
+
+    The orchestrator owns the workflow semantics, so the concrete "what to do
+    next" prompt belongs here rather than in the worker's static system prompt.
+    """
+    if decision.action == "retry":
+        return (
+            "Re-attempt your previous task. Address the blocker above directly. "
+            "Return the required checkpoint format."
+        )
+
+    if target_id == "architect" and source_id == "developer":
+        return (
+            "Review the implementation produced by developer against the architecture/design. "
+            "The developer's structured handoff is included below. Inspect the files changed, "
+            "verify tests and commands run, and decide whether to approve or request changes. "
+            "This is a code review gate: you MUST end your checkpoint with a line exactly like:\n"
+            "REVIEW_OUTCOME: approved\n"
+            "or\n"
+            "REVIEW_OUTCOME: changes_requested\n"
+            "Use approved only if the implementation matches the design and tests pass; "
+            "otherwise use changes_requested and list concrete fixes in RESULT."
+        )
+
+    if target_id == "developer" and source_id == "architect":
+        return (
+            "Implement the architecture/design produced by architect. "
+            "The architect's structured handoff is included below for context. "
+            "Produce concrete code, tests, and documentation. "
+            "Return the required checkpoint format."
+        )
+
+    if target_id == "architect" and source_id == "researcher":
+        return (
+            "Create the architecture/design specification based on the research findings. "
+            "The researcher's structured handoff is included below for context. "
+            "Define interfaces, data models, module boundaries, and validation criteria. "
+            "Return the required checkpoint format."
+        )
+
+    if target_id == "learning":
+        return (
+            "Summarize the completed mission, key decisions, and lessons learned. "
+            "Produce terminal documentation or a handoff note. "
+            "Return the required checkpoint format."
+        )
+
+    return "Take ownership of this step and produce concrete artifacts. Return the required checkpoint format."
+
+
+def _infer_architect_review_outcome(
+    classification: WorkerClassification, checkpoints: list[WorkerCheckpoint]
+) -> WorkerClassification:
+    """Backfill architect review_outcome when the LLM forgets to set it.
+
+    The developer->architect review gate is the only place review_outcome is
+    meaningful. If the architect returned DONE without an explicit outcome, we
+    inspect the checkpoint raw text. Approval signals default to approved;
+    anything that looks like a request for fixes defaults to changes_requested.
+    If the context does not look like a review at all (e.g. initial design),
+    leave review_outcome empty so the workflow can continue to developer.
+    """
+    if classification.worker_id != "architect":
+        return classification
+    if classification.verdict != "DONE":
+        return classification
+    if classification.review_outcome:
+        return classification
+
+    raw = ""
+    for cp in checkpoints:
+        if cp.get("worker_id") == "architect":
+            raw = (cp.get("raw") or "") + " " + (cp.get("result") or "")
+            break
+    raw_lower = raw.lower()
+
+    review_context = any(
+        kw in raw_lower
+        for kw in [
+            "review",
+            "developer",
+            "implementation",
+            "code review",
+            "审查",
+            "实现",
+        ]
+    )
+    if not review_context:
+        return classification
+
+    explicit = re.search(r"REVIEW[_\s]OUTCOME\s*[:=]\s*(approved|changes_requested)", raw, re.IGNORECASE)
+    if explicit:
+        classification.review_outcome = explicit.group(1).lower()
+        return classification
+
+    approval_signals = [
+        "approved",
+        "approve",
+        "lgtm",
+        "looks good",
+        "looks correct",
+        "matches the design",
+        "implementation is correct",
+        "tests pass",
+        "no issues",
+        "no problems",
+        "通过",
+        "符合",
+    ]
+    change_signals = [
+        "changes_requested",
+        "changes required",
+        "needs changes",
+        "needs work",
+        "does not match",
+        "does not implement",
+        "missing",
+        "fix",
+        "issue",
+        "bug",
+        "broken",
+        "fails",
+        "未通过",
+        "不符合",
+    ]
+    if any(sig in raw_lower for sig in approval_signals) and not any(
+        sig in raw_lower for sig in change_signals
+    ):
+        classification.review_outcome = "approved"
+        classification.reasoning = (classification.reasoning or "") + " [inferred approved]"
+    elif any(sig in raw_lower for sig in change_signals):
+        classification.review_outcome = "changes_requested"
+        classification.reasoning = (classification.reasoning or "") + " [inferred changes_requested]"
+    return classification
 
 
 def _build_task_for_transition(
@@ -119,10 +280,10 @@ def _build_task_for_transition(
             f"Blocker: {classification.blocker_summary or 'unknown'}\n"
             f"Blocker type: {classification.blocker_type or 'unknown'}\n\n"
             f"## Your task\n"
-            f"Re-attempt your previous task. Address the blocker above directly. "
-            f"Return the required checkpoint format (STATE, FILES_CHANGED, COMMANDS_RUN, RESULT, BLOCKER, NEXT_ACTION)."
+            f"{_transition_instructions(source_id, target_id, classification, decision)}"
         )
 
+    handoff = _read_handoff(source_id)
     lines = [
         f"## Mission",
         mission_goal,
@@ -139,9 +300,21 @@ def _build_task_for_transition(
             f"Files changed: {files}",
             f"Commands run: {commands}",
             "",
+        ]
+    )
+    if handoff:
+        lines.extend(
+            [
+                f"## Structured handoff from {source_id}",
+                handoff,
+                "",
+            ]
+        )
+    lines.extend(
+        [
             f"## Your task",
             f"{reason}.",
-            f"As {target_id}, take ownership of this step and produce concrete artifacts.",
+            f"As {target_id}, {_transition_instructions(source_id, target_id, classification, decision)}",
             "Return the required checkpoint format (STATE, FILES_CHANGED, COMMANDS_RUN, RESULT, BLOCKER, NEXT_ACTION).",
         ]
     )
@@ -285,6 +458,7 @@ CLASSIFY_PROMPT = """分析每个 Worker 的 checkpoint，输出结构化分类�
 }
 
 review_outcome 判断规则（仅 architect 审查 developer 时有效）:
+- 如果 checkpoint 原文中包含 REVIEW_OUTCOME: approved|changes_requested，直接使用该值
 - approved: developer 的实现完全符合设计规格，测试通过，无需修改
 - changes_requested: developer 的实现有问题，需要修改后重新提交
 - 空字符串: 非审查场景
@@ -355,18 +529,21 @@ async def classify_workers(state: OrchestratorState) -> dict:
         }
 
     classifications = [
-        WorkerClassification(
-            worker_id=c["worker_id"],
-            verdict=c.get("verdict", "SKIP"),
-            blocker_type=c.get("blocker_type", ""),
-            blocker_summary=c.get("blocker_summary", ""),
-            reasoning=c.get("reasoning", ""),
-            review_outcome=c.get("review_outcome", ""),
+        _infer_architect_review_outcome(
+            WorkerClassification(
+                worker_id=c["worker_id"],
+                verdict=c.get("verdict", "SKIP"),
+                blocker_type=c.get("blocker_type", ""),
+                blocker_summary=c.get("blocker_summary", ""),
+                reasoning=c.get("reasoning", ""),
+                review_outcome=c.get("review_outcome", ""),
+            ),
+            checkpoints,
         )
         for c in data.get("classifications", [])
     ]
 
-    summary = ", ".join(f"{c.worker_id}={c.verdict}" for c in classifications)
+    summary = ", ".join(f"{c.worker_id}={c.verdict}/{c.review_outcome or '-'}" for c in classifications)
     log(f"[classify] {summary}")
     return {
         "classifications": classifications,
@@ -769,7 +946,8 @@ async def dispatch_assignments(state: OrchestratorState) -> dict:
                         for a in assignments
                     ],
                     "missionId": mission_id,
-                    "timeoutSeconds": 600,
+                    "timeoutSeconds": 1200,
+                    "checkpointPollSeconds": 300,
                     "waitForCheckpoint": True,
                 },
             )
@@ -862,7 +1040,7 @@ async def wait_for_checkpoints(state: OrchestratorState) -> dict:
             "log_entries": [f"[wait] {len(current_workers)} current workers already terminal"],
         }
 
-    max_polls = 30
+    max_polls = 90
     poll_interval = 10
 
     for attempt in range(max_polls):
@@ -959,6 +1137,7 @@ def _checkpoint_from_parsed(checkpoint: dict[str, Any], worker_id: str) -> Worke
         commands_run=checkpoint.get("commandsRun") or "",
         blocker=checkpoint.get("blocker") or "",
         next_action=checkpoint.get("nextAction") or "",
+        review_outcome=checkpoint.get("reviewOutcome") or "",
         raw=checkpoint.get("raw") or "",
     )
 

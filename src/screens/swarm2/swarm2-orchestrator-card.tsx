@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
+  Alert02Icon,
   Cancel01Icon,
   ComputerTerminal01Icon,
   MessageMultiple01Icon,
@@ -53,6 +54,8 @@ export type Swarm2OrchestratorCardProps = {
   inboxCounts?: { needsReview: number; blocked: number; ready: number }
   routerSeed?: { key: number; prompt: string; mode: 'auto' | 'manual' | 'broadcast' } | null
   onOpenRouter: () => void
+  onOpenHumanGate?: () => void
+  humanGateActive?: boolean
   onRouterResults?: (response: DispatchResponse) => void
   /**
    * Bubble the bottom-center anchor of this card up to the parent so that
@@ -86,6 +89,8 @@ export function Swarm2OrchestratorCard({
   inboxCounts = { needsReview: 0, blocked: 0, ready: 0 },
   routerSeed = null,
   onOpenRouter,
+  onOpenHumanGate,
+  humanGateActive,
   onRouterResults,
   onAnchorRef,
   className,
@@ -188,6 +193,18 @@ export function Swarm2OrchestratorCard({
           </div>
 
           <div className="absolute right-0 top-0 flex shrink-0 items-center gap-1">
+            {humanGateActive ? (
+              <button
+                type="button"
+                onClick={onOpenHumanGate}
+                className="relative inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--theme-warning-border)] bg-[var(--theme-warning-soft)] text-[var(--theme-warning)] transition-colors hover:opacity-90"
+                aria-label="Human gate needs attention"
+                title="Human gate needs attention"
+              >
+                <HugeiconsIcon icon={Alert02Icon} size={16} strokeWidth={1.8} />
+                <span className="absolute -right-1 -top-1 size-2 rounded-full bg-red-500 ring-2 ring-[var(--theme-card)]" />
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={onOpenRouter}

@@ -13,6 +13,7 @@ import { useQuery } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   AlarmClockIcon,
+  Alert02Icon,
   CpuIcon,
   MessageMultiple01Icon,
   UserMultipleIcon,
@@ -26,6 +27,8 @@ import { Swarm2Wires } from './swarm2-wires'
 import { Swarm2ActivityFeed } from './swarm2-activity-feed'
 import { Swarm2KanbanBoard } from './swarm2-kanban-board'
 import { Swarm2ReportsView, buildSwarm2InboxLanes, type Swarm2InboxItem } from './swarm2-reports-view'
+import { HumanGatePanel } from './components/human-gate-panel'
+import { useHumanGate } from './hooks/use-human-gate'
 import { RouterChat } from '@/components/swarm/router-chat'
 import { SwarmTerminal } from '@/components/swarm/swarm-terminal'
 import { WorkflowHelpModal } from '@/components/workflow-help-modal'
@@ -669,6 +672,8 @@ type ControlPlaneStageProps = {
   viewMode: ViewMode
   onViewModeChange: (mode: ViewMode) => void
   onOpenRouter: () => void
+  onOpenHumanGate?: () => void
+  humanGateActive?: boolean
   onRouterResults: () => void
   onSelect: (workerId: string) => void
   onToggleRoom: (workerId: string) => void
@@ -707,6 +712,8 @@ function ControlPlaneStage({
   viewMode,
   onViewModeChange,
   onOpenRouter,
+  onOpenHumanGate,
+  humanGateActive,
   onRouterResults,
   onSelect,
   onToggleRoom,
@@ -815,6 +822,8 @@ function ControlPlaneStage({
           selectedId={selectedId}
           routerSeed={routerSeed}
           onOpenRouter={onOpenRouter}
+          onOpenHumanGate={onOpenHumanGate}
+          humanGateActive={humanGateActive}
           onRouterResults={() => {
             void onRouterResults()
           }}
@@ -994,6 +1003,8 @@ export function Swarm2Screen() {
   const [routerOpen, setRouterOpen] = useState(false)
   const [routerSeed, setRouterSeed] = useState<{ key: number; prompt: string; mode: 'auto' | 'manual' | 'broadcast' } | null>(null)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [humanGateOpen, setHumanGateOpen] = useState(false)
+  const [humanGateSeen, setHumanGateSeen] = useState(false)
   const [addSwarmOpen, setAddSwarmOpen] = useState(false)
   const [addSwarmSaving, setAddSwarmSaving] = useState(false)
   const [addSwarmError, setAddSwarmError] = useState<string | null>(null)
@@ -1277,6 +1288,23 @@ export function Swarm2Screen() {
     }
   }, [missionsQuery.data])
 
+  const {
+    gate: humanGate,
+    resume: resumeHumanGate,
+    isResuming: humanGateResuming,
+    resumeError: humanGateResumeError,
+  } = useHumanGate()
+
+  useEffect(() => {
+    if (humanGate && !humanGateSeen) {
+      setHumanGateOpen(true)
+      setHumanGateSeen(true)
+    }
+    if (!humanGate) {
+      setHumanGateSeen(false)
+    }
+  }, [humanGate, humanGateSeen])
+
   const activeAgents = useMemo(() => {
     return members
       .map((member) => {
@@ -1502,6 +1530,18 @@ export function Swarm2Screen() {
             </div>
 
             <div className="relative flex shrink-0 items-center gap-2 text-sm text-[var(--theme-muted)]">
+              {humanGate ? (
+                <button
+                  type="button"
+                  onClick={() => setHumanGateOpen(true)}
+                  className="relative inline-flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--theme-warning-border)] bg-[var(--theme-warning-soft)] text-[var(--theme-warning)] shadow-sm hover:opacity-90"
+                  aria-label="Human gate needs attention"
+                  title="Human gate needs attention"
+                >
+                  <HugeiconsIcon icon={Alert02Icon} size={17} strokeWidth={1.8} />
+                  <span className="absolute -right-1 -top-1 size-2.5 rounded-full bg-red-500 ring-2 ring-[var(--theme-card)]" />
+                </button>
+              ) : null}
               <WorkflowHelpModal
                 compact
                 eyebrow="Swarm"
@@ -1592,6 +1632,23 @@ export function Swarm2Screen() {
           </div>
         </header>
 
+        {humanGate ? (
+          <HumanGatePanel
+            gate={humanGate}
+            open={humanGateOpen}
+            onOpenChange={setHumanGateOpen}
+            onResume={resumeHumanGate}
+            isResuming={humanGateResuming}
+            resumeError={humanGateResumeError}
+            onOpenRuntime={(workerId) => {
+              setSelectedId(workerId)
+              setFocusedRuntimeWorkerId(workerId)
+              setViewMode('runtime')
+              setHumanGateOpen(false)
+            }}
+          />
+        ) : null}
+
         <div className="grid min-h-0 grid-cols-1 gap-3">
           <ControlPlaneStage
             members={members}
@@ -1606,6 +1663,8 @@ export function Swarm2Screen() {
             viewMode={viewMode}
             onViewModeChange={setViewMode}
             onOpenRouter={() => setRouterOpen(true)}
+            onOpenHumanGate={() => setHumanGateOpen(true)}
+            humanGateActive={Boolean(humanGate)}
             onRouterResults={() => {
               void runtimeQuery.refetch()
               void missionsQuery.refetch()

@@ -9,6 +9,7 @@ export type ParsedSwarmCheckpoint = {
   result: string | null
   blocker: string | null
   nextAction: string | null
+  reviewOutcome: string | null
   raw: string
 }
 
@@ -26,7 +27,7 @@ const STATE_MAP: Record<ParsedSwarmCheckpoint['stateLabel'], Pick<ParsedSwarmChe
 
 function normalizeLabel(value: string): Label | null {
   const upper = value.trim().toUpperCase().replace(/[ -]/g, '_')
-  return (LABELS as readonly string[]).includes(upper) ? upper as Label : null
+  return (LABELS as ReadonlyArray<string>).includes(upper) ? upper as Label : null
 }
 
 function clean(value: string | undefined): string | null {
@@ -64,6 +65,9 @@ export function parseSwarmCheckpoint(text: string): ParsedSwarmCheckpoint | null
   const stateLabel = stateRaw as ParsedSwarmCheckpoint['stateLabel']
   const mapped = STATE_MAP[stateLabel]
 
+  const review_match = text.match(/REVIEW[_\s]OUTCOME\s*[:=]\s*(approved|changes_requested)/i)
+  const reviewOutcome = review_match ? review_match[1].toLowerCase() : null
+
   return {
     stateLabel,
     runtimeState: mapped.runtimeState,
@@ -73,6 +77,7 @@ export function parseSwarmCheckpoint(text: string): ParsedSwarmCheckpoint | null
     result: clean(fields.RESULT),
     blocker: clean(fields.BLOCKER),
     nextAction: clean(fields.NEXT_ACTION),
+    reviewOutcome,
     raw: text.trim(),
   }
 }

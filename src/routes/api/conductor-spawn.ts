@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 import { createFileRoute } from '@tanstack/react-router'
@@ -12,9 +12,24 @@ import { getSwarmProfilePath } from '../../server/swarm-foundation'
 import { readWorkerMessages } from '../../server/swarm-chat-reader'
 import { newestCheckpointFromMessages } from '../../server/swarm-checkpoints'
 import { checkpointFromRuntimeSnapshot, dispatchSwarmAssignments, readRuntimeCheckpointSnapshot, runtimeCheckpointSignature } from './swarm-dispatch'
+import { buildHandoff, writeHandoff } from '../../server/handoff'
 import type { SwarmMission } from '../../server/swarm-missions'
+import type { ParsedSwarmCheckpoint } from '../../server/swarm-checkpoints'
 
 let cachedSkill: string | null = null
+
+async function recordHandoffForWorker(workerId: string, checkpoint: ParsedSwarmCheckpoint): Promise<void> {
+  try {
+    const runtimePath = resolve(getSwarmProfilePath(workerId), 'runtime.json')
+    const runtime = existsSync(runtimePath)
+      ? (JSON.parse(readFileSync(runtimePath, 'utf8')) as Record<string, unknown>)
+      : {}
+    const handoff = await buildHandoff(workerId, checkpoint, runtime)
+    await writeHandoff(handoff)
+  } catch (err) {
+    console.error(`[handoff] failed for ${workerId}:`, err)
+  }
+}
 
 export const NATIVE_CONDUCTOR_MODE_NOTE = 'Native-swarm is the official Workspace-native Swarm fallback when the dashboard Conductor API is unavailable.'
 
@@ -375,6 +390,9 @@ export const Route = createFileRoute('/api/conductor-spawn')({
                       workerId: assignment.workerId,
                       checkpoint,
                       source: 'conductor-poll',
+                    })
+                    void recordHandoffForWorker(assignment.workerId, checkpoint).catch((err) => {
+                      console.error(`[handoff] failed for ${assignment.workerId}:`, err)
                     })
                   }
                 } catch {

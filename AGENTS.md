@@ -26,6 +26,19 @@ This workspace uses semantic Hermes swarm workers, not numbered-only lanes. The 
 - For local Workspace pairing/debugging, treat **one gateway + one dashboard** as canonical: `hermes gateway run` on `:8642` and `hermes dashboard` on `:9119`. Before starting another gateway, verify `curl http://127.0.0.1:3000/api/sessions` (or the active workspace port) first. If Sessions already returns data, refresh/reprobe the UI instead of spawning a duplicate gateway.
 - If the default model is `gpt-5.4` / `openai-codex`, remember that chat depends on a live local Codex CLI login (`codex login`).
 
+## LangGraph Phase 2 human gate
+
+When the Phase 2 orchestrator raises `needs_human=True`, use one of:
+
+- **Dashboard (recommended):** open `/swarm2`. The Human Gate panel appears automatically, showing the blocked worker, blocker type, checkpoint, pending assignments, and routing analysis. Click **继续执行** to resume or **中止** to abort.
+- **CLI fallback:**
+  - `python -m hermes_langgraph_orchestrator --execute --resume approved --mission-id <id>`
+  - `python -m hermes_langgraph_orchestrator --execute --resume abort --mission-id <id>`
+- **API for automation:**
+  - `GET /api/orchestrator-active-gates` scans SQLite and returns every mission currently paused at `needs_human=True`.
+  - `GET /api/orchestrator-state?missionId=<id>` returns the current paused state for a specific mission.
+  - `POST /api/orchestrator/resume?mock=1` with `{ missionId, action: "approved" | "abort" }` resumes in the background.
+
 ## Windows-specific notes (2026-06-01)
 
 - **Three services required**: Gateway (:8642) + Dashboard (:9119) + Workspace (:3000). All must be running for full functionality.
@@ -49,3 +62,8 @@ This workspace uses semantic Hermes swarm workers, not numbered-only lanes. The 
 - **Slack invalid_auth**: Expected if Slack tokens aren't configured — ignore, doesn't affect core functionality.
 - **Node version**: Requires Node.js 22+. Check with `node --version`.
 - **`NODE_OPTIONS` stripped**: Windows doesn't support env var prefix in npm scripts — removed from `build` and `electron:dev` scripts.
+
+## Swarm dispatch environment variables
+
+- `HERMES_SWARM_USE_LIVE=1` — prefer persistent tmux TUI sessions for dispatch. By default dispatch now uses the worker wrapper (`hermes -p <worker> chat -q`) because live tmux paste is unreliable with long multiline prompts on this host.
+- `HERMES_SWARM_MOCK_BIN=<dir>` — when set, `src/routes/api/swarm-dispatch.ts` looks for worker wrapper scripts in `<dir>` before falling back to `~/.local/bin/`. Useful for validating workflow routing without invoking real LLM workers.
