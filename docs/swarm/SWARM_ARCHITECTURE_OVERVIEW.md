@@ -229,8 +229,10 @@ Worker 间通信的核心是 **tmux send-keys**，而非 HTTP 回调或消息队
 ```
 
 **两种派发模式**：
-1. **tmux 持久会话**（优先）：长任务，保持上下文，通过 `sendPromptToLiveSession()` 注入 prompt
-2. **oneshot 回退**：`hermes chat -q` 一次性执行，用于短任务或 tmux 不可用时
+1. **tmux 持久会话**（默认）：长任务，保持上下文，通过 `sendPromptToLiveSession()` 将完整 prompt 写入 `swarm-task.md` 后注入短指令
+2. **oneshot 回退**：tmux 基础设施不可用（未安装）或 `HERMES_SWARM_FORCE_ONESHOT=1` 时使用 `hermes chat -q` 一次性执行
+
+**fail-fast 规则**：tmux 已安装但 session 启动、paste 或 send-keys 失败时，派发直接报错，**不**静默回退 oneshot；由 Human Gate 或运维介入处理。
 
 ### 3.3 Checkpoint 契约
 
@@ -283,24 +285,30 @@ dispatchSwarmAssignments()                    [swarm-dispatch.ts:1018]
             ├─ 2. 标记 runtime.json 状态
             │     state: "running", phase: "dispatched"
             │
-            ├─ 3. 尝试 tmux 注入
-            │     └─ sendPromptToLiveSession()  [swarm-dispatch.ts:588]
-            │          ├─ tmux load-buffer (将 prompt 写入 buffer)
-            │          ├─ tmux paste-buffer (粘贴到会话)
-            │          └─ tmux send-keys Enter Enter (执行)
+            ├─ 3. 解析投递模式 resolveDeliveryMode()
+            │     ├─ 默认 tmux（tmux 可用时）
+            │     ├─ HERMES_SWARM_FORCE_ONESHOT=1 → oneshot
+            │     └─ tmux 不可用 → oneshot + deliveryFallback=tmux_unavailable
             │
-            ├─ 4. 失败则回退 oneshot
-            │     └─ hermes chat -q --profile <worker> "<prompt>"
+            ├─ 4. tmux 注入（默认）
+            │     └─ sendPromptToLiveSession()  [swarm-dispatch.ts]
+            │          ├─ 写 swarm-task.md（完整 prompt）
+            │          ├─ tmux load-buffer + paste-buffer（短指令）
+            │          └─ tmux send-keys Enter Enter
+            │     运行期失败 → fail-fast，不静默回退
             │
-            ├─ 5. 等待 checkpoint
-            │     └─ waitForFreshCheckpoint()   [swarm-dispatch.ts:534]
+            ├─ 5. oneshot 回退（仅 tmux 不可用或强制）
+            │     └─ wrapper `hermes chat -q "<prompt>"`
+            │
+            ├─ 6. 等待 checkpoint
+            │     └─ waitForFreshCheckpoint()   [swarm-dispatch.ts]
             │          轮询 runtime.json + 对话历史
+            │          oneshot 在 stdout 无 checkpoint 时同样走此路径
             │
-            ├─ 6. 记录结果
-            │     └─ markCheckpointResult()     [swarm-dispatch.ts:505]
-            │          更新 runtime.json + 触发通知
+            ├─ 7. 记录结果
+            │     └─ markCheckpointResult()
             │
-            └─ 7. 返回 { workerId, checkpoint, ... }
+            └─ 8. 返回 { workerId, delivery, checkpoint, ... }
 ```
 
 ### 4.2 Orchestrator 的三种调用路径

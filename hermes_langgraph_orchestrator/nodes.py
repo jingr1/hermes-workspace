@@ -68,7 +68,184 @@ def _get_llm() -> ChatOpenAI:
 # Helpers
 # ============================================================
 def _swarm_api_url(state: OrchestratorState) -> str:
-    return state.get("swarm_api_url", "http://localhost:3000/api")
+    return state.get("swarm_api_url") or _default_swarm_api_url()
+
+
+def _default_swarm_api_url() -> str:
+    return (
+        os.environ.get("HERMES_WORKSPACE_URL")
+        or os.environ.get("SWARM_API_URL")
+        or "http://127.0.0.1:3000/api"
+    ).rstrip("/")
+
+
+def _swarm_http_headers() -> dict[str, str]:
+    """Auth headers for Workspace API calls (password-protected deployments)."""
+    token = os.environ.get("HERMES_WORKSPACE_TOKEN", "").strip()
+    if not token:
+        sessions_path = Path(
+            os.environ.get("HERMES_HOME", os.path.expanduser("~/.hermes"))
+        ) / "workspace-sessions.json"
+        if sessions_path.exists():
+            try:
+                data = json.loads(sessions_path.read_text(encoding="utf-8"))
+                tokens = data.get("tokens") or {}
+                if isinstance(tokens, dict) and tokens:
+                    token = next(iter(tokens.keys()))
+            except Exception:
+                pass
+    if token:
+        return {"Cookie": f"claude-auth={token}"}
+    return {}
+
+
+def _swarm_delivery_mode() -> str | None:
+    """Map workspace env to swarm-dispatch deliveryMode (None = auto)."""
+    force = os.environ.get("HERMES_SWARM_FORCE_ONESHOT", "").strip().lower()
+    if force in ("1", "true", "yes"):
+        return "oneshot"
+    tmux_mode = os.environ.get("HERMES_SWARM_TMUX_MODE", "").strip().lower()
+    if tmux_mode == "cli":
+        return "tmux-cli"
+    if tmux_mode == "tui":
+        return "tmux-tui"
+    return None
+
+
+def _workspace_unreachable_hint(swarm_url: str) -> str:
+    base = swarm_url.removesuffix("/api")
+    return (
+        f"Workspace API unreachable at {swarm_url}. "
+        f"Start Workspace first: `cd hermes-workspace && pnpm dev` "
+        f"(then verify `curl {base}/api/swarm-roster`). "
+        f"Vite dev may need 10–30s on first SSR compile after startup. "
+        f"Override URL with --swarm-url or HERMES_WORKSPACE_URL."
+    )
+
+
+PREFLIGHT_ATTEMPTS = 6
+PREFLIGHT_READ_TIMEOUT_S = 12.0
+
+
+def load_workspace_dotenv() -> None:
+    """Load hermes-workspace/.env into os.environ (never overrides existing keys)."""
+    env_path = Path(__file__).resolve().parents[1] / ".env"
+    if not env_path.is_file():
+        return
+    try:
+        for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            if not key or key in os.environ:
+                continue
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+                value = value[1:-1]
+            os.environ[key] = value
+    except OSError:
+        return
+
+
+def _is_local_workspace_url(swarm_url: str) -> bool:
+    lowered = swarm_url.lower()
+    return "127.0.0.1" in lowered or "localhost" in lowered
+
+
+def _workspace_http_timeout(read_s: float = PREFLIGHT_READ_TIMEOUT_S) -> httpx.Timeout:
+    return httpx.Timeout(connect=3.0, read=read_s, write=5.0, pool=3.0)
+
+
+def _workspace_http_client(swarm_url: str, read_timeout_s: float = 30.0) -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        timeout=_workspace_http_timeout(read_timeout_s),
+        trust_env=not _is_local_workspace_url(swarm_url),
+    )
+
+
+async def check_swarm_workspace(swarm_url: str) -> str | None:
+    """Return an error message when Workspace is not reachable/authenticated."""
+    roster_url = f"{swarm_url.rstrip('/')}/swarm-roster"
+    last_error: str | None = None
+
+    for attempt in range(1, PREFLIGHT_ATTEMPTS + 1):
+        if attempt > 1:
+            wait_s = min(1.5 * attempt, 5.0)
+            log(
+                f"[preflight] Workspace 未就绪 ({attempt}/{PREFLIGHT_ATTEMPTS})，"
+                f"{wait_s:.0f}s 后重试（Vite 可能在编译 SSR）…"
+            )
+            await asyncio.sleep(wait_s)
+        try:
+            async with _workspace_http_client(swarm_url) as client:
+                resp = await client.get(roster_url, headers=_swarm_http_headers())
+            if resp.status_code == 401:
+                return (
+                    f"Workspace returned 401 for {swarm_url}. "
+                    "Set HERMES_WORKSPACE_TOKEN to a valid claude-auth session token."
+                )
+            resp.raise_for_status()
+            return None
+        except httpx.ConnectError:
+            last_error = _workspace_unreachable_hint(swarm_url)
+        except httpx.TimeoutException:
+            last_error = (
+                f"Workspace timed out at {swarm_url} "
+                f"(attempt {attempt}/{PREFLIGHT_ATTEMPTS}; "
+                "Vite dev server may still be starting or compiling API routes)."
+            )
+        except httpx.HTTPStatusError as e:
+            last_error = f"Workspace health check failed for {swarm_url}: HTTP {e.response.status_code}"
+            if e.response.status_code < 500:
+                return last_error
+        except Exception as e:
+            last_error = f"Workspace health check failed for {swarm_url}: {e}"
+
+    if last_error:
+        return f"{last_error} {_workspace_unreachable_hint(swarm_url)}"
+    return _workspace_unreachable_hint(swarm_url)
+
+
+async def _fetch_roster_ids(swarm_url: str) -> tuple[set[str], str | None]:
+    """Fetch roster ids from Workspace API."""
+    try:
+        async with _workspace_http_client(swarm_url) as client:
+            resp = await client.get(
+                f"{swarm_url.rstrip('/')}/swarm-roster",
+                headers=_swarm_http_headers(),
+            )
+            if resp.status_code == 401:
+                return set(), (
+                    "Workspace returned 401 for /swarm-roster. "
+                    "Set HERMES_WORKSPACE_TOKEN or disable HERMES_PASSWORD for local runs."
+                )
+            resp.raise_for_status()
+            data = resp.json()
+            roster = data.get("roster", {})
+            if isinstance(roster, dict):
+                workers = roster.get("workers", [])
+                if isinstance(workers, list):
+                    return {
+                        str(w.get("id", w.get("workerId", ""))).strip()
+                        for w in workers
+                        if w
+                    }, None
+                return {k.strip() for k in roster.keys() if isinstance(k, str)}, None
+            if isinstance(roster, list):
+                return {
+                    str(w.get("id", w.get("workerId", ""))).strip()
+                    for w in roster
+                    if w
+                }, None
+    except httpx.ConnectError:
+        return set(), _workspace_unreachable_hint(swarm_url)
+    except httpx.TimeoutException:
+        return set(), _workspace_unreachable_hint(swarm_url)
+    except Exception as e:
+        return set(), f"Failed to fetch roster: {e}"
+    return set(), "Failed to parse roster response"
 
 
 def _parse_dispatch_checkpoints(data: dict[str, Any]) -> list[WorkerCheckpoint]:
@@ -342,28 +519,13 @@ async def init_mission(state: OrchestratorState) -> dict:
     else:
         workflow_spec = state.get("workflow_spec") or load_default_workflow()
 
-    # Fetch roster. The Workspace API returns { ok: true, roster: SwarmRoster }
-    # where SwarmRoster = { version, workers: [{ id, ... }] }.
-    roster_ids: set[str] = set()
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(f"{swarm_url}/swarm-roster")
-            resp.raise_for_status()
-            data = resp.json()
-            roster = data.get("roster", {})
-            if isinstance(roster, dict):
-                workers = roster.get("workers", [])
-                if isinstance(workers, list):
-                    roster_ids = {str(w.get("id", w.get("workerId", ""))).strip() for w in workers if w}
-                else:
-                    # Fallback: dict keyed by worker id
-                    roster_ids = {k.strip() for k in roster.keys() if isinstance(k, str)}
-            elif isinstance(roster, list):
-                roster_ids = {str(w.get("id", w.get("workerId", ""))).strip() for w in roster if w}
-    except Exception as e:
+    # Fetch roster from Workspace API.
+    roster_ids, roster_error = await _fetch_roster_ids(swarm_url)
+    if roster_error or not roster_ids:
+        msg = roster_error or "Roster response was empty"
         return {
-            "collection_error": f"Failed to fetch roster: {e}",
-            "log_entries": [f"[init_mission] roster fetch failed: {e}"],
+            "collection_error": msg,
+            "log_entries": [f"[init_mission] roster fetch failed: {msg}"],
         }
 
     errors = validate_workflow_against_roster(workflow_spec, roster_ids)
@@ -414,7 +576,7 @@ async def collect_checkpoints(state: OrchestratorState) -> dict:
     mission_id = state.get("mission_id", "")
     log("[collect] 收集 checkpoint")
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with _workspace_http_client(swarm_url) as client:
             resp = await client.post(
                 f"{swarm_url}/swarm-orchestrator-loop",
                 json={
@@ -423,6 +585,7 @@ async def collect_checkpoints(state: OrchestratorState) -> dict:
                     "autoContinue": False,
                     "missionId": mission_id or None,
                 },
+                headers=_swarm_http_headers(),
             )
             resp.raise_for_status()
             data = resp.json()
@@ -480,19 +643,87 @@ blocker_type 判断规则:
 """
 
 
+def _infer_blocker_type(blocker: str, raw_lower: str) -> str:
+    text = f"{blocker} {raw_lower}".lower()
+    if "architecture_decision" in text or "架构决策" in text:
+        return "architecture_decision"
+    if "missing_dependency" in text or "缺少" in text:
+        return "missing_dependency"
+    if "test_failure" in text or "测试失败" in text:
+        return "test_failure"
+    if "timeout" in text or "超时" in text:
+        return "timeout"
+    if "missing_credential" in text or "api key" in text or "凭证" in text:
+        return "missing_credential"
+    if blocker.strip():
+        return "unknown"
+    return ""
+
+
+def _try_rule_classify(cp: WorkerCheckpoint) -> WorkerClassification | None:
+    """Fast path for checkpoints with explicit terminal STATE labels."""
+    state_label = (cp.get("state") or "").strip().upper()
+    if state_label not in {"DONE", "BLOCKED", "NEEDS_INPUT", "HANDOFF"}:
+        return None
+
+    raw = f"{cp.get('raw') or ''} {cp.get('result') or ''}"
+    raw_lower = raw.lower()
+    review_outcome = (cp.get("review_outcome") or "").strip()
+    if not review_outcome and "review_outcome:" in raw_lower:
+        for line in raw.splitlines():
+            if "review_outcome:" in line.lower():
+                review_outcome = line.split(":", 1)[1].strip().lower()
+                break
+
+    blocker_type = ""
+    if state_label == "BLOCKED":
+        blocker_type = _infer_blocker_type(cp.get("blocker", ""), raw_lower)
+
+    return WorkerClassification(
+        worker_id=cp["worker_id"],
+        verdict=state_label,
+        blocker_type=blocker_type,
+        blocker_summary=cp.get("blocker", ""),
+        reasoning="rule classify from STATE",
+        review_outcome=review_outcome,
+    )
+
+
 async def classify_workers(state: OrchestratorState) -> dict:
     checkpoints = state.get("checkpoints", [])
     if not checkpoints:
         log("[classify] 无 checkpoint")
         return {"log_entries": ["[classify] 无 checkpoint"]}
 
-    log(f"[classify] 分类 {len(checkpoints)} 个 worker")
+    rule_classifications: list[WorkerClassification] = []
+    ambiguous: list[WorkerCheckpoint] = []
+    for cp in checkpoints:
+        ruled = _try_rule_classify(cp)
+        if ruled:
+            rule_classifications.append(
+                _infer_architect_review_outcome(ruled, checkpoints)
+            )
+        else:
+            ambiguous.append(cp)
+
+    if not ambiguous:
+        summary = ", ".join(
+            f"{c.worker_id}={c.verdict}/{c.review_outcome or '-'}"
+            for c in rule_classifications
+        )
+        log(f"[classify] rule fast-path {summary}")
+        return {
+            "classifications": rule_classifications,
+            "log_entries": [f"[classify] rule fast-path {summary}"],
+        }
+
+    log(f"[classify] 分类 {len(checkpoints)} 个 worker ({len(ambiguous)} via LLM)")
     llm = _get_llm()
 
     cp_text = "\n\n".join(
         f"Worker: {cp['worker_id']}\nSTATE: {cp['state']}\n"
         f"Result: {cp['result'][:300]}\nBlocker: {cp['blocker']}\nNext: {cp['next_action']}"
-        for cp in checkpoints
+        for cp in ambiguous
     )
 
     resp = await llm.ainvoke(
@@ -524,11 +755,11 @@ async def classify_workers(state: OrchestratorState) -> dict:
                     "blocker_type": "unknown" if cp["state"] == "BLOCKED" else "",
                     "blocker_summary": cp["blocker"],
                 }
-                for cp in checkpoints
+                for cp in ambiguous
             ]
         }
 
-    classifications = [
+    llm_classifications = [
         _infer_architect_review_outcome(
             WorkerClassification(
                 worker_id=c["worker_id"],
@@ -542,6 +773,11 @@ async def classify_workers(state: OrchestratorState) -> dict:
         )
         for c in data.get("classifications", [])
     ]
+
+    by_worker = {c.worker_id: c for c in rule_classifications}
+    for c in llm_classifications:
+        by_worker[c.worker_id] = c
+    classifications = [by_worker[cp["worker_id"]] for cp in checkpoints if cp["worker_id"] in by_worker]
 
     summary = ", ".join(f"{c.worker_id}={c.verdict}/{c.review_outcome or '-'}" for c in classifications)
     log(f"[classify] {summary}")
@@ -691,7 +927,7 @@ async def swarm_orchestrate(state: OrchestratorState) -> dict:
     mission_id = state.get("mission_id", "")
     log("[swarm] 调用 Swarm orchestrator-loop")
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with _workspace_http_client(swarm_url) as client:
             resp = await client.post(
                 f"{swarm_url}/swarm-orchestrator-loop",
                 json={
@@ -701,6 +937,7 @@ async def swarm_orchestrate(state: OrchestratorState) -> dict:
                     "allowExecution": True,
                     "missionId": mission_id or None,
                 },
+                headers=_swarm_http_headers(),
             )
             resp.raise_for_status()
             data = resp.json()
@@ -866,6 +1103,10 @@ async def log_results(state: OrchestratorState) -> dict:
 # ============================================================
 async def ensure_sessions(state: OrchestratorState) -> dict:
     """Idempotently ensure tmux sessions exist via POST /api/swarm-tmux-start."""
+    if os.environ.get("HERMES_SWARM_FORCE_ONESHOT", "").strip().lower() in ("1", "true", "yes"):
+        log("[ensure_sessions] skipped (HERMES_SWARM_FORCE_ONESHOT)")
+        return {"log_entries": ["[ensure_sessions] skipped (FORCE_ONESHOT)"]}
+
     swarm_url = _swarm_api_url(state)
     assignments = state.get("langgraph_assignments", []) or []
     workers = _active_assignments_to_workers(assignments)
@@ -877,12 +1118,13 @@ async def ensure_sessions(state: OrchestratorState) -> dict:
     log(f"[ensure_sessions] 预热 {len(workers)} 个 session: {workers}")
     results: list[str] = []
     session_errors: list[str] = []
-    async with httpx.AsyncClient(timeout=30) as client:
+    async with _workspace_http_client(swarm_url) as client:
         for wid in workers:
             try:
                 resp = await client.post(
                     f"{swarm_url}/swarm-tmux-start",
                     json={"workerId": wid},
+                    headers=_swarm_http_headers(),
                 )
                 resp.raise_for_status()
                 data = resp.json()
@@ -930,26 +1172,34 @@ async def dispatch_assignments(state: OrchestratorState) -> dict:
         f"  → {a.get('worker_id')} | {a.get('reason') or a.get('task', '')[:80]}"
         for a in assignments
     )
-    log(f"[dispatch] 派发 {len(assignments)} 个任务 (waitForCheckpoint):\n{task_lines}")
+    log(f"[dispatch] 派发 {len(assignments)} 个任务 (fire-and-forget, wait in graph):\n{task_lines}")
+
+    dispatch_timeout = 120
+    dispatch_body: dict[str, Any] = {
+        "assignments": [
+            {
+                "workerId": a["worker_id"],
+                "task": a["task"],
+                "rationale": a.get("reason", ""),
+            }
+            for a in assignments
+        ],
+        "missionId": mission_id,
+        "timeoutSeconds": 1200,
+        "checkpointPollSeconds": 300,
+        "waitForCheckpoint": False,
+        "allowAsync": True,
+    }
+    delivery_mode = _swarm_delivery_mode()
+    if delivery_mode:
+        dispatch_body["deliveryMode"] = delivery_mode
 
     try:
-        async with httpx.AsyncClient(timeout=600) as client:
+        async with _workspace_http_client(swarm_url, read_timeout_s=float(dispatch_timeout)) as client:
             resp = await client.post(
                 f"{swarm_url}/swarm-dispatch",
-                json={
-                    "assignments": [
-                        {
-                            "workerId": a["worker_id"],
-                            "task": a["task"],
-                            "rationale": a.get("reason", ""),
-                        }
-                        for a in assignments
-                    ],
-                    "missionId": mission_id,
-                    "timeoutSeconds": 1200,
-                    "checkpointPollSeconds": 300,
-                    "waitForCheckpoint": True,
-                },
+                json=dispatch_body,
+                headers=_swarm_http_headers(),
             )
             resp.raise_for_status()
             data = resp.json()
@@ -1023,6 +1273,25 @@ async def wait_for_checkpoints(state: OrchestratorState) -> dict:
             if cp["worker_id"] in current_workers
         )
 
+    # Only the latest dispatch batch may short-circuit polling. Re-dispatching the
+    # same worker must not reuse an older terminal checkpoint from history.
+    fresh_cp_map: dict[str, WorkerCheckpoint] = {
+        cp["worker_id"]: cp
+        for cp in current_checkpoints
+        if cp.get("worker_id") in current_workers
+    }
+    if _all_terminal(fresh_cp_map):
+        history_map: dict[str, WorkerCheckpoint] = {
+            cp["worker_id"]: cp for cp in terminal_history if cp["worker_id"] in dispatched
+        }
+        history_map.update(fresh_cp_map)
+        return {
+            "awaiting_checkpoint": False,
+            "checkpoints": [fresh_cp_map[wid] for wid in current_workers if wid in fresh_cp_map],
+            "terminal_checkpoints": list(history_map.values()),
+            "log_entries": [f"[wait] {len(current_workers)} current workers already terminal (fresh dispatch)"],
+        }
+
     cp_map: dict[str, WorkerCheckpoint] = {
         cp["worker_id"]: cp for cp in terminal_history if cp["worker_id"] in dispatched
     }
@@ -1050,7 +1319,7 @@ async def wait_for_checkpoints(state: OrchestratorState) -> dict:
         # Drive the Swarm harvester so chat checkpoints get recorded to the
         # mission store even when no UI autopilot is running.
         try:
-            async with httpx.AsyncClient(timeout=30) as client:
+            async with _workspace_http_client(swarm_url) as client:
                 await client.post(
                     f"{swarm_url}/swarm-orchestrator-loop",
                     json={
@@ -1060,13 +1329,18 @@ async def wait_for_checkpoints(state: OrchestratorState) -> dict:
                         "autoContinue": False,
                         "allowExecution": False,
                     },
+                    headers=_swarm_http_headers(),
                 )
         except Exception as e:
             log(f"[wait] harvester probe failed: {e}")
 
         try:
-            async with httpx.AsyncClient(timeout=30) as client:
-                resp = await client.get(f"{swarm_url}/swarm-missions", params={"id": mission_id})
+            async with _workspace_http_client(swarm_url) as client:
+                resp = await client.get(
+                    f"{swarm_url}/swarm-missions",
+                    params={"id": mission_id},
+                    headers=_swarm_http_headers(),
+                )
                 resp.raise_for_status()
                 data = resp.json()
         except Exception as e:
@@ -1146,6 +1420,10 @@ async def human_approval_node(state: OrchestratorState) -> dict:
     """Human gate — LangGraph interrupt_before pauses here."""
     action = state.get("human_resume_action")
     log(f"[human_approval] 等待人工审批... (resume_action={action})")
+    if action == "abort":
+        return {
+            "log_entries": [f"[human_approval] aborted (resume_action={action})"],
+        }
     return {
         "log_entries": [f"[human_approval] paused (resume_action={action})"]
     }
@@ -1159,6 +1437,8 @@ async def finalize_mission(state: OrchestratorState) -> dict:
     exec_log = await log_execution(state)
     return {
         "all_done": True,
+        "langgraph_needs_human": False,
+        "human_resume_action": None,
         "log_entries": [f"[finalize] mission={mission_id} complete"]
         + exec_log.get("log_entries", []),
     }

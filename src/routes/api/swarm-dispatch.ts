@@ -14,6 +14,15 @@ import { publishSwarmCheckpointNotification } from '../../server/swarm-notificat
 import { ensureSwarmProfileConfig, syncSwarmProfileModel } from '../../server/swarm-profile-config'
 import { parseSwarmModelLabel } from '../../server/swarm-model-resolver'
 import { buildHandoff, writeHandoff } from '../../server/handoff'
+import {
+  buildHermesTmuxShellCommand,
+  buildHermesTmuxTuiCommand,
+  resolveTmuxTransportMode,
+  shellEscapeSingle,
+  tmuxPaneLooksLikeHermesTui,
+  tmuxPaneLooksLikeShellReady,
+  type TmuxTransportMode,
+} from '../../server/swarm-tmux-delivery'
 
 const HERMES_BIN_CANDIDATES = [
   process.env.HERMES_CLI_BIN,
@@ -43,6 +52,12 @@ type AssignmentRequest = {
   direct?: boolean
 }
 
+export type SwarmDeliveryMode = 'tmux-tui' | 'tmux-cli' | 'oneshot'
+/** @deprecated alias — resolves to tmux-tui or tmux-cli via HERMES_SWARM_TMUX_MODE */
+export type SwarmDeliveryModeLegacy = 'tmux'
+export type SwarmDeliveryModeRequest = SwarmDeliveryMode | SwarmDeliveryModeLegacy | 'auto'
+export type SwarmDeliveryFallback = 'tmux_unavailable'
+
 type DispatchRequest = {
   workerIds?: unknown
   prompt?: unknown
@@ -55,6 +70,7 @@ type DispatchRequest = {
   missionTitle?: unknown
   direct?: unknown
   notifySessionKey?: unknown
+  deliveryMode?: unknown
 }
 
 type WorkerResult = {
@@ -64,9 +80,73 @@ type WorkerResult = {
   error: string | null
   durationMs: number
   exitCode: number | null
-  delivery?: 'tmux' | 'oneshot'
+  delivery?: SwarmDeliveryMode
+  deliveryFallback?: SwarmDeliveryFallback | null
   checkpoint?: ParsedSwarmCheckpoint | null
   checkpointStatus?: 'checkpointed' | 'timeout' | 'not-requested'
+}
+
+type ResolvedDelivery = {
+  mode: SwarmDeliveryMode
+  fallback: SwarmDeliveryFallback | null
+}
+
+let warnedDeprecatedUseLive = false
+
+function warnIfDeprecatedUseLive(): void {
+  if (warnedDeprecatedUseLive) return
+  const legacy = process.env.HERMES_SWARM_USE_LIVE
+  if (legacy === '1' || legacy === 'true') {
+    warnedDeprecatedUseLive = true
+    console.warn(
+      '[swarm-dispatch] HERMES_SWARM_USE_LIVE is deprecated: tmux delivery is now the default. '
+      + 'Use HERMES_SWARM_FORCE_ONESHOT=1 to force wrapper oneshot instead.',
+    )
+  }
+}
+
+function resolveTmuxDeliveryMode(transport?: TmuxTransportMode | null): SwarmDeliveryMode {
+  return resolveTmuxTransportMode(transport) === 'cli' ? 'tmux-cli' : 'tmux-tui'
+}
+
+export function resolveDeliveryMode(
+  requestMode?: SwarmDeliveryModeRequest,
+  options?: { tmuxAvailable?: boolean },
+): ResolvedDelivery {
+  warnIfDeprecatedUseLive()
+  if (requestMode === 'oneshot') {
+    return { mode: 'oneshot', fallback: null }
+  }
+  if (requestMode === 'tmux-cli') {
+    return { mode: 'tmux-cli', fallback: null }
+  }
+  if (requestMode === 'tmux-tui') {
+    return { mode: 'tmux-tui', fallback: null }
+  }
+  if (requestMode === 'tmux') {
+    return { mode: resolveTmuxDeliveryMode(), fallback: null }
+  }
+  if (process.env.HERMES_SWARM_FORCE_ONESHOT === '1' || process.env.HERMES_SWARM_FORCE_ONESHOT === 'true') {
+    return { mode: 'oneshot', fallback: null }
+  }
+  const tmuxAvailable = options?.tmuxAvailable ?? resolveTmuxBin() !== null
+  if (!tmuxAvailable) {
+    return { mode: 'oneshot', fallback: 'tmux_unavailable' }
+  }
+  return { mode: resolveTmuxDeliveryMode(), fallback: null }
+}
+
+function parseDeliveryModeRequest(value: unknown): SwarmDeliveryModeRequest {
+  if (
+    value === 'tmux'
+    || value === 'tmux-tui'
+    || value === 'tmux-cli'
+    || value === 'oneshot'
+    || value === 'auto'
+  ) {
+    return value
+  }
+  return 'auto'
 }
 
 type RuntimeCheckpointSnapshot = {
@@ -125,7 +205,7 @@ const TMUX_BIN_CANDIDATES = [
   'tmux',
 ].filter((value): value is string => Boolean(value))
 
-function resolveTmuxBin(): string | null {
+export function resolveTmuxBin(): string | null {
   // Allow operators on non-standard installs (Docker, NixOS, custom
   // package layouts) to point Swarm at the right tmux binary without
   // patching this list. See #244.
@@ -153,6 +233,20 @@ function tmuxHasSession(tmuxBin: string, name: string): Promise<boolean> {
     execFile(tmuxBin, ['has-session', '-t', name], (error) => {
       resolve(!error)
     })
+  })
+}
+
+function tmuxSessionUsable(tmuxBin: string, name: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    execFile(tmuxBin, ['list-panes', '-t', name], (error) => {
+      resolve(!error)
+    })
+  })
+}
+
+function tmuxKillSession(tmuxBin: string, name: string): Promise<void> {
+  return new Promise((resolve) => {
+    execFile(tmuxBin, ['kill-session', '-t', name], () => resolve())
   })
 }
 
@@ -194,28 +288,25 @@ function resolveGithubToken(): string | null {
   return null
 }
 
-function shellEscapeSingle(value: string): string {
-  return value.replace(/'/g, `'\\''`)
-}
-
+/** @deprecated use buildHermesTmuxTuiCommand({ useExec: false }) */
 export function buildHermesTmuxLaunchCommand(input: {
   profilePath: string
   hermesBin: string
   ghToken?: string | null
 }): string {
-  const launchPrefix = [
-    `HERMES_HOME='${shellEscapeSingle(input.profilePath)}'`,
-    `HERMES_CLI_BIN='${shellEscapeSingle(input.hermesBin)}'`,
-    input.ghToken ? `GH_TOKEN='${shellEscapeSingle(input.ghToken)}'` : '',
-    input.ghToken ? `GITHUB_TOKEN='${shellEscapeSingle(input.ghToken)}'` : '',
-  ].filter(Boolean).join(' ')
-  const hermesBin = shellEscapeSingle(input.hermesBin)
-
-  // Do not exec the Hermes process. Keeping the parent shell alive means a
-  // failed worker startup leaves a readable tmux pane instead of destroying the
-  // session and turning the real error into "can't find pane".
-  return `${launchPrefix} '${hermesBin}' chat --tui; status=$?; printf '\n[Hermes worker exited with status %s]\n' "$status"`
+  return buildHermesTmuxTuiCommand({ ...input, useExec: false })
 }
+
+/** @deprecated use buildHermesTmuxTuiCommand({ useExec: true }) */
+export function buildHermesTmuxExecCommand(input: {
+  profilePath: string
+  hermesBin: string
+  ghToken?: string | null
+}): string {
+  return buildHermesTmuxTuiCommand({ ...input, useExec: true })
+}
+
+export { tmuxPaneLooksLikeHermesTui, tmuxPaneLooksLikeShellReady }
 
 function parseAssignments(value: unknown): Array<AssignmentRequest> {
   if (!Array.isArray(value)) return []
@@ -573,6 +664,94 @@ function markCheckpointResult(workerId: string, checkpoint: ParsedSwarmCheckpoin
   })
 }
 
+type CheckpointDispatchContext = {
+  workerId: string
+  assignment: AssignmentRequest
+  missionId?: string | null
+  notifySessionKey?: string | null
+  previousRaw: string | null
+  baselineRuntimeSignature: string
+  dispatchedAt: number
+  checkpointPollMs: number
+}
+
+async function attachCheckpointToResult(
+  result: WorkerResult,
+  context: CheckpointDispatchContext,
+  initialCheckpoint: ParsedSwarmCheckpoint | null,
+): Promise<WorkerResult> {
+  let checkpoint = initialCheckpoint
+  if (!checkpoint) {
+    checkpoint = await waitForFreshCheckpoint(
+      context.workerId,
+      context.previousRaw,
+      context.baselineRuntimeSignature,
+      context.dispatchedAt,
+      context.checkpointPollMs,
+    )
+  }
+
+  if (checkpoint) {
+    markCheckpointResult(context.workerId, checkpoint, context.notifySessionKey ?? 'main')
+    const updatedMission = recordMissionCheckpoint({
+      missionId: context.missionId,
+      assignmentId: context.assignment.assignmentId ?? null,
+      workerId: context.workerId,
+      checkpoint,
+      source: 'swarm-dispatch',
+    })
+    if (updatedMission?._completed) {
+      try {
+        for (const wId of new Set(updatedMission.assignments.map((a) => a.workerId))) {
+          appendSwarmMemoryEvent({
+            workerId: wId,
+            missionId: updatedMission.id,
+            type: 'complete',
+            title: updatedMission.title,
+            summary: `Mission complete: ${updatedMission.title}`,
+          })
+        }
+      } catch { /* memory write best-effort */ }
+    }
+    appendSwarmMemoryEvent({
+      workerId: context.workerId,
+      missionId: context.missionId ?? null,
+      assignmentId: context.assignment.assignmentId ?? null,
+      type: 'checkpoint',
+      summary: checkpoint.result ?? `Checkpoint ${checkpoint.stateLabel}`,
+      checkpoint,
+      event: {
+        stateLabel: checkpoint.stateLabel,
+        filesChanged: checkpoint.filesChanged,
+        commandsRun: checkpoint.commandsRun,
+        blocker: checkpoint.blocker,
+        nextAction: checkpoint.nextAction,
+      },
+    })
+    publishSwarmCheckpointNotification({
+      workerId: context.workerId,
+      missionId: context.missionId ?? null,
+      assignmentId: context.assignment.assignmentId ?? null,
+      checkpoint,
+      notifySessionKey: context.notifySessionKey ?? 'main',
+    })
+    await recordHandoffForWorker(context.workerId, checkpoint)
+    return {
+      ...result,
+      checkpoint,
+      checkpointStatus: 'checkpointed',
+      output: `${result.output}\nCheckpoint ${checkpoint.stateLabel}: ${checkpoint.result ?? 'no result'}`,
+    }
+  }
+
+  return {
+    ...result,
+    checkpoint: null,
+    checkpointStatus: 'timeout',
+    output: `${result.output}\nNo fresh checkpoint before poll timeout.`,
+  }
+}
+
 async function waitForFreshCheckpoint(
   workerId: string,
   previousRaw: string | null,
@@ -633,27 +812,131 @@ async function captureTmuxPane(tmuxBin: string, sessionName: string): Promise<st
   return captured.ok ? captured.stdout.trim() : ''
 }
 
+async function tmuxSessionHasHermesTui(tmuxBin: string, sessionName: string): Promise<boolean> {
+  const pane = await captureTmuxPane(tmuxBin, sessionName)
+  return tmuxPaneLooksLikeHermesTui(pane)
+}
+
+async function waitForHermesTuiReady(
+  tmuxBin: string,
+  sessionName: string,
+  timeoutMs = 20_000,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (await tmuxSessionHasHermesTui(tmuxBin, sessionName)) {
+      return true
+    }
+    await sleep(500)
+  }
+  return false
+}
+
+async function getPaneCurrentCommand(tmuxBin: string, sessionName: string): Promise<string> {
+  const captured = await execFileAsync(
+    tmuxBin,
+    ['list-panes', '-t', sessionName, '-F', '#{pane_current_command}'],
+    8_000,
+  )
+  return captured.ok ? captured.stdout.trim().split('\n')[0] || '' : ''
+}
+
+async function tmuxSessionHasShellReady(tmuxBin: string, sessionName: string): Promise<boolean> {
+  const pane = await captureTmuxPane(tmuxBin, sessionName)
+  const paneCommand = await getPaneCurrentCommand(tmuxBin, sessionName)
+  return tmuxPaneLooksLikeShellReady(pane, paneCommand)
+}
+
+async function waitForShellReady(
+  tmuxBin: string,
+  sessionName: string,
+  timeoutMs = 20_000,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (await tmuxSessionHasShellReady(tmuxBin, sessionName)) {
+      return true
+    }
+    await sleep(500)
+  }
+  return false
+}
+
+async function startHermesTmuxSession(input: {
+  tmuxBin: string
+  sessionName: string
+  profilePath: string
+  cwd: string
+  hermesBin: string
+  ghToken: string | null
+  transport: TmuxTransportMode
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const execCommand = input.transport === 'cli'
+    ? buildHermesTmuxShellCommand({
+        profilePath: input.profilePath,
+        hermesBin: input.hermesBin,
+        ghToken: input.ghToken,
+      })
+    : buildHermesTmuxTuiCommand({
+        profilePath: input.profilePath,
+        hermesBin: input.hermesBin,
+        ghToken: input.ghToken,
+        useExec: true,
+      })
+  const started = await execFileAsync(input.tmuxBin, [
+    'new-session',
+    '-d',
+    '-s',
+    input.sessionName,
+    '-c',
+    input.cwd,
+    execCommand,
+  ])
+  if (!started.ok) {
+    return { ok: false, error: started.error }
+  }
+
+  await sleep(1_500)
+  if (!(await tmuxHasSession(input.tmuxBin, input.sessionName))) {
+    return {
+      ok: false,
+      error: `Hermes worker tmux session ${input.sessionName} exited during startup`,
+    }
+  }
+
+  const ready = input.transport === 'cli'
+    ? await waitForShellReady(input.tmuxBin, input.sessionName)
+    : await waitForHermesTuiReady(input.tmuxBin, input.sessionName)
+  if (!ready) {
+    const pane = await captureTmuxPane(input.tmuxBin, input.sessionName)
+    const sanitized = redactStartupOutput(pane).slice(-4_000)
+    const label = input.transport === 'cli' ? 'shell' : 'Hermes TUI'
+    return {
+      ok: false,
+      error: `${label} did not become ready in ${input.sessionName}. Pane output: ${sanitized}`,
+    }
+  }
+
+  return { ok: true }
+}
+
 function redactStartupOutput(output: string): string {
   return output
     .replace(/(sk-[A-Za-z0-9_-]{12,})/g, '[REDACTED]')
     .replace(/(gh[pousr]_[A-Za-z0-9_]{12,})/g, '[REDACTED]')
 }
 
-export async function ensureLiveTmuxSession(workerId: string): Promise<{ ok: true; tmuxBin: string; sessionName: string } | { ok: false; error: string }> {
+export async function ensureLiveTmuxSession(
+  workerId: string,
+  transport: TmuxTransportMode = resolveTmuxTransportMode(),
+): Promise<{ ok: true; tmuxBin: string; sessionName: string; transport: TmuxTransportMode } | { ok: false; error: string }> {
   const tmuxBin = resolveTmuxBin()
   if (!tmuxBin) return { ok: false, error: 'tmux not installed' }
 
   const sessionName = sessionNameFor(workerId)
-  if (await tmuxHasSession(tmuxBin, sessionName)) {
-    return { ok: true, tmuxBin, sessionName }
-  }
-
   const profilePath = getProfilePath(workerId)
   ensureSwarmProfileConfig(profilePath)
 
-  // Sync the worker's profile config.yaml model section to the roster's
-  // model field before launching tmux. Hermes Agent reads config.yaml on
-  // every invocation, and the wrapper does not pass --model.
   const roster = rosterByWorkerId([workerId]).get(workerId)
   const resolvedModel = parseSwarmModelLabel(roster?.model ?? null)
   if (resolvedModel) {
@@ -662,58 +945,42 @@ export async function ensureLiveTmuxSession(workerId: string): Promise<{ ok: tru
 
   const cwd = resolveWorkerCwd(workerId)
   const hermesBin = resolveHermesBin()
-  const launchCommand = buildHermesTmuxLaunchCommand({
-    profilePath,
-    hermesBin,
-    ghToken: resolveGithubToken(),
-  })
+  const ghToken = resolveGithubToken()
 
-  const started = await execFileAsync(tmuxBin, [
-    'new-session',
-    '-d',
-    '-s',
+  const sessionExists = await tmuxHasSession(tmuxBin, sessionName)
+  const sessionUsable = sessionExists && (await tmuxSessionUsable(tmuxBin, sessionName))
+  const sessionReady = sessionUsable && (
+    transport === 'cli'
+      ? await tmuxSessionHasShellReady(tmuxBin, sessionName)
+      : await tmuxSessionHasHermesTui(tmuxBin, sessionName)
+  )
+
+  if (sessionUsable && sessionReady) {
+    return { ok: true, tmuxBin, sessionName, transport }
+  }
+
+  if (sessionExists) {
+    // Stale shell-only session (Hermes exited) or zombie pane — recreate.
+    await tmuxKillSession(tmuxBin, sessionName)
+  }
+
+  const started = await startHermesTmuxSession({
+    tmuxBin,
     sessionName,
-    '-c',
+    profilePath,
     cwd,
-  ])
+    hermesBin,
+    ghToken,
+    transport,
+  })
   if (!started.ok) {
     return { ok: false, error: started.error }
   }
 
-  const launched = await execFileAsync(tmuxBin, ['send-keys', '-t', sessionName, launchCommand, 'C-m'])
-  if (!launched.ok) {
-    return { ok: false, error: launched.error }
-  }
-
-  // Give the agent a moment to render its prompt before sending keys. If Hermes
-  // exits immediately, the shell stays alive and prints a sentinel that lets us
-  // surface the real startup failure instead of a later tmux "can't find pane".
-  await sleep(1200)
-  if (!(await tmuxHasSession(tmuxBin, sessionName))) {
-    return { ok: false, error: `Hermes worker tmux session ${sessionName} exited during startup` }
-  }
-
-  const startupOutput = await captureTmuxPane(tmuxBin, sessionName)
-  // Match only at the start of a line so the echoed shell command's printf
-  // format string doesn't trigger a false positive startup-failure sentinel.
-  const exitedPattern = /(?:^|\n)\[Hermes worker exited with status/
-  if (exitedPattern.test(startupOutput)) {
-    const sanitizedOutput = redactStartupOutput(startupOutput).slice(-4_000)
-    const logsDir = join(profilePath, 'logs')
-    mkdirSync(logsDir, { recursive: true })
-    const startupLogPath = join(logsDir, 'swarm-dispatch-startup.log')
-    writeFileSync(startupLogPath, `${new Date().toISOString()} ${sanitizedOutput}
-`, { flag: 'a' })
-    return {
-      ok: false,
-      error: `Hermes worker failed to start in tmux session ${sessionName}. Startup output saved to ${startupLogPath}: ${sanitizedOutput}`,
-    }
-  }
-
-  return { ok: true, tmuxBin, sessionName }
+  return { ok: true, tmuxBin, sessionName, transport }
 }
 
-async function sendPromptToLiveSession(workerId: string, prompt: string): Promise<WorkerResult | null> {
+async function sendPromptToLiveSession(workerId: string, prompt: string): Promise<WorkerResult> {
   const startedAt = Date.now()
   const ensured = await ensureLiveTmuxSession(workerId)
   if (!ensured.ok) {
@@ -727,11 +994,23 @@ async function sendPromptToLiveSession(workerId: string, prompt: string): Promis
       error: `Live tmux session unavailable: ${ensured.error}`,
       durationMs: Date.now() - startedAt,
       exitCode: null,
-      delivery: 'tmux',
+      delivery: 'tmux-tui',
     }
   }
 
   const { tmuxBin, sessionName } = ensured
+  if (!(await tmuxSessionHasHermesTui(tmuxBin, sessionName))) {
+    return {
+      workerId,
+      ok: false,
+      output: '',
+      error: `Session ${sessionName} is not running Hermes TUI (paste would land in shell). Restart the worker session and retry.`,
+      durationMs: Date.now() - startedAt,
+      exitCode: null,
+      delivery: 'tmux-tui',
+    }
+  }
+
   const profilePath = getProfilePath(workerId)
   const taskFilePath = join(profilePath, 'swarm-task.md')
   // Persist the full prompt to disk and deliver a short, single-line instruction
@@ -747,7 +1026,7 @@ async function sendPromptToLiveSession(workerId: string, prompt: string): Promis
       error: `Failed to write task file ${taskFilePath}: ${err instanceof Error ? err.message : String(err)}`,
       durationMs: Date.now() - startedAt,
       exitCode: null,
-      delivery: 'tmux',
+      delivery: 'tmux-tui',
     }
   }
   const instruction = `Execute the task in ${taskFilePath} and return the required checkpoint format.`
@@ -766,7 +1045,7 @@ async function sendPromptToLiveSession(workerId: string, prompt: string): Promis
       error: cleared.error,
       durationMs: Date.now() - startedAt,
       exitCode: null,
-      delivery: 'tmux',
+      delivery: 'tmux-tui',
     }
   }
 
@@ -784,7 +1063,7 @@ async function sendPromptToLiveSession(workerId: string, prompt: string): Promis
       error: loaded.error,
       durationMs: Date.now() - startedAt,
       exitCode: null,
-      delivery: 'tmux',
+      delivery: 'tmux-tui',
     }
   }
 
@@ -804,7 +1083,7 @@ async function sendPromptToLiveSession(workerId: string, prompt: string): Promis
       error: pasted.error,
       durationMs: Date.now() - startedAt,
       exitCode: null,
-      delivery: 'tmux',
+      delivery: 'tmux-tui',
     }
   }
 
@@ -822,7 +1101,7 @@ async function sendPromptToLiveSession(workerId: string, prompt: string): Promis
       error: enter.error,
       durationMs: Date.now() - startedAt,
       exitCode: null,
-      delivery: 'tmux',
+      delivery: 'tmux-tui',
     }
   }
   await sleep(1000)
@@ -835,7 +1114,7 @@ async function sendPromptToLiveSession(workerId: string, prompt: string): Promis
       error: confirmEnter.error,
       durationMs: Date.now() - startedAt,
       exitCode: null,
-      delivery: 'tmux',
+      delivery: 'tmux-tui',
     }
   }
 
@@ -846,7 +1125,124 @@ async function sendPromptToLiveSession(workerId: string, prompt: string): Promis
     error: null,
     durationMs: Date.now() - startedAt,
     exitCode: 0,
-    delivery: 'tmux',
+    delivery: 'tmux-tui',
+  }
+}
+
+function buildSwarmRunScript(profilePath: string, hermesBin: string, instruction: string): string {
+  const args = buildHermesChatQueryArgs(instruction)
+  const quotedArgs = args.map((arg) => {
+    if (/^[a-zA-Z0-9_./:@=-]+$/.test(arg)) return arg
+    return `'${shellEscapeSingle(arg)}'`
+  })
+  return [
+    '#!/usr/bin/env bash',
+    'set -euo pipefail',
+    `export HERMES_HOME='${shellEscapeSingle(profilePath)}'`,
+    `export HERMES_CLI_BIN='${shellEscapeSingle(hermesBin)}'`,
+    `exec '${shellEscapeSingle(hermesBin)}' ${quotedArgs.join(' ')}`,
+    '',
+  ].join('\n')
+}
+
+async function sendPromptToCliSession(workerId: string, prompt: string): Promise<WorkerResult> {
+  const startedAt = Date.now()
+  const ensured = await ensureLiveTmuxSession(workerId, 'cli')
+  if (!ensured.ok) {
+    return {
+      workerId,
+      ok: false,
+      output: '',
+      error: `Live tmux CLI session unavailable: ${ensured.error}`,
+      durationMs: Date.now() - startedAt,
+      exitCode: null,
+      delivery: 'tmux-cli',
+    }
+  }
+
+  const { tmuxBin, sessionName } = ensured
+  const profilePath = getProfilePath(workerId)
+  const taskFilePath = join(profilePath, 'swarm-task.md')
+  const runScriptPath = join(profilePath, 'swarm-run.sh')
+
+  try {
+    writeFileSync(taskFilePath, prompt, 'utf8')
+  } catch (err) {
+    return {
+      workerId,
+      ok: false,
+      output: '',
+      error: `Failed to write task file ${taskFilePath}: ${err instanceof Error ? err.message : String(err)}`,
+      durationMs: Date.now() - startedAt,
+      exitCode: null,
+      delivery: 'tmux-cli',
+    }
+  }
+
+  const instruction = `Execute the task in ${taskFilePath} and return the required checkpoint format.`
+  const hermesBin = resolveHermesBin()
+  try {
+    writeFileSync(runScriptPath, buildSwarmRunScript(profilePath, hermesBin, instruction), 'utf8')
+  } catch (err) {
+    return {
+      workerId,
+      ok: false,
+      output: '',
+      error: `Failed to write run script ${runScriptPath}: ${err instanceof Error ? err.message : String(err)}`,
+      durationMs: Date.now() - startedAt,
+      exitCode: null,
+      delivery: 'tmux-cli',
+    }
+  }
+
+  const shellReady = await waitForShellReady(tmuxBin, sessionName, 30_000)
+  if (!shellReady) {
+    return {
+      workerId,
+      ok: false,
+      output: '',
+      error: `Session ${sessionName} shell is busy or not ready for CLI dispatch`,
+      durationMs: Date.now() - startedAt,
+      exitCode: null,
+      delivery: 'tmux-cli',
+    }
+  }
+
+  const dispatchCmd = `bash '${runScriptPath.replace(/'/g, `'\\''`)}'`
+  const sent = await execFileAsync(tmuxBin, ['send-keys', '-t', sessionName, dispatchCmd])
+  if (!sent.ok) {
+    return {
+      workerId,
+      ok: false,
+      output: '',
+      error: sent.error,
+      durationMs: Date.now() - startedAt,
+      exitCode: null,
+      delivery: 'tmux-cli',
+    }
+  }
+  await sleep(150)
+  const enter = await execFileAsync(tmuxBin, ['send-keys', '-t', sessionName, 'C-m'])
+  if (!enter.ok) {
+    return {
+      workerId,
+      ok: false,
+      output: '',
+      error: enter.error,
+      durationMs: Date.now() - startedAt,
+      exitCode: null,
+      delivery: 'tmux-cli',
+    }
+  }
+
+  return {
+    workerId,
+    ok: true,
+    output: `Dispatched CLI task via ${runScriptPath} in tmux session ${sessionName}`,
+    error: null,
+    durationMs: Date.now() - startedAt,
+    exitCode: 0,
+    delivery: 'tmux-cli',
   }
 }
 
@@ -870,7 +1266,7 @@ export function buildHermesChatQueryArgs(prompt: string): string[] {
   ]
 }
 
-function runWorker(assignment: AssignmentRequest, timeoutMs: number, roster: SwarmRosterWorker | undefined, options?: { waitForCheckpoint?: boolean; checkpointPollMs?: number; missionId?: string | null; notifySessionKey?: string | null }): Promise<WorkerResult> {
+function runWorker(assignment: AssignmentRequest, timeoutMs: number, roster: SwarmRosterWorker | undefined, options?: { waitForCheckpoint?: boolean; checkpointPollMs?: number; missionId?: string | null; notifySessionKey?: string | null; deliveryMode?: SwarmDeliveryModeRequest }): Promise<WorkerResult> {
   return new Promise(async (resolve) => {
     const workerId = assignment.workerId
     const prompt = buildWorkerPrompt({
@@ -903,6 +1299,7 @@ function runWorker(assignment: AssignmentRequest, timeoutMs: number, roster: Swa
         author: 'aurora',
       })
     }
+    const { mode: deliveryMode, fallback: deliveryFallback } = resolveDeliveryMode(options?.deliveryMode)
     appendSwarmMemoryEvent({
       workerId,
       missionId: options?.missionId ?? null,
@@ -913,86 +1310,64 @@ function runWorker(assignment: AssignmentRequest, timeoutMs: number, roster: Swa
         task: assignment.task,
         rationale: assignment.rationale ?? null,
         direct: assignment.direct ?? false,
-        deliveryTarget: 'tmux',
+        deliveryTarget: deliveryMode,
+        deliveryFallback,
       },
     })
     const startedAt = Date.now()
     const wrapperPath = getWrapperPath(workerId)
+    const checkpointContext: CheckpointDispatchContext = {
+      workerId,
+      assignment,
+      missionId: options?.missionId ?? null,
+      notifySessionKey: options?.notifySessionKey ?? 'main',
+      previousRaw,
+      baselineRuntimeSignature,
+      dispatchedAt: startedAt,
+      checkpointPollMs: options?.checkpointPollMs ?? 90_000,
+    }
 
-    // The wrapper (`hermes chat -q`) is more reliable than live tmux paste for
-    // long, structured prompts. Live TUI delivery can wedge on multiline input
-    // or prompt_toolkit continuation mode. Use the live session only when
-    // explicitly requested via HERMES_SWARM_USE_LIVE=1.
-    const useLive = process.env.HERMES_SWARM_USE_LIVE === '1' || process.env.HERMES_SWARM_USE_LIVE === 'true'
-    const liveResult = useLive ? await sendPromptToLiveSession(workerId, prompt) : null
-    if (liveResult) {
-      markDispatchResult(workerId, liveResult)
-      if (options?.waitForCheckpoint && liveResult.ok) {
-        const checkpoint = await waitForFreshCheckpoint(
-          workerId,
-          previousRaw,
-          baselineRuntimeSignature,
-          startedAt,
-          options.checkpointPollMs ?? 90_000,
-        )
-        if (checkpoint) {
-          markCheckpointResult(workerId, checkpoint, options?.notifySessionKey ?? 'main')
-          const updatedMission = recordMissionCheckpoint({
-            missionId: options?.missionId,
-            assignmentId: assignment.assignmentId ?? null,
-            workerId,
-            checkpoint,
-            source: 'swarm-dispatch',
-          })
-          if (updatedMission?._completed) {
-            try {
-              for (const wId of new Set(updatedMission.assignments.map((a) => a.workerId))) {
-                appendSwarmMemoryEvent({
-                  workerId: wId,
-                  missionId: updatedMission.id,
-                  type: 'complete',
-                  title: updatedMission.title,
-                  summary: `Mission complete: ${updatedMission.title}`,
-                })
-              }
-            } catch { /* memory write best-effort */ }
-          }
-          appendSwarmMemoryEvent({
-            workerId,
-            missionId: options?.missionId ?? null,
-            assignmentId: assignment.assignmentId ?? null,
-            type: 'checkpoint',
-            summary: checkpoint.result ?? `Checkpoint ${checkpoint.stateLabel}`,
-            checkpoint,
-            event: {
-              stateLabel: checkpoint.stateLabel,
-              filesChanged: checkpoint.filesChanged,
-              commandsRun: checkpoint.commandsRun,
-              blocker: checkpoint.blocker,
-              nextAction: checkpoint.nextAction,
-            },
-          })
-          publishSwarmCheckpointNotification({
-            workerId,
-            missionId: options?.missionId ?? null,
-            assignmentId: assignment.assignmentId ?? null,
-            checkpoint,
-            notifySessionKey: options?.notifySessionKey ?? 'main',
-          })
-          await recordHandoffForWorker(workerId, checkpoint)
-          liveResult.checkpoint = checkpoint
-          liveResult.checkpointStatus = 'checkpointed'
-          liveResult.output = `${liveResult.output}\nCheckpoint ${checkpoint.stateLabel}: ${checkpoint.result ?? 'no result'}`
-        } else {
-          liveResult.checkpoint = null
-          liveResult.checkpointStatus = 'timeout'
-          liveResult.output = `${liveResult.output}\nNo fresh checkpoint before poll timeout.`
-        }
-      } else {
-        liveResult.checkpointStatus = 'not-requested'
+    // tmux: persistent session — tmux-tui paste or tmux-cli send-keys.
+    // oneshot is used only when tmux is unavailable or explicitly forced.
+    if (deliveryMode === 'tmux-tui') {
+      const liveResult = await sendPromptToLiveSession(workerId, prompt)
+      const result: WorkerResult = { ...liveResult, deliveryFallback }
+      markDispatchResult(workerId, result)
+      if (!result.ok) {
+        recordDispatchBlock(workerId, assignment, result, options)
+        resolve(result)
+        return
       }
-      recordDispatchBlock(workerId, assignment, liveResult, options)
-      resolve(liveResult)
+      if (options?.waitForCheckpoint) {
+        const withCheckpoint = await attachCheckpointToResult(result, checkpointContext, null)
+        recordDispatchBlock(workerId, assignment, withCheckpoint, options)
+        resolve(withCheckpoint)
+        return
+      }
+      result.checkpointStatus = 'not-requested'
+      recordDispatchBlock(workerId, assignment, result, options)
+      resolve(result)
+      return
+    }
+
+    if (deliveryMode === 'tmux-cli') {
+      const liveResult = await sendPromptToCliSession(workerId, prompt)
+      const result: WorkerResult = { ...liveResult, deliveryFallback }
+      markDispatchResult(workerId, result)
+      if (!result.ok) {
+        recordDispatchBlock(workerId, assignment, result, options)
+        resolve(result)
+        return
+      }
+      if (options?.waitForCheckpoint) {
+        const withCheckpoint = await attachCheckpointToResult(result, checkpointContext, null)
+        recordDispatchBlock(workerId, assignment, withCheckpoint, options)
+        resolve(withCheckpoint)
+        return
+      }
+      result.checkpointStatus = 'not-requested'
+      recordDispatchBlock(workerId, assignment, result, options)
+      resolve(result)
       return
     }
 
@@ -1005,6 +1380,7 @@ function runWorker(assignment: AssignmentRequest, timeoutMs: number, roster: Swa
         durationMs: Date.now() - startedAt,
         exitCode: null,
         delivery: 'oneshot',
+        deliveryFallback,
       }
       markDispatchResult(workerId, result)
       recordDispatchBlock(workerId, assignment, result, options)
@@ -1036,6 +1412,7 @@ function runWorker(assignment: AssignmentRequest, timeoutMs: number, roster: Swa
         killSignal: 'SIGTERM',
       },
       (error, stdout, stderr) => {
+        void (async () => {
         const durationMs = Date.now() - startedAt
         const stdoutStr = (stdout || '').toString()
         const stderrStr = (stderr || '').toString()
@@ -1051,6 +1428,7 @@ function runWorker(assignment: AssignmentRequest, timeoutMs: number, roster: Swa
             durationMs,
             exitCode: typeof code === 'number' ? code : null,
             delivery: 'oneshot',
+            deliveryFallback,
           }
           markDispatchResult(workerId, result)
           recordDispatchBlock(workerId, assignment, result, options)
@@ -1058,7 +1436,7 @@ function runWorker(assignment: AssignmentRequest, timeoutMs: number, roster: Swa
           return
         }
 
-        const result: WorkerResult = {
+        let result: WorkerResult = {
           workerId,
           ok: true,
           output: out,
@@ -1066,55 +1444,18 @@ function runWorker(assignment: AssignmentRequest, timeoutMs: number, roster: Swa
           durationMs,
           exitCode: 0,
           delivery: 'oneshot',
+          deliveryFallback,
         }
         if (options?.waitForCheckpoint) {
-          const checkpoint = parseSwarmCheckpoint(out)
-          if (checkpoint) {
-            markCheckpointResult(workerId, checkpoint, options?.notifySessionKey ?? 'main')
-            recordMissionCheckpoint({
-              missionId: options?.missionId,
-              assignmentId: assignment.assignmentId ?? null,
-              workerId,
-              checkpoint,
-              source: 'swarm-dispatch',
-            })
-            appendSwarmMemoryEvent({
-              workerId,
-              missionId: options?.missionId ?? null,
-              assignmentId: assignment.assignmentId ?? null,
-              type: 'checkpoint',
-              summary: checkpoint.result ?? `Checkpoint ${checkpoint.stateLabel}`,
-              checkpoint,
-              event: {
-                stateLabel: checkpoint.stateLabel,
-                filesChanged: checkpoint.filesChanged,
-                commandsRun: checkpoint.commandsRun,
-                blocker: checkpoint.blocker,
-                nextAction: checkpoint.nextAction,
-              },
-            })
-            publishSwarmCheckpointNotification({
-              workerId,
-              missionId: options?.missionId ?? null,
-              assignmentId: assignment.assignmentId ?? null,
-              checkpoint,
-              notifySessionKey: options?.notifySessionKey ?? 'main',
-            })
-            void recordHandoffForWorker(workerId, checkpoint).catch((err) => {
-              console.error(`[handoff] failed for ${workerId}:`, err)
-            })
-            result.checkpoint = checkpoint
-            result.checkpointStatus = 'checkpointed'
-          } else {
-            result.checkpoint = null
-            result.checkpointStatus = 'timeout'
-          }
+          const stdoutCheckpoint = parseSwarmCheckpoint(out)
+          result = await attachCheckpointToResult(result, checkpointContext, stdoutCheckpoint)
         } else {
           result.checkpointStatus = 'not-requested'
         }
         markDispatchResult(workerId, result)
         recordDispatchBlock(workerId, assignment, result, options)
         resolve(result)
+        })()
       },
     )
 
@@ -1127,6 +1468,7 @@ function runWorker(assignment: AssignmentRequest, timeoutMs: number, roster: Swa
         durationMs: Date.now() - startedAt,
         exitCode: null,
         delivery: 'oneshot',
+        deliveryFallback,
       }
       markDispatchResult(workerId, result)
       recordDispatchBlock(workerId, assignment, result, options)
@@ -1183,6 +1525,7 @@ export async function dispatchSwarmAssignments(body: DispatchRequest) {
   const pollRaw = typeof body.checkpointPollSeconds === 'number' ? body.checkpointPollSeconds : 90
   const checkpointPollSeconds = Math.max(5, Math.min(300, Math.floor(pollRaw)))
   const notifySessionKey = typeof body.notifySessionKey === 'string' && body.notifySessionKey.trim() ? body.notifySessionKey.trim() : 'main'
+  const deliveryMode = parseDeliveryModeRequest(body.deliveryMode)
 
   const requestedMissionId = typeof body.missionId === 'string' ? body.missionId.trim() : ''
   const hasExplicitMissionTitle = typeof body.missionTitle === 'string' && body.missionTitle.trim()
@@ -1221,7 +1564,7 @@ export async function dispatchSwarmAssignments(body: DispatchRequest) {
     assignment,
     timeoutMs,
     roster.get(assignment.workerId),
-    { waitForCheckpoint, checkpointPollMs: checkpointPollSeconds * 1000, missionId: mission.id, notifySessionKey },
+    { waitForCheckpoint, checkpointPollMs: checkpointPollSeconds * 1000, missionId: mission.id, notifySessionKey, deliveryMode },
   )))
 
   const latestMission = getSwarmMission(mission.id) ?? mission

@@ -28,6 +28,7 @@ import { Swarm2ActivityFeed } from './swarm2-activity-feed'
 import { Swarm2KanbanBoard } from './swarm2-kanban-board'
 import { Swarm2ReportsView, buildSwarm2InboxLanes, type Swarm2InboxItem } from './swarm2-reports-view'
 import { HumanGatePanel } from './components/human-gate-panel'
+import { LanggraphAutopilotPanel } from './components/langgraph-autopilot-panel'
 import { useHumanGate } from './hooks/use-human-gate'
 import { RouterChat } from '@/components/swarm/router-chat'
 import { SwarmTerminal } from '@/components/swarm/swarm-terminal'
@@ -1005,6 +1006,7 @@ export function Swarm2Screen() {
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [humanGateOpen, setHumanGateOpen] = useState(false)
   const [humanGateSeen, setHumanGateSeen] = useState(false)
+  const [langgraphOpen, setLanggraphOpen] = useState(false)
   const [addSwarmOpen, setAddSwarmOpen] = useState(false)
   const [addSwarmSaving, setAddSwarmSaving] = useState(false)
   const [addSwarmError, setAddSwarmError] = useState<string | null>(null)
@@ -1530,6 +1532,13 @@ export function Swarm2Screen() {
             </div>
 
             <div className="relative flex shrink-0 items-center gap-2 text-sm text-[var(--theme-muted)]">
+              <button
+                type="button"
+                onClick={() => setLanggraphOpen(true)}
+                className="inline-flex h-10 items-center rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 text-xs font-semibold text-[var(--theme-text)] shadow-sm hover:bg-[var(--theme-card2)]"
+              >
+                LangGraph
+              </button>
               {humanGate ? (
                 <button
                   type="button"
@@ -1648,6 +1657,7 @@ export function Swarm2Screen() {
             }}
           />
         ) : null}
+        <LanggraphAutopilotPanel open={langgraphOpen} onOpenChange={setLanggraphOpen} />
 
         <div className="grid min-h-0 grid-cols-1 gap-3">
           <ControlPlaneStage

@@ -9,6 +9,14 @@ import { rosterByWorkerId } from '../../server/swarm-roster'
 import { parseSwarmModelLabel } from '../../server/swarm-model-resolver'
 import { syncSwarmProfileModel } from '../../server/swarm-profile-config'
 import { handoffPath, readHandoff } from '../../server/handoff'
+import {
+  buildHermesTmuxShellCommand,
+  buildHermesTmuxTuiCommand,
+  resolveTmuxTransportMode,
+  tmuxPaneLooksLikeHermesTui,
+  tmuxPaneLooksLikeShellReady,
+  type TmuxTransportMode,
+} from '../../server/swarm-tmux-delivery'
 
 // Inlined to avoid SSR module-resolution races against freshly-written
 // helpers; mirrors `src/server/claude-paths.ts` getProfilesDir().
@@ -29,10 +37,10 @@ function getProfilesDir(): string {
  * Body: { workerId: "swarm1" }
  *
  * Idempotently ensures a long-lived tmux session exists for a worker.
- * The session runs the worker's `hermes` TUI inside its profile + cwd, so
- * dispatch traffic + the swarm2 Runtime pane both see the same live agent.
+ * - tmux-tui (default): `hermes chat --tui` — dispatch pastes into TUI prompt
+ * - tmux-cli (HERMES_SWARM_TMUX_MODE=cli): `bash -l` — dispatch runs `hermes chat -q`
  *
- * Returns: { workerId, sessionName, alreadyRunning, started }
+ * Returns: { workerId, sessionName, alreadyRunning, started, transportMode }
  */
 
 type StartRequest = {
@@ -43,6 +51,7 @@ const TMUX_BIN_CANDIDATES = [
   process.env.TMUX_BIN,
   '/opt/homebrew/bin/tmux',
   '/usr/local/bin/tmux',
+  '/usr/bin/tmux',
   join(homedir(), '.local', 'bin', 'tmux'),
   'tmux',
 ].filter((value): value is string => Boolean(value))
@@ -74,6 +83,52 @@ function tmuxHasSession(tmuxBin: string, name: string): Promise<boolean> {
       resolve(!error)
     })
   })
+}
+
+function tmuxSessionUsable(tmuxBin: string, name: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    execFile(tmuxBin, ['list-panes', '-t', name], (error) => {
+      resolve(!error)
+    })
+  })
+}
+
+function tmuxKillSession(tmuxBin: string, name: string): Promise<void> {
+  return new Promise((resolve) => {
+    execFile(tmuxBin, ['kill-session', '-t', name], () => resolve())
+  })
+}
+
+function captureTmuxPane(tmuxBin: string, sessionName: string): Promise<string> {
+  return new Promise((resolve) => {
+    execFile(tmuxBin, ['capture-pane', '-p', '-t', sessionName, '-S', '-120'], (error, stdout) => {
+      resolve(error ? '' : stdout.toString().trim())
+    })
+  })
+}
+
+async function sessionHasHermesTui(tmuxBin: string, sessionName: string): Promise<boolean> {
+  const pane = await captureTmuxPane(tmuxBin, sessionName)
+  return tmuxPaneLooksLikeHermesTui(pane)
+}
+
+function getPaneCurrentCommand(tmuxBin: string, sessionName: string): Promise<string> {
+  return new Promise((resolve) => {
+    execFile(tmuxBin, ['list-panes', '-t', sessionName, '-F', '#{pane_current_command}'], (error, stdout) => {
+      resolve(error ? '' : stdout.toString().trim().split('\n')[0] || '')
+    })
+  })
+}
+
+async function sessionHasShellReady(tmuxBin: string, sessionName: string): Promise<boolean> {
+  const pane = await captureTmuxPane(tmuxBin, sessionName)
+  const paneCommand = await getPaneCurrentCommand(tmuxBin, sessionName)
+  return tmuxPaneLooksLikeShellReady(pane, paneCommand)
+}
+
+function resolveGithubToken(): string | null {
+  const direct = process.env.GH_TOKEN || process.env.GITHUB_TOKEN
+  return direct?.trim() || null
 }
 
 function validateWorkerId(value: string): boolean {
@@ -108,11 +163,17 @@ function startSession(
   profilePath: string,
   cwd: string,
   workerId: string,
+  transport: TmuxTransportMode,
 ): Promise<{ ok: boolean; error?: string }> {
   const handoff = readHandoff(workerId)
   const handoffEnv = handoff
     ? `HERMES_HANDOFF_PATH='${handoffPath(workerId).replace(/'/g, `'\\''`)}' `
     : ''
+  const hermesBin = resolveHermesBin()
+  const ghToken = resolveGithubToken()
+  const startCommand = transport === 'cli'
+    ? `${handoffEnv}${buildHermesTmuxShellCommand({ profilePath, hermesBin, ghToken })}`
+    : `${handoffEnv}${buildHermesTmuxTuiCommand({ profilePath, hermesBin, ghToken, useExec: true })}`
   return new Promise((resolve) => {
     const child = execFile(
       tmuxBin,
@@ -123,7 +184,7 @@ function startSession(
         sessionName,
         '-c',
         cwd,
-        `${handoffEnv}HERMES_HOME='${profilePath.replace(/'/g, `'\\''`)}' HERMES_CLI_BIN='${resolveHermesBin().replace(/'/g, `'\\''`)}' exec '${resolveHermesBin().replace(/'/g, `'\\''`)}' chat --tui`,
+        startCommand,
       ],
       { timeout: 8_000 },
       async (error, _stdout, stderr) => {
@@ -134,22 +195,28 @@ function startSession(
           })
           return
         }
-        // Give the agent a moment to render its prompt. If the Hermes process
-        // exits immediately, the session dies before dispatch can use it.
         await sleep(1_500)
-        if (await tmuxHasSession(tmuxBin, sessionName)) {
-          // If a previous handoff exists for this worker, paste it into the
-          // session so the agent can ground itself on restart.
-          if (handoff) {
-            await injectHandoffPrompt(tmuxBin, sessionName, workerId)
-          }
-          resolve({ ok: true })
+        if (!(await tmuxHasSession(tmuxBin, sessionName))) {
+          resolve({
+            ok: false,
+            error: `Hermes worker session ${sessionName} exited during startup. Check the profile and Hermes logs.`,
+          })
           return
         }
-        resolve({
-          ok: false,
-          error: `Hermes worker session ${sessionName} exited during startup. Check the profile and Hermes logs.`,
-        })
+        const ready = transport === 'cli'
+          ? await sessionHasShellReady(tmuxBin, sessionName)
+          : await sessionHasHermesTui(tmuxBin, sessionName)
+        if (!ready) {
+          resolve({
+            ok: false,
+            error: `Worker session ${sessionName} started but ${transport === 'cli' ? 'shell' : 'TUI'} is not ready`,
+          })
+          return
+        }
+        if (handoff && transport === 'tui') {
+          await injectHandoffPrompt(tmuxBin, sessionName, workerId)
+        }
+        resolve({ ok: true })
       },
     )
     child.on('error', (error) => {
@@ -305,16 +372,27 @@ export const Route = createFileRoute('/api/swarm-tmux-start')({
         }
 
         const sessionName = `swarm-${workerId}`
-        const alreadyRunning = await tmuxHasSession(tmuxBin, sessionName)
-        if (alreadyRunning) {
+        const transportMode = resolveTmuxTransportMode()
+        const sessionExists = await tmuxHasSession(tmuxBin, sessionName)
+        const sessionUsable = sessionExists && (await tmuxSessionUsable(tmuxBin, sessionName))
+        const sessionReady = sessionUsable && (
+          transportMode === 'cli'
+            ? await sessionHasShellReady(tmuxBin, sessionName)
+            : await sessionHasHermesTui(tmuxBin, sessionName)
+        )
+        if (sessionUsable && sessionReady) {
           return json({
             workerId,
             sessionName,
             alreadyRunning: true,
             started: false,
             tmuxBin,
+            transportMode,
             modelSync,
           })
+        }
+        if (sessionExists) {
+          await tmuxKillSession(tmuxBin, sessionName)
         }
 
         const cwd = resolveWorkerCwd(workerId)
@@ -324,6 +402,7 @@ export const Route = createFileRoute('/api/swarm-tmux-start')({
           profilePath,
           cwd,
           workerId,
+          transportMode,
         )
         if (!result.ok) {
           return json(
@@ -338,6 +417,7 @@ export const Route = createFileRoute('/api/swarm-tmux-start')({
           alreadyRunning: false,
           started: true,
           tmuxBin,
+          transportMode,
           cwd,
           modelSync,
         })

@@ -1,11 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
-import { isAuthenticated } from '../../server/auth-middleware'
+import { isAuthenticated } from '../../../server/auth-middleware'
 import {
   langgraphEnvWithHumanGate,
   parseHumanGateResumeBody,
-} from '../../server/langgraph-human-gate'
-import { spawnLanggraphDetached } from '../../server/langgraph-orchestrator'
+} from '../../../server/langgraph-human-gate'
+import { runLanggraphSync, spawnLanggraphDetached } from '../../../server/langgraph-orchestrator'
 
 type ResumeBody = {
   missionId?: unknown
@@ -19,7 +19,7 @@ function cleanString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
-export const Route = createFileRoute('/api/orchestrator-resume')({
+export const Route = createFileRoute('/api/swarm-langgraph/resume')({
   server: {
     handlers: {
       POST: async ({ request }) => {
@@ -47,6 +47,40 @@ export const Route = createFileRoute('/api/orchestrator-resume')({
           return json({ ok: false, error: '自定义选项需要填写说明' }, { status: 400 })
         }
         const env = langgraphEnvWithHumanGate(process.env, humanGate)
+
+        // Abort should finalize immediately; run synchronously so the UI can
+        // clear the human gate without a silent background failure.
+        if (action === 'abort') {
+          const result = runLanggraphSync(
+            [
+              '--execute',
+              ...(useMock ? ['--mock-services'] : []),
+              '--resume',
+              action,
+              '--mission-id',
+              missionId,
+            ],
+            env,
+          )
+          if (!result.ok) {
+            return json(
+              {
+                ok: false,
+                error: result.error || 'Abort failed',
+                stderr: result.stderr?.slice(0, 2000) ?? null,
+              },
+              { status: 500 },
+            )
+          }
+          return json({
+            ok: true,
+            accepted: true,
+            completed: true,
+            action,
+            missionId,
+            mock: useMock,
+          })
+        }
 
         const { pid } = spawnLanggraphDetached(
           [

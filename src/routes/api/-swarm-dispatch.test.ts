@@ -1,13 +1,79 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   buildHermesChatQueryArgs,
+  buildHermesTmuxExecCommand,
   buildHermesTmuxLaunchCommand,
   buildWorkerPrompt,
   checkpointFromRuntimeSnapshot,
   dispatchBlockReason,
+  resolveDeliveryMode,
   runtimeCheckpointSignature,
   runtimeSnapshotIsFresh,
+  tmuxPaneLooksLikeHermesTui,
+  tmuxPaneLooksLikeShellReady,
 } from './swarm-dispatch'
+
+describe('resolveDeliveryMode', () => {
+  const originalForceOneshot = process.env.HERMES_SWARM_FORCE_ONESHOT
+  const originalTmuxBin = process.env.TMUX_BIN
+  const originalTmuxMode = process.env.HERMES_SWARM_TMUX_MODE
+
+  afterEach(() => {
+    if (originalForceOneshot === undefined) delete process.env.HERMES_SWARM_FORCE_ONESHOT
+    else process.env.HERMES_SWARM_FORCE_ONESHOT = originalForceOneshot
+    if (originalTmuxBin === undefined) delete process.env.TMUX_BIN
+    else process.env.TMUX_BIN = originalTmuxBin
+    if (originalTmuxMode === undefined) delete process.env.HERMES_SWARM_TMUX_MODE
+    else process.env.HERMES_SWARM_TMUX_MODE = originalTmuxMode
+  })
+
+  it('defaults to tmux-tui when tmux is available', () => {
+    process.env.TMUX_BIN = '/usr/bin/tmux'
+    delete process.env.HERMES_SWARM_FORCE_ONESHOT
+    delete process.env.HERMES_SWARM_TMUX_MODE
+    expect(resolveDeliveryMode()).toEqual({ mode: 'tmux-tui', fallback: null })
+  })
+
+  it('defaults to tmux-cli when HERMES_SWARM_TMUX_MODE=cli', () => {
+    process.env.TMUX_BIN = '/usr/bin/tmux'
+    process.env.HERMES_SWARM_TMUX_MODE = 'cli'
+    delete process.env.HERMES_SWARM_FORCE_ONESHOT
+    expect(resolveDeliveryMode()).toEqual({ mode: 'tmux-cli', fallback: null })
+  })
+
+  it('falls back to oneshot when tmux is unavailable', () => {
+    delete process.env.HERMES_SWARM_FORCE_ONESHOT
+    expect(resolveDeliveryMode('auto', { tmuxAvailable: false })).toEqual({
+      mode: 'oneshot',
+      fallback: 'tmux_unavailable',
+    })
+  })
+
+  it('forces oneshot when HERMES_SWARM_FORCE_ONESHOT is set', () => {
+    process.env.TMUX_BIN = '/usr/bin/tmux'
+    process.env.HERMES_SWARM_FORCE_ONESHOT = '1'
+    expect(resolveDeliveryMode()).toEqual({ mode: 'oneshot', fallback: null })
+  })
+
+  it('honors explicit request overrides', () => {
+    process.env.TMUX_BIN = '/usr/bin/tmux'
+    expect(resolveDeliveryMode('oneshot')).toEqual({ mode: 'oneshot', fallback: null })
+    expect(resolveDeliveryMode('tmux-tui')).toEqual({ mode: 'tmux-tui', fallback: null })
+    expect(resolveDeliveryMode('tmux-cli')).toEqual({ mode: 'tmux-cli', fallback: null })
+    expect(resolveDeliveryMode('tmux')).toEqual({ mode: 'tmux-tui', fallback: null })
+  })
+
+  it('warns once when deprecated HERMES_SWARM_USE_LIVE is set', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    process.env.HERMES_SWARM_USE_LIVE = '1'
+    process.env.TMUX_BIN = '/usr/bin/tmux'
+    resolveDeliveryMode()
+    resolveDeliveryMode()
+    expect(warn).toHaveBeenCalledTimes(1)
+    warn.mockRestore()
+    delete process.env.HERMES_SWARM_USE_LIVE
+  })
+})
 
 describe('checkpointFromRuntimeSnapshot', () => {
   it('maps runtime lifecycle fields into a structured checkpoint', () => {
@@ -116,6 +182,50 @@ describe('buildHermesTmuxLaunchCommand', () => {
     expect(command).toContain("'/opt/homebrew/bin/hermes' chat --tui")
     expect(command).toContain('[Hermes worker exited with status %s]')
     expect(command).not.toContain('exec ')
+  })
+})
+
+describe('buildHermesTmuxExecCommand', () => {
+  it('exec-replaces the pane with Hermes TUI for tmux-first dispatch', () => {
+    const command = buildHermesTmuxExecCommand({
+      profilePath: '/home/user/.hermes/profiles/researcher',
+      hermesBin: '/usr/bin/hermes',
+    })
+    expect(command).toContain("exec '/usr/bin/hermes' chat --tui")
+    expect(command).toContain("HERMES_HOME='/home/user/.hermes/profiles/researcher'")
+  })
+})
+
+describe('tmuxPaneLooksLikeHermesTui', () => {
+  it('accepts an active Hermes prompt', () => {
+    const pane = [
+      'Hermes Agent',
+      'Available Tools',
+      '─ ready │ DeepSeek V4 Pro Seed │ 1 session ─',
+      'researcher ❯',
+    ].join('\n')
+    expect(tmuxPaneLooksLikeHermesTui(pane)).toBe(true)
+  })
+
+  it('rejects a bare bash shell where paste would run Execute as a command', () => {
+    const pane = [
+      '(base) user@host:~$ Execute the task in /tmp/swarm-task.md and return the required checkpoint format.',
+      'Execute: command not found',
+      '(base) user@host:~$',
+    ].join('\n')
+    expect(tmuxPaneLooksLikeHermesTui(pane)).toBe(false)
+  })
+})
+
+describe('tmuxPaneLooksLikeShellReady', () => {
+  it('accepts an idle bash prompt for CLI dispatch', () => {
+    const pane = '(base) user@host:~/proj$'
+    expect(tmuxPaneLooksLikeShellReady(pane, 'bash')).toBe(true)
+  })
+
+  it('rejects a pane that is still running hermes', () => {
+    const pane = 'running tools...'
+    expect(tmuxPaneLooksLikeShellReady(pane, 'python3')).toBe(false)
   })
 })
 

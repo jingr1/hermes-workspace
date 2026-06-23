@@ -37,10 +37,92 @@ def serialize_state(state: OrchestratorState) -> dict[str, Any]:
     return _serialize(state)
 
 
+def build_human_gate_assignments(
+    state: OrchestratorState,
+    *,
+    choice: str = "primary",
+    human_note: str = "",
+    target_worker_id: str | None = None,
+) -> list[dict]:
+    """Build dispatch assignments from a human-gate UI selection."""
+    classifications = state.get("classifications", []) or []
+    checkpoints = state.get("checkpoints", []) or []
+    classification = classifications[0] if classifications else {}
+    source_id = (
+        classification.get("worker_id")
+        if isinstance(classification, dict)
+        else getattr(classification, "worker_id", "unknown")
+    )
+    cp_map = {cp.get("worker_id"): cp for cp in checkpoints if cp.get("worker_id")}
+    checkpoint = cp_map.get(source_id, checkpoints[0] if checkpoints else {})
+
+    if isinstance(classification, dict):
+        blocker_summary = classification.get("blocker_summary") or checkpoint.get("blocker") or ""
+        verdict = classification.get("verdict") or "BLOCKED"
+    else:
+        blocker_summary = classification.blocker_summary or checkpoint.get("blocker") or ""
+        verdict = classification.verdict or "BLOCKED"
+
+    target_id = (target_worker_id or source_id or "unknown").strip()
+    mission_goal = state.get("mission_goal", "")
+    note = (human_note or "").strip()
+    result = (checkpoint.get("result") or "").strip()
+    next_action = (checkpoint.get("next_action") or "").strip()
+    files = (checkpoint.get("files_changed") or "").strip() or "none"
+
+    note_block = f"\n\n## 人工补充说明\n{note}" if note else ""
+    choice_label = {"primary": "选项一", "secondary": "选项二", "custom": "自定义"}.get(
+        choice, choice
+    )
+
+    if target_id == source_id:
+        task = (
+            f"## Mission\n{mission_goal}\n\n"
+            f"## Human gate 决策\n"
+            f"人工选择：{choice_label}（重试 {source_id}）\n"
+            f"上一 verdict：{verdict}\n"
+            f"阻塞原因：{blocker_summary or 'unknown'}{note_block}\n\n"
+            f"## Your task\n"
+            f"根据人工决策继续处理阻塞项，完成后回报 checkpoint "
+            f"(STATE, FILES_CHANGED, COMMANDS_RUN, RESULT, BLOCKER, NEXT_ACTION)。"
+        )
+        reason = f"human gate {choice_label}: retry {source_id}"
+    else:
+        context_lines = [
+            f"## Mission\n{mission_goal}\n",
+            f"## Human gate 决策\n",
+            f"人工选择：{choice_label}（{source_id} → {target_id}）\n",
+            f"上一 verdict：{verdict}\n",
+            f"阻塞原因：{blocker_summary or 'unknown'}{note_block}\n",
+            f"## Context from {source_id}\n",
+        ]
+        if result:
+            context_lines.append(f"Result: {result}\n")
+        if next_action:
+            context_lines.append(f"Suggested next action: {next_action}\n")
+        context_lines.append(f"Files changed: {files}\n")
+        context_lines.extend(
+            [
+                f"\n## Your task\n",
+                f"As {target_id}, act on the human gate decision above. ",
+                "Address the blocker or handoff context, then return the required checkpoint format "
+                "(STATE, FILES_CHANGED, COMMANDS_RUN, RESULT, BLOCKER, NEXT_ACTION).",
+            ]
+        )
+        task = "".join(context_lines)
+        reason = f"human gate {choice_label}: {source_id} → {target_id}"
+
+    return [{"worker_id": target_id, "task": task, "reason": reason}]
+
+
 def build_resume_command(
     state: OrchestratorState,
     action: str,
     assignment_overrides: list[dict] | None = None,
+    *,
+    human_choice: str | None = None,
+    human_note: str | None = None,
+    target_worker_id: str | None = None,
 ) -> Command:
     """Build a LangGraph Command to resume from the human_approval interrupt.
 
@@ -50,16 +132,37 @@ def build_resume_command(
         assignment_overrides: Optional replacement assignments for the human
             gate. If provided and ``action`` is ``approved``, these are used
             instead of ``pending_human_assignments``.
+        human_choice: UI choice ``primary`` | ``secondary`` | ``custom``.
+        human_note: Optional free-text from the human gate panel.
+        target_worker_id: Target worker for the approved dispatch.
     """
     if action == "approved":
-        pending = assignment_overrides if assignment_overrides is not None else (
-            state.get("pending_human_assignments", []) or []
-        )
+        if assignment_overrides is not None:
+            pending = assignment_overrides
+        elif human_choice or human_note or target_worker_id:
+            pending = build_human_gate_assignments(
+                state,
+                choice=human_choice or "primary",
+                human_note=human_note or "",
+                target_worker_id=target_worker_id,
+            )
+        else:
+            pending = state.get("pending_human_assignments", []) or []
+
+        payload: dict[str, Any] | None = None
+        if human_choice or human_note or target_worker_id:
+            payload = {
+                "choice": human_choice or "primary",
+                "human_note": human_note or "",
+                "target_worker_id": target_worker_id or "",
+            }
+
         return Command(
             update={
                 "langgraph_assignments": pending,
                 "pending_human_assignments": [],
                 "human_resume_action": "approved",
+                "human_resume_payload": payload,
             }
         )
     if action == "abort":
@@ -68,7 +171,7 @@ def build_resume_command(
                 "pending_human_assignments": [],
                 "langgraph_assignments": [],
                 "human_resume_action": "abort",
-                "all_done": True,
+                "awaiting_checkpoint": False,
             },
             goto="finalize_mission",
         )

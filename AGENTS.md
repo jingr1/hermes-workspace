@@ -37,7 +37,8 @@ When the Phase 2 orchestrator raises `needs_human=True`, use one of:
 - **API for automation:**
   - `GET /api/orchestrator-active-gates` scans SQLite and returns every mission currently paused at `needs_human=True`.
   - `GET /api/orchestrator-state?missionId=<id>` returns the current paused state for a specific mission.
-  - `POST /api/orchestrator/resume?mock=1` with `{ missionId, action: "approved" | "abort" }` resumes in the background.
+  - `POST /api/orchestrator-resume` with `{ missionId, action: "approved" | "abort" }` resumes in the background.
+  - Prefer `POST /api/swarm-langgraph/run` to start missions and `POST /api/swarm-langgraph/resume` for human gate recovery.
 
 ## Windows-specific notes (2026-06-01)
 
@@ -65,5 +66,7 @@ When the Phase 2 orchestrator raises `needs_human=True`, use one of:
 
 ## Swarm dispatch environment variables
 
-- `HERMES_SWARM_USE_LIVE=1` — prefer persistent tmux TUI sessions for dispatch. By default dispatch now uses the worker wrapper (`hermes -p <worker> chat -q`) because live tmux paste is unreliable with long multiline prompts on this host.
+- `HERMES_SWARM_FORCE_ONESHOT=1` — force wrapper oneshot (`hermes -p <worker> chat -q`) instead of the default tmux live-session delivery. Use in CI or hosts without tmux.
+- `HERMES_SWARM_TMUX_MODE=cli` — tmux session runs `bash -l`; dispatch uses `send-keys` to run `hermes chat -q` per task (`tmux-cli`). Default is `tui` (paste into `hermes chat --tui`).
+- `HERMES_SWARM_USE_LIVE=1` — **deprecated** (tmux is now the default). Setting it only emits a warning.
 - `HERMES_SWARM_MOCK_BIN=<dir>` — when set, `src/routes/api/swarm-dispatch.ts` looks for worker wrapper scripts in `<dir>` before falling back to `~/.local/bin/`. Useful for validating workflow routing without invoking real LLM workers.

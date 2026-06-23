@@ -55,6 +55,26 @@ from hermes_langgraph_orchestrator.state import (
 )
 from hermes_langgraph_orchestrator.workflow import load_workflow
 
+
+def import_async_sqlite_saver():
+    """Load AsyncSqliteSaver or exit with an actionable venv hint."""
+    try:
+        from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+
+        return AsyncSqliteSaver
+    except ModuleNotFoundError:
+        orch_dir = os.path.dirname(os.path.abspath(__file__))
+        venv_python = os.path.join(orch_dir, ".venv", "bin", "python")
+        print(
+            "\n❌ 缺少 langgraph-checkpoint-sqlite（`langgraph.checkpoint.sqlite`）。\n"
+            "   Phase 2（--execute / --resume / --get-state）请用项目 venv 运行，例如：\n"
+            f"   {venv_python} -m hermes_langgraph_orchestrator --execute --resume approved --mission-id <id>\n"
+            "\n   若尚未创建 venv：\n"
+            f"   cd {os.path.dirname(orch_dir)} && python3 -m venv hermes_langgraph_orchestrator/.venv\n"
+            f"   {venv_python} -m pip install -r hermes_langgraph_orchestrator/requirements.txt\n"
+        )
+        sys.exit(1)
+
 # ============================================================
 # 场景数据
 # ============================================================
@@ -372,7 +392,7 @@ async def main():
     parser.add_argument("--scenario", type=str, default="cdc", choices=["rate-limiter", "cdc"])
     parser.add_argument("--mission-id", type=str, default="", help="mission ID，默认自动生成唯一 ID")
     parser.add_argument("--goal", type=str, default="")
-    parser.add_argument("--swarm-url", type=str, default="http://localhost:3000/api")
+    parser.add_argument("--swarm-url", type=str, default="", help="Workspace API base URL (default: HERMES_WORKSPACE_URL or http://127.0.0.1:3000/api)")
     parser.add_argument("--workflow", type=str, default="", help="workflow YAML 路径，默认 cdc.yaml")
     parser.add_argument(
         "--initial-workers",
@@ -406,12 +426,23 @@ async def main():
     )
     args = parser.parse_args()
 
+    from hermes_langgraph_orchestrator.nodes import load_workspace_dotenv
+
+    load_workspace_dotenv()
+
     scenario = args.scenario
     mission_id = args.mission_id or f"mission-{int(time.time())}"
     goal = args.goal or {
         "rate-limiter": "为 API 服务添加 rate limiter",
         "cdc": "设计并开发 CDC+空簧 的物理模型，用 JAX 构建",
     }[scenario]
+
+    swarm_url = (
+        args.swarm_url.strip()
+        or os.environ.get("HERMES_WORKSPACE_URL", "").strip()
+        or os.environ.get("SWARM_API_URL", "").strip()
+        or "http://127.0.0.1:3000/api"
+    ).rstrip("/")
 
     phase = "Phase 2 (执行)" if args.execute else "Phase 1 (对比)"
     mode = "全部 mock" if args.mock else "mock services" if args.mock_services else "真实 LLM + mock collect" if args.mock_collect else "真实 LLM + 真实 API"
@@ -446,7 +477,15 @@ async def main():
 
     if args.execute:
         from hermes_langgraph_orchestrator.graph import build_phase2_graph
-        from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+        from hermes_langgraph_orchestrator.nodes import check_swarm_workspace
+
+        AsyncSqliteSaver = import_async_sqlite_saver()
+
+        if not args.mock_services and not args.resume:
+            preflight_error = await check_swarm_workspace(swarm_url)
+            if preflight_error:
+                print(f"\n❌ Workspace preflight failed:\n   {preflight_error}\n")
+                sys.exit(1)
 
         initial_tasks: list[dict] = []
         if args.initial_workers:
@@ -472,8 +511,24 @@ async def main():
                 if current_state is None or current_state.values is None:
                     print(f"\n❌ 找不到 mission {mission_id} 的状态，无法恢复")
                     sys.exit(1)
-                command = build_resume_command(current_state.values, args.resume)
-                print(f"▶ Phase 2 恢复 (action={args.resume})...\n")
+                human_choice = os.environ.get("HERMES_LANGGRAPH_HUMAN_CHOICE")
+                human_note = os.environ.get("HERMES_LANGGRAPH_HUMAN_NOTE")
+                resume_target = os.environ.get("HERMES_LANGGRAPH_RESUME_TARGET")
+                command = build_resume_command(
+                    current_state.values,
+                    args.resume,
+                    human_choice=human_choice,
+                    human_note=human_note,
+                    target_worker_id=resume_target,
+                )
+                if human_choice or human_note or resume_target:
+                    print(
+                        f"▶ Phase 2 恢复 (action={args.resume}, "
+                        f"choice={human_choice or 'primary'}, "
+                        f"target={resume_target or 'default'})...\n"
+                    )
+                else:
+                    print(f"▶ Phase 2 恢复 (action={args.resume})...\n")
                 try:
                     result = await graph.ainvoke(command, config)  # type: ignore[arg-type]
                 except Exception as e:
@@ -486,7 +541,7 @@ async def main():
                 initial: OrchestratorState = {
                     "mission_id": mission_id,
                     "mission_goal": goal,
-                    "swarm_api_url": args.swarm_url,
+                    "swarm_api_url": swarm_url,
                     "workflow_path": args.workflow or None,
                     "checkpoints": [],
                     "terminal_checkpoints": [],
@@ -504,11 +559,34 @@ async def main():
                     "dispatch_error": None,
                     "wait_attempts": 0,
                     "all_done": False,
+                    "human_resume_action": None,
                     "iteration": 0,
                     "max_iterations": args.max_iterations,
                     "phase": "phase2_execute",
                     "log_entries": [],
                 }
+                existing = await graph.aget_state(config)
+                if existing and existing.values:
+                    print(
+                        f"ℹ️  复用 mission checkpoint（{mission_id}），重置编排状态后重新执行。"
+                        " 全新任务请换 --mission-id。"
+                    )
+                    await graph.aupdate_state(
+                        config,
+                        {
+                            "all_done": False,
+                            "human_resume_action": None,
+                            "langgraph_needs_human": False,
+                            "checkpoints": [],
+                            "terminal_checkpoints": [],
+                            "classifications": [],
+                            "pending_human_assignments": [],
+                            "dispatch_results": None,
+                            "dispatch_error": None,
+                            "awaiting_checkpoint": False,
+                            "iteration": 0,
+                        },
+                    )
                 print(f"▶ Phase 2 执行开始...\n")
                 try:
                     result = await graph.ainvoke(initial, config)  # type: ignore[arg-type]
@@ -543,7 +621,29 @@ async def main():
                 for l in logs:
                     print(f"   {l}")
 
-            print(f"\n✅ Phase 2 完成。详细: logs/execute_*.json")
+            paused_at_gate = (
+                result.get("langgraph_needs_human") is True
+                and not result.get("all_done", False)
+            )
+            if paused_at_gate:
+                workspace_base = swarm_url.removesuffix("/api")
+                pending = result.get("pending_human_assignments") or []
+                classifications = result.get("classifications") or []
+                worker = "unknown"
+                if classifications:
+                    first = classifications[0]
+                    worker = first.get("worker_id") if isinstance(first, dict) else getattr(first, "worker_id", "unknown")
+                elif pending:
+                    worker = pending[0].get("worker_id", "unknown")
+                print(f"\n⏸ Mission 暂停在 Human Gate（{mission_id}，worker={worker}）")
+                print(f"   打开 Dashboard 审批: {workspace_base}/swarm2")
+                print("   页面会自动弹出「Mission 需要人工决策」对话框；也可点右上角警告图标。")
+                print(
+                    f"   CLI 恢复: python -m hermes_langgraph_orchestrator "
+                    f"--execute --resume approved --mission-id {mission_id}"
+                )
+            else:
+                print(f"\n✅ Phase 2 完成。详细: logs/execute_*.json")
 
     else:
         from hermes_langgraph_orchestrator.graph import build_phase1_graph
@@ -568,7 +668,7 @@ async def main():
         initial: OrchestratorState = {
             "mission_id": mission_id,
             "mission_goal": goal,
-            "swarm_api_url": args.swarm_url,
+            "swarm_api_url": swarm_url,
             "workflow_path": args.workflow or None,
             "checkpoints": [],
             "terminal_checkpoints": [],

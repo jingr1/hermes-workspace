@@ -116,56 +116,129 @@ workers:
     acceptsBroadcast: true
     reviewRequired: false
   - id: architect
-    name: architect
-    role: Worker
-    specialty: ""
+    name: Architect
+    role: System Design / Review
+    specialty: architecture design, interface contracts, design review, CDC modeling
     model: custom:nioint-gateway/DeepSeek-V4-Pro-Seed
-    mission: Awaiting orchestrator dispatch.
-    modes: []
-    tools: []
-    skills: []
+    mission: Produce decision-grade designs with explicit interfaces, review developer
+      implementations, and return structured checkpoints.
+    profile: architect
+    modes:
+      - design
+    tools:
+      - terminal
+      - file
+      - web
+      - gbrain
+      - session_search
+      - skills
+      - todo
+    skills:
+      - gstack-for-hermes
+      - gbrain
+      - writing-plans
+      - requesting-code-review
+      - codebase-inspection
     plugins: []
     pluginToolsets: []
-    mcpServers: []
-    capabilities: []
-    preferredTaskTypes: []
-    greenlightRequiredFor: []
+    mcpServers:
+      - gbrain
+    wrapper: architect:design
+    capabilities:
+      - architecture
+      - design-review
+      - interface-contracts
+    preferredTaskTypes:
+      - design
+      - architecture
+      - review
+    greenlightRequiredFor:
+      - publish
+      - destructive
     maxConcurrentTasks: 1
     acceptsBroadcast: true
-    reviewRequired: false
+    reviewRequired: true
   - id: developer
-    name: developer
-    role: Worker
-    specialty: ""
-    model: DeepSeek-V4-Pro-Seed
-    mission: Awaiting orchestrator dispatch.
-    modes: []
-    tools: []
-    skills: []
+    name: Developer
+    role: Implementation / Builder
+    specialty: full-stack implementation, tests, CDC and modeling code
+    model: custom:nioint-gateway/DeepSeek-V4-Pro-Seed
+    mission: Implement approved designs with tests, evidence-bearing checkpoints,
+      and clean handoffs back to architect review.
+    profile: developer
+    modes:
+      - implement
+    tools:
+      - terminal
+      - file
+      - browser
+      - web
+      - gbrain
+      - session_search
+      - skills
+      - todo
+    skills:
+      - gstack-for-hermes
+      - gbrain
+      - test-driven-development
+      - systematic-debugging
+      - codebase-inspection
+      - github-pr-workflow
     plugins: []
     pluginToolsets: []
-    mcpServers: []
-    capabilities: []
-    preferredTaskTypes: []
-    greenlightRequiredFor: []
+    mcpServers:
+      - gbrain
+    wrapper: developer:implement
+    capabilities:
+      - implementation
+      - testing
+      - debugging
+    preferredTaskTypes:
+      - implementation
+      - bugfix
+      - refactor
+    greenlightRequiredFor:
+      - merge
+      - destructive
     maxConcurrentTasks: 1
     acceptsBroadcast: true
-    reviewRequired: false
+    reviewRequired: true
   - id: learning
-    name: learning
-    role: Worker
-    specialty: ""
-    model: DeepSeek-V4-Pro-Seed
-    mission: Awaiting orchestrator dispatch.
+    name: Learning
+    role: Retrospective / Documentation
+    specialty: mission retrospectives, documentation, knowledge capture
+    model: custom:nioint-gateway/DeepSeek-V4-Pro-Seed
+    mission: Capture mission outcomes, lessons learned, and durable documentation
+      after implementation and review complete.
+    profile: learning
     modes: []
-    tools: []
-    skills: []
+    tools:
+      - file
+      - gbrain
+      - session_search
+      - skills
+      - todo
+      - web
+    skills:
+      - gstack-for-hermes
+      - gbrain
+      - obsidian-markdown
+      - writing-plans
     plugins: []
     pluginToolsets: []
-    mcpServers: []
-    capabilities: []
-    preferredTaskTypes: []
-    greenlightRequiredFor: []
+    mcpServers:
+      - gbrain
+    wrapper: learning
+    capabilities:
+      - documentation
+      - retrospective
+      - knowledge-capture
+    preferredTaskTypes:
+      - documentation
+      - retrospective
+      - synthesis
+    greenlightRequiredFor:
+      - publish
     maxConcurrentTasks: 1
     acceptsBroadcast: true
     reviewRequired: false

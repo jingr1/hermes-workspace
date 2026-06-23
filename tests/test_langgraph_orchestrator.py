@@ -19,7 +19,12 @@ from langgraph.types import Command
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from hermes_langgraph_orchestrator.graph import build_phase1_graph, build_phase2_graph
-from hermes_langgraph_orchestrator.resume import build_resume_command, list_active_gates, read_mission_state
+from hermes_langgraph_orchestrator.resume import (
+    build_human_gate_assignments,
+    build_resume_command,
+    list_active_gates,
+    read_mission_state,
+)
 from hermes_langgraph_orchestrator.state import OrchestratorState
 from hermes_langgraph_orchestrator.workflow import (
     load_default_workflow,
@@ -392,3 +397,202 @@ async def test_read_mission_state() -> None:
 
             gates = await list_active_gates(checkpoint_path)
             assert any(g["mission_id"] == mission_id and g["langgraph_needs_human"] is True for g in gates)
+
+
+def test_try_rule_classify_done_and_blocked():
+    from hermes_langgraph_orchestrator.nodes import _try_rule_classify
+
+    done = _try_rule_classify({
+        "worker_id": "researcher",
+        "state": "DONE",
+        "result": "research complete",
+        "files_changed": "",
+        "commands_run": "",
+        "blocker": "",
+        "next_action": "architect",
+        "review_outcome": "",
+        "raw": "STATE: DONE\nRESULT: research complete",
+    })
+    assert done is not None
+    assert done.verdict == "DONE"
+
+    blocked = _try_rule_classify({
+        "worker_id": "developer",
+        "state": "BLOCKED",
+        "result": "ODE unstable",
+        "files_changed": "",
+        "commands_run": "",
+        "blocker": "architecture_decision needed for solver",
+        "next_action": "escalate",
+        "review_outcome": "",
+        "raw": "STATE: BLOCKED\nBLOCKER: architecture_decision needed",
+    })
+    assert blocked is not None
+    assert blocked.verdict == "BLOCKED"
+    assert blocked.blocker_type == "architecture_decision"
+
+    in_progress = _try_rule_classify({
+        "worker_id": "developer",
+        "state": "IN_PROGRESS",
+        "result": "",
+        "files_changed": "",
+        "commands_run": "",
+        "blocker": "",
+        "next_action": "",
+        "review_outcome": "",
+        "raw": "STATE: IN_PROGRESS",
+    })
+    assert in_progress is None
+
+
+@pytest.mark.asyncio
+async def test_classify_workers_rule_fast_path_skips_llm(monkeypatch):
+    from hermes_langgraph_orchestrator import nodes
+
+    async def _fail_llm(*_args, **_kwargs):
+        raise AssertionError("LLM should not be called for deterministic checkpoints")
+
+    monkeypatch.setattr(nodes, "_get_llm", _fail_llm)
+    result = await nodes.classify_workers({
+        "mission_goal": "CDC",
+        "checkpoints": [
+            {
+                "worker_id": "researcher",
+                "state": "DONE",
+                "result": "done",
+                "files_changed": "",
+                "commands_run": "",
+                "blocker": "",
+                "next_action": "",
+                "review_outcome": "",
+                "raw": "STATE: DONE",
+            }
+        ],
+    })
+    assert result["classifications"][0].verdict == "DONE"
+
+
+def test_swarm_roster_has_cdc_worker_wrappers():
+    import yaml
+    from pathlib import Path
+
+    swarm_path = Path(__file__).parent.parent / "swarm.yaml"
+    with open(swarm_path, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+    workers = {w["id"]: w for w in data.get("workers", [])}
+    for wid in ("architect", "developer", "learning", "researcher"):
+        assert wid in workers, f"missing worker {wid}"
+        assert workers[wid].get("wrapper"), f"{wid} missing wrapper"
+        assert workers[wid].get("tools"), f"{wid} missing tools"
+        assert workers[wid].get("skills"), f"{wid} missing skills"
+    wf = load_default_workflow()
+    errors = validate_workflow_against_roster(wf, set(workers.keys()))
+    assert errors == []
+
+
+@pytest.mark.asyncio
+async def test_check_swarm_workspace_retries_after_timeout(monkeypatch):
+    import httpx
+    from hermes_langgraph_orchestrator import nodes
+
+    calls = {"n": 0}
+
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self) -> None:
+            return None
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def get(self, url, headers=None):
+            calls["n"] += 1
+            if calls["n"] < 3:
+                raise httpx.TimeoutException("simulated vite compile stall")
+            return FakeResponse()
+
+    async def fast_sleep(_seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr(nodes, "_workspace_http_client", lambda *args, **kwargs: FakeClient())
+    monkeypatch.setattr(nodes.asyncio, "sleep", fast_sleep)
+
+    err = await nodes.check_swarm_workspace("http://127.0.0.1:3000/api")
+    assert err is None
+    assert calls["n"] == 3
+
+
+def test_load_workspace_dotenv_does_not_override_existing(monkeypatch):
+    from hermes_langgraph_orchestrator import nodes
+
+    env_file = Path(__file__).parent.parent / ".env"
+    if not env_file.is_file():
+        pytest.skip("workspace .env not present")
+
+    monkeypatch.setenv("EXISTING_TEST_KEY_SHOULD_NOT_BE_IN_ENV", "from-shell")
+    before = os.environ.get("HERMES_SWARM_TMUX_MODE")
+    nodes.load_workspace_dotenv()
+    if before is None and "HERMES_SWARM_TMUX_MODE" in env_file.read_text(encoding="utf-8"):
+        assert os.environ.get("HERMES_SWARM_TMUX_MODE") in ("cli", "tui")
+    assert os.environ.get("EXISTING_TEST_KEY_SHOULD_NOT_BE_IN_ENV") == "from-shell"
+
+
+def test_build_human_gate_assignments_architect_to_developer():
+    state: OrchestratorState = {
+        "mission_id": "cdc-gate",
+        "mission_goal": "CDC model",
+        "classifications": [
+            {
+                "worker_id": "architect",
+                "verdict": "NEEDS_INPUT",
+                "blocker_type": "review",
+                "blocker_summary": "P0: half_car field order",
+                "reasoning": "needs human",
+                "review_outcome": "",
+            }
+        ],
+        "checkpoints": [
+            {
+                "worker_id": "architect",
+                "state": "NEEDS_INPUT",
+                "result": "Review found P0 issues",
+                "files_changed": "half_car.py",
+                "commands_run": "none",
+                "blocker": "P0 issues",
+                "next_action": "fix half_car",
+            }
+        ],
+    }
+    assignments = build_human_gate_assignments(
+        state,
+        choice="primary",
+        human_note="先修 half_car",
+        target_worker_id="developer",
+    )
+    assert len(assignments) == 1
+    assert assignments[0]["worker_id"] == "developer"
+    assert "half_car" in assignments[0]["task"]
+    assert "先修 half_car" in assignments[0]["task"]
+
+    command = build_resume_command(
+        state,
+        "approved",
+        human_choice="primary",
+        human_note="先修 half_car",
+        target_worker_id="developer",
+    )
+    assert command.update["langgraph_assignments"][0]["worker_id"] == "developer"
+    assert command.update["human_resume_payload"]["choice"] == "primary"
+
+
+def test_is_local_workspace_url():
+    from hermes_langgraph_orchestrator.nodes import _is_local_workspace_url
+
+    assert _is_local_workspace_url("http://127.0.0.1:3000/api")
+    assert _is_local_workspace_url("http://localhost:3000/api")
+    assert not _is_local_workspace_url("http://10.0.0.5:3000/api")

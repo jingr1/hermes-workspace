@@ -109,7 +109,15 @@ hermes_langgraph_orchestrator/.venv/bin/python -m hermes_langgraph_orchestrator 
 
 ### Phase 2：真实编排
 
-会真实启动 tmux session、派发任务、等待 checkpoint、自动路由。
+会真实启动 tmux session（默认 `tmux-tui`）、派发任务、等待 checkpoint、自动路由。无需设置 `HERMES_SWARM_USE_LIVE`。
+
+**推荐（TUI paste 不稳定时）**：在 `hermes-workspace/.env` 加 `HERMES_SWARM_TMUX_MODE=cli`，重启 `pnpm dev`。走 `tmux-cli`：session 长驻 bash，每次 dispatch 在 pane 里跑 `hermes chat -q`。
+
+```bash
+# .env
+HERMES_SWARM_TMUX_MODE=cli
+TMUX_BIN=/usr/bin/tmux
+```
 
 ```bash
 hermes_langgraph_orchestrator/.venv/bin/python -m hermes_langgraph_orchestrator \
@@ -245,7 +253,42 @@ curl -s "http://localhost:3000/api/swarm-missions?id=cdc-real-001" | python3 -m 
 
 ---
 
+## Tmux Worker 生命周期（Swarm2 Runtime）
+
+| 步骤 | API | 行为 |
+|------|-----|------|
+| 创建 | `POST /api/swarm-tmux-start` | `tmux new-session -d -s swarm-<role> "<shell\|hermes --tui>"` |
+| 分发 | `POST /api/swarm-dispatch` | `tmux send-keys` 注入任务（TUI paste 或 CLI `hermes chat -q`） |
+| 交互 | `POST /api/swarm-tmux-scroll` | copy-mode 滚动；Runtime 通过 `capture-pane` 读输出 |
+| 销毁 | `POST /api/swarm-tmux-stop` | `tmux kill-session` |
+
+派发模式：
+
+| 模式 | 环境变量 / `deliveryMode` | 创建 | 分发 |
+|------|---------------------------|------|------|
+| `tmux-tui` | 默认 | `hermes chat --tui` | paste SwarmBrief 进 TUI |
+| `tmux-cli` | `HERMES_SWARM_TMUX_MODE=cli` | `bash -l` + Hermes env | `send-keys` 跑 `swarm-run.sh` |
+| `oneshot` | `HERMES_SWARM_FORCE_ONESHOT=1` | 无 tmux | 直接 `hermes chat -q` |
+
+---
+
 ## 常见问题
+
+### 0. `Failed to fetch roster` / `Workspace timed out` / preflight failed
+
+Phase 2 真实执行依赖 **Hermes Workspace**（`:3000`）。常见根因：
+
+1. **`pnpm dev` 刚启动**：Vite 首次编译 SSR API 路由可能 **>5s**，旧版 preflight 会误报 timeout。现已自动重试最多 6 次（读超时 12s/次）。
+2. **Workspace 未运行**：先 `pnpm dev`，等 Vite ready 后再跑 LangGraph。
+
+```bash
+cd hermes-workspace && pnpm dev
+curl -s http://127.0.0.1:3000/api/swarm-roster | head
+```
+
+CLI 启动时会自动加载 `hermes-workspace/.env`（不覆盖已有环境变量）。若启用了 `HERMES_PASSWORD`，设置 `HERMES_WORKSPACE_TOKEN`。
+
+CLI 会在 `--execute` 前做 preflight；也可手动指定 API 地址：`--swarm-url http://127.0.0.1:3000/api`。
 
 ### 1. `ensure_sessions researcher: error (Server error '500' ... ENOENT)`
 

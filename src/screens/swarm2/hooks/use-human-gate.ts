@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useMemo } from 'react'
+import type { HumanGateChoice } from '../lib/human-gate-options'
 
 export type OrchestratorCheckpoint = {
   worker_id: string
@@ -85,17 +86,49 @@ async function fetchActiveGates(): Promise<Array<OrchestratorState>> {
   return data.gates ?? []
 }
 
-async function postResume({ missionId, action, mock }: { missionId: string; action: 'approved' | 'abort'; mock: boolean }): Promise<{ ok: boolean }> {
-  const res = await fetch(`/api/orchestrator-resume${mock ? '?mock=1' : ''}`, {
+export type HumanGateResumeRequest = {
+  action: 'approved' | 'abort'
+  choice?: HumanGateChoice
+  humanNote?: string
+  targetWorkerId?: string
+  mock?: boolean
+}
+
+async function postResume({
+  missionId,
+  action,
+  choice,
+  humanNote,
+  targetWorkerId,
+  mock,
+}: {
+  missionId: string
+  action: 'approved' | 'abort'
+  choice?: HumanGateChoice
+  humanNote?: string
+  targetWorkerId?: string
+  mock: boolean
+}): Promise<{ ok: boolean; completed?: boolean }> {
+  const res = await fetch(`/api/swarm-langgraph/resume${mock ? '?mock=1' : ''}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ missionId, action }),
+    body: JSON.stringify({
+      missionId,
+      action,
+      ...(action === 'approved'
+        ? {
+            choice: choice ?? 'primary',
+            humanNote: humanNote ?? '',
+            targetWorkerId: targetWorkerId ?? '',
+          }
+        : {}),
+    }),
   })
+  const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; completed?: boolean }
   if (!res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { error?: string }
     throw new Error(data.error || `HTTP ${res.status}`)
   }
-  return res.json() as Promise<{ ok: boolean }>
+  return { ok: Boolean(data.ok), completed: data.completed }
 }
 
 function deriveGate(state: OrchestratorState | null | undefined): HumanGate | null {
@@ -144,17 +177,27 @@ export function useHumanGate(missionId?: string | null | undefined) {
 
   const resumeMutation = useMutation({
     mutationFn: postResume,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey })
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey })
+      await queryClient.invalidateQueries({ queryKey: ['orchestrator', 'active-gates'] })
+      await queryClient.invalidateQueries({ queryKey: ['orchestrator', 'state'] })
     },
   })
 
   const resume = useCallback(
-    (action: 'approved' | 'abort', options?: { mock?: boolean }) => {
-      if (!missionId) return
-      resumeMutation.mutate({ missionId, action, mock: options?.mock ?? false })
+    (request: HumanGateResumeRequest) => {
+      const id = missionId ?? gate?.missionId
+      if (!id) return
+      resumeMutation.mutate({
+        missionId: id,
+        action: request.action,
+        choice: request.choice,
+        humanNote: request.humanNote,
+        targetWorkerId: request.targetWorkerId,
+        mock: request.mock ?? false,
+      })
     },
-    [missionId, resumeMutation],
+    [missionId, gate?.missionId, resumeMutation],
   )
 
   return {

@@ -438,6 +438,25 @@ export function cancelSwarmAssignment(input: {
   return { mission, assignment, changed: true }
 }
 
+export function appendSwarmMissionOrchestratorEvent(input: {
+  missionId: string
+  message: string
+  data?: Record<string, unknown>
+}): SwarmMission | null {
+  const store = readStore()
+  const mission = store.missions.find((item) => item.id === input.missionId)
+  if (!mission) return null
+  mission.events.push(event('continuation', input.message, {
+    data: {
+      source: 'langgraph-orchestrator',
+      ...(input.data ?? {}),
+    },
+  }))
+  mission.updatedAt = now()
+  writeStore(store)
+  return mission
+}
+
 export function cancelSwarmMission(input: {
   missionId?: string | null
   actor?: string | null

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Alert02Icon, Cancel01Icon, ComputerTerminal01Icon, PlayIcon } from '@hugeicons/core-free-icons'
 import { Button } from '@/components/ui/button'
@@ -13,14 +13,15 @@ import {
 } from '@/components/ui/dialog'
 import { toast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
-import type { HumanGate } from '../hooks/use-human-gate'
+import type { HumanGate, HumanGateResumeRequest } from '../hooks/use-human-gate'
+import { deriveHumanGateOptions, type HumanGateChoice } from '../lib/human-gate-options'
 
 type HumanGatePanelProps = {
   gate: HumanGate
   open: boolean
   onOpenChange: (open: boolean) => void
   onOpenRuntime?: (workerId: string) => void
-  onResume: (action: 'approved' | 'abort', options?: { mock?: boolean }) => void
+  onResume: (request: HumanGateResumeRequest) => void
   isResuming: boolean
   resumeError: Error | null
 }
@@ -45,6 +46,53 @@ function MonoBlock({ text }: { text: string }) {
   )
 }
 
+function OptionCard({
+  selected,
+  label,
+  description,
+  targetWorkerId,
+  onSelect,
+}: {
+  selected: boolean
+  label: string
+  description: string
+  targetWorkerId: string
+  onSelect: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={cn(
+        'w-full rounded-2xl border p-3.5 text-left transition-colors',
+        selected
+          ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-soft)] ring-1 ring-[var(--theme-accent)]/30'
+          : 'border-[var(--theme-border)] bg-[var(--theme-bg)] hover:border-[var(--theme-muted)]',
+      )}
+    >
+      <div className="flex items-start gap-3">
+        <span
+          className={cn(
+            'mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border',
+            selected
+              ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)]'
+              : 'border-[var(--theme-border)] bg-[var(--theme-card)]',
+          )}
+        >
+          {selected ? <span className="size-1.5 rounded-full bg-white" /> : null}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-[var(--theme-text)]">{label}</span>
+          <span className="mt-1 block text-xs leading-relaxed text-[var(--theme-muted-2)]">{description}</span>
+          <span className="mt-2 inline-flex rounded-full border border-[var(--theme-border)] bg-[var(--theme-card)] px-2 py-0.5 text-[10px] font-medium text-[var(--theme-muted)]">
+            → {targetWorkerId}
+          </span>
+        </span>
+      </div>
+    </button>
+  )
+}
+
 export function HumanGatePanel({
   gate,
   open,
@@ -54,8 +102,20 @@ export function HumanGatePanel({
   isResuming,
   resumeError,
 }: HumanGatePanelProps) {
+  const options = useMemo(() => deriveHumanGateOptions(gate), [gate])
   const [useMock, setUseMock] = useState(false)
   const [lastAction, setLastAction] = useState<'approved' | 'abort' | null>(null)
+  const [selectedChoice, setSelectedChoice] = useState<HumanGateChoice>('primary')
+  const [humanNote, setHumanNote] = useState('')
+  const [explicitChoice, setExplicitChoice] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setSelectedChoice('primary')
+      setHumanNote('')
+      setExplicitChoice(false)
+    }
+  }, [open, gate.missionId, gate.workerId])
 
   useEffect(() => {
     if (resumeError) {
@@ -63,9 +123,32 @@ export function HumanGatePanel({
     }
   }, [resumeError])
 
+  const effectiveChoice: HumanGateChoice =
+    !explicitChoice && humanNote.trim() ? 'custom' : selectedChoice
+
+  const resolvedTarget =
+    effectiveChoice === 'secondary'
+      ? options.secondary.targetWorkerId
+      : effectiveChoice === 'custom'
+        ? gate.workerId
+        : options.primary.targetWorkerId
+
+  const canApprove = effectiveChoice !== 'custom' || humanNote.trim().length > 0
+
   const handleResume = (action: 'approved' | 'abort') => {
     setLastAction(action)
-    onResume(action, { mock: useMock })
+    if (action === 'abort') {
+      onResume({ action, mock: useMock })
+      onOpenChange(false)
+      return
+    }
+    onResume({
+      action,
+      choice: effectiveChoice,
+      humanNote: humanNote.trim(),
+      targetWorkerId: resolvedTarget,
+      mock: useMock,
+    })
   }
 
   const cp = gate.checkpoint
@@ -73,7 +156,7 @@ export function HumanGatePanel({
   return (
     <DialogRoot open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="w-[min(520px,92vw)]"
+        className="w-[min(560px,92vw)]"
         style={{ background: 'var(--theme-card)' }}
       >
         <div className="flex items-start gap-3 border-b border-[var(--theme-border)] p-5">
@@ -83,7 +166,7 @@ export function HumanGatePanel({
           <div className="min-w-0 flex-1">
             <DialogTitle className="text-base font-semibold">Mission 需要人工决策</DialogTitle>
             <DialogDescription className="mt-0.5 text-xs">
-              LangGraph Phase 2 在当前 checkpoint 触发 human gate，需要你确认后才能继续。
+              选择下一步如何处理，或填写自定义说明（参考 Hermes / Claude Code 澄清交互）。
             </DialogDescription>
           </div>
           <DialogClose />
@@ -117,6 +200,59 @@ export function HumanGatePanel({
             <p className="leading-relaxed">{gate.blockerSummary || '未提供详细阻塞原因'}</p>
           </Section>
 
+          <div className="space-y-2">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--theme-muted)]">
+              选择下一步
+            </div>
+            <div className="space-y-2">
+              <OptionCard
+                selected={explicitChoice && selectedChoice === 'primary'}
+                label={options.primary.label}
+                description={options.primary.description}
+                targetWorkerId={options.primary.targetWorkerId}
+                onSelect={() => {
+                  setSelectedChoice('primary')
+                  setExplicitChoice(true)
+                }}
+              />
+              <OptionCard
+                selected={explicitChoice && selectedChoice === 'secondary'}
+                label={options.secondary.label}
+                description={options.secondary.description}
+                targetWorkerId={options.secondary.targetWorkerId}
+                onSelect={() => {
+                  setSelectedChoice('secondary')
+                  setExplicitChoice(true)
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--theme-muted)]">
+              自定义说明
+            </div>
+            <textarea
+              value={humanNote}
+              onChange={(e) => setHumanNote(e.target.value)}
+              placeholder={options.customPlaceholder}
+              rows={4}
+              className={cn(
+                'w-full resize-y rounded-2xl border bg-[var(--theme-bg)] p-3 text-sm leading-relaxed text-[var(--theme-text)] outline-none transition-colors placeholder:text-[var(--theme-muted)]',
+                !explicitChoice && humanNote.trim()
+                  ? 'border-[var(--theme-accent)] ring-1 ring-[var(--theme-accent)]/30'
+                  : 'border-[var(--theme-border)] focus:border-[var(--theme-accent)]',
+              )}
+            />
+            <p className="text-[11px] text-[var(--theme-muted)]">
+              {!explicitChoice && humanNote.trim()
+                ? `将作为自定义说明派发给 ${gate.workerId}。`
+                : explicitChoice
+                  ? `已选「${selectedChoice === 'secondary' ? options.secondary.label : options.primary.label}」，下方文字会作为补充说明。`
+                  : '不选上方选项时，仅填写此处将作为第三条自定义路径。'}
+            </p>
+          </div>
+
           {gate.reasoning ? (
             <Section label="编排器推理">
               <p className="leading-relaxed text-[var(--theme-muted-2)]">{gate.reasoning}</p>
@@ -135,19 +271,11 @@ export function HumanGatePanel({
             </div>
           ) : null}
 
-          {gate.pendingAssignments.length > 0 ? (
-            <Section label="批准后将派发的任务">
-              <ul className="space-y-2">
-                {gate.pendingAssignments.map((assignment, index) => (
-                  <li
-                    key={index}
-                    className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3 text-xs"
-                  >
-                    <div className="font-semibold text-[var(--theme-text)]">{assignment.worker_id}</div>
-                    <div className="mt-1 text-[var(--theme-muted-2)]">{assignment.task}</div>
-                  </li>
-                ))}
-              </ul>
+          {gate.blockerType === 'timeout' || /tmux|paste|live session/i.test(gate.blockerSummary) ? (
+            <Section label="tmux 投递提示">
+              <p className="text-xs leading-relaxed text-[var(--theme-muted-2)]">
+                派发走 tmux 优先路径。若 worker 未响应，请用 Runtime 打开 tmux 会话检查 TUI 状态，修复后确认继续。
+              </p>
             </Section>
           ) : null}
 
@@ -159,6 +287,9 @@ export function HumanGatePanel({
 
           <div className="text-[10px] text-[var(--theme-muted)]">
             迭代 {gate.iteration} / {gate.maxIterations}
+            {effectiveChoice !== 'custom' ? (
+              <span className="ml-2">· 将派发给 {resolvedTarget}</span>
+            ) : null}
           </div>
 
           {isResuming ? (
@@ -210,10 +341,10 @@ export function HumanGatePanel({
               type="button"
               size="sm"
               onClick={() => handleResume('approved')}
-              disabled={isResuming}
+              disabled={isResuming || !canApprove}
             >
               <HugeiconsIcon icon={PlayIcon} size={14} strokeWidth={1.8} />
-              继续执行
+              确认并继续
             </Button>
           </div>
         </div>

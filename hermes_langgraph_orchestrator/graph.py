@@ -112,13 +112,25 @@ def build_phase2_graph(
     graph.add_edge("classify", "route")
 
     def route_after_route(state: OrchestratorState) -> str:
+        if state.get("all_done", False):
+            return "finalize_mission"
         if state.get("langgraph_needs_human", False):
             return "human_approval"
         if state.get("awaiting_checkpoint", False):
             return "wait_for_checkpoints"
         iteration = state.get("iteration", 0)
         max_iter = state.get("max_iterations", 5)
-        if state.get("all_done", False) or iteration >= max_iter:
+        if iteration >= max_iter:
+            return "finalize_mission"
+        assignments = state.get("langgraph_assignments") or []
+        if assignments:
+            return "ensure_sessions"
+        if state.get("human_resume_action") == "abort":
+            return "finalize_mission"
+        return "ensure_sessions"
+
+    def route_after_human_approval(state: OrchestratorState) -> str:
+        if state.get("all_done", False) or state.get("human_resume_action") == "abort":
             return "finalize_mission"
         return "ensure_sessions"
 
@@ -133,7 +145,14 @@ def build_phase2_graph(
         },
     )
 
-    graph.add_edge("human_approval", "ensure_sessions")
+    graph.add_conditional_edges(
+        "human_approval",
+        route_after_human_approval,
+        {
+            "finalize_mission": "finalize_mission",
+            "ensure_sessions": "ensure_sessions",
+        },
+    )
     graph.add_edge("finalize_mission", END)
 
     saver = checkpointer if checkpointer is not None else MemorySaver()
