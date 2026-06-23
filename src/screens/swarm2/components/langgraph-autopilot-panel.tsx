@@ -12,6 +12,7 @@ type LanggraphAutopilotPanelProps = {
 
 export function LanggraphAutopilotPanel({ open, onOpenChange }: LanggraphAutopilotPanelProps) {
   const [goal, setGoal] = useState('设计并开发 CDC+空簧 的物理模型')
+  const [workflowPath, setWorkflowPath] = useState('')
   const [useMock, setUseMock] = useState(false)
   const {
     activeMissionId,
@@ -48,6 +49,21 @@ export function LanggraphAutopilotPanel({ open, onOpenChange }: LanggraphAutopil
             />
           </label>
 
+          <label className="block space-y-2">
+            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--theme-muted)]">
+              Workflow 路径（可选）
+            </span>
+            <input
+              value={workflowPath}
+              onChange={(e) => setWorkflowPath(e.target.value)}
+              placeholder="hermes_langgraph_orchestrator/workflows/research_only.yaml"
+              className="w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)]"
+            />
+            <span className="block text-[11px] text-[var(--theme-muted)]">
+              留空使用默认 CDC；示例：`research_only.yaml`、`design_implement.yaml`
+            </span>
+          </label>
+
           {import.meta.env.DEV ? (
             <label className="flex items-center gap-2 text-xs text-[var(--theme-muted)]">
               <input type="checkbox" checked={useMock} onChange={(e) => setUseMock(e.target.checked)} />
@@ -64,7 +80,12 @@ export function LanggraphAutopilotPanel({ open, onOpenChange }: LanggraphAutopil
           <Button
             type="button"
             disabled={isStarting || !goal.trim()}
-            onClick={() => start(goal.trim(), { mock: useMock })}
+            onClick={() =>
+              start(goal.trim(), {
+                mock: useMock,
+                workflowId: workflowPath.trim() || undefined,
+              })
+            }
           >
             {isStarting ? '启动中…' : '启动 LangGraph Mission'}
           </Button>

@@ -542,6 +542,13 @@ def test_load_workspace_dotenv_does_not_override_existing(monkeypatch):
     assert os.environ.get("EXISTING_TEST_KEY_SHOULD_NOT_BE_IN_ENV") == "from-shell"
 
 
+def test_load_research_only_workflow() -> None:
+    wf = load_workflow("hermes_langgraph_orchestrator/workflows/research_only.yaml")
+    assert wf.entry == "researcher"
+    roster = {"orchestrator", "researcher", "architect", "developer", "learning"}
+    assert validate_workflow_against_roster(wf, roster) == []
+
+
 def test_build_human_gate_assignments_architect_to_developer():
     state: OrchestratorState = {
         "mission_id": "cdc-gate",

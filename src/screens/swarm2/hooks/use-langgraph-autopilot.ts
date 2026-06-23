@@ -26,6 +26,7 @@ export type LanggraphAutopilotStatus = {
 async function startLanggraphMission(input: {
   missionGoal: string
   missionId?: string
+  workflowId?: string
   maxIterations?: number
   mock?: boolean
 }): Promise<{ ok: boolean; missionId: string }> {
@@ -35,6 +36,7 @@ async function startLanggraphMission(input: {
     body: JSON.stringify({
       missionGoal: input.missionGoal,
       missionId: input.missionId,
+      workflowId: input.workflowId,
       maxIterations: input.maxIterations,
       mock: input.mock ?? false,
     }),
@@ -74,10 +76,14 @@ export function useLanggraphAutopilot() {
   })
 
   const start = useCallback(
-    (missionGoal: string, options?: { missionId?: string; maxIterations?: number; mock?: boolean }) => {
+    (
+      missionGoal: string,
+      options?: { missionId?: string; workflowId?: string; maxIterations?: number; mock?: boolean },
+    ) => {
       startMutation.mutate({
         missionGoal,
         missionId: options?.missionId,
+        workflowId: options?.workflowId,
         maxIterations: options?.maxIterations,
         mock: options?.mock,
       })

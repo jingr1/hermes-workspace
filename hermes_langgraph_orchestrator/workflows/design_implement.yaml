@@ -1,0 +1,47 @@
+name: design_implement
+version: 1
+entry: architect
+description: |
+  Skip the research lane: architect designs first, developer implements,
+  architect reviews (up to 3 rounds), then terminates on approval.
+
+transitions:
+  - from: architect
+    "on":
+      verdict: DONE
+      review_outcome: approved
+    to: null
+    reason: "设计已批准且无实现需求，直接结束"
+
+  - from: architect
+    "on":
+      verdict: DONE
+    to: developer
+    reason: "设计完成，进入实现"
+
+  - from: developer
+    "on":
+      verdict: DONE
+    to: architect
+    max_iterations: 3
+    reason: "实现完成，交 architect 审查"
+
+  - from: architect
+    "on":
+      verdict: DONE
+      review_outcome: approved
+    to: null
+    reason: "实现审查通过，任务完成"
+
+blockers:
+  escalate:
+    - architecture_decision
+    - missing_credential
+  retry:
+    - missing_dependency
+    - test_failure
+    - timeout
+
+settings:
+  max_iterations: 5
+  terminal_docs: false

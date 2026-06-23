@@ -8,6 +8,7 @@ LangGraph 作为 Hermes Swarm 的**确定性编排大脑**：加载 workflow.yam
 
 - [环境准备](#环境准备)
 - [重启 Workspace](#重启-workspace)
+- [创建自定义编排任务](#创建自定义编排任务)
 - [执行任务派发与编排](#执行任务派发与编排)
   - [Phase 1：与 orchestrator-loop 对比](#phase-1与-orchestrator-loop-对比)
   - [Phase 2：真实编排](#phase-2真实编排)
@@ -85,6 +86,167 @@ curl -s -X POST http://localhost:3000/api/swarm-tmux-start \
 
 ---
 
+## 创建自定义编排任务
+
+LangGraph **图结构是固定的**（init → dispatch → wait → classify → route → human gate）；**编排逻辑由 workflow YAML 声明**。要跑 CDC 以外的任务，需要：
+
+1. 在 `hermes_langgraph_orchestrator/workflows/` 新建或复制一份 YAML
+2. 确保 `entry` / `transitions` 里引用的 worker 都在 `swarm.yaml` roster 中
+3. 启动 mission 时用 `--workflow <path>`（或 API 的 `workflowId`）指向该文件
+
+> **`--scenario` 只影响 Phase 1 mock checkpoint**，不决定 Phase 2 路由。真实执行时未传 `--workflow` 则默认 `workflows/cdc.yaml`。
+
+### 架构关系
+
+```text
+swarm.yaml          workflow.yaml              LangGraph 图
+(roster 真源)   →   (状态机 / 路由规则)   →   (固定节点，读 YAML 做 route)
+  researcher          entry: researcher          init_mission 校验 roster
+  architect           transitions[]              route_workflow 匹配 verdict
+  developer           blockers.retry/escalate    human_approval 人工门控
+  learning            settings.max_iterations
+  orchestrator
+```
+
+当前 roster（`swarm.yaml`）：`orchestrator`、`researcher`、`architect`、`developer`、`learning`。workflow 里出现的每个 worker id 必须在此列表中。
+
+### 内置 workflow 示例
+
+| 文件 | 入口 | 路径 | 适用场景 |
+|---|---|---|---|
+| `cdc.yaml` | `researcher` | 调研 → 设计 → 实现 → 审查 | CDC / 空簧等全流程（**默认**） |
+| `research_only.yaml` | `researcher` | 调研 → learning 写报告 | 纯调研、文献综述、选项备忘录 |
+| `design_implement.yaml` | `architect` | 设计 → 实现 → 审查（跳过调研） | 需求已明确、直接设计与开发 |
+
+### 第一步：编写 workflow YAML
+
+最小模板：
+
+```yaml
+name: my_workflow
+version: 1
+entry: researcher          # 第一个派发的 worker
+description: |
+  一句话说明这条编排解决什么问题。
+
+transitions:
+  - from: researcher       # 哪个 worker 的 checkpoint 触发了这条边
+    "on":
+      verdict: DONE        # 匹配 WorkerClassification.verdict
+      # review_outcome: approved   # 可选，architect 审查时常用
+    to: architect          # 下一个 worker；null = 任务结束
+    reason: "调研完成，进入设计"
+    # max_iterations: 3    # 可选，限制 from→to 循环次数（审查环）
+
+blockers:
+  escalate:                # 这些 blocker_type → Human Gate
+    - architecture_decision
+    - missing_credential
+  retry:                   # 这些 blocker_type → 自动重试同一 worker
+    - timeout
+    - test_failure
+    - missing_dependency
+
+settings:
+  max_iterations: 5        # 全局路由轮数上限
+  terminal_docs: false     # true 时启用 cdc.yaml 里的 terminal_docs 边
+```
+
+**路由匹配规则**（`workflow.py` → `route_by_workflow`）：
+
+| checkpoint 状态 | 行为 |
+|---|---|
+| `SKIP` | 继续轮询，不派发 |
+| `BLOCKED` + `blockers.retry` | 重试同一 worker |
+| `BLOCKED` / `NEEDS_INPUT` / `HANDOFF`（其他） | Human Gate |
+| `DONE` | 按 `transitions` 第一条匹配的边派发；`to: null` 则 finalize |
+| 无匹配 transition | Human Gate（避免静默结束） |
+
+`transitions` 按文件顺序匹配；更具体的边（带 `review_outcome`）应写在更泛的边**前面**（参考 `design_implement.yaml`）。
+
+### 第二步：校验 workflow
+
+```bash
+cd /home/ramon.jing/hermes-workspace
+
+hermes_langgraph_orchestrator/.venv/bin/python -c "
+from hermes_langgraph_orchestrator.workflow import load_workflow, validate_workflow_against_roster
+wf = load_workflow('hermes_langgraph_orchestrator/workflows/research_only.yaml')
+roster = {'orchestrator','researcher','architect','developer','learning'}
+print('OK' if not validate_workflow_against_roster(wf, roster) else validate_workflow_against_roster(wf, roster))
+"
+```
+
+或跑单元测试：
+
+```bash
+hermes_langgraph_orchestrator/.venv/bin/python -m pytest \
+  tests/test_langgraph_orchestrator.py::test_load_default_workflow -v
+```
+
+### 第三步：启动 mission（非 CDC）
+
+**纯调研任务**（`research_only.yaml`）：
+
+```bash
+hermes_langgraph_orchestrator/.venv/bin/python -m hermes_langgraph_orchestrator \
+  --execute \
+  --mission-id research-memo-001 \
+  --goal "调研 CDC 空簧建模的业界方案与 JAX 生态" \
+  --workflow hermes_langgraph_orchestrator/workflows/research_only.yaml
+```
+
+**跳过调研，直接设计+实现**（`design_implement.yaml`）：
+
+```bash
+hermes_langgraph_orchestrator/.venv/bin/python -m hermes_langgraph_orchestrator \
+  --execute \
+  --mission-id impl-from-spec-001 \
+  --goal "按已有 ARCHITECTURE.md 实现 half_car + lqr 模块" \
+  --workflow hermes_langgraph_orchestrator/workflows/design_implement.yaml
+```
+
+**HTTP API**（`workflowId` = YAML 路径）：
+
+```bash
+curl -s -X POST http://127.0.0.1:3000/api/swarm-langgraph/run \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "missionGoal": "调研 JAX 在车辆悬架建模中的实践",
+    "missionId": "research-memo-002",
+    "workflowId": "hermes_langgraph_orchestrator/workflows/research_only.yaml",
+    "maxIterations": 3
+  }' | python3 -m json.tool
+```
+
+**Dashboard**：`/swarm2` → **LangGraph** 面板可填可选 **Workflow 路径**；留空则仍用默认 `cdc.yaml`。
+
+### `mission-id` 规则
+
+- 每个新任务用**新的** `mission-id`（= LangGraph `thread_id`）
+- 同一 ID 会复用 SQLite checkpoint；Human Gate 暂停的 mission 用 [`--resume`](#从-human-gate-恢复)，不要用相同 ID 重跑 `--execute`
+
+### 新增 worker 时
+
+若 workflow 需要 roster 里没有的角色（例如 `qa`、`builder`）：
+
+1. 在 `swarm.yaml` 增加 worker 定义（wrapper / profile / skills 与 `AGENTS.md` 对齐）
+2. 重启 Workspace（`pnpm dev`）让 roster API 生效
+3. 在 workflow YAML 中引用新 `id`
+4. `init_mission` 会在启动时校验；引用未知 worker 会直接失败并写入 `collection_error`
+
+### 启动后验证
+
+```bash
+tmux ls
+ls -t logs/execute_*.json | head -1
+curl -s "http://127.0.0.1:3000/api/orchestrator-state?missionId=<id>" | python3 -m json.tool
+```
+
+日志里应出现 `[init_mission] workflow=<your_workflow_name>`。
+
+---
+
 ## 执行任务派发与编排
 
 所有命令都从仓库根目录执行。
@@ -148,6 +310,10 @@ resume approved → developer DONE → architect approved → finalize
 
 ### 从 human gate 恢复
 
+**Dashboard（推荐）：** 打开 `/swarm2`，Human Gate 面板提供两个预设选项 + 自定义说明框，点 **确认并继续** 或 **中止**。
+
+**CLI：**
+
 ```bash
 hermes_langgraph_orchestrator/.venv/bin/python -m hermes_langgraph_orchestrator \
   --execute --scenario cdc --mission-id cdc-real-001 --resume approved
@@ -156,6 +322,23 @@ hermes_langgraph_orchestrator/.venv/bin/python -m hermes_langgraph_orchestrator 
 hermes_langgraph_orchestrator/.venv/bin/python -m hermes_langgraph_orchestrator \
   --execute --scenario cdc --mission-id cdc-real-001 --resume abort
 ```
+
+**HTTP API：**
+
+```bash
+# 继续（可带人工决策）
+curl -s -X POST http://127.0.0.1:3000/api/swarm-langgraph/resume \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "missionId": "cdc-real-001",
+    "action": "approved",
+    "choice": "primary",
+    "targetWorkerId": "developer",
+    "humanNote": "先修 P0：half_car 字段顺序"
+  }' | python3 -m json.tool
+```
+
+`choice`：`primary` | `secondary` | `custom`（仅填自定义说明时）。`action`：`approved` | `abort`。
 
 恢复依赖 SQLite checkpointer，默认路径 `~/.hermes/langgraph-checkpoints.db`。也可以用 `--checkpoint-path` 自定义。
 
@@ -199,6 +382,15 @@ swarm-architect: 1 windows (created Fri Jun 12 13:08:45 2026) [80x24]
 ```bash
 tmux attach -t swarm-researcher
 ```
+
+> **已在 tmux 内时**：不要嵌套 `attach`（会报 `sessions should be nested with care`）。改用：
+>
+> ```bash
+> tmux switch-client -t swarm-architect   # 切换到目标 session
+> # 或先 Ctrl+b d detach，再 tmux attach -t swarm-architect
+> ```
+>
+> 不进入 session 也可查看输出：`tmux capture-pane -t swarm-architect -p | tail -80`
 
 Attach 后按 `Ctrl + B` 再按 `D` 可以** detach**（保持 session 后台运行）。
 

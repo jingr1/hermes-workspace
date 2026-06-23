@@ -1,0 +1,32 @@
+name: research_report
+version: 1
+entry: researcher
+description: |
+  Research-only mission: researcher synthesizes findings, learning writes the report.
+  No architect/developer loop — useful for market scans, literature reviews, options memos.
+
+transitions:
+  - from: researcher
+    "on":
+      verdict: DONE
+    to: learning
+    reason: "调研完成，交给 learning 写报告"
+
+  - from: learning
+    "on":
+      verdict: DONE
+    to: null
+    reason: "调研报告完成，任务结束"
+
+blockers:
+  escalate:
+    - architecture_decision
+    - missing_credential
+  retry:
+    - missing_dependency
+    - test_failure
+    - timeout
+
+settings:
+  max_iterations: 3
+  terminal_docs: false
