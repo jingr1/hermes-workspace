@@ -1,11 +1,7 @@
 """
-LangGraph Orchestrator Nodes — Phase 1 对比模式 + Phase 2 执行模式
+LangGraph Orchestrator Nodes — workflow-driven execution.
 
-LangGraph 图结构编排:
-  init → collect → classify (唯一 LLM 调用) → 纯函数路由表 → dispatch → ...
-
-LLM 只做一件事: 把非结构化 checkpoint 文本 → 结构化分类
-之后所有路由由图的边 + workflow.yaml 决定。
+init → ensure → dispatch → wait → classify (LLM or rule fast-path) → route → ...
 """
 
 from __future__ import annotations
@@ -268,6 +264,87 @@ def _parse_dispatch_checkpoints(data: dict[str, Any]) -> list[WorkerCheckpoint]:
             )
         )
     return checkpoints
+
+
+def _assignment_sort_key(assignment: dict[str, Any]) -> tuple[int, int]:
+    """Sort mission assignments newest-first by dispatch/completion time."""
+    for field in ("dispatchedAt", "completedAt", "updatedAt"):
+        raw = assignment.get(field)
+        if isinstance(raw, (int, float)) and raw > 0:
+            return (1, int(raw))
+    return (0, 0)
+
+
+def _latest_assignment_checkpoints_from_mission(
+    mission: dict[str, Any],
+    *,
+    worker_filter: set[str] | None = None,
+) -> dict[str, WorkerCheckpoint]:
+    """Return the newest assignment checkpoint per worker (if any)."""
+    latest_assignment: dict[str, dict[str, Any]] = {}
+    for assignment in mission.get("assignments", []) or []:
+        if not isinstance(assignment, dict):
+            continue
+        wid = str(assignment.get("workerId") or "").strip()
+        if not wid:
+            continue
+        if worker_filter is not None and wid not in worker_filter:
+            continue
+        prev = latest_assignment.get(wid)
+        if prev is None or _assignment_sort_key(assignment) > _assignment_sort_key(prev):
+            latest_assignment[wid] = assignment
+
+    cp_map: dict[str, WorkerCheckpoint] = {}
+    for wid, assignment in latest_assignment.items():
+        checkpoint = assignment.get("checkpoint")
+        if not checkpoint:
+            continue
+        cp_map[wid] = _checkpoint_from_parsed(checkpoint, wid)
+    return cp_map
+
+
+def _sync_cp_map_from_mission(
+    cp_map: dict[str, WorkerCheckpoint],
+    mission: dict[str, Any],
+    *,
+    current_workers: set[str],
+    dispatched: set[str],
+) -> None:
+    """Refresh cp_map from mission store using only the latest assignment per worker."""
+    latest = _latest_assignment_checkpoints_from_mission(mission, worker_filter=dispatched)
+    for wid in dispatched:
+        if wid in latest:
+            cp_map[wid] = latest[wid]
+    # A re-dispatched worker with a fresh assignment but no checkpoint yet must not
+    # inherit an older terminal checkpoint from a previous assignment.
+    for wid in current_workers:
+        if wid not in latest:
+            cp_map.pop(wid, None)
+
+
+async def _harvest_worker_checkpoints(
+    swarm_url: str,
+    mission_id: str,
+    worker_ids: list[str],
+) -> None:
+    """Pull fresh chat/runtime checkpoints into the mission store after async dispatch."""
+    if not worker_ids:
+        return
+    try:
+        async with _workspace_http_client(swarm_url, read_timeout_s=60.0) as client:
+            await client.post(
+                f"{swarm_url}/swarm-orchestrator-loop",
+                json={
+                    "workerIds": sorted(set(worker_ids)),
+                    "missionId": mission_id,
+                    "dryRun": False,
+                    "autoContinue": False,
+                    "allowExecution": False,
+                },
+                headers=_swarm_http_headers(),
+            )
+    except Exception as e:
+        log(f"[harvest] failed for {worker_ids}: {e}")
 
 
 def _active_assignments_to_workers(assignments: list[dict]) -> list[str]:
@@ -569,39 +646,6 @@ async def init_mission(state: OrchestratorState) -> dict:
 
 
 # ============================================================
-# Node: collect
-# ============================================================
-async def collect_checkpoints(state: OrchestratorState) -> dict:
-    swarm_url = _swarm_api_url(state)
-    mission_id = state.get("mission_id", "")
-    log("[collect] 收集 checkpoint")
-    try:
-        async with _workspace_http_client(swarm_url) as client:
-            resp = await client.post(
-                f"{swarm_url}/swarm-orchestrator-loop",
-                json={
-                    "dryRun": True,
-                    "staleMinutes": 10,
-                    "autoContinue": False,
-                    "missionId": mission_id or None,
-                },
-                headers=_swarm_http_headers(),
-            )
-            resp.raise_for_status()
-            data = resp.json()
-    except Exception as e:
-        return {"collection_error": str(e), "log_entries": [f"[collect] ERROR: {e}"]}
-
-    checkpoints = _parse_dispatch_checkpoints(data)
-    log(f"[collect] {len(checkpoints)} checkpoints")
-    return {
-        "checkpoints": checkpoints,
-        "collection_error": None,
-        "log_entries": [f"[collect] {len(checkpoints)} checkpoints"],
-    }
-
-
-# ============================================================
 # Node: classify — 唯一 LLM 调用
 # ============================================================
 CLASSIFY_PROMPT = """分析每个 Worker 的 checkpoint，输出结构化分类。
@@ -848,6 +892,17 @@ async def route_workflow(state: OrchestratorState) -> dict:
         if decision.action in ("dispatch", "retry"):
             target = decision.worker_id
             if target:
+                if (
+                    c.worker_id == "architect"
+                    and target == "developer"
+                    and decision.action == "dispatch"
+                ):
+                    dev_cp = cp_map.get("developer")
+                    if dev_cp and (dev_cp.get("state") or "").upper() == "DONE":
+                        analysis_parts.append(
+                            "  → developer already DONE; skip stale architect→developer re-dispatch"
+                        )
+                        continue
                 key = f"{c.worker_id}→{target}"
                 transition_counts[key] = transition_counts.get(key, 0) + 1
                 dispatched.add(target)
@@ -915,189 +970,6 @@ async def route_workflow(state: OrchestratorState) -> dict:
     }
 
 
-# Backward-compatible alias for Phase 1 graphs that import langgraph_dispatch.
-langgraph_dispatch = route_workflow
-
-
-# ============================================================
-# Node: swarm — 调用 Swarm API (Phase 1 only)
-# ============================================================
-async def swarm_orchestrate(state: OrchestratorState) -> dict:
-    swarm_url = _swarm_api_url(state)
-    mission_id = state.get("mission_id", "")
-    log("[swarm] 调用 Swarm orchestrator-loop")
-    try:
-        async with _workspace_http_client(swarm_url) as client:
-            resp = await client.post(
-                f"{swarm_url}/swarm-orchestrator-loop",
-                json={
-                    "dryRun": True,
-                    "staleMinutes": 10,
-                    "autoContinue": True,
-                    "allowExecution": True,
-                    "missionId": mission_id or None,
-                },
-                headers=_swarm_http_headers(),
-            )
-            resp.raise_for_status()
-            data = resp.json()
-    except Exception as e:
-        return {
-            "swarm_decision": DispatchDecision(
-                source="swarm",
-                analysis=f"API 失败: {e}",
-                assignments=[],
-                human_approval_required=True,
-            ),
-            "log_entries": [f"[swarm] ERROR: {e}"],
-        }
-
-    continuation = data.get("continuation")
-    assignments = []
-    if continuation and isinstance(continuation, dict):
-        for a in continuation.get("assignments", []):
-            assignments.append(
-                {
-                    "worker_id": a.get("workerId", ""),
-                    "task": a.get("task", ""),
-                    "reason": a.get("rationale", ""),
-                }
-            )
-
-    results = data.get("results", [])
-    action_lines = [f"{r['workerId']}: {r.get('action', r.get('status', '?'))}" for r in results]
-    analysis = "Swarm 规则引擎:\n" + "\n".join(action_lines)
-
-    decision = DispatchDecision(
-        source="swarm",
-        analysis=analysis,
-        assignments=assignments,
-        human_approval_required=any(
-            (r.get("checkpoint") or {}).get("stateLabel") in ("NEEDS_INPUT", "BLOCKED")
-            for r in results
-            if r.get("checkpoint")
-        ),
-        metadata={"summary": data.get("summary", {}), "mode": data.get("mode", {})},
-    )
-    log(f"[swarm] {len(assignments)} assignments")
-    return {
-        "swarm_decision": decision,
-        "log_entries": [f"[swarm] {len(assignments)} assignments"],
-    }
-
-
-# ============================================================
-# Node: compare (Phase 1 only)
-# ============================================================
-async def compare_decisions(state: OrchestratorState) -> dict:
-    swarm = state.get("swarm_decision")
-    lang = state.get("langgraph_decision")
-    if not swarm or not lang:
-        return {"comparison": {"error": "missing"}, "log_entries": ["[compare] missing"]}
-
-    log("[compare] Swarm vs LangGraph")
-    swarm_pairs = {
-        f"{a.get('worker_id','')}:{a.get('task','')[:60]}" for a in swarm.assignments
-    }
-    lang_pairs = {
-        f"{a.get('worker_id','')}:{a.get('task','')[:60]}" for a in lang.assignments
-    }
-    swarm_workers = {a.get("worker_id", "") for a in swarm.assignments}
-    lang_workers = {a.get("worker_id", "") for a in lang.assignments}
-
-    agreed = sorted(swarm_pairs & lang_pairs)
-    swarm_only = sorted(swarm_pairs - lang_pairs)
-    lang_only = sorted(lang_pairs - swarm_pairs)
-
-    comparison = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "agreement": {
-            "assignments": agreed,
-            "workers": sorted(swarm_workers & lang_workers),
-            "count": len(agreed),
-        },
-        "divergence": {
-            "swarm_only": swarm_only,
-            "langgraph_only": lang_only,
-            "swarm_only_workers": sorted(swarm_workers - lang_workers),
-            "langgraph_only_workers": sorted(lang_workers - swarm_workers),
-        },
-        "approval": {
-            "swarm": swarm.human_approval_required,
-            "langgraph": lang.human_approval_required,
-        },
-        "counts": {"swarm": len(swarm.assignments), "langgraph": len(lang.assignments)},
-        "summary": _summary(agreed, swarm_only, lang_only, swarm, lang),
-    }
-    log(f"[compare] agreed={len(agreed)}, swarm_only={len(swarm_only)}, lang_only={len(lang_only)}")
-    return {
-        "comparison": comparison,
-        "log_entries": [
-            f"[compare] agreed={len(agreed)}, swarm_only={len(swarm_only)}, lang_only={len(lang_only)}"
-        ],
-    }
-
-
-def _summary(agreed, swarm_only, lang_only, swarm, lang) -> str:
-    parts = []
-    if agreed:
-        parts.append(f"一致: {len(agreed)} 项")
-    if swarm_only:
-        parts.append(f"Swarm独有: {len(swarm_only)} 项")
-    if lang_only:
-        parts.append(f"LangGraph独有: {len(lang_only)} 项")
-    if swarm.human_approval_required != lang.human_approval_required:
-        parts.append("审批不一致")
-    return "；".join(parts) if parts else "双方均无派发"
-
-
-# ============================================================
-# Node: log (Phase 1 only)
-# ============================================================
-async def log_results(state: OrchestratorState) -> dict:
-    comparison = state.get("comparison")
-    if not comparison:
-        return {"log_entries": ["[log] waiting"]}
-    mission_id = state.get("mission_id", "unknown")
-    swarm = state.get("swarm_decision")
-    lang = state.get("langgraph_decision")
-
-    log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
-    os.makedirs(log_dir, exist_ok=True)
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    log_file = os.path.join(log_dir, f"compare_{mission_id}_{ts}.json")
-
-    output = {
-        "phase": "phase1_compare",
-        "mission_id": mission_id,
-        "mission_goal": state.get("mission_goal", ""),
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "checkpoints": [
-            {"worker_id": cp["worker_id"], "state": cp["state"], "result": cp["result"]}
-            for cp in state.get("checkpoints", [])
-        ],
-        "swarm_decision": {
-            "analysis": swarm.analysis if swarm else "",
-            "assignments": swarm.assignments if swarm else [],
-            "human_approval_required": swarm.human_approval_required if swarm else False,
-        },
-        "langgraph_decision": {
-            "analysis": lang.analysis if lang else "",
-            "assignments": lang.assignments if lang else [],
-            "human_approval_required": lang.human_approval_required if lang else False,
-            "metadata": lang.metadata if lang else {},
-        },
-        "comparison": comparison,
-    }
-    with open(log_file, "w", encoding="utf-8") as f:
-        json.dump(output, f, ensure_ascii=False, indent=2)
-
-    log(f"[log] {log_file}")
-    return {
-        "log_entries": [f"[log] {log_file}", f"[log] {comparison.get('summary', 'N/A')}"],
-    }
-
-
 # ============================================================
 # Phase 2 nodes
 # ============================================================
@@ -1155,7 +1027,7 @@ async def ensure_sessions(state: OrchestratorState) -> dict:
 
 
 async def dispatch_assignments(state: OrchestratorState) -> dict:
-    """Unified dispatch node: call /api/swarm-dispatch with waitForCheckpoint=true."""
+    """Unified dispatch node: fire-and-forget swarm-dispatch, then harvest + graph wait."""
     swarm_url = _swarm_api_url(state)
     mission_id = state.get("mission_id", "")
     assignments = state.get("langgraph_assignments", []) or []
@@ -1218,8 +1090,9 @@ async def dispatch_assignments(state: OrchestratorState) -> dict:
             "log_entries": [f"[dispatch] ERROR: {detail}"],
         }
 
-    checkpoints = _parse_dispatch_checkpoints(data)
-    log(f"[dispatch] {len(checkpoints)} checkpoints")
+    worker_ids = [wid for a in assignments if (wid := a.get("worker_id"))]
+    await _harvest_worker_checkpoints(swarm_url, mission_id, worker_ids)
+
     dispatch_counts = dict(state.get("dispatch_counts", {}) or {})
     dispatched_workers = list(state.get("dispatched_workers", []) or [])
     for a in assignments:
@@ -1231,10 +1104,13 @@ async def dispatch_assignments(state: OrchestratorState) -> dict:
     return {
         "dispatch_results": data,
         "dispatch_error": None,
-        "checkpoints": checkpoints,
+        # Async dispatch must not seed classify/wait with stale runtime snapshots.
+        "checkpoints": [],
         "dispatch_counts": dispatch_counts,
         "dispatched_workers": dispatched_workers,
-        "log_entries": [f"[dispatch] {len(assignments)} tasks, {len(checkpoints)} checkpoints"],
+        "log_entries": [
+            f"[dispatch] {len(assignments)} tasks dispatched; harvest triggered for {worker_ids}"
+        ],
     }
 
 
@@ -1292,12 +1168,16 @@ async def wait_for_checkpoints(state: OrchestratorState) -> dict:
             "log_entries": [f"[wait] {len(current_workers)} current workers already terminal (fresh dispatch)"],
         }
 
+  # Do not reuse terminal history for workers in the active batch; they may have a
+    # newer assignment with no checkpoint yet (e.g. architect review after design).
     cp_map: dict[str, WorkerCheckpoint] = {
-        cp["worker_id"]: cp for cp in terminal_history if cp["worker_id"] in dispatched
+        cp["worker_id"]: cp
+        for cp in terminal_history
+        if cp["worker_id"] in dispatched and cp["worker_id"] not in current_workers
     }
     for cp in current_checkpoints:
         wid = cp.get("worker_id")
-        if wid in dispatched:
+        if wid in current_workers and wid:
             cp_map[wid] = cp
 
     # If current workers are already terminal, skip polling.
@@ -1353,15 +1233,12 @@ async def wait_for_checkpoints(state: OrchestratorState) -> dict:
             await asyncio.sleep(poll_interval)
             continue
 
-        # Collect latest checkpoints for tracked workers.
-        for assignment in mission.get("assignments", []):
-            wid = assignment.get("workerId")
-            if wid not in dispatched:
-                continue
-            checkpoint = assignment.get("checkpoint")
-            if not checkpoint:
-                continue
-            cp_map[wid] = _checkpoint_from_parsed(checkpoint, wid)
+        _sync_cp_map_from_mission(
+            cp_map,
+            mission,
+            current_workers=current_workers,
+            dispatched=dispatched,
+        )
 
         terminal_count = sum(
             1 for cp in cp_map.values() if cp["state"] in terminal_states

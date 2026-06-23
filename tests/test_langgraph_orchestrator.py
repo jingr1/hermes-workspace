@@ -4,7 +4,6 @@ CDC end-to-end tests for the LangGraph Swarm orchestrator.
 These tests use mock services (no real Workspace API) so they can run in CI.
 """
 
-import asyncio
 import os
 import sys
 import tempfile
@@ -18,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from langgraph.types import Command
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
-from hermes_langgraph_orchestrator.graph import build_phase1_graph, build_phase2_graph
+from hermes_langgraph_orchestrator.graph import build_phase2_graph
 from hermes_langgraph_orchestrator.resume import (
     build_human_gate_assignments,
     build_resume_command,
@@ -227,56 +226,6 @@ def test_route_by_workflow_blocked_escalates() -> None:
     c = WorkerClassification("developer", "BLOCKED", "architecture_decision", "x", "y", "")
     decision = route_by_workflow(c, state, wf)
     assert decision.action == "human"
-
-
-def test_phase1_graph_mock() -> None:
-    """Phase 1 graph runs to completion with mock nodes."""
-
-    async def mock_collect(state: OrchestratorState) -> dict:
-        from hermes_langgraph_orchestrator.state import WorkerCheckpoint
-
-        return {
-            "checkpoints": [WorkerCheckpoint(**cp) for cp in SCENARIO_CDC],  # type: ignore[typeddict-item]
-            "collection_error": None,
-            "log_entries": ["[mock-collect] 3 checkpoints"],
-        }
-
-    async def mock_swarm(state: OrchestratorState) -> dict:
-        from hermes_langgraph_orchestrator.state import DispatchDecision
-
-        return {
-            "swarm_decision": DispatchDecision(
-                source="swarm",
-                analysis="mock swarm",
-                assignments=[{"worker_id": "architect", "task": "t", "reason": "r"}],
-                human_approval_required=True,
-            ),
-            "log_entries": ["[mock-swarm] ok"],
-        }
-
-    async def run() -> OrchestratorState:
-        graph = build_phase1_graph(
-            init_fn=mock_init_mission,
-            collect_fn=mock_collect,
-            swarm_fn=mock_swarm,
-        )
-        initial: OrchestratorState = {
-            "mission_id": "test-phase1",
-            "mission_goal": "CDC model",
-            "swarm_api_url": "http://localhost:3000/api",
-            "checkpoints": [],
-            "classifications": [],
-            "langgraph_assignments": [],
-            "log_entries": [],
-        }
-        result = await graph.ainvoke(initial, {"configurable": {"thread_id": "test-phase1"}})  # type: ignore[arg-type]
-        return result  # type: ignore[return-value]
-
-    result = asyncio.run(run())
-    lang = result.get("langgraph_decision")
-    assert lang is not None
-    assert any(a["worker_id"] == "architect" for a in lang.assignments)
-    assert lang.human_approval_required is True
 
 
 @pytest.mark.asyncio
@@ -603,3 +552,125 @@ def test_is_local_workspace_url():
     assert _is_local_workspace_url("http://127.0.0.1:3000/api")
     assert _is_local_workspace_url("http://localhost:3000/api")
     assert not _is_local_workspace_url("http://10.0.0.5:3000/api")
+
+
+def test_latest_assignment_checkpoints_prefers_newest_assignment():
+    from hermes_langgraph_orchestrator.nodes import _latest_assignment_checkpoints_from_mission
+
+    mission = {
+        "assignments": [
+            {
+                "workerId": "architect",
+                "dispatchedAt": 100,
+                "checkpoint": {
+                    "stateLabel": "DONE",
+                    "result": "design complete",
+                    "raw": "STATE: DONE\nRESULT: design complete",
+                },
+            },
+            {
+                "workerId": "architect",
+                "dispatchedAt": 200,
+                "checkpoint": None,
+            },
+        ]
+    }
+    latest = _latest_assignment_checkpoints_from_mission(mission, worker_filter={"architect"})
+    assert latest == {}
+
+
+def test_sync_cp_map_clears_stale_current_worker_checkpoint():
+    from hermes_langgraph_orchestrator.nodes import _sync_cp_map_from_mission
+    from hermes_langgraph_orchestrator.state import WorkerCheckpoint
+
+    cp_map = {
+        "architect": WorkerCheckpoint(
+            worker_id="architect",
+            state="DONE",
+            result="design complete",
+            files_changed="",
+            commands_run="",
+            blocker="",
+            next_action="",
+            review_outcome="",
+            raw="STATE: DONE\nRESULT: design complete",
+        )
+    }
+    mission = {
+        "assignments": [
+            {
+                "workerId": "architect",
+                "dispatchedAt": 100,
+                "checkpoint": {
+                    "stateLabel": "DONE",
+                    "result": "design complete",
+                    "raw": "STATE: DONE\nRESULT: design complete",
+                },
+            },
+            {
+                "workerId": "architect",
+                "dispatchedAt": 200,
+                "checkpoint": None,
+            },
+        ]
+    }
+    _sync_cp_map_from_mission(
+        cp_map,
+        mission,
+        current_workers={"architect"},
+        dispatched={"architect", "developer"},
+    )
+    assert "architect" not in cp_map
+
+
+@pytest.mark.asyncio
+async def test_route_skips_stale_architect_to_developer_redispatch():
+    from hermes_langgraph_orchestrator.nodes import route_workflow
+    from hermes_langgraph_orchestrator.state import WorkerClassification
+
+    state: OrchestratorState = {
+        "mission_goal": "CDC",
+        "workflow_spec": load_default_workflow(),
+        "roster_snapshot": ["researcher", "architect", "developer", "learning"],
+        "classifications": [
+            WorkerClassification(
+                worker_id="architect",
+                verdict="DONE",
+                blocker_type="",
+                blocker_summary="",
+                reasoning="rule classify from STATE",
+                review_outcome="",
+            )
+        ],
+        "checkpoints": [
+            {
+                "worker_id": "architect",
+                "state": "DONE",
+                "result": "design complete",
+                "files_changed": "",
+                "commands_run": "",
+                "blocker": "",
+                "next_action": "",
+                "review_outcome": "",
+                "raw": "STATE: DONE\nRESULT: design complete",
+            },
+            {
+                "worker_id": "developer",
+                "state": "DONE",
+                "result": "implementation complete",
+                "files_changed": "",
+                "commands_run": "",
+                "blocker": "",
+                "next_action": "",
+                "review_outcome": "",
+                "raw": "STATE: DONE\nRESULT: implementation complete",
+            },
+        ],
+        "dispatched_workers": ["researcher", "architect", "developer"],
+        "transition_counts": {},
+        "iteration": 0,
+        "max_iterations": 5,
+    }
+    result = await route_workflow(state)
+    assert result["langgraph_assignments"] == []
+    assert "skip stale architect→developer" in result["langgraph_decision"].analysis

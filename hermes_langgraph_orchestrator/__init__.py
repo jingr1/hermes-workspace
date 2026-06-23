@@ -1,1 +1,1 @@
-"""Hermes LangGraph Orchestrator — Phase 1 对比模式"""
+"""Hermes LangGraph Orchestrator — workflow-driven swarm execution."""

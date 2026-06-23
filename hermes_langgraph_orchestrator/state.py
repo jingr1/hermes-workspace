@@ -1,8 +1,5 @@
 """
-LangGraph Orchestrator State — Phase 1 + Phase 2
-
-Phase 1 (对比): LangGraph 图结构 vs Swarm 规则引擎
-Phase 2 (执行): LangGraph 图结构真实编排，替代 Swarm orchestrator-loop
+LangGraph Orchestrator State — workflow-driven swarm execution.
 """
 
 from typing import TypedDict, Annotated, Any
@@ -85,17 +82,11 @@ class OrchestratorState(TypedDict, total=False):
     transition_counts: dict[str, int]
     awaiting_checkpoint: bool
 
-    # --- Swarm 规则引擎 (Phase 1 only) ---
-    swarm_decision: DispatchDecision | None
-
-    # --- Phase 2: 执行状态 ---
+    # --- 执行状态 ---
     dispatch_results: dict | None
     dispatch_error: str | None
     wait_attempts: int
     all_done: bool
-
-    # --- 对比 (Phase 1 only) ---
-    comparison: dict | None
 
     # --- 控制 ---
     iteration: int

@@ -14,6 +14,7 @@ import { publishSwarmCheckpointNotification } from '../../server/swarm-notificat
 import { ensureSwarmProfileConfig, syncSwarmProfileModel } from '../../server/swarm-profile-config'
 import { parseSwarmModelLabel } from '../../server/swarm-model-resolver'
 import { buildHandoff, writeHandoff } from '../../server/handoff'
+import { harvestSwarmWorkers } from '../../server/swarm-harvest'
 import {
   buildHermesTmuxShellCommand,
   buildHermesTmuxTuiCommand,
@@ -1568,6 +1569,20 @@ export async function dispatchSwarmAssignments(body: DispatchRequest) {
   )))
 
   const latestMission = getSwarmMission(mission.id) ?? mission
+
+  if (!waitForCheckpoint) {
+    try {
+      await harvestSwarmWorkers(
+        [...new Set(assignments.map((assignment) => assignment.workerId))],
+        'swarm-dispatch-harvest',
+      )
+    } catch (error) {
+      console.error(
+        '[swarm-dispatch] post-dispatch harvest failed:',
+        error instanceof Error ? error.message : String(error),
+      )
+    }
+  }
 
   return {
     dispatchedAt,

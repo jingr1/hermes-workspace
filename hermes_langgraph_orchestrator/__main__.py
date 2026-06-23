@@ -1,19 +1,12 @@
 #!/usr/bin/env python3
 """
-LangGraph Orchestrator — Phase 1 (对比) + Phase 2 (执行)
-
-Phase 1: LangGraph 图结构 vs Swarm 规则引擎
-Phase 2: LangGraph 图结构真实编排（循环 + interrupt + dispatch）
+LangGraph Orchestrator — workflow-driven swarm execution.
 
 用法:
-    # Phase 1 对比
-    python -m hermes_langgraph_orchestrator --mock --scenario cdc
-    python -m hermes_langgraph_orchestrator --mock-collect --scenario cdc
+    python -m hermes_langgraph_orchestrator --execute --mission-id <id> --goal "..."
 
-    # Phase 2 执行
-    python -m hermes_langgraph_orchestrator --execute --mock-services --scenario cdc
+    python -m hermes_langgraph_orchestrator --execute --mock-services --mission-id cdc-mock-001
 
-    # Resume after human gate
     python -m hermes_langgraph_orchestrator --execute --resume approved --mission-id <id>
     python -m hermes_langgraph_orchestrator --execute --resume abort --mission-id <id>
 """
@@ -48,7 +41,6 @@ from hermes_langgraph_orchestrator.resume import (
     read_mission_state,
 )
 from hermes_langgraph_orchestrator.state import (
-    DispatchDecision,
     OrchestratorState,
     WorkerCheckpoint,
     WorkerClassification,
@@ -67,7 +59,7 @@ def import_async_sqlite_saver():
         venv_python = os.path.join(orch_dir, ".venv", "bin", "python")
         print(
             "\n❌ 缺少 langgraph-checkpoint-sqlite（`langgraph.checkpoint.sqlite`）。\n"
-            "   Phase 2（--execute / --resume / --get-state）请用项目 venv 运行，例如：\n"
+            "   请用项目 venv 运行（--execute / --resume / --get-state），例如：\n"
             f"   {venv_python} -m hermes_langgraph_orchestrator --execute --resume approved --mission-id <id>\n"
             "\n   若尚未创建 venv：\n"
             f"   cd {os.path.dirname(orch_dir)} && python3 -m venv hermes_langgraph_orchestrator/.venv\n"
@@ -76,34 +68,8 @@ def import_async_sqlite_saver():
         sys.exit(1)
 
 # ============================================================
-# 场景数据
+# Mock checkpoints for --mock-services (CI / no Workspace)
 # ============================================================
-SCENARIO_RATE_LIMITER = [
-    {
-        "worker_id": "builder",
-        "state": "DONE",
-        "result": "实现了 rate_limiter.py，token bucket，14/14 测试通过",
-        "files_changed": "src/rate_limiter.py, tests/test_rate_limiter.py",
-        "commands_run": "pytest tests/test_rate_limiter.py -v",
-        "blocker": "",
-        "next_action": "提交给 reviewer 审查",
-        "raw": "STATE: DONE\nRESULT: 14/14 tests pass\nNEXT_ACTION: Submit for review",
-    },
-    {
-        "worker_id": "researcher",
-        "state": "DONE",
-        "result": "调研 3 种方案，推荐 token bucket",
-        "files_changed": "",
-        "commands_run": "",
-        "blocker": "",
-        "next_action": "交给 builder 参考",
-        "raw": "STATE: DONE\nRESULT: token bucket recommended",
-    },
-]
-
-# Current Hermes Swarm roster (5 workers): orchestrator, researcher, architect,
-# developer, learning.  CDC scenario adapted to use researcher → architect →
-# developer loop.
 SCENARIO_CDC = [
     {
         "worker_id": "researcher",
@@ -137,126 +103,37 @@ SCENARIO_CDC = [
     },
 ]
 
-SCENARIOS = {"rate-limiter": SCENARIO_RATE_LIMITER, "cdc": SCENARIO_CDC}
 
-
-# ============================================================
-# Phase 1 mocks
-# ============================================================
-async def make_mock_collect(scenario: str):
-    checkpoints = SCENARIOS.get(scenario, SCENARIO_RATE_LIMITER)
-
-    async def _fn(state: OrchestratorState) -> dict:
-        print(f"[mock] 场景: {scenario}, {len(checkpoints)} 个 checkpoint")
-        cps = [WorkerCheckpoint(**cp) for cp in checkpoints]  # type: ignore[typeddict-item]
-        return {
-            "checkpoints": cps,
-            "collection_error": None,
-            "log_entries": [f"[mock] {len(cps)} checkpoints"],
-        }
-
-    return _fn
-
-
-async def make_mock_classify_phase1(scenario: str):
-    if scenario == "cdc":
-        classifications = [
-            WorkerClassification("researcher", "DONE", "", "", "调研完成", ""),
-            WorkerClassification("architect", "DONE", "", "", "设计完成", ""),
-            WorkerClassification(
-                "developer",
-                "BLOCKED",
-                "architecture_decision",
-                "耦合ODE数值不稳定",
-                "数值方法选择是架构决策",
-                "",
-            ),
-        ]
-    else:
-        classifications = [
-            WorkerClassification("builder", "DONE", "", "", "实现完成", ""),
-            WorkerClassification("researcher", "DONE", "", "", "调研完成", ""),
-        ]
-
-    async def _fn(state: OrchestratorState) -> dict:
-        print(f"[mock-classify] {len(classifications)} workers")
-        return {
-            "classifications": classifications,
-            "log_entries": [f"[mock-classify] {len(classifications)} workers"],
-        }
-
-    return _fn
-
-
-async def make_mock_swarm(scenario: str):
-    if scenario == "cdc":
-        analysis = "Swarm: researcher→architect, architect→developer, developer→human"
-        assignments = [
-            {"worker_id": "architect", "task": "Design CDC+airspring interface...", "reason": "regex(nextAction)"},
-            {"worker_id": "developer", "task": "Implement structure A...", "reason": "regex(nextAction)"},
-        ]
-        needs_human = True
-    else:
-        analysis = "Swarm: builder→reviewer, researcher→skip"
-        assignments = [
-            {"worker_id": "reviewer", "task": "Review rate_limiter.py...", "reason": "Autopilot review gate"}
-        ]
-        needs_human = False
-
-    async def _fn(state: OrchestratorState) -> dict:
-        print(f"[mock-swarm] {len(assignments)} assignments")
-        return {
-            "swarm_decision": DispatchDecision(
-                source="swarm",
-                analysis=analysis,
-                assignments=assignments,
-                human_approval_required=needs_human,
-            ),
-            "log_entries": [f"[mock-swarm] {len(assignments)} assignments"],
-        }
-
-    return _fn
-
-
-# ============================================================
-# Phase 2 mocks
-# ============================================================
-def _find_scenario_checkpoint(scenario: str, worker_id: str, call: int) -> dict | None:
+def _find_scenario_checkpoint(worker_id: str, call: int) -> dict | None:
     """Return the appropriate checkpoint for a worker on its Nth dispatch."""
-    if scenario == "cdc":
-        if worker_id == "researcher":
-            return next((cp for cp in SCENARIO_CDC if cp["worker_id"] == "researcher"), None)
-        if worker_id == "architect":
-            # First dispatch: plain DONE; second dispatch (review) : approved.
-            cp = next((cp for cp in SCENARIO_CDC if cp["worker_id"] == "architect"), None)
-            if cp and call >= 2:
-                cp2 = dict(cp)
-                cp2["result"] = "[approved] 最终审查通过: 实现符合设计，测试通过"
-                cp2["next_action"] = "任务完成"
-                cp2["raw"] = "STATE: DONE\nRESULT: approved\nNEXT_ACTION: done"
-                return cp2
-            return cp
-        if worker_id == "developer":
-            # First dispatch: BLOCKED; retry: DONE.
-            cp = next((cp for cp in SCENARIO_CDC if cp["worker_id"] == "developer"), None)
-            if cp and call >= 2:
-                cp2 = dict(cp)
-                cp2["state"] = "DONE"
-                cp2["blocker"] = ""
-                cp2["result"] = "结构 A 实现完成: cdc_airspring_model_a.py, 8/8 测试通过, jit/vmap 兼容"
-                cp2["files_changed"] = "cdc_airspring_model_a.py, test_model_a.py"
-                cp2["commands_run"] = "pytest test_model_a.py -v"
-                cp2["next_action"] = "交给 architect 最终审查"
-                cp2["raw"] = "STATE: DONE\nFILES_CHANGED: cdc_airspring_model_a.py\nRESULT: 8/8 tests pass\nNEXT_ACTION: Architect review"
-                return cp2
-            return cp
-        return None
-
-    # rate-limiter scenario (uses old builder/reviewer roster for Phase 1 smoke)
-    return next((cp for cp in SCENARIOS.get(scenario, []) if cp["worker_id"] == worker_id), None)
+    if worker_id == "researcher":
+        return next((cp for cp in SCENARIO_CDC if cp["worker_id"] == "researcher"), None)
+    if worker_id == "architect":
+        cp = next((cp for cp in SCENARIO_CDC if cp["worker_id"] == "architect"), None)
+        if cp and call >= 2:
+            cp2 = dict(cp)
+            cp2["result"] = "[approved] 最终审查通过: 实现符合设计，测试通过"
+            cp2["next_action"] = "任务完成"
+            cp2["raw"] = "STATE: DONE\nRESULT: approved\nNEXT_ACTION: done"
+            return cp2
+        return cp
+    if worker_id == "developer":
+        cp = next((cp for cp in SCENARIO_CDC if cp["worker_id"] == "developer"), None)
+        if cp and call >= 2:
+            cp2 = dict(cp)
+            cp2["state"] = "DONE"
+            cp2["blocker"] = ""
+            cp2["result"] = "结构 A 实现完成: cdc_airspring_model_a.py, 8/8 测试通过, jit/vmap 兼容"
+            cp2["files_changed"] = "cdc_airspring_model_a.py, test_model_a.py"
+            cp2["commands_run"] = "pytest test_model_a.py -v"
+            cp2["next_action"] = "交给 architect 最终审查"
+            cp2["raw"] = "STATE: DONE\nFILES_CHANGED: cdc_airspring_model_a.py\nRESULT: 8/8 tests pass\nNEXT_ACTION: Architect review"
+            return cp2
+        return cp
+    return None
 
 
-async def make_mock_dispatch(scenario: str):
+async def make_mock_dispatch():
     """Mock dispatch_assignments: returns checkpoint(s) for assigned workers.
 
     Call count is derived from persisted dispatched_workers so resume works
@@ -278,7 +155,7 @@ async def make_mock_dispatch(scenario: str):
         for a in assignments:
             wid = a["worker_id"]
             call = dispatch_counts.get(wid, 0) + 1
-            cp = _find_scenario_checkpoint(scenario, wid, call)
+            cp = _find_scenario_checkpoint(wid, call)
             if cp:
                 checkpoints.append(WorkerCheckpoint(**cp))  # type: ignore[typeddict-item]
             dispatch_counts[wid] = call
@@ -295,7 +172,7 @@ async def make_mock_dispatch(scenario: str):
     return _fn
 
 
-async def make_mock_classify_phase2(scenario: str):
+async def make_mock_classify():
     """Classify based on the single checkpoint returned by mock dispatch."""
 
     async def _fn(state: OrchestratorState) -> dict:
@@ -336,7 +213,7 @@ async def make_mock_classify_phase2(scenario: str):
     return _fn
 
 
-async def make_mock_init_mission(scenario: str):
+async def make_mock_init_mission():
     """Mock init_mission: load default workflow and a 5-worker roster."""
 
     async def _fn(state: OrchestratorState) -> dict:
@@ -385,11 +262,8 @@ async def make_mock_ensure_sessions():
 # ============================================================
 async def main():
     parser = argparse.ArgumentParser(description="LangGraph Orchestrator")
-    parser.add_argument("--mock", action="store_true", help="全部 mock (Phase 1)")
-    parser.add_argument("--mock-collect", action="store_true", help="mock checkpoint，真实 LLM (Phase 1)")
-    parser.add_argument("--execute", action="store_true", help="Phase 2: 真实编排执行")
-    parser.add_argument("--mock-services", action="store_true", help="Phase 2: mock init/ensure/dispatch (用于 CI/无 API 环境)")
-    parser.add_argument("--scenario", type=str, default="cdc", choices=["rate-limiter", "cdc"])
+    parser.add_argument("--execute", action="store_true", help="运行 LangGraph 编排（必须，除非 --get-state / --list-active-gates）")
+    parser.add_argument("--mock-services", action="store_true", help="mock init/ensure/dispatch（用于 CI/无 API 环境）")
     parser.add_argument("--mission-id", type=str, default="", help="mission ID，默认自动生成唯一 ID")
     parser.add_argument("--goal", type=str, default="")
     parser.add_argument("--swarm-url", type=str, default="", help="Workspace API base URL (default: HERMES_WORKSPACE_URL or http://127.0.0.1:3000/api)")
@@ -430,12 +304,8 @@ async def main():
 
     load_workspace_dotenv()
 
-    scenario = args.scenario
     mission_id = args.mission_id or f"mission-{int(time.time())}"
-    goal = args.goal or {
-        "rate-limiter": "为 API 服务添加 rate limiter",
-        "cdc": "设计并开发 CDC+空簧 的物理模型，用 JAX 构建",
-    }[scenario]
+    goal = args.goal or "设计并开发 CDC+空簧 的物理模型，用 JAX 构建"
 
     swarm_url = (
         args.swarm_url.strip()
@@ -444,13 +314,14 @@ async def main():
         or "http://127.0.0.1:3000/api"
     ).rstrip("/")
 
-    phase = "Phase 2 (执行)" if args.execute else "Phase 1 (对比)"
-    mode = "全部 mock" if args.mock else "mock services" if args.mock_services else "真实 LLM + mock collect" if args.mock_collect else "真实 LLM + 真实 API"
+    if not args.get_state and not args.list_active_gates and not args.execute:
+        parser.error("specify --execute, --get-state, or --list-active-gates")
+
+    mode = "mock services" if args.mock_services else "真实 LLM + 真实 API"
 
     if not args.get_state and not args.list_active_gates:
         print("=" * 60)
-        print(f"LangGraph Orchestrator — {phase}")
-        print(f"场景: {scenario}")
+        print("LangGraph Orchestrator — 执行")
         print("=" * 60)
         print(f"  Goal: {goal}")
         print(f"  Mode: {mode}")
@@ -499,9 +370,9 @@ async def main():
 
         async with AsyncSqliteSaver.from_conn_string(checkpoint_path) as saver:
             graph = build_phase2_graph(
-                classify_fn=(await make_mock_classify_phase2(scenario)) if args.mock_services else None,
-                dispatch_fn=(await make_mock_dispatch(scenario)) if args.mock_services else None,
-                init_fn=(await make_mock_init_mission(scenario)) if args.mock_services else None,
+                classify_fn=(await make_mock_classify()) if args.mock_services else None,
+                dispatch_fn=(await make_mock_dispatch()) if args.mock_services else None,
+                init_fn=(await make_mock_init_mission()) if args.mock_services else None,
                 ensure_fn=(await make_mock_ensure_sessions()) if args.mock_services else None,
                 checkpointer=saver,
             )
@@ -523,12 +394,12 @@ async def main():
                 )
                 if human_choice or human_note or resume_target:
                     print(
-                        f"▶ Phase 2 恢复 (action={args.resume}, "
+                        f"▶ 恢复 (action={args.resume}, "
                         f"choice={human_choice or 'primary'}, "
                         f"target={resume_target or 'default'})...\n"
                     )
                 else:
-                    print(f"▶ Phase 2 恢复 (action={args.resume})...\n")
+                    print(f"▶ 恢复 (action={args.resume})...\n")
                 try:
                     result = await graph.ainvoke(command, config)  # type: ignore[arg-type]
                 except Exception as e:
@@ -587,7 +458,7 @@ async def main():
                             "iteration": 0,
                         },
                     )
-                print(f"▶ Phase 2 执行开始...\n")
+                print(f"▶ 执行开始...\n")
                 try:
                     result = await graph.ainvoke(initial, config)  # type: ignore[arg-type]
                 except Exception as e:
@@ -598,7 +469,7 @@ async def main():
                     sys.exit(1)
 
             print("\n" + "=" * 60)
-            print("Phase 2 结果")
+            print("执行结果")
             print("=" * 60)
 
             lang = result.get("langgraph_decision")
@@ -643,100 +514,7 @@ async def main():
                     f"--execute --resume approved --mission-id {mission_id}"
                 )
             else:
-                print(f"\n✅ Phase 2 完成。详细: logs/execute_*.json")
-
-    else:
-        from hermes_langgraph_orchestrator.graph import build_phase1_graph
-
-        graph = build_phase1_graph(
-            collect_fn=(await make_mock_collect(scenario)) if (args.mock or args.mock_collect) else None,
-            swarm_fn=(await make_mock_swarm(scenario)) if args.mock else None,
-            init_fn=(await make_mock_init_mission(scenario)) if args.mock else None,
-        )
-
-        if args.mock:
-            # Replace classify with mock too.
-            from hermes_langgraph_orchestrator import nodes as graph_nodes
-
-            graph_nodes.classify_workers = await make_mock_classify_phase1(scenario)  # type: ignore[assignment]
-            graph = build_phase1_graph(
-                collect_fn=await make_mock_collect(scenario),
-                swarm_fn=await make_mock_swarm(scenario),
-                init_fn=await make_mock_init_mission(scenario),
-            )
-
-        initial: OrchestratorState = {
-            "mission_id": mission_id,
-            "mission_goal": goal,
-            "swarm_api_url": swarm_url,
-            "workflow_path": args.workflow or None,
-            "checkpoints": [],
-            "terminal_checkpoints": [],
-            "collection_error": None,
-            "classifications": [],
-            "langgraph_assignments": [],
-            "langgraph_needs_human": False,
-            "swarm_decision": None,
-            "langgraph_decision": None,
-            "comparison": None,
-            "iteration": 0,
-            "max_iterations": 1,
-            "phase": "phase1_compare",
-            "log_entries": [],
-        }
-
-        print("▶ Phase 1 对比开始...\n")
-
-        try:
-            result = await graph.ainvoke(initial, {"configurable": {"thread_id": mission_id}})  # type: ignore[arg-type]
-        except Exception as e:
-            print(f"\n❌ 失败: {e}")
-            import traceback
-
-            traceback.print_exc()
-            sys.exit(1)
-
-        print("\n" + "=" * 60)
-        print("Phase 1 结果")
-        print("=" * 60)
-
-        lang = result.get("langgraph_decision")
-        if lang:
-            print(f"\n🧠 LangGraph 图结构编排 (LLM classify + workflow 路由):")
-            print(f"   派发: {len(lang.assignments)} 项, 需人工: {lang.human_approval_required}")
-            for a in lang.assignments:
-                print(f"     → {a['worker_id']}: {a.get('reason', '')[:100]}")
-            if lang.metadata.get("classifications"):
-                parts = [
-                    f"{c['worker_id']}={c['verdict']}"
-                    + (f"({c['blocker_type']})" if c.get("blocker_type") else "")
-                    for c in lang.metadata["classifications"]
-                ]
-                print(f"   分类: {', '.join(parts)}")
-
-        swarm = result.get("swarm_decision")
-        if swarm:
-            print(f"\n🔧 Hermes Swarm 规则引擎:")
-            print(f"   派发: {len(swarm.assignments)} 项, 需人工: {swarm.human_approval_required}")
-            for a in swarm.assignments:
-                print(f"     → {a['worker_id']}: {a.get('reason', '')[:100]}")
-
-        comp = result.get("comparison", {})
-        if comp:
-            print(f"\n🔍 对比:")
-            print(f"   一致: {comp.get('agreement', {}).get('count', 0)} 项")
-            div = comp.get("divergence", {})
-            print(f"   Swarm 独有: {len(div.get('swarm_only', []))} 项")
-            print(f"   LangGraph 独有: {len(div.get('langgraph_only', []))} 项")
-            print(f"   摘要: {comp.get('summary', 'N/A')}")
-
-        logs = result.get("log_entries", [])
-        if logs:
-            print(f"\n📋 日志 ({len(logs)} 条):")
-            for l in logs:
-                print(f"   {l}")
-
-        print(f"\n✅ Phase 1 完成。详细: logs/compare_*.json")
+                print(f"\n✅ 执行完成。详细: logs/execute_*.json")
 
 
 if __name__ == "__main__":

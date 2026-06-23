@@ -10,9 +10,8 @@ LangGraph 作为 Hermes Swarm 的**确定性编排大脑**：加载 workflow.yam
 - [重启 Workspace](#重启-workspace)
 - [创建自定义编排任务](#创建自定义编排任务)
 - [执行任务派发与编排](#执行任务派发与编排)
-  - [Phase 1：与 orchestrator-loop 对比](#phase-1与-orchestrator-loop-对比)
-  - [Phase 2：真实编排](#phase-2真实编排)
-  - [Phase 2：Mock 模式（无 API/无 worker）](#phase-2mock-模式无-api无-worker)
+  - [真实编排](#真实编排)
+  - [Mock 模式（CI / 无 Workspace）](#mock-模式ci--无-workspace)
   - [从 human gate 恢复](#从-human-gate-恢复)
 - [查看与 Attach tmux](#查看与-attach-tmux)
 - [状态与日志](#状态与日志)
@@ -94,7 +93,7 @@ LangGraph **图结构是固定的**（init → dispatch → wait → classify �
 2. 确保 `entry` / `transitions` 里引用的 worker 都在 `swarm.yaml` roster 中
 3. 启动 mission 时用 `--workflow <path>`（或 API 的 `workflowId`）指向该文件
 
-> **`--scenario` 只影响 Phase 1 mock checkpoint**，不决定 Phase 2 路由。真实执行时未传 `--workflow` 则默认 `workflows/cdc.yaml`。
+> 未传 `--workflow` 时默认 `workflows/cdc.yaml`。编排逻辑完全由 workflow YAML 决定。
 
 ### 架构关系
 
@@ -249,31 +248,17 @@ curl -s "http://127.0.0.1:3000/api/orchestrator-state?missionId=<id>" | python3 
 
 ## 执行任务派发与编排
 
-所有命令都从仓库根目录执行。
+所有命令都从仓库根目录执行，且需要 **`--execute`**（查询状态用 `--get-state` / `--list-active-gates`）。
 
 ```bash
 cd /home/ramon.jing/hermes-workspace
 ```
 
-### Phase 1：与 orchestrator-loop 对比
+### 真实编排
 
-快速对比 LangGraph 路由 vs Hermes Swarm 规则引擎，**不真派发**。
+会真实启动 tmux session（默认 `tmux-tui`）、派发任务、等待 checkpoint、按 workflow YAML 自动路由。
 
-```bash
-# 全部 mock
-hermes_langgraph_orchestrator/.venv/bin/python -m hermes_langgraph_orchestrator \
-  --mock --scenario cdc
-
-# 真实 LLM 分类 + mock checkpoint
-hermes_langgraph_orchestrator/.venv/bin/python -m hermes_langgraph_orchestrator \
-  --mock-collect --scenario cdc
-```
-
-### Phase 2：真实编排
-
-会真实启动 tmux session（默认 `tmux-tui`）、派发任务、等待 checkpoint、自动路由。无需设置 `HERMES_SWARM_USE_LIVE`。
-
-**推荐（TUI paste 不稳定时）**：在 `hermes-workspace/.env` 加 `HERMES_SWARM_TMUX_MODE=cli`，重启 `pnpm dev`。走 `tmux-cli`：session 长驻 bash，每次 dispatch 在 pane 里跑 `hermes chat -q`。
+**推荐（TUI paste 不稳定时）**：在 `hermes-workspace/.env` 加 `HERMES_SWARM_TMUX_MODE=cli`，重启 `pnpm dev`。
 
 ```bash
 # .env
@@ -283,7 +268,8 @@ TMUX_BIN=/usr/bin/tmux
 
 ```bash
 hermes_langgraph_orchestrator/.venv/bin/python -m hermes_langgraph_orchestrator \
-  --execute --scenario cdc --mission-id cdc-real-001
+  --execute --mission-id cdc-real-001 \
+  --goal "设计并开发 CDC+空簧 的物理模型，用 JAX 构建"
 ```
 
 流程示例：
@@ -292,16 +278,16 @@ hermes_langgraph_orchestrator/.venv/bin/python -m hermes_langgraph_orchestrator 
 researcher DONE → architect DONE → developer BLOCKED → human gate
 ```
 
-### Phase 2：Mock 模式（无 API/无 worker）
+### Mock 模式（CI / 无 Workspace）
 
-适合 CI 或没有启动 Workspace 时验证图结构。
+适合 CI 或没有启动 Workspace 时验证图结构（`--mock-services`，不调用真实 tmux/dispatch API）。
 
 ```bash
 hermes_langgraph_orchestrator/.venv/bin/python -m hermes_langgraph_orchestrator \
-  --execute --mock-services --scenario cdc --mission-id cdc-mock-001
+  --execute --mock-services --mission-id cdc-mock-001
 ```
 
-Mock CDC 场景会自动跑完：
+Mock 会自动跑完：
 
 ```text
 researcher → architect → developer(BLOCKED) → human gate
@@ -316,11 +302,11 @@ resume approved → developer DONE → architect approved → finalize
 
 ```bash
 hermes_langgraph_orchestrator/.venv/bin/python -m hermes_langgraph_orchestrator \
-  --execute --scenario cdc --mission-id cdc-real-001 --resume approved
+  --execute --mission-id cdc-real-001 --resume approved
 
 # 或放弃当前 mission
 hermes_langgraph_orchestrator/.venv/bin/python -m hermes_langgraph_orchestrator \
-  --execute --scenario cdc --mission-id cdc-real-001 --resume abort
+  --execute --mission-id cdc-real-001 --resume abort
 ```
 
 **HTTP API：**
@@ -346,17 +332,17 @@ curl -s -X POST http://127.0.0.1:3000/api/swarm-langgraph/resume \
 
 | 参数 | 说明 |
 |---|---|
-| `--execute` | Phase 2 真实编排 |
+| `--execute` | 运行 LangGraph 编排（必须，除非 `--get-state` / `--list-active-gates`） |
 | `--mock-services` | mock init/ensure/dispatch，不依赖 Workspace |
-| `--scenario cdc` | CDC + 空簧场景（当前 5 worker roster） |
-| `--scenario rate-limiter` | rate limiter 场景（旧 roster，用于 Phase 1） |
 | `--mission-id <id>` | mission 标识，也是 LangGraph thread_id |
 | `--goal "..."` | 自定义 mission goal |
 | `--initial-workers researcher,architect` | 跳过 workflow entry，直接派发指定 worker |
 | `--max-iterations 5` | 最大路由轮数 |
-| `--workflow path/to.yaml` | 自定义 workflow YAML |
+| `--workflow path/to.yaml` | 自定义 workflow YAML（默认 `workflows/cdc.yaml`） |
 | `--checkpoint-path path.db` | 自定义 SQLite checkpointer |
 | `--resume approved\|abort` | 从 human gate 恢复 |
+| `--get-state` | 读取 mission 状态（JSON） |
+| `--list-active-gates` | 列出所有 Human Gate 暂停的 mission |
 
 ---
 
@@ -425,8 +411,7 @@ curl -s -X POST http://localhost:3000/api/swarm-tmux-stop \
 
 ```bash
 ls logs/
-# compare_<mission>_<timestamp>.json   # Phase 1
-# execute_<mission>_<timestamp>.json   # Phase 2
+# execute_<mission>_<timestamp>.json
 ```
 
 ### SQLite checkpointer
