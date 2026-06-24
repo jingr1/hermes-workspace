@@ -562,7 +562,7 @@ export function buildWorkerPrompt(input: {
     '- Produce concrete artifacts or a concrete checkpoint; avoid vague status updates.',
     '- If you are blocked, say exactly what is missing and the smallest unblock action.',
     '- If this is part of a larger workflow, stop after your checkpoint and wait for orchestrator continuation.',
-    '- If context pressure is high, write a structured handoff to your handoffs/ directory before /new and continue from it on resume.',
+    `- If context pressure is high, write a session snapshot to ~/.hermes/profiles/${input.workerId}/memory/session-snapshots/<missionId>.md before /new and continue from it on resume. Cross-worker handoffs use memory/handoffs/swarm/${input.workerId}-latest.md (platform-managed).`,
     '',
     '## Required Checkpoint Format',
     'STATE: DONE | BLOCKED | NEEDS_INPUT | HANDOFF | IN_PROGRESS',

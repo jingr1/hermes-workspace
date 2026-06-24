@@ -35,7 +35,7 @@ These paths are locked. Do not substitute Claude/OpenClaw profile paths for work
 | Worker mission summary | `~/.hermes/profiles/<workerId>/memory/missions/<missionId>/SUMMARY.md` |
 | Worker mission event log | `~/.hermes/profiles/<workerId>/memory/missions/<missionId>/events.jsonl` |
 | Worker episodic logs | `~/.hermes/profiles/<workerId>/memory/episodes/YYYY-MM-DD.md` |
-| Worker handoffs | `~/.hermes/profiles/<workerId>/memory/handoffs/<missionId>.md` |
+| Worker session snapshots | `~/.hermes/profiles/<workerId>/memory/session-snapshots/<missionId>.md` |
 | Swarm control-plane runtime | `/Users/aurora/hermes-workspace/.runtime/` |
 | Swarm mission ledger | `/Users/aurora/hermes-workspace/.runtime/swarm-missions.json` |
 | Swarm roster/source of truth | `/Users/aurora/hermes-workspace/swarm.yaml` |
@@ -62,7 +62,7 @@ Owned by the worker. Used for:
 - role-specific conventions,
 - mission-local decisions,
 - episodic task history,
-- compaction/restart handoffs.
+- compaction/restart session snapshots.
 
 ### Swarm control-plane state
 
@@ -244,20 +244,22 @@ Template:
 - Next action: ...
 ```
 
-### Handoffs
+### Session snapshots and shared handoffs
 
-Worker-local handoff:
+Worker-local session snapshot (for compaction / session renewal):
 
-`~/.hermes/profiles/<workerId>/memory/handoffs/<missionId>.md`
+`~/.hermes/profiles/<workerId>/memory/session-snapshots/<missionId>.md`
 
-Shared latest handoff:
+Legacy path `memory/handoffs/` under the profile may still be read for backward compatibility but must not be used for new writes.
+
+Shared cross-worker handoff:
 
 `/Users/aurora/.openclaw/workspace/memory/handoffs/swarm/<workerId>-latest.md`
 
 Template:
 
 ```markdown
-# Handoff — <workerId> — <missionId>
+# Session snapshot — <workerId> — <missionId>
 
 Generated: <ISO timestamp>
 
@@ -295,7 +297,7 @@ Generated: <ISO timestamp>
 
 ## Resume prompt
 
-When this worker restarts, load this handoff, inspect runtime.json, then continue from "Next exact action".
+When this worker restarts, load this session snapshot, inspect runtime.json, then continue from "Next exact action".
 ```
 
 ## API contracts
@@ -344,7 +346,7 @@ Rules:
 - create directories on demand,
 - write markdown atomically,
 - append JSONL events atomically,
-- optionally mirror handoffs to shared handoff path.
+- optionally mirror session snapshots to shared handoff path.
 
 ### `GET /api/swarm-memory/search`
 

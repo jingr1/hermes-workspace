@@ -59,10 +59,23 @@ describe('swarm-memory module', () => {
     const mod = await loadModule()
     mod.ensureWorkerMemoryScaffold({ workerId: 'swarmtest1' })
     const result = mod.writeSwarmHandoff({ workerId: 'swarmtest1', missionId: 'mission-test-1', content: 'Handoff body', mirrorShared: false })
-    expect(result.localPath.endsWith('handoffs/mission-test-1.md')).toBe(true)
+    expect(result.localPath.endsWith('session-snapshots/mission-test-1.md')).toBe(true)
     expect(result.localPath.startsWith(tempHome)).toBe(true)
     expect(readFileSync(result.localPath, 'utf8')).toMatch(/Handoff body/)
     expect(result.sharedPath).toBeUndefined()
+  })
+
+  it('reads legacy profile handoffs path when session-snapshots file is absent', async () => {
+    const mod = await loadModule()
+    mod.ensureWorkerMemoryScaffold({ workerId: 'swarmtest1' })
+    const legacyDir = mod.swarmWorkerLegacyHandoffsRoot('swarmtest1')
+    const legacyPath = join(legacyDir, 'mission-legacy.md')
+    const { mkdirSync, writeFileSync } = await import('node:fs')
+    mkdirSync(legacyDir, { recursive: true })
+    writeFileSync(legacyPath, 'legacy snapshot body\n', 'utf8')
+    const resolved = mod.resolveSessionSnapshotPath('swarmtest1', 'mission-legacy.md')
+    expect(resolved).toBe(legacyPath)
+    expect(readFileSync(resolved, 'utf8')).toMatch(/legacy snapshot body/)
   })
 
   it('searches worker memory for tokens', async () => {

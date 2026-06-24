@@ -340,8 +340,8 @@ function readRuntimeMissionContext(workerId: string): { missionId: string | null
 export async function requestWorkerHandoff(workerId: string): Promise<{ ok: boolean; handoffPath: string; error?: string }> {
   const hp = handoffPath(workerId)
   mkdirSync(dirname(hp), { recursive: true })
-  const localHandoff = join(getProfilesDir(), workerId, 'memory', 'handoffs', 'latest.md')
-  const prompt = `CONTEXT_HANDOFF_REQUIRED. Stop current work and write a durable handoff.\n\nWrite the handoff to BOTH of these exact paths:\n${localHandoff}\n${hp}\n\nUse this template (fill it in, do not just copy):\n# Handoff — ${workerId} — <missionId>\n\nGenerated: <ISO timestamp>\n\n## Current state\n## Objective\n## Completed\n## In progress\n## Files touched\n## Commands run\n## Blockers\n## Next exact action\n## Resume prompt\nWhen this worker restarts, load this handoff and continue from "Next exact action".\n\nThen reply in the required checkpoint format:\nSTATE: HANDOFF\nFILES_CHANGED: exact files or none\nCOMMANDS_RUN: exact commands or none\nRESULT: concise current state and what landed\nBLOCKER: blocker or none\nNEXT_ACTION: exact next action after /new or restart\n\nDo not continue implementation until renewed.`
+  const localSnapshot = join(getProfilesDir(), workerId, 'memory', 'session-snapshots', 'latest.md')
+  const prompt = `CONTEXT_HANDOFF_REQUIRED. Stop current work and write a durable session snapshot before renewal.\n\nWrite the snapshot to BOTH of these exact paths:\n${localSnapshot}\n${hp}\n\nUse this template (fill it in, do not just copy):\n# Session snapshot — ${workerId} — <missionId>\n\nGenerated: <ISO timestamp>\n\n## Current state\n## Objective\n## Completed\n## In progress\n## Files touched\n## Commands run\n## Blockers\n## Next exact action\n## Resume prompt\nWhen this worker restarts, load this snapshot and continue from "Next exact action".\n\nThen reply in the required checkpoint format:\nSTATE: HANDOFF\nFILES_CHANGED: exact files or none\nCOMMANDS_RUN: exact commands or none\nRESULT: concise current state and what landed\nBLOCKER: blocker or none\nNEXT_ACTION: exact next action after /new or restart\n\nDo not continue implementation until renewed.`
   const sent = await sendToWorker(workerId, prompt)
   const ctx = readRuntimeMissionContext(workerId)
   try {
@@ -351,7 +351,7 @@ export async function requestWorkerHandoff(workerId: string): Promise<{ ok: bool
       assignmentId: ctx.assignmentId,
       type: 'handoff-requested',
       summary: 'Lifecycle requested durable handoff before compaction',
-      event: { sharedHandoffPath: hp, localHandoffPath: localHandoff, ok: sent.ok },
+      event: { sharedHandoffPath: hp, localSnapshotPath: localSnapshot, ok: sent.ok },
     })
   } catch { /* memory write best-effort */ }
   return { ...sent, handoffPath: hp }
@@ -411,7 +411,7 @@ export async function renewWorker(workerId: string): Promise<{ ok: boolean; rest
   if (!started.ok) return { ok: false, restarted: false, resumeSent: false, error: started.error, handoffPath: hp }
   // Wait for shell prompt to appear before sending the resume message.
   await new Promise((resolve) => setTimeout(resolve, 1500))
-  const resumePrompt = `RESUME_AFTER_HANDOFF. Read your latest handoff at ${hp} and the local copy under ~/.hermes/profiles/${workerId}/memory/handoffs/, plus your runtime.json, then continue from "Next exact action". Reply with a fresh checkpoint when you have re-grounded.`
+  const resumePrompt = `RESUME_AFTER_HANDOFF. Read your latest shared handoff at ${hp} and the local session snapshot under ~/.hermes/profiles/${workerId}/memory/session-snapshots/, plus your runtime.json, then continue from "Next exact action". Reply with a fresh checkpoint when you have re-grounded.`
   const sent = await sendToWorker(workerId, resumePrompt)
   const ctx = readRuntimeMissionContext(workerId)
   try {

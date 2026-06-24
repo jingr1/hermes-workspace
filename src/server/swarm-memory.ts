@@ -76,8 +76,29 @@ export function swarmWorkerEpisodesRoot(workerId: string): string {
   return join(swarmWorkerMemoryRoot(workerId), 'episodes')
 }
 
+export const SESSION_SNAPSHOTS_DIR = 'session-snapshots'
+const LEGACY_HANDOFFS_DIR = 'handoffs'
+
+export function swarmWorkerSessionSnapshotsRoot(workerId: string): string {
+  return join(swarmWorkerMemoryRoot(workerId), SESSION_SNAPSHOTS_DIR)
+}
+
+/** @deprecated Legacy profile path; read fallback only. */
+export function swarmWorkerLegacyHandoffsRoot(workerId: string): string {
+  return join(swarmWorkerMemoryRoot(workerId), LEGACY_HANDOFFS_DIR)
+}
+
+/** @deprecated Use swarmWorkerSessionSnapshotsRoot */
 export function swarmWorkerHandoffsRoot(workerId: string): string {
-  return join(swarmWorkerMemoryRoot(workerId), 'handoffs')
+  return swarmWorkerSessionSnapshotsRoot(workerId)
+}
+
+export function resolveSessionSnapshotPath(workerId: string, fileName: string): string {
+  const preferred = join(swarmWorkerSessionSnapshotsRoot(workerId), fileName)
+  if (existsSync(preferred)) return preferred
+  const legacy = join(swarmWorkerLegacyHandoffsRoot(workerId), fileName)
+  if (existsSync(legacy)) return legacy
+  return preferred
 }
 
 export function validateSwarmId(value: string): boolean {
@@ -144,7 +165,7 @@ export function ensureWorkerMemoryScaffold(input: {
   ensureDir(root)
   ensureDir(join(root, 'missions'))
   ensureDir(join(root, 'episodes'))
-  ensureDir(join(root, 'handoffs'))
+  ensureDir(join(root, SESSION_SNAPSHOTS_DIR))
 
   // The PROFILE-ROOT MEMORY.md / SOUL.md / USER.md are cloned from the main
   // user profile and contain durable project + persona + user context. We do
@@ -164,7 +185,7 @@ export function ensureWorkerMemoryScaffold(input: {
       '- IDENTITY.md — worker role/specialty\n',
       '- missions/<missionId>/SUMMARY.md + events.jsonl — per-mission memory\n',
       '- episodes/YYYY-MM-DD.md — daily episodic log\n',
-      '- handoffs/<missionId>.md or latest.md — compaction/restart handoffs\n',
+      '- session-snapshots/<missionId>.md or latest.md — session compaction/restart snapshots\n',
     ].join(''))
   }
 
@@ -308,7 +329,7 @@ export function writeSwarmHandoff(input: {
 }): { localPath: string; sharedPath?: string } {
   if (!validateSwarmId(input.workerId)) throw new Error(`Invalid workerId: ${input.workerId}`)
   if (!validateMissionId(input.missionId)) throw new Error(`Invalid missionId: ${input.missionId}`)
-  const localPath = join(swarmWorkerHandoffsRoot(input.workerId), `${input.missionId}.md`)
+  const localPath = join(swarmWorkerSessionSnapshotsRoot(input.workerId), `${input.missionId}.md`)
   atomicWrite(localPath, input.content.endsWith('\n') ? input.content : `${input.content}\n`)
   let sharedPath: string | undefined
   if (input.mirrorShared ?? true) {
@@ -329,7 +350,7 @@ function memoryRootFor(input: { workerId?: string | null; kind: SwarmMemoryKind;
     return swarmWorkerMissionMemoryRoot(workerId, missionId)
   }
   if (input.kind === 'episodic') return swarmWorkerEpisodesRoot(workerId)
-  return swarmWorkerHandoffsRoot(workerId)
+  return swarmWorkerSessionSnapshotsRoot(workerId)
 }
 
 function listFiles(root: string, maxDepth = 2): Array<string> {
@@ -520,7 +541,7 @@ export function buildSwarmStartupSnapshot(input: SwarmStartupSnapshotInput): Swa
   if (existsSync(sharedHandoffPath)) {
     latestHandoff = { path: sharedHandoffPath, content: readTextIfExists(sharedHandoffPath) }
   } else if (activeMissionId) {
-    const localHandoff = join(swarmWorkerHandoffsRoot(workerId), `${activeMissionId}.md`)
+    const localHandoff = resolveSessionSnapshotPath(workerId, `${activeMissionId}.md`)
     if (existsSync(localHandoff)) {
       latestHandoff = { path: localHandoff, content: readTextIfExists(localHandoff) }
     }
@@ -574,7 +595,7 @@ export function buildSwarmStartupSnapshot(input: SwarmStartupSnapshotInput): Swa
   renderedSections.push(
     [
       `Profile root: ~/.hermes/profiles/${workerId}/  (SOUL.md plus optional MEMORY.md / USER.md when cloned from main)`,
-      `Swarm memory: ~/.hermes/profiles/${workerId}/memory/  (IDENTITY.md, missions/, episodes/, handoffs/)`,
+      `Swarm memory: ~/.hermes/profiles/${workerId}/memory/  (IDENTITY.md, missions/, episodes/, session-snapshots/)`,
       `Shared handoff: ${sharedHandoffPath}`,
       `Shared swarm memory: ${SWARM_SHARED_MEMORY_ROOT}`,
       `Project context: ${SWARM_PROJECT_CONTEXT_PATH}`,
