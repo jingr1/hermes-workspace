@@ -157,14 +157,27 @@ def build_resume_command(
                 "target_worker_id": target_worker_id or "",
             }
 
-        return Command(
-            update={
-                "langgraph_assignments": pending,
-                "pending_human_assignments": [],
-                "human_resume_action": "approved",
-                "human_resume_payload": payload,
-            }
-        )
+        update: dict[str, Any] = {
+            "langgraph_assignments": pending,
+            "pending_human_assignments": [],
+            "human_resume_action": "approved",
+            "human_resume_payload": payload,
+            "langgraph_needs_human": False,
+        }
+        analysis = ""
+        decision = state.get("langgraph_decision")
+        if isinstance(decision, dict):
+            analysis = str(decision.get("analysis") or "")
+        elif decision is not None and hasattr(decision, "analysis"):
+            analysis = str(getattr(decision, "analysis", "") or "")
+        if "review loop limit" in analysis and "architect" in analysis and "researcher" in analysis:
+            counts = dict(state.get("transition_counts") or {})
+            for key in list(counts.keys()):
+                if "architect" in key and "researcher" in key:
+                    counts[key] = 0
+            update["transition_counts"] = counts
+
+        return Command(update=update)
     if action == "abort":
         return Command(
             update={

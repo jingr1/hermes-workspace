@@ -9,6 +9,8 @@ export type LanggraphAutopilotStatus = {
   orchestratorState?: {
     mission_id?: string
     mission_goal?: string
+    workflow_path?: string | null
+    workflow_spec?: { name?: string } | null
     iteration?: number
     max_iterations?: number
     langgraph_needs_human?: boolean

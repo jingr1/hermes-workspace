@@ -1,7 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
+import { join } from 'node:path'
 import { isAuthenticated } from '../../../server/auth-middleware'
 import { spawnLanggraphDetached } from '../../../server/langgraph-orchestrator'
+
+function resolveWorkflowArg(workflowId: string): string {
+  if (workflowId.startsWith('/')) return workflowId
+  return join(process.cwd(), workflowId)
+}
 
 type RunBody = {
   missionGoal?: unknown
@@ -52,7 +58,7 @@ export const Route = createFileRoute('/api/swarm-langgraph/run')({
           String(maxIterations),
         ]
         if (workflowId) {
-          args.push('--workflow', workflowId)
+          args.push('--workflow', resolveWorkflowArg(workflowId))
         }
 
         const { pid } = spawnLanggraphDetached(args)
@@ -63,6 +69,7 @@ export const Route = createFileRoute('/api/swarm-langgraph/run')({
           threadId: missionId,
           pid,
           mock: useMock,
+          workflowId: workflowId ?? null,
         })
       },
     },

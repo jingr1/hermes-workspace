@@ -30,6 +30,44 @@ python3 -m venv .venv
 > 如果系统已安装全部依赖，也可以直接用 `python3 -m hermes_langgraph_orchestrator ...`。
 > 但 Phase 2 的 SQLite checkpointer 需要 `langgraph-checkpoint-sqlite`，建议用上面的 venv。
 
+### 从任意目录启动
+
+`python -m` **只能跟模块名**，不能写路径（`-m ../hermes-workspace/...` 会报 `Relative module names not supported`）。
+且 orchestrator 包默认**未装进 venv**，在非 workspace 目录下 `-m hermes_langgraph_orchestrator` 会报 `No module named ...`。
+
+推荐三种方式（任选其一）：
+
+**1. 包装脚本（推荐）**
+
+```bash
+# 可加 PATH，或直接用绝对路径
+~/hermes-workspace/hermes_langgraph_orchestrator/bin/hermes-langgraph \
+  --execute \
+  --mission-id "research-vmc-$(date +%s)" \
+  --goal "调研世界模型在VMC控制中的应用现状和发展趋势" \
+  --workflow research_only
+```
+
+`--workflow` 支持短名（`research_only`）、相对 workspace 路径、或绝对路径。
+
+**2. 直接运行 `__main__.py`**
+
+```bash
+~/hermes-workspace/hermes_langgraph_orchestrator/.venv/bin/python \
+  ~/hermes-workspace/hermes_langgraph_orchestrator/__main__.py \
+  --execute --mission-id test-001 --goal "..." --workflow research_only
+```
+
+**3. 设置 `PYTHONPATH` 后用 `-m`**
+
+```bash
+PYTHONPATH=~/hermes-workspace \
+  ~/hermes-workspace/hermes_langgraph_orchestrator/.venv/bin/python \
+  -m hermes_langgraph_orchestrator --execute ...
+```
+
+可选：在 venv 里 `pip install -e hermes_langgraph_orchestrator` 后，任意目录 `-m` 也能工作，并会安装 `hermes-langgraph` 命令。
+
 ---
 
 ## 重启 Workspace
@@ -114,7 +152,7 @@ swarm.yaml          workflow.yaml              LangGraph 图
 | 文件 | 入口 | 路径 | 适用场景 |
 |---|---|---|---|
 | `cdc.yaml` | `researcher` | 调研 → 设计 → 实现 → 审查 | CDC / 空簧等全流程（**默认**） |
-| `research_only.yaml` | `researcher` | 调研 → learning 写报告 | 纯调研、文献综述、选项备忘录 |
+| `research_only.yaml` | `researcher` | 调研 → architect 对抗审查（3 轮未达成一致 → Human Gate） | 纯调研、文献综述、选项备忘录 |
 | `design_implement.yaml` | `architect` | 设计 → 实现 → 审查（跳过调研） | 需求已明确、直接设计与开发 |
 
 ### 第一步：编写 workflow YAML
@@ -185,14 +223,14 @@ hermes_langgraph_orchestrator/.venv/bin/python -m pytest \
 
 ### 第三步：启动 mission（非 CDC）
 
-**纯调研任务**（`research_only.yaml`）：
+**纯调研任务**（`research_only.yaml`）：researcher 完成调研后由 architect 做对抗审查；双方通过 `REVIEW_OUTCOME: approved|changes_requested` 协商。`architect→researcher` 修订环最多 3 次，仍不一致则 Human Gate 梳理分歧点由人工裁决。
 
 ```bash
-hermes_langgraph_orchestrator/.venv/bin/python -m hermes_langgraph_orchestrator \
+hermes-langgraph \
   --execute \
   --mission-id research-memo-001 \
   --goal "调研 CDC 空簧建模的业界方案与 JAX 生态" \
-  --workflow hermes_langgraph_orchestrator/workflows/research_only.yaml
+  --workflow research_only
 ```
 
 **跳过调研，直接设计+实现**（`design_implement.yaml`）：
@@ -214,7 +252,7 @@ curl -s -X POST http://127.0.0.1:3000/api/swarm-langgraph/run \
     "missionGoal": "调研 JAX 在车辆悬架建模中的实践",
     "missionId": "research-memo-002",
     "workflowId": "hermes_langgraph_orchestrator/workflows/research_only.yaml",
-    "maxIterations": 3
+    "maxIterations": 8
   }' | python3 -m json.tool
 ```
 

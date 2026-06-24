@@ -97,6 +97,11 @@ export function LanggraphAutopilotPanel({ open, onOpenChange }: LanggraphAutopil
                 <div className="mt-2 text-[var(--theme-muted)]">加载状态…</div>
               ) : (
                 <div className="mt-2 space-y-1 text-[var(--theme-muted-2)]">
+                  <div>
+                    Workflow:{' '}
+                    {orchestrator?.workflow_spec?.name
+                      ?? (orchestrator?.workflow_path ? orchestrator.workflow_path : 'cdc (default)')}
+                  </div>
                   <div>迭代: {orchestrator?.iteration ?? 0} / {orchestrator?.max_iterations ?? 5}</div>
                   <div>Human gate: {orchestrator?.langgraph_needs_human ? '等待审批' : '无'}</div>
                   <div>完成: {orchestrator?.all_done ? '是' : '否'}</div>

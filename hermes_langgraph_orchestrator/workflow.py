@@ -135,6 +135,32 @@ def default_workflow_path() -> Path:
     return pkg / "workflows" / "cdc.yaml"
 
 
+def resolve_workflow_path(path: str | os.PathLike[str]) -> Path:
+    """Resolve a workflow path relative to the Hermes workspace root when needed."""
+    raw = Path(path).expanduser()
+    if raw.is_file():
+        return raw.resolve()
+
+    pkg_dir = Path(__file__).parent
+    workspace_root = pkg_dir.parent
+
+    # Short id: research_only -> workflows/research_only.yaml
+    workflow_name = raw.name if raw.suffix else f"{raw.name}.yaml"
+    if not raw.suffix or raw.suffix == ".yaml":
+        for base in (pkg_dir / "workflows", workspace_root / "hermes_langgraph_orchestrator" / "workflows"):
+            candidate = (base / workflow_name).resolve()
+            if candidate.is_file():
+                return candidate
+
+    candidate = (workspace_root / raw).resolve()
+    if candidate.is_file():
+        return candidate
+    pkg_candidate = (pkg_dir / raw).resolve()
+    if pkg_candidate.is_file():
+        return pkg_candidate
+    return raw
+
+
 def load_default_workflow() -> WorkflowSpec:
     return load_workflow(default_workflow_path())
 

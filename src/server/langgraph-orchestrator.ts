@@ -1,10 +1,22 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { join } from 'node:path'
 
+export function resolveLanggraphWorkspaceRoot(): string {
+  const override = process.env.HERMES_WORKSPACE_ROOT
+  if (override) return override
+  return process.cwd()
+}
+
 export function resolveLanggraphPythonBin(): string {
   const override = process.env.HERMES_LANGGRAPH_PYTHON
   if (override) return override
-  return join(process.cwd(), 'hermes_langgraph_orchestrator', '.venv', 'bin', 'python')
+  return join(resolveLanggraphWorkspaceRoot(), 'hermes_langgraph_orchestrator', '.venv', 'bin', 'python')
+}
+
+function langgraphSpawnEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const workspaceRoot = resolveLanggraphWorkspaceRoot()
+  const pythonPath = [workspaceRoot, env.PYTHONPATH].filter(Boolean).join(':')
+  return { ...env, PYTHONPATH: pythonPath }
 }
 
 export function parseJsonFromStdout(stdout: string): unknown {
@@ -25,7 +37,7 @@ export function spawnLanggraphDetached(
   const child = spawn(python, ['-m', 'hermes_langgraph_orchestrator', ...args], {
     detached: true,
     stdio: 'ignore',
-    env,
+    env: langgraphSpawnEnv(env),
   })
   child.unref()
   return { pid: child.pid ?? null }
@@ -45,7 +57,7 @@ export function runLanggraphSync(
   const result = spawnSync(python, ['-m', 'hermes_langgraph_orchestrator', ...args], {
     encoding: 'utf8',
     maxBuffer: 10 * 1024 * 1024,
-    env,
+    env: langgraphSpawnEnv(env),
   })
   if (result.error) {
     return {

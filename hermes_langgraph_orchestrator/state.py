@@ -61,6 +61,7 @@ class OrchestratorState(TypedDict, total=False):
 
     # --- roster / workflow ---
     roster_snapshot: list[str]
+    workflow_path: str | None
     workflow_spec: Any  # WorkflowSpec loaded from YAML
     terminal_docs_enabled: bool
 

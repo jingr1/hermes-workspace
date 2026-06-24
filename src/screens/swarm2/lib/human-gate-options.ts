@@ -19,6 +19,32 @@ export type HumanGateOptions = {
 export function deriveHumanGateOptions(gate: HumanGate): HumanGateOptions {
   const workerId = gate.workerId
   const verdict = gate.verdict
+  const analysis = gate.analysis
+
+  const isResearchReviewLoop =
+    analysis.includes('review loop limit') &&
+    analysis.includes('architect') &&
+    analysis.includes('researcher')
+
+  if (isResearchReviewLoop) {
+    return {
+      primary: {
+        id: 'primary',
+        label: '按 architect 意见修订调研',
+        description:
+          'researcher 根据 architect 对抗审查意见修订调研结论，修订后再次提交审查。',
+        targetWorkerId: 'researcher',
+      },
+      secondary: {
+        id: 'secondary',
+        label: '按 researcher 结论定稿',
+        description:
+          'architect 接受 researcher 调研结论并输出 REVIEW_OUTCOME: approved，结束任务。',
+        targetWorkerId: 'architect',
+      },
+      customPlaceholder: '梳理双方分歧点，说明采纳哪方意见及后续要求…',
+    }
+  }
 
   if (verdict === 'NEEDS_INPUT' && workerId === 'architect') {
     return {

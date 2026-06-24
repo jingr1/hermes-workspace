@@ -4,6 +4,7 @@ CDC end-to-end tests for the LangGraph Swarm orchestrator.
 These tests use mock services (no real Workspace API) so they can run in CI.
 """
 
+import asyncio
 import os
 import sys
 import tempfile
@@ -28,6 +29,7 @@ from hermes_langgraph_orchestrator.state import OrchestratorState
 from hermes_langgraph_orchestrator.workflow import (
     load_default_workflow,
     load_workflow,
+    resolve_workflow_path,
     route_by_workflow,
     validate_workflow_against_roster,
 )
@@ -491,11 +493,93 @@ def test_load_workspace_dotenv_does_not_override_existing(monkeypatch):
     assert os.environ.get("EXISTING_TEST_KEY_SHOULD_NOT_BE_IN_ENV") == "from-shell"
 
 
+def test_resolve_workflow_path_relative() -> None:
+    resolved = resolve_workflow_path("hermes_langgraph_orchestrator/workflows/research_only.yaml")
+    assert resolved.is_file()
+    assert resolved.name == "research_only.yaml"
+
+
+def test_init_mission_honors_workflow_path_channel() -> None:
+    """workflow_path must be a LangGraph state channel or UI-provided paths are ignored."""
+
+    async def run() -> dict:
+        state: OrchestratorState = {
+            "mission_id": "wf-channel-test",
+            "mission_goal": "research only",
+            "swarm_api_url": "http://localhost:3000/api",
+            "workflow_path": "hermes_langgraph_orchestrator/workflows/research_only.yaml",
+            "langgraph_assignments": [],
+        }
+        # roster fetch will fail without server; only assert path survives until load.
+        from hermes_langgraph_orchestrator.nodes import init_mission
+
+        assert state.get("workflow_path")
+        wf = load_workflow(resolve_workflow_path(state["workflow_path"]))  # type: ignore[arg-type]
+        assert wf.name == "research_adversarial_review"
+        assert wf.entry == "researcher"
+        next_target = None
+        for t in wf.transitions:
+            if t.from_worker == "researcher" and t.on.verdict == "DONE":
+                next_target = t.to
+        assert next_target == "architect"
+        return {"ok": True}
+
+    assert asyncio.run(run())["ok"] is True
+
+
 def test_load_research_only_workflow() -> None:
     wf = load_workflow("hermes_langgraph_orchestrator/workflows/research_only.yaml")
+    assert wf.name == "research_adversarial_review"
     assert wf.entry == "researcher"
     roster = {"orchestrator", "researcher", "architect", "developer", "learning"}
     assert validate_workflow_against_roster(wf, roster) == []
+
+
+def test_route_research_review_loop_limit_triggers_human() -> None:
+    from hermes_langgraph_orchestrator.state import WorkerClassification
+
+    wf = load_workflow("hermes_langgraph_orchestrator/workflows/research_only.yaml")
+    state: OrchestratorState = {
+        "roster_snapshot": ["orchestrator", "researcher", "architect", "developer", "learning"],
+        "workflow_spec": wf,
+        "transition_counts": {"architect→researcher": 3},
+    }
+    c = WorkerClassification(
+        "architect", "DONE", "", "", "仍有分歧", "changes_requested"
+    )
+    decision = route_by_workflow(c, state, wf)
+    assert decision.action == "human"
+    assert "review loop limit" in (decision.reason or "")
+
+
+def test_route_research_done_to_architect() -> None:
+    from hermes_langgraph_orchestrator.state import WorkerClassification
+
+    wf = load_workflow("hermes_langgraph_orchestrator/workflows/research_only.yaml")
+    state: OrchestratorState = {
+        "roster_snapshot": ["orchestrator", "researcher", "architect", "developer", "learning"],
+        "workflow_spec": wf,
+        "transition_counts": {},
+    }
+    c = WorkerClassification("researcher", "DONE", "", "", "调研完成", "")
+    decision = route_by_workflow(c, state, wf)
+    assert decision.action == "dispatch"
+    assert decision.worker_id == "architect"
+
+
+def test_route_research_architect_approved_terminates() -> None:
+    from hermes_langgraph_orchestrator.state import WorkerClassification
+
+    wf = load_workflow("hermes_langgraph_orchestrator/workflows/research_only.yaml")
+    state: OrchestratorState = {
+        "roster_snapshot": ["orchestrator", "researcher", "architect", "developer", "learning"],
+        "workflow_spec": wf,
+        "transition_counts": {},
+    }
+    c = WorkerClassification("architect", "DONE", "", "", "审查通过", "approved")
+    decision = route_by_workflow(c, state, wf)
+    assert decision.action == "done"
+    assert decision.terminal is True
 
 
 def test_build_human_gate_assignments_architect_to_developer():

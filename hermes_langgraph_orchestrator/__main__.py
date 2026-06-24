@@ -448,6 +448,8 @@ async def main():
                             "all_done": False,
                             "human_resume_action": None,
                             "langgraph_needs_human": False,
+                            "workflow_path": args.workflow or None,
+                            "workflow_spec": None,
                             "checkpoints": [],
                             "terminal_checkpoints": [],
                             "classifications": [],
@@ -517,5 +519,10 @@ async def main():
                 print(f"\n✅ 执行完成。详细: logs/execute_*.json")
 
 
-if __name__ == "__main__":
+def cli() -> None:
+    """Console entry point (hermes-langgraph)."""
     asyncio.run(main())
+
+
+if __name__ == "__main__":
+    cli()

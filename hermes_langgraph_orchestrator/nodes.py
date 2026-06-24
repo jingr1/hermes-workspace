@@ -33,6 +33,7 @@ from .workflow import (
     WorkflowSpec,
     load_default_workflow,
     load_workflow,
+    resolve_workflow_path,
     route_by_workflow,
     validate_workflow_against_roster,
 )
@@ -362,11 +363,23 @@ def _read_handoff(source_id: str) -> str:
     return ""
 
 
+RESEARCH_ADVERSARIAL_WORKFLOWS = frozenset({"research_adversarial_review"})
+
+
+def _is_research_adversarial_workflow(state: OrchestratorState | None) -> bool:
+    if not state:
+        return False
+    spec = state.get("workflow_spec")
+    name = getattr(spec, "name", "") if spec else ""
+    return name in RESEARCH_ADVERSARIAL_WORKFLOWS
+
+
 def _transition_instructions(
     source_id: str,
     target_id: str,
     classification: WorkerClassification,
     decision: Any,
+    state: OrchestratorState | None = None,
 ) -> str:
     """Return role-specific, actionable instructions for a workflow transition.
 
@@ -401,12 +414,33 @@ def _transition_instructions(
         )
 
     if target_id == "architect" and source_id == "researcher":
+        if _is_research_adversarial_workflow(state):
+            return (
+                "Perform adversarial review of the researcher's findings (not architecture design). "
+                "Challenge assumptions, missing evidence, weak citations, and overstated claims. "
+                "The researcher's structured handoff is included below. "
+                "You MUST end your checkpoint with a line exactly like:\n"
+                "REVIEW_OUTCOME: approved\n"
+                "or\n"
+                "REVIEW_OUTCOME: changes_requested\n"
+                "Use approved only when the research conclusions are well-supported and complete; "
+                "otherwise use changes_requested and list concrete disputes in RESULT."
+            )
         return (
             "Create the architecture/design specification based on the research findings. "
             "The researcher's structured handoff is included below for context. "
             "Define interfaces, data models, module boundaries, and validation criteria. "
             "Return the required checkpoint format."
         )
+
+    if target_id == "researcher" and source_id == "architect":
+        if _is_research_adversarial_workflow(state):
+            return (
+                "Revise your research deliverable based on architect's adversarial review. "
+                "Address each disputed point explicitly; note where you accept criticism or rebut with evidence. "
+                "Stay within research scope — do not produce architecture/design specs. "
+                "Return the required checkpoint format."
+            )
 
     if target_id == "learning":
         return (
@@ -419,16 +453,17 @@ def _transition_instructions(
 
 
 def _infer_architect_review_outcome(
-    classification: WorkerClassification, checkpoints: list[WorkerCheckpoint]
+    classification: WorkerClassification,
+    checkpoints: list[WorkerCheckpoint],
+    state: OrchestratorState | None = None,
 ) -> WorkerClassification:
     """Backfill architect review_outcome when the LLM forgets to set it.
 
-    The developer->architect review gate is the only place review_outcome is
-    meaningful. If the architect returned DONE without an explicit outcome, we
-    inspect the checkpoint raw text. Approval signals default to approved;
-    anything that looks like a request for fixes defaults to changes_requested.
-    If the context does not look like a review at all (e.g. initial design),
-    leave review_outcome empty so the workflow can continue to developer.
+    Used for developer→architect code review and researcher→architect adversarial
+    research review. If the architect returned DONE without an explicit outcome,
+    inspect checkpoint text. Approval signals default to approved; change signals
+    to changes_requested. For initial CDC design (non-review), leave empty so the
+    workflow can route to developer.
     """
     if classification.worker_id != "architect":
         return classification
@@ -444,15 +479,20 @@ def _infer_architect_review_outcome(
             break
     raw_lower = raw.lower()
 
-    review_context = any(
+    review_context = _is_research_adversarial_workflow(state) or any(
         kw in raw_lower
         for kw in [
             "review",
             "developer",
+            "researcher",
+            "research",
             "implementation",
             "code review",
+            "adversarial",
             "审查",
             "实现",
+            "调研",
+            "对抗",
         ]
     )
     if not review_context:
@@ -534,7 +574,7 @@ def _build_task_for_transition(
             f"Blocker: {classification.blocker_summary or 'unknown'}\n"
             f"Blocker type: {classification.blocker_type or 'unknown'}\n\n"
             f"## Your task\n"
-            f"{_transition_instructions(source_id, target_id, classification, decision)}"
+            f"{_transition_instructions(source_id, target_id, classification, decision, state)}"
         )
 
     handoff = _read_handoff(source_id)
@@ -568,7 +608,7 @@ def _build_task_for_transition(
         [
             f"## Your task",
             f"{reason}.",
-            f"As {target_id}, {_transition_instructions(source_id, target_id, classification, decision)}",
+            f"As {target_id}, {_transition_instructions(source_id, target_id, classification, decision, state)}",
             "Return the required checkpoint format (STATE, FILES_CHANGED, COMMANDS_RUN, RESULT, BLOCKER, NEXT_ACTION).",
         ]
     )
@@ -587,7 +627,9 @@ async def init_mission(state: OrchestratorState) -> dict:
     workflow_path = state.get("workflow_path")
     if workflow_path:
         try:
-            workflow_spec = load_workflow(str(workflow_path))
+            resolved = resolve_workflow_path(str(workflow_path))
+            workflow_spec = load_workflow(resolved)
+            workflow_path = str(resolved)
         except Exception as e:
             return {
                 "collection_error": f"Failed to load workflow {workflow_path}: {e}",
@@ -595,6 +637,7 @@ async def init_mission(state: OrchestratorState) -> dict:
             }
     else:
         workflow_spec = state.get("workflow_spec") or load_default_workflow()
+        workflow_path = None
 
     # Fetch roster from Workspace API.
     roster_ids, roster_error = await _fetch_roster_ids(swarm_url)
@@ -636,6 +679,7 @@ async def init_mission(state: OrchestratorState) -> dict:
     )
     return {
         "roster_snapshot": sorted(roster_ids),
+        "workflow_path": workflow_path,
         "workflow_spec": workflow_spec,
         "terminal_docs_enabled": workflow_spec.settings.terminal_docs,
         "langgraph_assignments": assignments,
@@ -664,11 +708,11 @@ CLASSIFY_PROMPT = """分析每个 Worker 的 checkpoint，输出结构化分类�
   ]
 }
 
-review_outcome 判断规则（仅 architect 审查 developer 时有效）:
+review_outcome 判断规则（architect 审查 developer 实现，或 architect 对抗审查 researcher 调研时有效）:
 - 如果 checkpoint 原文中包含 REVIEW_OUTCOME: approved|changes_requested，直接使用该值
-- approved: developer 的实现完全符合设计规格，测试通过，无需修改
-- changes_requested: developer 的实现有问题，需要修改后重新提交
-- 空字符串: 非审查场景
+- approved: 实现/调研结论符合要求，无需修改
+- changes_requested: 存在问题或分歧，需要修改后重新提交
+- 空字符串: 非审查场景（例如 CDC 中 architect 产出初始设计、尚未进入审查）
 
 verdict 判断规则:
 - DONE: 任务完成
@@ -745,7 +789,7 @@ async def classify_workers(state: OrchestratorState) -> dict:
         ruled = _try_rule_classify(cp)
         if ruled:
             rule_classifications.append(
-                _infer_architect_review_outcome(ruled, checkpoints)
+                _infer_architect_review_outcome(ruled, checkpoints, state)
             )
         else:
             ambiguous.append(cp)
@@ -814,6 +858,7 @@ async def classify_workers(state: OrchestratorState) -> dict:
                 review_outcome=c.get("review_outcome", ""),
             ),
             checkpoints,
+            state,
         )
         for c in data.get("classifications", [])
     ]
@@ -877,13 +922,25 @@ async def route_workflow(state: OrchestratorState) -> dict:
 
         if decision.action == "human":
             needs_human = True
+            gate_task = (
+                f"Human gate cleared. Retry previous task. "
+                f"Blocker: {c.blocker_summary or decision.reason}"
+            )
+            if "review loop limit" in (decision.reason or ""):
+                arch_cp = cp_map.get("architect", {})
+                res_cp = cp_map.get("researcher", {})
+                arch_result = (arch_cp.get("result") or "").strip()
+                res_result = (res_cp.get("result") or "").strip()
+                gate_task = (
+                    "3 rounds of adversarial research review completed without agreement.\n"
+                    "Human must adjudicate the disputed points and choose the next step.\n\n"
+                    f"Architect last result:\n{arch_result or '(none)'}\n\n"
+                    f"Researcher last result:\n{res_result or '(none)'}"
+                )
             pending_human.append(
                 {
                     "worker_id": c.worker_id,
-                    "task": (
-                        f"Human gate cleared. Retry previous task. "
-                        f"Blocker: {c.blocker_summary or decision.reason}"
-                    ),
+                    "task": gate_task,
                     "reason": f"human approved retry: {decision.reason}",
                 }
             )
@@ -1337,6 +1394,8 @@ async def log_execution(state: OrchestratorState) -> dict:
         "phase": "phase2_execute",
         "mission_id": mission_id,
         "mission_goal": state.get("mission_goal", ""),
+        "workflow_path": state.get("workflow_path"),
+        "workflow_name": getattr(state.get("workflow_spec"), "name", None),
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "iterations": state.get("iteration", 0),
         "all_done": state.get("all_done", False),
