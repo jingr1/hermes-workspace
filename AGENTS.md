@@ -19,9 +19,9 @@ LangGraph workflows (`cdc.yaml`, `research_only.yaml`, `design_implement.yaml`) 
 | Stage | Worker | Role |
 |---|---|---|
 | Route / greenlight | `orchestrator` | Decompose missions, assign specialists, enforce human approval gates |
-| Research | `researcher` | Wiki-first lookup (`llm-wiki`), external verification, decision-grade synthesis |
-| Design / review | `architect` | Architecture, interface contracts, adversarial design review (`reviewRequired: true`) |
-| Implement | `developer` | Code, tests, evidence-bearing checkpoints (`reviewRequired: true`) |
+| Research | `researcher` | Establish facts (competitive analysis, data validation, source tracing); no strategy or recommendations; respond to architect challenges with evidence |
+| Design / review | `architect` | Technical translation, tech-direction decisions, implementation review; no fact-gathering or coding |
+| Implement | `developer` | Code per spec, tests, build verification; no architecture or design decisions |
 | Retrospective | `learning` | Mission docs, lessons learned, durable knowledge capture |
 
 ## Operating rules
@@ -30,7 +30,7 @@ LangGraph workflows (`cdc.yaml`, `research_only.yaml`, `design_implement.yaml`) 
 - **GBrain ≡ llm-wiki** in this workspace: the `gbrain` skill/MCP is not deployed locally. Brain-first lookup uses the Hermes builtin `llm-wiki` skill against `WIKI_PATH` (default `~/wiki`), plus swarm mission memory under `memory/swarm/`.
 - **Brain-first order** (before web search): ① read `$WIKI_PATH/SCHEMA.md` + `index.md` + recent `log.md`; ② grep `memory/swarm/` and dispatch handoffs; ③ `session_search` for prior sessions; ④ external `web` / `arxiv` only when local context is insufficient.
 - **Knowledge layering:** `~/wiki` holds durable domain knowledge; `memory/swarm/<worker>/` holds mission artifacts; `learning` ingests reusable conclusions into the wiki after missions complete.
-- **Researcher** researches; **Architect** designs and gates; **Developer** implements; **Learning** documents; **Orchestrator** routes and enforces greenlight.
+- **Researcher** establishes facts only (competitive analysis, validation, source trails); no strategy or recommendations. **Architect** may challenge findings; researcher responds with evidence. **Architect** owns technical translation, tech-direction decisions, and implementation review — not primary fact-gathering or code. **Developer** implements and tests per architect specs only — no architecture or design changes, no skipping tests; escalate spec gaps to architect. **Learning** documents; **Orchestrator** routes and enforces greenlight.
 - Do not enable optional Hermes plugins globally unless the task explicitly needs them; record plugin/toolset alignment in `swarm.yaml` first.
 - For local Workspace pairing/debugging, treat **one gateway + one dashboard** as canonical: `hermes gateway run` on `:8642` and `hermes dashboard` on `:9119`. Before starting another gateway, verify `curl http://127.0.0.1:3000/api/sessions` (or the active workspace port) first. If Sessions already returns data, refresh/reprobe the UI instead of spawning a duplicate gateway.
 - If the default model is `gpt-5.4` / `openai-codex`, remember that chat depends on a live local Codex CLI login (`codex login`).

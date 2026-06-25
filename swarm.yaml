@@ -29,7 +29,6 @@ workers:
       - kanban-orchestrator
       - subagent-driven-development
       - writing-plans
-      - requesting-code-review
       - workspace-dispatch
     plugins: []
     pluginToolsets: []
@@ -58,12 +57,15 @@ workers:
     reviewRequired: false
   - id: researcher
     name: Researcher
-    role: Brain-first Research / Bounded Autoresearch
-    specialty: wiki-first lookup (llm-wiki), external research, synthesis, source
-      trails, bounded research loops
+    role: Fact-Finding Research / Bounded Autoresearch
+    specialty: establish facts — competitive analysis, data validation, source
+      tracing; wiki-first lookup (llm-wiki)
     model: nioint/DeepSeek-V4-Pro-Seed
-    mission: Produce decision-grade research with brain-first context, external
-      verification, and explicit uncertainty.
+    mission: Produce evidence-backed factual research with brain-first context,
+      external verification, explicit uncertainty, and full source trails. Do not
+      make strategy judgments, recommendations, or direction choices — those belong
+      to architect and orchestrator. When architect challenges findings, respond
+      with evidence, citations, and corrections only.
     profile: researcher
     modes:
       - quick
@@ -94,16 +96,17 @@ workers:
     wrapper: researcher:quick
     capabilities:
       - research
-      - synthesis
+      - fact-establishment
       - source-verification
+      - source-tracing
       - wiki-query
       - autoresearch
     preferredTaskTypes:
       - research
-      - analysis
-      - options
+      - competitive-analysis
+      - data-validation
       - source-review
-      - market-map
+      - source-tracing
     greenlightRequiredFor:
       - publish
       - external-send
@@ -113,11 +116,17 @@ workers:
     reviewRequired: false
   - id: architect
     name: Architect
-    role: System Design / Review
-    specialty: architecture design, interface contracts, design review
+    role: System Architecture & Technical Specification Agent
+    specialty: technical translation (architecture, data models, interfaces, tech
+      selection); direction decisions (hypothesis stack, kill criteria, milestones);
+      implementation review against design intent
     model: nioint/DeepSeek-V4-Flash-Seed
-    mission: Produce decision-grade designs with explicit interfaces, review
-      developer implementations, and return structured checkpoints.
+    mission: Translate upstream strategy into decision-grade technical designs with
+      explicit interfaces, data models, and tech choices. Own technical direction —
+      hypothesis stack, kill criteria, and milestones. Review developer work for
+      design-intent fidelity and challenge researcher findings when evidence is
+      weak. Do not collect primary facts (researcher), write implementation code
+      (developer), or make business strategy beyond the technical scope.
     profile: architect
     modes:
       - design
@@ -129,23 +138,33 @@ workers:
       - skills
       - todo
     skills:
+      - architect-core
       - gstack-for-hermes
       - llm-wiki
       - writing-plans
       - requesting-code-review
       - codebase-inspection
+      - architecture-diagram
+      - writing-plans
+      - brainstorming
     plugins: []
     pluginToolsets: []
     mcpServers: []
     wrapper: architect:design
     capabilities:
       - architecture
+      - technical-specification
+      - technical-direction
       - design-review
+      - implementation-review
       - interface-contracts
     preferredTaskTypes:
       - design
       - architecture
-      - review
+      - technical-specification
+      - tech-direction
+      - implementation-review
+      - research-challenge
     greenlightRequiredFor:
       - publish
       - destructive
@@ -154,11 +173,14 @@ workers:
     reviewRequired: true
   - id: developer
     name: Developer
-    role: Implementation / Builder
-    specialty: full-stack implementation, tests, CDC and modeling code
+    role: Implementation & Testing Agent
+    specialty: implement from approved design specs — feature code, tests, build
+      verification
     model: nioint/Kimi-K2.7-Code-Tencent
-    mission: Implement approved designs with tests, evidence-bearing checkpoints,
-      and clean handoffs back to architect review.
+    mission: Implement approved technical specifications with tests, evidence-bearing
+      checkpoints, and verified builds. Hand off to architect for design-intent review.
+      Do not change architecture, make design decisions, or skip tests — escalate
+      spec gaps to architect.
     profile: developer
     modes:
       - implement
@@ -177,6 +199,9 @@ workers:
       - systematic-debugging
       - codebase-inspection
       - github-pr-workflow
+      - requesting-code-review
+      - receiving-code-review
+      - executing-plans
     plugins: []
     pluginToolsets: []
     mcpServers: []
@@ -184,11 +209,13 @@ workers:
     capabilities:
       - implementation
       - testing
+      - build-verification
       - debugging
     preferredTaskTypes:
       - implementation
+      - testing
+      - build-verification
       - bugfix
-      - refactor
     greenlightRequiredFor:
       - merge
       - destructive
