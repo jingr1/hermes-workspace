@@ -8,7 +8,7 @@ Modes: none
 file, session_search, skills, todo, web
 
 ## Skills
-gstack-for-hermes, llm-wiki, obsidian-markdown, writing-plans
+gstack-for-hermes, llm-wiki, obsidian, writing-plans
 
 ## MCP servers
 none (brain-first via `llm-wiki` skill + `WIKI_PATH`)

@@ -1,0 +1,16 @@
+# Pilot contract for researcher:autoresearch demo (mechanical metric)
+goal: Raise routing-hint keyword score without breaking size guard
+scope:
+  - hermes-workspace/autoresearch-demo/routing_hint.md
+mutable_target: hermes-workspace/autoresearch-demo/routing_hint.md
+locked_eval:
+  - hermes-workspace/autoresearch-demo/eval.sh
+  - hermes-workspace/autoresearch-demo/guard.sh
+metric: keyword score (0-4 integer)
+direction: higher
+verify: bash hermes-workspace/autoresearch-demo/eval.sh
+guard: bash hermes-workspace/autoresearch-demo/guard.sh
+iterations: 2
+results_log: hermes-workspace/autoresearch-results/demo-pilot.tsv
+rollback: git checkout -- hermes-workspace/autoresearch-demo/routing_hint.md when metric worsens or guard fails
+greenlight: approved — demo pilot only, no publish/merge/destructive scope

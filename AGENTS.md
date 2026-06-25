@@ -9,10 +9,10 @@ LangGraph workflows (`cdc.yaml`, `research_only.yaml`, `design_implement.yaml`) 
 | Worker | Wrapper | Model | Modes | Tools | Skills | MCP | Plugins |
 |---|---|---|---|---|---|---|---|
 | `orchestrator` | `orchestrator:plan` | `custom:nioint-gateway/DeepSeek-V4-Pro-Seed` | plan | todo, kanban, delegation, terminal, file, session_search, cronjob, skills, clarify, web | orchestrator-core, gstack-for-hermes, llm-wiki, kanban-orchestrator, subagent-driven-development, writing-plans, requesting-code-review, workspace-dispatch | none | none |
-| `researcher` | `researcher:quick` | `custom:nioint-gateway/DeepSeek-V4-Pro-Seed` | quick, autoresearch | web, browser, terminal, file, vision, session_search, skills, todo | researcher-core, llm-wiki, autoresearch, browser-harness-power-use, gstack-for-hermes, researcher-quick, researcher-autoresearch, arxiv, youtube-content, polymarket | none | none |
+| `researcher` | `researcher:quick` | `custom:nioint-gateway/DeepSeek-V4-Pro-Seed` | quick, autoresearch | web, browser, terminal, file, vision, session_search, skills, todo | researcher-core, llm-wiki, autoresearch, browser-harness, gstack-for-hermes, researcher-quick, researcher-autoresearch, arxiv, youtube-content, polymarket | none | none |
 | `architect` | `architect:design` | `nioint/DeepSeek-V4-Flash-Seed` | design | terminal, file, web, session_search, skills, todo | gstack-for-hermes, llm-wiki, writing-plans, requesting-code-review, codebase-inspection | none | none |
 | `developer` | `developer:implement` | `custom:nioint-gateway/DeepSeek-V4-Pro-Seed` | implement | terminal, file, browser, web, session_search, skills, todo | gstack-for-hermes, llm-wiki, test-driven-development, systematic-debugging, codebase-inspection, github-pr-workflow | none | none |
-| `learning` | `learning` | `custom:nioint-gateway/DeepSeek-V4-Pro-Seed` | — | file, session_search, skills, todo, web | gstack-for-hermes, llm-wiki, obsidian-markdown, writing-plans | none | none |
+| `learning` | `learning` | `custom:nioint-gateway/DeepSeek-V4-Pro-Seed` | — | file, session_search, skills, todo, web | gstack-for-hermes, llm-wiki, obsidian, writing-plans | none | none |
 
 ### Default mission pipeline
 

@@ -24,7 +24,7 @@ Architect may challenge findings in review (`research_only.yaml` loop). Research
 web, browser, terminal, file, vision, session_search, skills, todo
 
 ## Skills
-researcher-core, llm-wiki, autoresearch, browser-harness-power-use, gstack-for-hermes, researcher-quick, researcher-autoresearch, arxiv, youtube-content, polymarket
+researcher-core, llm-wiki, autoresearch, browser-harness, gstack-for-hermes, researcher-quick, researcher-autoresearch, arxiv, youtube-content, polymarket
 
 ## MCP servers
 none (brain-first via `llm-wiki` skill + `WIKI_PATH`)

@@ -28,11 +28,15 @@ You are an autonomous mission orchestrator. Decompose work into tasks, spawn one
 
 ## Task Types
 
+Set each task's `type` to match `swarm.yaml` `preferredTaskTypes` when routing to specialists (`researcher`, `architect`, `developer`, `learning`); otherwise use the same labels in generic worker prompts.
+
 | Type | Worker Does | Verify With |
 |------|-----------|-------------|
-| coding | Write code, create files | file exists, tsc passes |
-| research | Search, read, synthesize | output file exists with content |
-| review | Read code, check behavior | reviewer outputs PASS verdict |
+| research | Wiki-first lookup, external sources, cited facts | output file exists; `grep` finds citations |
+| design | Architecture, interfaces, tech choices, specs | spec file exists with interfaces/requirements |
+| implementation | Write code, tests, build verification | files exist; build/`tsc` passes; tests pass |
+| review | Design-intent or implementation review | reviewer outputs PASS verdict |
+| documentation | Retrospective, lessons learned, knowledge capture | doc file exists with substantive content |
 
 ## Dispatch Loop
 

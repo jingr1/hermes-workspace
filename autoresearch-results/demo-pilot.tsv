@@ -1,0 +1,4 @@
+iteration	commit	metric	delta	status	summary	verify	guard
+0	bbae1c70	1	0	baseline	score=1 (wiki only)	1	pass
+1	bbae1c70	4	+3	kept	added citation, uncertainty, no-recommendation keywords (202 bytes)	4	pass
+2	bbae1c70	4	0	kept	tightened prose, kept all 4 keyword groups (152 bytes, -50 from iter1)	4	pass

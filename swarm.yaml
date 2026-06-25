@@ -83,7 +83,7 @@ workers:
       - researcher-core
       - llm-wiki
       - autoresearch
-      - browser-harness-power-use
+      - browser-harness
       - gstack-for-hermes
       - researcher-quick
       - researcher-autoresearch
@@ -145,7 +145,6 @@ workers:
       - requesting-code-review
       - codebase-inspection
       - architecture-diagram
-      - writing-plans
       - brainstorming
     plugins: []
     pluginToolsets: []
@@ -240,7 +239,7 @@ workers:
     skills:
       - gstack-for-hermes
       - llm-wiki
-      - obsidian-markdown
+      - obsidian
       - writing-plans
     plugins: []
     pluginToolsets: []
