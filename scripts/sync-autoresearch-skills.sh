@@ -22,11 +22,11 @@ done
 rm -rf "${SKILLS}/researcher-autoresearch" 2>/dev/null || true
 
 install_wrapper "orchestrator:autoresearch-dispatch" orchestrator \
-  "autoresearch-orchestrate,autoresearch-plan,autoresearch,orchestrator-core,workspace-dispatch"
+  "autoresearch-orchestrate,autoresearch-plan,autoresearch"
 install_wrapper "architect:autoresearch" architect \
-  "autoresearch-execute,autoresearch,architect-core"
+  "autoresearch-execute,autoresearch"
 install_wrapper "developer:autoresearch" developer \
-  "autoresearch-execute,autoresearch,executing-plans"
+  "autoresearch-execute,autoresearch"
 rm -f "${BIN}/researcher:autoresearch"
 
 for profile in orchestrator architect developer researcher; do
