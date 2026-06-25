@@ -1,27 +1,36 @@
 # Hermes Workspace Agent Contract
 
-This workspace uses semantic Hermes swarm workers, not numbered-only lanes. The source of truth for routing is `swarm.yaml`; each worker also has a matching profile under `~/.hermes/profiles/<worker-id>/`, a role skill `<worker-id>-core`, and a wrapper in `~/.local/bin/`.
+This workspace uses semantic Hermes swarm workers, not numbered-only lanes. The source of truth for routing is `swarm.yaml`; each worker also has a matching profile under `~/.hermes/profiles/<worker-id>/`, role skills as listed below, and a wrapper in `~/.local/bin/`.
 
 ## Current semantic roster
 
-| Worker | Wrapper | Tools | Skills | MCP | Plugins |
-|---|---|---|---|---|---|
-| `orchestrator` | `orchestrator:plan` | todo, kanban, delegation, terminal, file, gbrain, session_search, cronjob, skills, clarify, web | orchestrator-core, gstack-for-hermes, gbrain, kanban-orchestrator, subagent-driven-development, writing-plans, requesting-code-review, workspace-dispatch | gbrain | none |
-| `km-agent` | `km:health` | gbrain, file, terminal, session_search, skills, todo, cronjob, web | km-agent-core, gbrain, obsidian-markdown, obsidian-cli, obsidian-bases, json-canvas, gstack-for-hermes | gbrain | none |
-| `builder` | `builder:task` | terminal, file, browser, web, gbrain, session_search, skills, todo | builder-core, gstack-for-hermes, test-driven-development, systematic-debugging, github-pr-workflow, requesting-code-review, codebase-inspection | gbrain | none |
-| `reviewer` | `reviewer:gate` | terminal, file, web, gbrain, session_search, skills | reviewer-core, requesting-code-review, github-code-review, systematic-debugging, gstack-for-hermes, gbrain, codebase-inspection | gbrain | none |
-| `qa` | `qa:smoke` | browser, terminal, file, vision, gbrain, session_search, skills, web | qa-core, browser-harness-power-use, dogfood, gstack-for-hermes | gbrain | none |
-| `researcher` | `researcher:quick` | gbrain, web, browser, terminal, file, vision, session_search, skills, todo | researcher-core, gbrain, autoresearch, browser-harness-power-use, gstack-for-hermes, researcher-quick, researcher-autoresearch, arxiv, youtube-content, polymarket | gbrain | none |
-| `ops-watch` | `ops:health` | terminal, cronjob, file, gbrain, skills, session_search, web | ops-watch-core, gbrain, hermes-agent, systematic-debugging, webhook-subscriptions | gbrain | none |
-| `maintainer` | `maintainer:check` | terminal, file, web, browser, gbrain, session_search, skills | maintainer-core, github-repo-management, github-pr-workflow, github-issues, github-code-review, gbrain, gstack-for-hermes, hermes-agent | gbrain | none |
-| `strategist` | `strategist:review` | gbrain, web, session_search, file, skills, todo, clarify | strategist-core, gstack-for-hermes, gbrain, writing-plans, polymarket | gbrain | none |
-| `inbox-triage` | `inbox:triage` | gbrain, web, file, session_search, todo, skills, terminal | inbox-triage-core, gbrain, obsidian-markdown, gstack-for-hermes, defuddle, youtube-content | gbrain | none |
+LangGraph workflows (`cdc.yaml`, `research_only.yaml`, `design_implement.yaml`) may only reference worker ids defined here.
+
+| Worker | Wrapper | Model | Modes | Tools | Skills | MCP | Plugins |
+|---|---|---|---|---|---|---|---|
+| `orchestrator` | `orchestrator:plan` | `custom:nioint-gateway/DeepSeek-V4-Pro-Seed` | plan | todo, kanban, delegation, terminal, file, session_search, cronjob, skills, clarify, web | orchestrator-core, gstack-for-hermes, llm-wiki, kanban-orchestrator, subagent-driven-development, writing-plans, requesting-code-review, workspace-dispatch | none | none |
+| `researcher` | `researcher:quick` | `custom:nioint-gateway/DeepSeek-V4-Pro-Seed` | quick, autoresearch | web, browser, terminal, file, vision, session_search, skills, todo | researcher-core, llm-wiki, autoresearch, browser-harness-power-use, gstack-for-hermes, researcher-quick, researcher-autoresearch, arxiv, youtube-content, polymarket | none | none |
+| `architect` | `architect:design` | `nioint/DeepSeek-V4-Flash-Seed` | design | terminal, file, web, session_search, skills, todo | gstack-for-hermes, llm-wiki, writing-plans, requesting-code-review, codebase-inspection | none | none |
+| `developer` | `developer:implement` | `custom:nioint-gateway/DeepSeek-V4-Pro-Seed` | implement | terminal, file, browser, web, session_search, skills, todo | gstack-for-hermes, llm-wiki, test-driven-development, systematic-debugging, codebase-inspection, github-pr-workflow | none | none |
+| `learning` | `learning` | `custom:nioint-gateway/DeepSeek-V4-Pro-Seed` | — | file, session_search, skills, todo, web | gstack-for-hermes, llm-wiki, obsidian-markdown, writing-plans | none | none |
+
+### Default mission pipeline
+
+| Stage | Worker | Role |
+|---|---|---|
+| Route / greenlight | `orchestrator` | Decompose missions, assign specialists, enforce human approval gates |
+| Research | `researcher` | Wiki-first lookup (`llm-wiki`), external verification, decision-grade synthesis |
+| Design / review | `architect` | Architecture, interface contracts, adversarial design review (`reviewRequired: true`) |
+| Implement | `developer` | Code, tests, evidence-bearing checkpoints (`reviewRequired: true`) |
+| Retrospective | `learning` | Mission docs, lessons learned, durable knowledge capture |
 
 ## Operating rules
 
-- Keep `swarm.yaml`, profile `config.yaml`, profile core skills, and wrappers aligned when changing a worker.
-- Prefer GBrain-first lookup for context-sensitive RAZSOC/Hermes/workflow decisions.
-- Builder implements; Reviewer gates; QA verifies behavior; Orchestrator routes and enforces greenlight.
+- Keep `swarm.yaml`, profile `config.yaml`, profile skills, and wrappers aligned when changing a worker.
+- **GBrain ≡ llm-wiki** in this workspace: the `gbrain` skill/MCP is not deployed locally. Brain-first lookup uses the Hermes builtin `llm-wiki` skill against `WIKI_PATH` (default `~/wiki`), plus swarm mission memory under `memory/swarm/`.
+- **Brain-first order** (before web search): ① read `$WIKI_PATH/SCHEMA.md` + `index.md` + recent `log.md`; ② grep `memory/swarm/` and dispatch handoffs; ③ `session_search` for prior sessions; ④ external `web` / `arxiv` only when local context is insufficient.
+- **Knowledge layering:** `~/wiki` holds durable domain knowledge; `memory/swarm/<worker>/` holds mission artifacts; `learning` ingests reusable conclusions into the wiki after missions complete.
+- **Researcher** researches; **Architect** designs and gates; **Developer** implements; **Learning** documents; **Orchestrator** routes and enforces greenlight.
 - Do not enable optional Hermes plugins globally unless the task explicitly needs them; record plugin/toolset alignment in `swarm.yaml` first.
 - For local Workspace pairing/debugging, treat **one gateway + one dashboard** as canonical: `hermes gateway run` on `:8642` and `hermes dashboard` on `:9119`. Before starting another gateway, verify `curl http://127.0.0.1:3000/api/sessions` (or the active workspace port) first. If Sessions already returns data, refresh/reprobe the UI instead of spawning a duplicate gateway.
 - If the default model is `gpt-5.4` / `openai-codex`, remember that chat depends on a live local Codex CLI login (`codex login`).

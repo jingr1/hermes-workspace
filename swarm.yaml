@@ -5,7 +5,7 @@ workers:
     role: Swarm Orchestrator / Greenlight Gate
     specialty: mission routing, task decomposition, handoffs, proof contracts, human
       approval gates
-    model: custom:nioint-gateway/DeepSeek-V4-Pro-Seed
+    model: nioint/DeepSeek-V4-Flash-Seed
     mission: Decompose missions into safe, proof-bearing work and route to the right
       specialist while preserving human greenlight control.
     profile: orchestrator
@@ -17,7 +17,6 @@ workers:
       - delegation
       - terminal
       - file
-      - gbrain
       - session_search
       - cronjob
       - skills
@@ -26,7 +25,7 @@ workers:
     skills:
       - orchestrator-core
       - gstack-for-hermes
-      - gbrain
+      - llm-wiki
       - kanban-orchestrator
       - subagent-driven-development
       - writing-plans
@@ -34,8 +33,7 @@ workers:
       - workspace-dispatch
     plugins: []
     pluginToolsets: []
-    mcpServers:
-      - gbrain
+    mcpServers: []
     wrapper: orchestrator:plan
     capabilities:
       - orchestration
@@ -61,9 +59,9 @@ workers:
   - id: researcher
     name: Researcher
     role: Brain-first Research / Bounded Autoresearch
-    specialty: GBrain-first lookup, external research, synthesis, source trails,
-      bounded research loops
-    model: custom:nioint-gateway/DeepSeek-V4-Pro-Seed
+    specialty: wiki-first lookup (llm-wiki), external research, synthesis, source
+      trails, bounded research loops
+    model: nioint/DeepSeek-V4-Pro-Seed
     mission: Produce decision-grade research with brain-first context, external
       verification, and explicit uncertainty.
     profile: researcher
@@ -71,7 +69,6 @@ workers:
       - quick
       - autoresearch
     tools:
-      - gbrain
       - web
       - browser
       - terminal
@@ -82,7 +79,7 @@ workers:
       - todo
     skills:
       - researcher-core
-      - gbrain
+      - llm-wiki
       - autoresearch
       - browser-harness-power-use
       - gstack-for-hermes
@@ -93,14 +90,13 @@ workers:
       - polymarket
     plugins: []
     pluginToolsets: []
-    mcpServers:
-      - gbrain
+    mcpServers: []
     wrapper: researcher:quick
     capabilities:
       - research
       - synthesis
       - source-verification
-      - gbrain-query
+      - wiki-query
       - autoresearch
     preferredTaskTypes:
       - research
@@ -118,7 +114,7 @@ workers:
   - id: architect
     name: Architect
     role: System Design / Review
-    specialty: architecture design, interface contracts, design review, CDC modeling
+    specialty: architecture design, interface contracts, design review
     model: nioint/DeepSeek-V4-Flash-Seed
     mission: Produce decision-grade designs with explicit interfaces, review
       developer implementations, and return structured checkpoints.
@@ -129,20 +125,18 @@ workers:
       - terminal
       - file
       - web
-      - gbrain
       - session_search
       - skills
       - todo
     skills:
       - gstack-for-hermes
-      - gbrain
+      - llm-wiki
       - writing-plans
       - requesting-code-review
       - codebase-inspection
     plugins: []
     pluginToolsets: []
-    mcpServers:
-      - gbrain
+    mcpServers: []
     wrapper: architect:design
     capabilities:
       - architecture
@@ -162,7 +156,7 @@ workers:
     name: Developer
     role: Implementation / Builder
     specialty: full-stack implementation, tests, CDC and modeling code
-    model: custom:nioint-gateway/DeepSeek-V4-Pro-Seed
+    model: nioint/Kimi-K2.7-Code-Tencent
     mission: Implement approved designs with tests, evidence-bearing checkpoints,
       and clean handoffs back to architect review.
     profile: developer
@@ -173,21 +167,19 @@ workers:
       - file
       - browser
       - web
-      - gbrain
       - session_search
       - skills
       - todo
     skills:
       - gstack-for-hermes
-      - gbrain
+      - llm-wiki
       - test-driven-development
       - systematic-debugging
       - codebase-inspection
       - github-pr-workflow
     plugins: []
     pluginToolsets: []
-    mcpServers:
-      - gbrain
+    mcpServers: []
     wrapper: developer:implement
     capabilities:
       - implementation
@@ -207,27 +199,25 @@ workers:
     name: Learning
     role: Retrospective / Documentation
     specialty: mission retrospectives, documentation, knowledge capture
-    model: custom:nioint-gateway/DeepSeek-V4-Pro-Seed
+    model: nioint/DeepSeek-V4-Pro-Seed
     mission: Capture mission outcomes, lessons learned, and durable documentation
       after implementation and review complete.
     profile: learning
     modes: []
     tools:
       - file
-      - gbrain
       - session_search
       - skills
       - todo
       - web
     skills:
       - gstack-for-hermes
-      - gbrain
+      - llm-wiki
       - obsidian-markdown
       - writing-plans
     plugins: []
     pluginToolsets: []
-    mcpServers:
-      - gbrain
+    mcpServers: []
     wrapper: learning
     capabilities:
       - documentation
