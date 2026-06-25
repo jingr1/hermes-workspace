@@ -8,17 +8,17 @@ LangGraph workflows (`cdc.yaml`, `research_only.yaml`, `design_implement.yaml`) 
 
 | Worker | Wrapper | Model | Modes | Tools | Skills | MCP | Plugins |
 |---|---|---|---|---|---|---|---|
-| `orchestrator` | `orchestrator:plan` | `custom:nioint-gateway/DeepSeek-V4-Pro-Seed` | plan | todo, kanban, delegation, terminal, file, session_search, cronjob, skills, clarify, web | orchestrator-core, gstack-for-hermes, llm-wiki, kanban-orchestrator, subagent-driven-development, writing-plans, requesting-code-review, workspace-dispatch | none | none |
-| `researcher` | `researcher:quick` | `custom:nioint-gateway/DeepSeek-V4-Pro-Seed` | quick, autoresearch | web, browser, terminal, file, vision, session_search, skills, todo | researcher-core, llm-wiki, autoresearch, browser-harness, gstack-for-hermes, researcher-quick, researcher-autoresearch, arxiv, youtube-content, polymarket | none | none |
-| `architect` | `architect:design` | `nioint/DeepSeek-V4-Flash-Seed` | design | terminal, file, web, session_search, skills, todo | gstack-for-hermes, llm-wiki, writing-plans, requesting-code-review, codebase-inspection | none | none |
-| `developer` | `developer:implement` | `custom:nioint-gateway/DeepSeek-V4-Pro-Seed` | implement | terminal, file, browser, web, session_search, skills, todo | gstack-for-hermes, llm-wiki, test-driven-development, systematic-debugging, codebase-inspection, github-pr-workflow | none | none |
+| `orchestrator` | `orchestrator:plan` | `custom:nioint-gateway/DeepSeek-V4-Pro-Seed` | plan, autoresearch-dispatch | todo, kanban, delegation, terminal, file, session_search, cronjob, skills, clarify, web | orchestrator-core, gstack-for-hermes, llm-wiki, kanban-orchestrator, subagent-driven-development, writing-plans, workspace-dispatch, autoresearch, autoresearch-plan, autoresearch-orchestrate | none | none |
+| `researcher` | `researcher:quick` | `custom:nioint-gateway/DeepSeek-V4-Pro-Seed` | quick | web, browser, terminal, file, vision, session_search, skills, todo | researcher-core, llm-wiki, browser-harness, gstack-for-hermes, researcher-quick, arxiv, youtube-content, polymarket | none | none |
+| `architect` | `architect:design` | `nioint/DeepSeek-V4-Flash-Seed` | design, autoresearch | terminal, file, web, session_search, skills, todo | architect-core, gstack-for-hermes, llm-wiki, writing-plans, requesting-code-review, codebase-inspection, autoresearch, autoresearch-execute | none | none |
+| `developer` | `developer:implement` | `custom:nioint-gateway/DeepSeek-V4-Pro-Seed` | implement, autoresearch | terminal, file, browser, web, session_search, skills, todo | gstack-for-hermes, llm-wiki, test-driven-development, systematic-debugging, codebase-inspection, github-pr-workflow, autoresearch, autoresearch-execute | none | none |
 | `learning` | `learning` | `custom:nioint-gateway/DeepSeek-V4-Pro-Seed` | — | file, session_search, skills, todo, web | gstack-for-hermes, llm-wiki, obsidian, writing-plans | none | none |
 
 ### Default mission pipeline
 
 | Stage | Worker | Role |
 |---|---|---|
-| Route / greenlight | `orchestrator` | Decompose missions, assign specialists, enforce human approval gates |
+| Route / greenlight / autoresearch dispatch | `orchestrator` | Decompose missions, draft autoresearch contracts, dispatch executors, enforce human approval gates |
 | Research | `researcher` | Establish facts (competitive analysis, data validation, source tracing); no strategy or recommendations; respond to architect challenges with evidence |
 | Design / review | `architect` | Technical translation, tech-direction decisions, implementation review; no fact-gathering or coding |
 | Implement | `developer` | Code per spec, tests, build verification; no architecture or design decisions |

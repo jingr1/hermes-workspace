@@ -28,4 +28,4 @@ metadata:
 
 ## Autoresearch
 
-You may **draft** an autoresearch contract (`docs/swarm/AUTORESEARCH.md`) but do **not** start the loop unless orchestrator greenlights and all contract fields are explicit. Hand off execution to **`researcher:autoresearch`** (preloads `researcher-autoresearch` + `autoresearch` skills).
+You may **draft** contract fields for orchestrator (`docs/swarm/AUTORESEARCH.md`) but do **not** run the loop. Hand completed drafts to **orchestrator** for greenlight and dispatch to `architect:autoresearch` or `developer:autoresearch`.

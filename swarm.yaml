@@ -11,6 +11,7 @@ workers:
     profile: orchestrator
     modes:
       - plan
+      - autoresearch-dispatch
     tools:
       - todo
       - kanban
@@ -30,6 +31,9 @@ workers:
       - subagent-driven-development
       - writing-plans
       - workspace-dispatch
+      - autoresearch
+      - autoresearch-plan
+      - autoresearch-orchestrate
     plugins: []
     pluginToolsets: []
     mcpServers: []
@@ -40,24 +44,27 @@ workers:
       - routing
       - proof-contracts
       - greenlight-gate
+      - autoresearch-dispatch
     preferredTaskTypes:
       - orchestration
       - planning
       - routing
       - coordination
       - handoff
+      - autoresearch-dispatch
     greenlightRequiredFor:
       - merge
       - publish
       - destructive
       - external-send
       - credential-change
+      - long-running-loop
     maxConcurrentTasks: 1
     acceptsBroadcast: true
     reviewRequired: false
   - id: researcher
     name: Researcher
-    role: Fact-Finding Research / Bounded Autoresearch
+    role: Fact-Finding Research
     specialty: establish facts — competitive analysis, data validation, source
       tracing; wiki-first lookup (llm-wiki)
     model: nioint/DeepSeek-V4-Pro-Seed
@@ -69,7 +76,6 @@ workers:
     profile: researcher
     modes:
       - quick
-      - autoresearch
     tools:
       - web
       - browser
@@ -82,11 +88,9 @@ workers:
     skills:
       - researcher-core
       - llm-wiki
-      - autoresearch
       - browser-harness
       - gstack-for-hermes
       - researcher-quick
-      - researcher-autoresearch
       - arxiv
       - youtube-content
       - polymarket
@@ -100,7 +104,6 @@ workers:
       - source-verification
       - source-tracing
       - wiki-query
-      - autoresearch
     preferredTaskTypes:
       - research
       - competitive-analysis
@@ -130,6 +133,7 @@ workers:
     profile: architect
     modes:
       - design
+      - autoresearch
     tools:
       - terminal
       - file
@@ -146,6 +150,8 @@ workers:
       - codebase-inspection
       - architecture-diagram
       - brainstorming
+      - autoresearch
+      - autoresearch-execute
     plugins: []
     pluginToolsets: []
     mcpServers: []
@@ -164,9 +170,11 @@ workers:
       - tech-direction
       - implementation-review
       - research-challenge
+      - autoresearch-execute
     greenlightRequiredFor:
       - publish
       - destructive
+      - long-running-loop
     maxConcurrentTasks: 1
     acceptsBroadcast: true
     reviewRequired: true
@@ -183,6 +191,7 @@ workers:
     profile: developer
     modes:
       - implement
+      - autoresearch
     tools:
       - terminal
       - file
@@ -201,6 +210,8 @@ workers:
       - requesting-code-review
       - receiving-code-review
       - executing-plans
+      - autoresearch
+      - autoresearch-execute
     plugins: []
     pluginToolsets: []
     mcpServers: []
@@ -215,9 +226,11 @@ workers:
       - testing
       - build-verification
       - bugfix
+      - autoresearch-execute
     greenlightRequiredFor:
       - merge
       - destructive
+      - long-running-loop
     maxConcurrentTasks: 1
     acceptsBroadcast: true
     reviewRequired: true

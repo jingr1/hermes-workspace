@@ -16,7 +16,7 @@ This is not a chat wrapper with tabs. It is the operating surface for a local ag
 
 - [QUICKSTART.md](./QUICKSTART.md) — clone, run, detect profiles, spawn workers, dispatch the first task.
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — loop, SwarmBrief shape, notification routing, lanes, review, repair.
-- [AUTORESEARCH.md](./AUTORESEARCH.md) — bounded optimization-loop contract for `researcher:autoresearch`.
+- [AUTORESEARCH.md](./AUTORESEARCH.md) — bounded optimization-loop contract; orchestrator dispatches `architect:autoresearch` / `developer:autoresearch`.
 - [SKILLS.md](./SKILLS.md) — bundled swarm skills, auto-loading, and custom skill conventions.
 - [ROLES.md](./ROLES.md) — role presets used by the Add Swarm dialog and the canonical project specs.
 

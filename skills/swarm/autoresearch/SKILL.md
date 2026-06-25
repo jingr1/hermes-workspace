@@ -1,8 +1,8 @@
 ---
 name: autoresearch
 description: Bounded optimization-loop contract and discipline — see docs/swarm/AUTORESEARCH.md.
-version: 1.0.0
-author: Hermes Workspace
+version: 2.2.1-hermes
+author: Hermes Workspace (contract index; loop ported from uditgoenka/autoresearch)
 metadata:
   hermes:
     tags: [swarm, autoresearch, optimization]
@@ -11,24 +11,28 @@ metadata:
 
 # Autoresearch (Swarm)
 
-Reference: `docs/swarm/AUTORESEARCH.md` in hermes-workspace.
+Reference: `docs/swarm/AUTORESEARCH.md` in hermes-workspace. Classic loop semantics from [uditgoenka/autoresearch](https://github.com/uditgoenka/autoresearch).
 
 ```text
-normal research     = gather evidence -> synthesize facts
-autoresearch mode   = mutate one target -> verify metric -> keep/revert -> repeat
+normal research     = gather evidence -> synthesize facts (researcher:quick)
+autoresearch        = mutate one target -> verify metric -> keep/revert -> repeat
+orchestrator        = contract + greenlight + dispatch
+executor            = architect:autoresearch | developer:autoresearch (runs loop)
 ```
 
 ## When to use
 
-Only when a **scalar metric** and **mechanical verify/guard commands** exist. If evaluation requires human judgment, stay in `researcher-quick`.
+Only when a **scalar metric** and **mechanical verify/guard commands** exist. If evaluation requires human judgment, stay in `researcher:quick` or `architect:design`.
 
 ## Contract fields
 
-Required before loop: goal, scope, mutable_target, locked_eval, metric, direction, verify, guard, iterations, results_log, rollback, greenlight.
+Required: `goal`, `scope`, `mutable_target`, `locked_eval`, `metric`, `direction`, `verify`, `guard`, `iterations`, `results_log`, `rollback`, `greenlight`, **`executor`** (`architect` | `developer`).
 
-## Roles
+## Role skills
 
-- `researcher:quick` drafts the contract
-- `orchestrator` approves greenlight and budget
-- `researcher:autoresearch` runs the loop
-- `architect` reviews for metric hacking / scope creep
+| Role | Skill | Action |
+|---|---|---|
+| `orchestrator` | `autoresearch-orchestrate`, `autoresearch-plan` | Draft contract, greenlight, dispatch |
+| `architect` | `autoresearch-execute` | Run loop on spec/skill/prompt targets |
+| `developer` | `autoresearch-execute` | Run loop on code/test targets |
+| `researcher` | — | May supply facts; does **not** run autoresearch |
