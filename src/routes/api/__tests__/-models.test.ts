@@ -52,6 +52,10 @@ vi.mock('../../../server/local-provider-discovery', () => ({
   ensureProviderInConfig: () => false,
 }))
 
+vi.mock('../../../server/stt-transcription', () => ({
+  readHermesEnv: () => ({}),
+}))
+
 beforeEach(() => {
   vi.clearAllMocks()
   delete process.env.HERMES_HOME
@@ -155,5 +159,61 @@ describe('models route', () => {
     expect(json.ok).toBe(true)
     expect(json.models[0].id).toBe('nest-model')
     expect(json.models[0].provider).toBe('anthropic')
+  })
+
+  it('indexes provider default_model and fetches live models using key_env', async () => {
+    const envHome = '/mock/profiles/jarvis'
+    process.env.CLAUDE_HOME = envHome
+    process.env.DEEPSEEK_API_KEY = 'test-key'
+
+    const configYaml = [
+      'providers:',
+      '  custom:nioint-gateway:',
+      '    base_url: https://modelgateway.nioint.com/v1',
+      '    key_env: DEEPSEEK_API_KEY',
+      '    default_model: DeepSeek-V4-Pro-Seed',
+    ].join('\n')
+    existsSync.mockImplementation((p: string) => p === `${envHome}/config.yaml`)
+    readFileSync.mockImplementation((p: string) => {
+      if (p === `${envHome}/config.yaml`) return configYaml
+      return ''
+    })
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: async () => ({
+        data: [
+          { id: 'DeepSeek-V4-Pro-Seed' },
+          { id: 'Kimi-K2.7-Code-Tencent' },
+          { id: 'DeepSeek-V4-Flash' },
+        ],
+      }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const get = await getHandler()
+    const request = new Request('http://localhost/api/models')
+    const res = await get({ request })
+    expect(res.status).toBe(200)
+    const json = await res.json()
+    expect(json.ok).toBe(true)
+
+    const niointModels = json.models.filter(
+      (m: { provider?: string }) => m.provider === 'custom:nioint-gateway',
+    )
+    expect(niointModels.map((m: { id: string }) => m.id).sort()).toEqual([
+      'DeepSeek-V4-Flash',
+      'DeepSeek-V4-Pro-Seed',
+      'Kimi-K2.7-Code-Tencent',
+    ])
+
+    expect(fetchMock).toHaveBeenCalled()
+    const [, init] = fetchMock.mock.calls[0]
+    expect((init as RequestInit).headers).toMatchObject({
+      authorization: 'Bearer test-key',
+    })
+
+    vi.unstubAllGlobals()
   })
 })

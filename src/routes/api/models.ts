@@ -15,6 +15,7 @@ import {
   ensureProviderInConfig,
   getDiscoveredModels,
 } from '../../server/local-provider-discovery'
+import { readHermesEnv } from '../../server/stt-transcription'
 
 const CLAUDE_HOME = process.env.HERMES_HOME ?? process.env.CLAUDE_HOME ?? path.join(os.homedir(), '.hermes')
 const MODELS_PATH = path.join(CLAUDE_HOME, 'models.json')
@@ -196,6 +197,24 @@ function resolveConfiguredSecret(value: unknown): string {
   return raw
 }
 
+/** Resolve API key from a Hermes provider block (supports key_env / api_key_env). */
+export function resolveProviderApiKey(block: Record<string, unknown>): string {
+  const direct =
+    resolveConfiguredSecret(block.api_key) ||
+    resolveConfiguredSecret(block.apiKey) ||
+    resolveConfiguredSecret(block.token)
+  if (direct) return direct
+
+  const envName =
+    readString(block.key_env) ||
+    readString(block.keyEnv) ||
+    readString(block.api_key_env) ||
+    readString(block.apiKeyEnv)
+  if (!envName) return ''
+  const hermesEnv = readHermesEnv(CLAUDE_HOME)
+  return process.env[envName] ?? hermesEnv[envName] ?? ''
+}
+
 function normalizeConfiguredBaseUrl(value: unknown): string {
   const raw = readString(value)
   if (!raw) return ''
@@ -232,11 +251,7 @@ function readConfiguredLiveModelEndpoints(): Array<LiveModelEndpoint> {
         normalizeConfiguredBaseUrl(block.api_base) ||
         normalizeConfiguredBaseUrl(block.apiBase)
       if (!baseUrl) return
-      const apiKey =
-        resolveConfiguredSecret(block.api_key) ||
-        resolveConfiguredSecret(block.apiKey) ||
-        resolveConfiguredSecret(block.token) ||
-        resolveConfiguredSecret(block.api_key_env ? process.env[readString(block.api_key_env)] : '')
+      const apiKey = resolveProviderApiKey(block)
       const key = `${provider}\u0000${baseUrl}`
       if (seen.has(key)) return
       seen.add(key)
@@ -353,7 +368,10 @@ function readClaudeConfigCatalog(): Array<ModelEntry> {
         }
       }
       const providerDefault =
-        readString(providerBlock.model) || readString(providerBlock.default)
+        readString(providerBlock.model) ||
+        readString(providerBlock.default) ||
+        readString(providerBlock.default_model) ||
+        readString(providerBlock.defaultModel)
       if (providerDefault) {
         pushEntry({
           id: providerDefault,

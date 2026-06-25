@@ -318,12 +318,30 @@ researcher DONE → architect DONE → developer BLOCKED → human gate
 
 ### Mock 模式（CI / 无 Workspace）
 
-适合 CI 或没有启动 Workspace 时验证图结构（`--mock-services`，不调用真实 tmux/dispatch API）。
+适合 CI 或没有启动 Workspace 时验证编排流程（`--mock-services`，按 workflow 合成 checkpoint，不调用真实 tmux/dispatch API）。
 
 ```bash
+# 默认 CDC workflow + auto profile
 hermes_langgraph_orchestrator/.venv/bin/python -m hermes_langgraph_orchestrator \
   --execute --mock-services --mission-id cdc-mock-001
+
+# 指定 workflow（generic profile：一轮审查后通过）
+hermes-langgraph --execute --mock-services --workflow research_only \
+  --mission-id research-mock-001 --goal "调研 mock"
+
+# 测试 Human Gate（architect 始终 changes_requested，审查环触顶）
+hermes-langgraph --execute --mock-services --workflow research_only \
+  --mock-profile human_gate --mission-id research-gate-mock-001
 ```
+
+**`--mock-profile` 策略**
+
+| Profile | 用途 |
+|---------|------|
+| `auto` | 按 workflow 名推断（CDC → `cdc`，其余 → `generic`） |
+| `generic` | 通用：worker DONE；有审查环时 architect 先 `changes_requested` 再 `approved` |
+| `cdc` | CDC 脚本：developer 首次 BLOCKED，二次 DONE |
+| `human_gate` | architect 审查始终 `changes_requested`，用于测审查环触顶 → Human Gate |
 
 Mock 会自动跑完：
 
@@ -371,7 +389,8 @@ curl -s -X POST http://127.0.0.1:3000/api/swarm-langgraph/resume \
 | 参数 | 说明 |
 |---|---|
 | `--execute` | 运行 LangGraph 编排（必须，除非 `--get-state` / `--list-active-gates`） |
-| `--mock-services` | mock init/ensure/dispatch，不依赖 Workspace |
+| `--mock-services` | mock init/ensure/dispatch/classify，不依赖 Workspace |
+| `--mock-profile auto\|generic\|cdc\|human_gate` | mock checkpoint 策略（需配合 `--mock-services`） |
 | `--mission-id <id>` | mission 标识，也是 LangGraph thread_id |
 | `--goal "..."` | 自定义 mission goal |
 | `--initial-workers researcher,architect` | 跳过 workflow entry，直接派发指定 worker |

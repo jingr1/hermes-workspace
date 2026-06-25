@@ -119,9 +119,9 @@ workers:
     name: Architect
     role: System Design / Review
     specialty: architecture design, interface contracts, design review, CDC modeling
-    model: custom:nioint-gateway/DeepSeek-V4-Pro-Seed
-    mission: Produce decision-grade designs with explicit interfaces, review developer
-      implementations, and return structured checkpoints.
+    model: nioint/DeepSeek-V4-Flash-Seed
+    mission: Produce decision-grade designs with explicit interfaces, review
+      developer implementations, and return structured checkpoints.
     profile: architect
     modes:
       - design
