@@ -2,7 +2,7 @@
 
 Profile: `orchestrator`
 Wrapper: `orchestrator:plan`
-Modes: plan, autoresearch-dispatch
+Modes: plan, autoresearch, autoresearch-dispatch
 
 ## Tools
 todo, kanban, delegation, terminal, file, session_search, cronjob, skills, clarify, web
@@ -16,11 +16,12 @@ none (brain-first via `llm-wiki` skill + `WIKI_PATH`)
 ## Plugins
 none
 
-## Autoresearch dispatch
+## Autoresearch
 
-- `orchestrator:plan` — default mission routing and greenlight
-- `orchestrator:autoresearch-dispatch` — validate contract, greenlight, dispatch `architect:autoresearch` or `developer:autoresearch`
+- `orchestrator:autoresearch` — **default entry** (Claude `/autoresearch` equivalent): wizard → contract → dispatch executor
+- `orchestrator:autoresearch-dispatch` — validate existing contract only, then dispatch
+- Executors: `architect:autoresearch` | `developer:autoresearch`
 
-Contract spec: `docs/swarm/AUTORESEARCH.md`. Install wrappers: `bash scripts/sync-autoresearch-skills.sh`
+Docs: `docs/swarm/AUTORESEARCH-GUIDE.md`. Install: `bash scripts/sync-autoresearch-skills.sh`
 
 This file mirrors `swarm.yaml` and the profile config under `~/.hermes/profiles/orchestrator/`.

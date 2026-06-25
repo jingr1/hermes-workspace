@@ -11,6 +11,7 @@ workers:
     profile: orchestrator
     modes:
       - plan
+      - autoresearch
       - autoresearch-dispatch
     tools:
       - todo
@@ -25,6 +26,7 @@ workers:
       - web
     skills:
       - orchestrator-core
+      - mission-memory-layout
       - gstack-for-hermes
       - llm-wiki
       - kanban-orchestrator
@@ -87,6 +89,7 @@ workers:
       - todo
     skills:
       - researcher-core
+      - mission-memory-layout
       - llm-wiki
       - browser-harness
       - gstack-for-hermes
@@ -143,6 +146,7 @@ workers:
       - todo
     skills:
       - architect-core
+      - mission-memory-layout
       - gstack-for-hermes
       - llm-wiki
       - writing-plans
@@ -202,6 +206,7 @@ workers:
       - todo
     skills:
       - gstack-for-hermes
+      - mission-memory-layout
       - llm-wiki
       - test-driven-development
       - systematic-debugging
@@ -254,6 +259,8 @@ workers:
       - llm-wiki
       - obsidian
       - writing-plans
+      - mission-memory-layout
+      - learning-wiki-ingest
     plugins: []
     pluginToolsets: []
     mcpServers: []

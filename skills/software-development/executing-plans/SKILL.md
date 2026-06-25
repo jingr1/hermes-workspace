@@ -17,7 +17,7 @@ Announce: "Using executing-plans skill."
 
 ## Step 1: Load and review
 
-1. Read the plan/spec from `memory/swarm/architect/` or the dispatch task
+1. Read the plan/spec from `memory/swarm/missions/<missionId>/architect/` or the dispatch task
 2. Review critically — if scope, interfaces, or tests are unclear, **BLOCK** and escalate to architect
 3. If clear: create todos and proceed
 

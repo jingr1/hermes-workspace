@@ -155,3 +155,4 @@ skills-bundle/
 .env.bak-*
 pr-triage-20260505-*/
 logs/*
+memory/*

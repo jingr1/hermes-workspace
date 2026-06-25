@@ -19,11 +19,11 @@ Do NOT write implementation code, scaffold projects, or dispatch developer tasks
 
 ## Process
 
-1. **Explore context** — `memory/swarm/researcher/`, wiki, existing code, prior architect artifacts
+1. **Explore context** — `memory/swarm/missions/`, wiki, existing code, prior architect artifacts
 2. **Clarify** — one question at a time: constraints, interfaces, non-goals, success signals
 3. **Propose 2–3 technical approaches** — trade-offs; recommend one with reasoning
 4. **Present design** — architecture, data model, interfaces, kill criteria, milestones; get approval per section
-5. **Write spec** — `memory/swarm/architect/YYYY-MM-DD-<topic>-spec.md`
+5. **Write spec** — `memory/swarm/missions/<missionId>/architect/YYYY-MM-DD-<topic>-spec.md`
 6. **Self-review** — no TBDs, no contradictions, scope fits one developer pass
 7. **Hand off** — invoke `writing-plans` if an implementation plan is needed; route implementation to **developer**
 

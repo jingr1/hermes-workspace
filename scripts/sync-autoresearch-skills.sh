@@ -21,6 +21,8 @@ for skill in autoresearch autoresearch-orchestrate autoresearch-plan autoresearc
 done
 rm -rf "${SKILLS}/researcher-autoresearch" 2>/dev/null || true
 
+install_wrapper "orchestrator:autoresearch" orchestrator \
+  "autoresearch-orchestrate,autoresearch-plan,autoresearch"
 install_wrapper "orchestrator:autoresearch-dispatch" orchestrator \
   "autoresearch-orchestrate,autoresearch-plan,autoresearch"
 install_wrapper "architect:autoresearch" architect \
@@ -61,4 +63,4 @@ for profile in orchestrator architect developer researcher; do
 done
 
 echo "Synced autoresearch skills and wrappers."
-ls -la "${BIN}/orchestrator:autoresearch-dispatch" "${BIN}/architect:autoresearch" "${BIN}/developer:autoresearch"
+ls -la "${BIN}/orchestrator:autoresearch" "${BIN}/orchestrator:autoresearch-dispatch" "${BIN}/architect:autoresearch" "${BIN}/developer:autoresearch"

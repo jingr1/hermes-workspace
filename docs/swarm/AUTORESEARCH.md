@@ -1,5 +1,8 @@
 # Autoresearch Mode
 
+> **操作手册：** [AUTORESEARCH-GUIDE.md](./AUTORESEARCH-GUIDE.md)（流程、命令、demo、排错）  
+> 本文：契约字段、示例目标、反模式、exit report。
+
 Autoresearch is a bounded optimization harness for Hermes Agents. It is not the default research workflow.
 
 Use it only when the system can mechanically decide whether an iteration improved.
@@ -240,6 +243,8 @@ Default wedge:
 Only after a clean pilot should orchestrator approve a longer or background loop.
 
 Install local wrappers: `bash scripts/sync-autoresearch-skills.sh`
+
+See [AUTORESEARCH-GUIDE.md](./AUTORESEARCH-GUIDE.md) for step-by-step usage.
 
 ## Exit report
 

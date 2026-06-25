@@ -7,6 +7,7 @@ LangGraph 作为 Hermes Swarm 的**确定性编排大脑**：加载 workflow.yam
 ## 目录
 
 - [环境准备](#环境准备)
+- [同步 Hermes Profiles](#同步-hermes-profiles)
 - [重启 Workspace](#重启-workspace)
 - [创建自定义编排任务](#创建自定义编排任务)
 - [执行任务派发与编排](#执行任务派发与编排)
@@ -67,6 +68,80 @@ PYTHONPATH=~/hermes-workspace \
 ```
 
 可选：在 venv 里 `pip install -e hermes_langgraph_orchestrator` 后，任意目录 `-m` 也能工作，并会安装 `hermes-langgraph` 命令。
+
+---
+
+## 同步 Hermes Profiles
+
+`swarm.yaml` 是 roster **真源**（worker id、model、tools、skills、mission 等）。LangGraph dispatch / tmux 启动时，Hermes 实际读的是 `~/.hermes/profiles/<workerId>/` 下的运行时配置。改完 `swarm.yaml` 后需同步 profile，否则 roster 上的 model / toolsets 只是展示，worker 仍用旧配置。
+
+### 三层对齐关系
+
+```text
+swarm.yaml                    ~/.hermes/profiles/<id>/           ~/.local/bin/
+(roster 真源)            →    config.yaml / SOUL.md / skills   →   orchestrator:plan 等 wrapper
+  model: nioint/...            model.provider + model.default       hermes -p <profile>
+  tools: [...]                 toolsets: [...]
+  skills: [...]                skills/<skill>/SKILL.md
+  mission / role               SOUL.md + memory/IDENTITY.md
+```
+
+运行时还会由 dispatch / tmux-start 自动调用 `syncSwarmProfileModel()` 同步 **model**；但 toolsets、SOUL、IDENTITY、swarm skills 需手动跑同步脚本。
+
+### 一键同步
+
+在仓库根目录执行：
+
+```bash
+cd /home/ramon.jing/hermes-workspace
+
+# 1. 同步 config.yaml（model + toolsets）、SOUL.md、memory/IDENTITY.md、skills/swarm/ 下的角色技能
+node scripts/sync-swarm-profiles.mjs
+
+# 2. 同步 autoresearch 技能与 wrapper（orchestrator:autoresearch-dispatch 等）
+bash scripts/sync-autoresearch-skills.sh
+```
+
+`sync-swarm-profiles.mjs` 对每个 `swarm.yaml` worker 写入：
+
+| 文件 | 来源字段 | 备注 |
+|------|----------|------|
+| `config.yaml` → `model.provider` / `model.default` | `model`（`provider/model-id`，如 `nioint/DeepSeek-V4-Flash-Seed`） | |
+| `config.yaml` → `toolsets` | `tools` | **learning** 为合并（union），保留原有 `hermes-cli` 等 |
+| `config.yaml` → `kanban.orchestrator_profile` | orchestrator 固定为 `orchestrator` | |
+| `SOUL.md` | `name`, `role`, `mission`, … | **learning** 保留 `agents/learning/SOUL.md` 教学人格，仅追加 swarm 扩展段 |
+| `memory/IDENTITY.md` | 同上 + `skills`, `capabilities` | learning 额外标注 tutor + retrospective 双模式 |
+| `skills/<skill>/` | `skills` 列表中存在于 `skills/swarm/` 的条目 | |
+
+Hub / bundled 技能（`gstack-for-hermes`、`llm-wiki`、`obsidian` 等）不在 `skills/swarm/`，由 Hermes profile skills hub 提供，脚本会跳过。
+
+### 当前 roster 与 profile 映射
+
+| Worker | Wrapper | Model | Modes |
+|--------|---------|-------|-------|
+| `orchestrator` | `orchestrator:plan` | `nioint/DeepSeek-V4-Flash-Seed` | plan, autoresearch-dispatch |
+| `researcher` | `researcher:quick` | `nioint/DeepSeek-V4-Pro-Seed` | quick |
+| `architect` | `architect:design` | `nioint/DeepSeek-V4-Flash-Seed` | design, autoresearch |
+| `developer` | `developer:implement` | `nioint/Kimi-K2.7-Code-Tencent` | implement, autoresearch |
+| `learning` | `learning` | `nioint/DeepSeek-V4-Pro-Seed` | tutor + swarm retrospective（SOUL 合并，不覆盖） |
+
+完整字段见仓库根目录 `swarm.yaml` 与 `AGENTS.md`。
+
+### 何时需要同步
+
+- 修改 `swarm.yaml` 中的 `model`、`tools`、`skills`、`mission`、`role` 后
+- 新增 worker 并创建 `~/.hermes/profiles/<id>/` 目录后
+- 更新 `skills/swarm/` 下角色技能（`orchestrator-core`、`researcher-core` 等）后
+- 启动 LangGraph 真实编排前，确认 profile 与 roster 一致
+
+同步后若 worker tmux session 已在运行，建议重启 session 使新 toolsets / SOUL 生效：
+
+```bash
+curl -s -X POST http://localhost:3000/api/swarm-tmux-stop \
+  -H 'Content-Type: application/json' -d '{"workerId":"researcher"}'
+curl -s -X POST http://localhost:3000/api/swarm-tmux-start \
+  -H 'Content-Type: application/json' -d '{"workerId":"researcher"}'
+```
 
 ---
 
@@ -268,9 +343,10 @@ curl -s -X POST http://127.0.0.1:3000/api/swarm-langgraph/run \
 若 workflow 需要 roster 里没有的角色（例如 `qa`、`builder`）：
 
 1. 在 `swarm.yaml` 增加 worker 定义（wrapper / profile / skills 与 `AGENTS.md` 对齐）
-2. 重启 Workspace（`pnpm dev`）让 roster API 生效
-3. 在 workflow YAML 中引用新 `id`
-4. `init_mission` 会在启动时校验；引用未知 worker 会直接失败并写入 `collection_error`
+2. 创建 `~/.hermes/profiles/<id>/` 并运行 [同步 Hermes Profiles](#同步-hermes-profiles)
+3. 重启 Workspace（`pnpm dev`）让 roster API 生效
+4. 在 workflow YAML 中引用新 `id`
+5. `init_mission` 会在启动时校验；引用未知 worker 会直接失败并写入 `collection_error`
 
 ### 启动后验证
 

@@ -18,7 +18,7 @@ metadata:
 1. **Orient** — `llm-wiki`: read `$WIKI_PATH/SCHEMA.md`, `index.md`, recent `log.md`
 2. **Local context** — grep `memory/swarm/`, read handoffs, `session_search` if relevant
 3. **External verify** — `web`, `browser`, `arxiv` only for gaps local context cannot fill
-4. **Deliver** — cited fact sheet under `memory/swarm/researcher/<topic>.md`
+4. **Deliver** — cited fact sheet under `memory/swarm/missions/<missionId>/researcher/<topic>.md`
 
 ## Output rules
 

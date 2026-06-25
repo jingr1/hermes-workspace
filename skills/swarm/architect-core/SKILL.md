@@ -28,7 +28,7 @@ You are the **System Architecture & Technical Specification Agent**.
 
 ## Artifacts
 
-Write specs to `memory/swarm/architect/` with: context, decisions, interfaces, data model, kill criteria, review checklist.
+Write specs to `memory/swarm/missions/<missionId>/architect/` (or `memory/swarm/architect/` before missionId is known) with: context, decisions, interfaces, data model, kill criteria, review checklist. See `mission-memory-layout` skill.
 
 ## Review verdict
 
