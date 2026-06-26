@@ -1482,6 +1482,7 @@ function ChatMessageListComponent({
     sessionKey,
     scrollToBottom,
     streamingText,
+    contentStyle,
   ])
 
   useEffect(() => {

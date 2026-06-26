@@ -20,6 +20,7 @@ describe('root runtime guards', () => {
       registerAppServiceWorker({
         serviceWorker: { register },
         cachesApi: { keys: vi.fn().mockResolvedValue(['stale']), delete: deleteCache },
+        enabled: true,
       }),
     ).resolves.toBeUndefined()
 

@@ -7,27 +7,14 @@
  * workspace's `/api/swarm-kanban/*` routes can talk to the dashboard
  * without touching SQLite directly.
  *
- * Why proxy at all when we also have direct-SQLite read/write
- * (see kanban-backend.ts)? Two reasons:
- *
- *   1. **Remote workspaces.** When the workspace runs in Docker/VPS
- *      and the agent runs elsewhere, the SQLite file isn't on the
- *      same filesystem. HTTP is the only viable path.
- *   2. **Single source of truth + dispatcher integration.** The
- *      dashboard's plugin_api.py wraps writes inside the same
- *      transactional helpers the dispatcher uses. Going through
- *      HTTP keeps the workspace from racing the dispatcher on
- *      `running` vs `claimed` state.
- *
- * This module is only used when `caps.kanban === true`. Otherwise
- * kanban-backend.ts falls through to the local file-backed store.
+ * Auth: newer Hermes dashboards require the ephemeral session token for
+ * `/api/plugins/kanban/*`. Always route through `dashboardFetch()` from
+ * gateway-capabilities (auto token + 401 retry) — do not roll a separate
+ * fetch path here.
  *
  * See v2.3.0 plan.
  */
-import {
-  CLAUDE_DASHBOARD_URL,
-  fetchDashboardToken,
-} from './gateway-capabilities'
+import { dashboardFetch } from './gateway-capabilities'
 
 const PROXY_TIMEOUT_MS = 10_000
 
@@ -53,50 +40,37 @@ export type DashboardKanbanBoardResponse = {
   }>
 }
 
-/**
- * Build headers for dashboard kanban API calls. The plugin route is
- * unauthenticated by design (loopback only), but we still pass the
- * dashboard session token if we have one — some setups proxy the
- * dashboard behind auth that requires it.
- */
-async function buildHeaders(): Promise<Record<string, string>> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  }
-  try {
-    const token = await fetchDashboardToken()
-    if (token) headers.Authorization = `Bearer ${token}`
-  } catch {
-    // Token fetch is best-effort. The plugin route works without it
-    // on standard loopback installs.
-  }
-  return headers
-}
-
-function dashboardUrl(path: string, params: Record<string, string | undefined> = {}): string {
-  const base = CLAUDE_DASHBOARD_URL.replace(/\/+$/, '')
-  const url = new URL(`${base}${path}`)
+function withQuery(
+  path: string,
+  params: Record<string, string | undefined> = {},
+): string {
+  const url = new URL(path, 'http://local')
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined && value !== '') url.searchParams.set(key, value)
   }
-  return url.toString()
+  const qs = url.search
+  return qs ? `${path.split('?')[0]}${qs}` : path
 }
 
-async function dashboardFetch<T>(
+async function dashboardKanbanJson<T>(
   path: string,
   init: RequestInit = {},
   params: Record<string, string | undefined> = {},
 ): Promise<T> {
-  const headers = await buildHeaders()
-  const res = await fetch(dashboardUrl(path, params), {
+  const method = (init.method || 'GET').toUpperCase()
+  const res = await dashboardFetch(withQuery(path, params), {
     ...init,
-    headers: { ...headers, ...(init.headers || {}) },
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(init.headers || {}),
+    },
     signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
   })
   if (!res.ok) {
     const body = await res.text().catch(() => '')
     throw new Error(
-      `Dashboard kanban proxy: ${init.method || 'GET'} ${path} → ${res.status}${body ? ` — ${body.slice(0, 200)}` : ''}`,
+      `Dashboard kanban proxy: ${method} ${path} → ${res.status}${body ? ` — ${body.slice(0, 200)}` : ''}`,
     )
   }
   return (await res.json()) as T
@@ -106,7 +80,7 @@ async function dashboardFetch<T>(
 export function fetchDashboardKanbanBoard(
   board?: string,
 ): Promise<DashboardKanbanBoardResponse> {
-  return dashboardFetch<DashboardKanbanBoardResponse>(
+  return dashboardKanbanJson<DashboardKanbanBoardResponse>(
     '/api/plugins/kanban/board',
     {},
     board ? { board } : {},
@@ -119,7 +93,7 @@ export async function fetchDashboardKanbanTask(
   board?: string,
 ): Promise<DashboardKanbanTask | null> {
   try {
-    const wrapped = await dashboardFetch<{ task?: DashboardKanbanTask }>(
+    const wrapped = await dashboardKanbanJson<{ task?: DashboardKanbanTask }>(
       `/api/plugins/kanban/tasks/${encodeURIComponent(taskId)}`,
       {},
       board ? { board } : {},
@@ -147,7 +121,7 @@ export async function createDashboardKanbanTask(
   input: CreateDashboardKanbanTaskInput,
   board?: string,
 ): Promise<DashboardKanbanTask> {
-  const wrapped = await dashboardFetch<{ task: DashboardKanbanTask }>(
+  const wrapped = await dashboardKanbanJson<{ task: DashboardKanbanTask }>(
     '/api/plugins/kanban/tasks',
     {
       method: 'POST',
@@ -172,7 +146,7 @@ export async function updateDashboardKanbanTask(
   updates: UpdateDashboardKanbanTaskInput,
   board?: string,
 ): Promise<DashboardKanbanTask> {
-  const wrapped = await dashboardFetch<{ task: DashboardKanbanTask }>(
+  const wrapped = await dashboardKanbanJson<{ task: DashboardKanbanTask }>(
     `/api/plugins/kanban/tasks/${encodeURIComponent(taskId)}`,
     {
       method: 'PATCH',
@@ -199,5 +173,5 @@ export function listDashboardKanbanBoards(): Promise<{
   boards: Array<DashboardKanbanBoard>
   current: string
 }> {
-  return dashboardFetch('/api/plugins/kanban/boards')
+  return dashboardKanbanJson('/api/plugins/kanban/boards')
 }

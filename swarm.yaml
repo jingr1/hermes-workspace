@@ -5,7 +5,7 @@ workers:
     role: Swarm Orchestrator / Greenlight Gate
     specialty: mission routing, task decomposition, handoffs, proof contracts, human
       approval gates
-    model: nioint/DeepSeek-V4-Flash-Seed
+    model: nioint/Deepseek-V4-Pro-Tencent
     mission: Decompose missions into safe, proof-bearing work and route to the right
       specialist while preserving human greenlight control.
     profile: orchestrator
@@ -32,7 +32,6 @@ workers:
       - kanban-orchestrator
       - subagent-driven-development
       - writing-plans
-      - workspace-dispatch
       - autoresearch
       - autoresearch-plan
       - autoresearch-orchestrate
@@ -71,10 +70,10 @@ workers:
       tracing; wiki-first lookup (llm-wiki)
     model: nioint/DeepSeek-V4-Pro-Seed
     mission: Produce evidence-backed factual research with brain-first context,
-      external verification, explicit uncertainty, and full source trails. Do not
-      make strategy judgments, recommendations, or direction choices — those belong
-      to architect and orchestrator. When architect challenges findings, respond
-      with evidence, citations, and corrections only.
+      external verification, explicit uncertainty, and full source trails. Do
+      not make strategy judgments, recommendations, or direction choices — those
+      belong to architect and orchestrator. When architect challenges findings,
+      respond with evidence, citations, and corrections only.
     profile: researcher
     modes:
       - quick
@@ -124,15 +123,16 @@ workers:
     name: Architect
     role: System Architecture & Technical Specification Agent
     specialty: technical translation (architecture, data models, interfaces, tech
-      selection); direction decisions (hypothesis stack, kill criteria, milestones);
-      implementation review against design intent
+      selection); direction decisions (hypothesis stack, kill criteria,
+      milestones); implementation review against design intent
     model: nioint/DeepSeek-V4-Flash-Seed
     mission: Translate upstream strategy into decision-grade technical designs with
-      explicit interfaces, data models, and tech choices. Own technical direction —
-      hypothesis stack, kill criteria, and milestones. Review developer work for
-      design-intent fidelity and challenge researcher findings when evidence is
-      weak. Do not collect primary facts (researcher), write implementation code
-      (developer), or make business strategy beyond the technical scope.
+      explicit interfaces, data models, and tech choices. Own technical
+      direction — hypothesis stack, kill criteria, and milestones. Review
+      developer work for design-intent fidelity and challenge researcher
+      findings when evidence is weak. Do not collect primary facts (researcher),
+      write implementation code (developer), or make business strategy beyond
+      the technical scope.
     profile: architect
     modes:
       - design
@@ -188,10 +188,10 @@ workers:
     specialty: implement from approved design specs — feature code, tests, build
       verification
     model: nioint/Kimi-K2.7-Code-Tencent
-    mission: Implement approved technical specifications with tests, evidence-bearing
-      checkpoints, and verified builds. Hand off to architect for design-intent review.
-      Do not change architecture, make design decisions, or skip tests — escalate
-      spec gaps to architect.
+    mission: Implement approved technical specifications with tests,
+      evidence-bearing checkpoints, and verified builds. Hand off to architect
+      for design-intent review. Do not change architecture, make design
+      decisions, or skip tests — escalate spec gaps to architect.
     profile: developer
     modes:
       - implement

@@ -9,6 +9,7 @@
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite dev",
+    "dev:clean": "rm -rf node_modules/.vite && vite dev",
     "build": "vite build",
     "start:all": "concurrently \"hermes gateway run\" \"pnpm dev\"",
     "start": "node server-entry.js",

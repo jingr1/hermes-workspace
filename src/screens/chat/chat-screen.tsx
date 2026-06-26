@@ -1733,17 +1733,27 @@ export function ChatScreen({
     return 'var(--chat-composer-height, 56px)'
   }, [isMobile])
 
-  // Keep message list clear of composer, keyboard, and desktop terminal panel.
+  // Terminal panel reserves space via main marginBottom (sibling overlay).
+  // Do not also pad the scroll content by terminal height — that double-counts
+  // and leaves a large empty gap above the composer when the panel is open.
   const stableContentStyle = useMemo<React.CSSProperties>(() => {
     if (isMobile) {
       return {
         paddingBottom: 'calc(var(--chat-composer-height, 56px) + 8px)',
       }
     }
-    return {
-      paddingBottom:
-        terminalPanelInset > 0 ? `${terminalPanelInset + 16}px` : '16px',
-    }
+    return { paddingBottom: '16px' }
+  }, [isMobile])
+
+  // Re-anchor messages when the desktop terminal panel opens/closes (main margin shifts).
+  useEffect(() => {
+    if (isMobile) return
+    const viewport = document.querySelector('[data-chat-scroll-viewport]')
+    if (!(viewport instanceof HTMLElement)) return
+    const frameId = window.requestAnimationFrame(() => {
+      viewport.scrollTo({ top: viewport.scrollHeight, behavior: 'auto' })
+    })
+    return () => window.cancelAnimationFrame(frameId)
   }, [isMobile, terminalPanelInset])
 
   const shouldRedirectToNew =
@@ -2873,9 +2883,7 @@ export function ChatScreen({
               pinGroupMinHeight={pinGroupMinHeight}
               headerHeight={headerHeight}
               contentStyle={stableContentStyle}
-              bottomOffset={
-                isMobile ? mobileScrollBottomOffset : terminalPanelInset
-              }
+              bottomOffset={isMobile ? mobileScrollBottomOffset : 0}
               isStreaming={derivedStreamingInfo.isStreaming}
               streamingMessageId={derivedStreamingInfo.streamingMessageId}
               streamingText={

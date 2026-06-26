@@ -13,7 +13,6 @@
  */
 import {
   Suspense,
-  lazy,
   useCallback,
   useEffect,
   useMemo,
@@ -24,6 +23,7 @@ import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { fetchClaudeAuthStatus, type AuthStatus } from '@/lib/claude-auth'
 import { cn } from '@/lib/utils'
 import { ConnectionStartupScreen } from '@/components/connection-startup-screen'
+import { ErrorBoundary } from '@/components/error-boundary'
 import { ChatSidebar } from '@/screens/chat/components/chat-sidebar'
 import { useChatSessions } from '@/screens/chat/hooks/use-chat-sessions'
 import { useWorkspaceStore } from '@/stores/workspace-store'
@@ -48,13 +48,8 @@ import { useMobileKeyboard } from '@/hooks/use-mobile-keyboard'
 import { SystemMetricsFooter } from '@/components/system-metrics-footer'
 import { CommandPalette } from '@/components/command-palette'
 import { useSettings } from '@/hooks/use-settings'
+import { TerminalWorkspaceLazy } from '@/lib/terminal-workspace-lazy'
 // ActivityTicker moved to dashboard-only (too noisy for global header)
-
-const TerminalWorkspace = lazy(() =>
-  import('@/components/terminal/terminal-workspace').then((m) => ({
-    default: m.TerminalWorkspace,
-  })),
-)
 
 export const DESKTOP_SIDEBAR_BACKDROP_CLASS =
   'fixed left-0 bottom-0 top-[var(--titlebar-h,0px)] w-[300px] z-10 bg-black/10 backdrop-blur-[1px]'
@@ -172,6 +167,16 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
     }
   }, [connectionVerified])
 
+  // Never block the shell indefinitely behind the startup overlay.
+  useEffect(() => {
+    if (connectionVerified) return
+    const timer = setTimeout(() => {
+      setAuthStatus((prev) => prev ?? { authenticated: true, authRequired: false })
+      setConnectionVerified(true)
+    }, 6_000)
+    return () => clearTimeout(timer)
+  }, [connectionVerified])
+
   // Derive active session from URL
   const mobilePageTitle = (() => {
     if (pathname.startsWith('/terminal')) return 'Terminal'
@@ -195,6 +200,16 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
   const activeFriendlyId = chatMatch ? chatMatch[1] : 'main'
   const isOnChatRoute = Boolean(chatMatch) || pathname === '/new'
   const isOnTerminalRoute = pathname.startsWith('/terminal')
+  const [terminalMounted, setTerminalMounted] = useState(isOnTerminalRoute)
+
+  useEffect(
+    function mountFullscreenTerminalOnFirstVisit() {
+      if (isOnTerminalRoute) {
+        setTerminalMounted(true)
+      }
+    },
+    [isOnTerminalRoute],
+  )
   const isOnPlaygroundRoute = pathname === '/playground' || pathname.startsWith('/playground/')
   const isOnHermesWorldLandingRoute = pathname === '/hermes-world' || pathname.startsWith('/hermes-world/') || pathname === '/world' || pathname.startsWith('/world/')
   const isEmbeddedSurface =
@@ -414,12 +429,20 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
                 <MobilePageHeader title="Terminal" />
               )}
               <div className="flex-1 min-h-0 overflow-hidden">
-                <Suspense fallback={null}>
-                  <TerminalWorkspace
-                    mode="fullscreen"
-                    panelVisible={isOnTerminalRoute}
-                  />
-                </Suspense>
+                {terminalMounted ? (
+                  <ErrorBoundary
+                    className="h-full"
+                    title="Terminal unavailable"
+                    description="The terminal module failed to load. Other pages still work — reload or visit /terminal later."
+                  >
+                    <Suspense fallback={null}>
+                      <TerminalWorkspaceLazy
+                        mode="fullscreen"
+                        panelVisible={isOnTerminalRoute}
+                      />
+                    </Suspense>
+                  </ErrorBoundary>
+                ) : null}
               </div>
               {/* Mobile input bar — only mount on the terminal route.
                   It uses fixed bottom positioning, so if it stays mounted while

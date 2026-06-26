@@ -326,4 +326,38 @@ describe('kanban-backend', () => {
     expect(sqliteCalls.some((call) => call.includes('idempotency_key') && call.includes('native-dispatch-1'))).toBe(true)
     expect(sqliteCalls.every((call) => !call.includes('swarm2-kanban.json'))).toBe(true)
   })
+
+  it('falls back to local when Hermes dashboard proxy fetch fails in auto mode', async () => {
+    vi.stubEnv('CLAUDE_KANBAN_BACKEND', 'auto')
+    vi.doMock('./gateway-capabilities', () => ({
+      getCapabilities: () => ({
+        kanban: true,
+        dashboard: { url: 'http://127.0.0.1:9119', available: true },
+      }),
+      CLAUDE_DASHBOARD_URL: 'http://127.0.0.1:9119',
+    }))
+    vi.doMock('./kanban-dashboard-proxy', () => ({
+      fetchDashboardKanbanBoard: vi.fn(() =>
+        Promise.reject(new TypeError('fetch failed')),
+      ),
+      createDashboardKanbanTask: vi.fn(),
+      updateDashboardKanbanTask: vi.fn(),
+    }))
+
+    const mod = await loadKanbanBackend({
+      existsSync: () => false,
+      execFileSync: (command, args = []) => {
+        if (command === 'which' && args[0] === 'claude') throw new Error('not found')
+        throw new Error(`Unexpected command: ${command} ${args.join(' ')}`)
+      },
+    })
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const cards = await mod.listKanbanCards()
+    expect(cards[0]?.id).toBe('local-1')
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Hermes Dashboard proxy unavailable'),
+    )
+    warnSpy.mockRestore()
+  })
 })

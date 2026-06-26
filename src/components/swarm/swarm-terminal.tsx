@@ -41,7 +41,7 @@ export const SwarmTerminal = memo(function SwarmTerminal({
   const inputBufferRef = useRef('')
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const nativeInputCounterRef = useRef(0)
-  const [state, setState] = useState<ConnectionState>('idle')
+  const [state, setState] = useState<ConnectionState>('connecting')
   const [error, setError] = useState<string | null>(null)
   const [reconnectKey, setReconnectKey] = useState(0)
   const [isFocused, setIsFocused] = useState(false)
@@ -83,20 +83,12 @@ export const SwarmTerminal = memo(function SwarmTerminal({
     }, 18)
   }, [flushPendingInput])
 
-  const stop = useCallback(() => {
+  const restart = useCallback(() => {
     if (flushTimerRef.current) {
       clearTimeout(flushTimerRef.current)
       flushTimerRef.current = null
     }
     flushPendingInput()
-    const sessionId = sessionIdRef.current
-    if (sessionId) {
-      void fetch('/api/terminal-close', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId }),
-      }).catch(() => undefined)
-    }
     if (readerRef.current) {
       try {
         void readerRef.current.cancel()
@@ -106,25 +98,30 @@ export const SwarmTerminal = memo(function SwarmTerminal({
       readerRef.current = null
     }
     sessionIdRef.current = null
-    setState('closed')
-  }, [flushPendingInput])
-
-  const restart = useCallback(() => {
-    stop()
-    if (terminalRef.current) {
-      terminalRef.current.write('\r\n\x1b[33m[swarm] restarting…\x1b[0m\r\n')
-    }
+    setError(null)
     setReconnectKey((k) => k + 1)
-    setState('idle')
-  }, [stop])
+    setState('connecting')
+  }, [flushPendingInput])
 
   useEffect(() => {
     let cancelled = false
 
     async function bootstrap() {
-      if (!containerRef.current) return
+      if (!containerRef.current) {
+        if (!cancelled) {
+          window.setTimeout(() => {
+            if (!cancelled) void bootstrap()
+          }, 0)
+        }
+        return
+      }
       await ensureXterm()
-      if (cancelled || !containerRef.current || !xtermCtors) return
+      if (cancelled || !containerRef.current) return
+      if (!xtermCtors) {
+        setError('Failed to load terminal')
+        setState('error')
+        return
+      }
 
       const { Terminal, FitAddon, WebLinksAddon } = xtermCtors
       const terminal = new Terminal({
@@ -173,11 +170,8 @@ export const SwarmTerminal = memo(function SwarmTerminal({
       }
       viewport?.addEventListener('wheel', wheelHandler, { passive: false })
 
-      terminal.writeln(`\x1b[1;36m[swarm] worker ${workerId} terminal\x1b[0m`)
-      terminal.writeln(`\x1b[2mcommand: ${command.join(' ')}\x1b[0m`)
-      terminal.writeln('')
-
       setState('connecting')
+      const attachSessionId = sessionIdRef.current
       const response = await fetch('/api/terminal-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -186,7 +180,9 @@ export const SwarmTerminal = memo(function SwarmTerminal({
           cwd,
           cols: terminal.cols,
           rows: terminal.rows,
+          sessionId: attachSessionId ?? undefined,
         }),
+        signal: AbortSignal.timeout(20_000),
       }).catch(() => null)
 
       if (cancelled) return
@@ -253,17 +249,30 @@ export const SwarmTerminal = memo(function SwarmTerminal({
               const parsed = JSON.parse(dataLine) as Record<string, unknown>
               if (event === 'session') {
                 const sessionId = typeof parsed.sessionId === 'string' ? parsed.sessionId : null
+                const reattach = parsed.reattach === true
                 if (sessionId) sessionIdRef.current = sessionId
+                if (!reattach) terminal.clear()
+                terminal.writeln(`\x1b[1;36m[swarm] worker ${workerId} terminal\x1b[0m`)
+                terminal.writeln(`\x1b[2mcommand: ${command.join(' ')}\x1b[0m`)
+                if (reattach) {
+                  terminal.writeln('\x1b[2mreattached — waiting for output…\x1b[0m')
+                }
+                terminal.writeln('')
               } else if (event === 'data') {
                 const data = typeof parsed.data === 'string' ? parsed.data : ''
                 if (data) terminal.write(data)
               } else if (event === 'exit' || event === 'close') {
-                terminal.writeln('\r\n\x1b[33m[swarm] session ended\x1b[0m')
+                const exitCode = typeof parsed.exitCode === 'number' ? parsed.exitCode : null
+                const suffix = exitCode !== null ? ` (exit ${exitCode})` : ''
+                terminal.writeln(`\r\n\x1b[33m[swarm] session ended${suffix}\x1b[0m`)
                 sessionIdRef.current = null
                 setState('closed')
               } else if (event === 'error') {
                 const message = typeof parsed.message === 'string' ? parsed.message : 'unknown error'
                 terminal.writeln(`\r\n\x1b[31m[swarm] ${message}\x1b[0m`)
+                sessionIdRef.current = null
+                setError(message)
+                setState('error')
               }
             } catch {
               /* skip malformed event */
@@ -288,7 +297,21 @@ export const SwarmTerminal = memo(function SwarmTerminal({
 
     return () => {
       cancelled = true
-      stop()
+      if (flushTimerRef.current) {
+        clearTimeout(flushTimerRef.current)
+        flushTimerRef.current = null
+      }
+      flushPendingInput()
+      if (readerRef.current) {
+        try {
+          void readerRef.current.cancel()
+        } catch {
+          /* noop */
+        }
+        readerRef.current = null
+      }
+      // Fresh xterm cannot replay scrollback from a detached PTY — spawn anew.
+      sessionIdRef.current = null
       const terminal = terminalRef.current
       terminalRef.current = null
       fitRef.current = null
@@ -314,17 +337,43 @@ export const SwarmTerminal = memo(function SwarmTerminal({
     return () => clearTimeout(id)
   }, [active, focusTerminal])
 
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault()
+      event.stopPropagation()
+      const lines = Math.max(-8, Math.min(8, Math.round(event.deltaY / 40)))
+      if (lines !== 0) {
+        terminalRef.current?.scrollLines(lines)
+      }
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
+
   return (
     <div className={cn('flex flex-col gap-2', className)}>
       {state !== 'connected' || error ? (
-        <div className="flex items-center justify-between text-[10px] text-[var(--theme-muted)]">
+        <div className="flex items-center justify-between gap-2 text-[10px] text-[var(--theme-muted)]">
           <span>
             {state === 'connecting' && 'connecting…'}
-            {state === 'closed' && 'session closed'}
+            {state === 'closed' && 'browser terminal disconnected — tmux session may still be running'}
             {state === 'error' && 'error'}
             {state === 'idle' && 'idle'}
           </span>
-          {error ? <span className="text-red-300">attach error</span> : null}
+          <div className="flex items-center gap-2">
+            {error ? <span className="text-red-300">attach error</span> : null}
+            {(state === 'closed' || state === 'error' || state === 'idle' || state === 'connecting') ? (
+              <button
+                type="button"
+                onClick={() => restart()}
+                className="rounded-md border border-[var(--theme-border)] px-2 py-0.5 text-[10px] font-semibold text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
+              >
+                Reconnect
+              </button>
+            ) : null}
+          </div>
         </div>
       ) : null}
       <div
@@ -408,14 +457,6 @@ export const SwarmTerminal = memo(function SwarmTerminal({
           event.stopPropagation()
           queueInput(data)
           focusTerminal()
-        }}
-        onWheel={(event) => {
-          event.preventDefault()
-          event.stopPropagation()
-          const lines = Math.max(-8, Math.min(8, Math.round(event.deltaY / 40)))
-          if (lines !== 0) {
-            terminalRef.current?.scrollLines(lines)
-          }
         }}
         className={cn(
           'cursor-text overflow-hidden rounded-2xl border bg-[#0b0d12] p-2 outline-none',

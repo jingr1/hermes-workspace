@@ -15,6 +15,15 @@ describe('RouterChat dispatch request', () => {
 
     expect(src).toContain("fetch('/api/swarm-dispatch'")
     expect(src).toContain('waitForCheckpoint: false')
-    expect(src).not.toContain('checkpointPollSeconds: 90')
+    expect(src).toContain('allowAsync: true')
+    expect(src).toContain('/api/swarm-missions?id=')
+  })
+
+  it('excludes workspace from swarm dispatch targets', () => {
+    const src = source()
+
+    expect(src).toContain("from '@/lib/swarm-workers'")
+    expect(src).toContain('isSwarmDispatchWorkerId')
+    expect(src).toContain('handleModeChange')
   })
 })

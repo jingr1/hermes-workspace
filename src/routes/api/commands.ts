@@ -21,6 +21,12 @@ export const Route = createFileRoute('/api/commands')({
         try {
           const res = await gatewayFetch('/v1/commands')
 
+          if (res.status === 404) {
+            // Current gateway builds expose slash commands via TUI RPC
+            // (commands.catalog), not REST /v1/commands — degrade quietly.
+            return Response.json({ commands: [] })
+          }
+
           if (!res.ok) {
             return json(
               { error: `Gateway responded with status ${res.status}` },

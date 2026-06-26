@@ -1,6 +1,7 @@
 'use client'
 
 import type { CrewMember } from '@/hooks/use-crew-status'
+import { buildTmuxAttachCommand } from '@/lib/tmux-attach'
 import { cn } from '@/lib/utils'
 import { SwarmTerminal } from '@/components/swarm/swarm-terminal'
 
@@ -21,7 +22,7 @@ function shellCommandForRuntime(
   runtime: StandaloneRuntimeEntry | undefined,
 ): Array<string> {
   if (runtime?.tmuxAttachable && runtime.tmuxSession) {
-    return ['tmux', 'attach', '-t', runtime.tmuxSession]
+    return buildTmuxAttachCommand(runtime.tmuxSession)
   }
   const cwd = runtime?.cwd?.replace(/"/g, '\\"')
   return ['zsh', '-lc', cwd ? `cd "${cwd}" && exec zsh -l` : 'exec zsh -l']

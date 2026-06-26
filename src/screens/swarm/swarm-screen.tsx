@@ -11,7 +11,7 @@ import {
   RefreshIcon,
   ViewIcon,
 } from '@hugeicons/core-free-icons'
-import { cn } from '@/lib/utils'
+import { buildTmuxAttachCommand } from '@/lib/tmux-attach'
 import { WorkflowHelpModal } from '@/components/workflow-help-modal'
 import {
   getOnlineStatus,
@@ -77,7 +77,7 @@ function useUpdatedAgo(fetchedAt: number | null): string {
 
 function shellCommandForRuntime(runtime: RuntimeEntry | undefined): string[] {
   if (runtime?.tmuxAttachable && runtime.tmuxSession) {
-    return ['tmux', 'attach', '-t', runtime.tmuxSession]
+    return buildTmuxAttachCommand(runtime.tmuxSession)
   }
   const cwd = runtime?.cwd?.replace(/"/g, '\\"')
   return ['zsh', '-lc', cwd ? `cd "${cwd}" && exec zsh -l` : 'exec zsh -l']

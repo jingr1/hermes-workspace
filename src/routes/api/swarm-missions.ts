@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../server/auth-middleware'
 import { SWARM_MISSIONS_PATH, cancelSwarmAssignment, cancelSwarmMission, getSwarmMission, listSwarmMissions, listSwarmReports } from '../../server/swarm-missions'
+import { syncSwarmMissionCheckpoints } from '../../server/swarm-mission-sync'
 import { resetSwarmWorkerRuntime } from '../../server/swarm-runtime-reset'
 
 type CancelPostBody = {
@@ -27,14 +28,17 @@ export const Route = createFileRoute('/api/swarm-missions')({
         }
         const url = new URL(request.url)
         const id = url.searchParams.get('id')?.trim()
+        const sync = url.searchParams.get('sync') === '1' || url.searchParams.get('sync') === 'true'
         const limitRaw = Number(url.searchParams.get('limit') ?? 20)
         const limit = Number.isFinite(limitRaw) ? limitRaw : 20
+        const synced = id && sync ? await syncSwarmMissionCheckpoints(id) : null
         return json({
           ok: true,
           path: SWARM_MISSIONS_PATH,
-          mission: id ? getSwarmMission(id) : null,
+          mission: synced?.mission ?? (id ? getSwarmMission(id) : null),
           missions: id ? [] : listSwarmMissions(limit),
           reports: id ? listSwarmReports({ missionId: id, limit }) : [],
+          synced: synced?.synced ?? 0,
           fetchedAt: Date.now(),
         })
       },

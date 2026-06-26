@@ -11,6 +11,7 @@ import { createOrUpdateMission, getSwarmMission, markMissionAssignmentDispatched
 import { appendSwarmMemoryEvent, buildSwarmStartupSnapshot } from '../../server/swarm-memory'
 import { rosterByWorkerId, type SwarmRosterWorker } from '../../server/swarm-roster'
 import { publishSwarmCheckpointNotification } from '../../server/swarm-notifications'
+import { isSwarmDispatchWorkerId } from '../../lib/swarm-workers'
 import { ensureSwarmProfileConfig, syncSwarmProfileModel } from '../../server/swarm-profile-config'
 import { parseSwarmModelLabel } from '../../server/swarm-model-resolver'
 import { buildHandoff, writeHandoff } from '../../server/handoff'
@@ -72,6 +73,12 @@ type DispatchRequest = {
   direct?: unknown
   notifySessionKey?: unknown
   deliveryMode?: unknown
+}
+
+export function resolveWaitForCheckpoint(body: Pick<DispatchRequest, 'waitForCheckpoint' | 'allowAsync'>): boolean {
+  if (body.waitForCheckpoint === true) return true
+  if (body.waitForCheckpoint === false || body.allowAsync === true) return false
+  return true
 }
 
 type WorkerResult = {
@@ -321,7 +328,7 @@ function parseAssignments(value: unknown): Array<AssignmentRequest> {
     const dependsOn = Array.isArray(obj.dependsOn) ? obj.dependsOn.filter((value): value is string => typeof value === 'string' && value.trim().length > 0) : undefined
     const reviewRequired = typeof obj.reviewRequired === 'boolean' ? obj.reviewRequired : undefined
     const direct = typeof obj.direct === 'boolean' ? obj.direct : undefined
-    if (!workerId || !task || !validateWorkerId(workerId)) continue
+    if (!workerId || !task || !validateWorkerId(workerId) || !isSwarmDispatchWorkerId(workerId)) continue
     assignments.push({ workerId, task, rationale, dependsOn, reviewRequired, direct })
   }
   return assignments
@@ -1497,7 +1504,7 @@ export async function dispatchSwarmAssignments(body: DispatchRequest) {
     const workerIds = workerIdsRaw
       .filter((value): value is string => typeof value === 'string')
       .map((value) => value.trim())
-      .filter((value) => value.length > 0 && validateWorkerId(value))
+      .filter((value) => value.length > 0 && validateWorkerId(value) && isSwarmDispatchWorkerId(value))
     assignments = workerIds.map((workerId) => ({
       workerId,
       task: prompt,
@@ -1522,7 +1529,7 @@ export async function dispatchSwarmAssignments(body: DispatchRequest) {
   const timeoutRaw = typeof body.timeoutSeconds === 'number' ? body.timeoutSeconds : DEFAULT_TIMEOUT_S
   const timeoutSeconds = Math.max(10, Math.min(MAX_TIMEOUT_S, Math.floor(timeoutRaw)))
   const timeoutMs = timeoutSeconds * 1000
-  const waitForCheckpoint = !(body.waitForCheckpoint === false && body.allowAsync === true)
+  const waitForCheckpoint = resolveWaitForCheckpoint(body)
   const pollRaw = typeof body.checkpointPollSeconds === 'number' ? body.checkpointPollSeconds : 90
   const checkpointPollSeconds = Math.max(5, Math.min(300, Math.floor(pollRaw)))
   const notifySessionKey = typeof body.notifySessionKey === 'string' && body.notifySessionKey.trim() ? body.notifySessionKey.trim() : 'main'

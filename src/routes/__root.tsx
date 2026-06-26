@@ -233,10 +233,14 @@ type CachesLike = {
 export async function registerAppServiceWorker({
   serviceWorker,
   cachesApi,
+  enabled = import.meta.env.PROD,
 }: {
   serviceWorker?: ServiceWorkerLike
   cachesApi?: CachesLike
+  enabled?: boolean
 }): Promise<void> {
+  if (!enabled) return
+
   await cachesApi
     ?.keys()
     .then((names) =>
@@ -399,6 +403,87 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             server-entry.js and vite.config.ts. Don't re-emit it as a `<meta>`
             here — see the comment in src/lib/csp.ts for why duplicating it
             in the HTML is unsafe when an edge proxy mutates the body. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: wrapInlineScript(`
+          // Recover when Vite returns 504 / mixed optimize-deps hashes after HMR/config reload.
+          (function () {
+            var reloadKey = 'hermes-vite-dep-reload';
+            var isDev = ${import.meta.env.DEV ? 'true' : 'false'};
+            if (isDev) {
+              try {
+                if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+                  navigator.serviceWorker.getRegistrations().then(function (regs) {
+                    regs.forEach(function (reg) { void reg.unregister(); });
+                  });
+                }
+                if (window.caches && caches.keys) {
+                  caches.keys().then(function (keys) {
+                    keys.forEach(function (key) { caches.delete(key); });
+                  });
+                }
+              } catch (_) {}
+            }
+            function reloadOnce() {
+              try {
+                var count = Number(sessionStorage.getItem(reloadKey) || '0');
+                if (count >= 3) return;
+                sessionStorage.setItem(reloadKey, String(count + 1));
+              } catch (_) {}
+              try {
+                if (window.caches && caches.keys) {
+                  caches.keys().then(function (keys) {
+                    keys.forEach(function (key) { caches.delete(key); });
+                  });
+                }
+              } catch (_) {}
+              var bust = '__hermes_v=' + Date.now();
+              var base = location.pathname + location.search.replace(/([?&])__hermes_v=[^&]*/g, '$1').replace(/[?&]$/, '');
+              location.replace(base + (base.indexOf('?') === -1 ? '?' : '&') + bust);
+            }
+            function shouldRecover(message) {
+              return (
+                message.indexOf('Failed to fetch dynamically imported module') !== -1 ||
+                message.indexOf('Importing a module script failed') !== -1 ||
+                message.indexOf('Invalid hook call') !== -1 ||
+                message.indexOf("reading 'useState'") !== -1 ||
+                message.indexOf("reading 'useContext'") !== -1 ||
+                message.indexOf("reading 'useCallback'") !== -1 ||
+                message.indexOf("reading 'useMemo'") !== -1
+              );
+            }
+            function hasMixedViteDepHashes() {
+              if (!performance || !performance.getEntriesByType) return false;
+              var hashes = {};
+              performance.getEntriesByType('resource').forEach(function (entry) {
+                var url = entry.name || '';
+                if (url.indexOf('.vite/deps/') === -1) return;
+                var match = url.match(/[?&]v=([^&]+)/);
+                if (match) hashes[match[1]] = true;
+              });
+              return Object.keys(hashes).length > 1;
+            }
+            window.addEventListener('vite:preloadError', function (event) {
+              if (event && typeof event.preventDefault === 'function') event.preventDefault();
+              reloadOnce();
+            });
+            window.addEventListener('error', function (event) {
+              var message = event && event.message ? String(event.message) : '';
+              if (shouldRecover(message)) reloadOnce();
+            });
+            window.addEventListener('unhandledrejection', function (event) {
+              var reason = event && event.reason;
+              var message = reason && reason.message ? String(reason.message) : String(reason || '');
+              if (shouldRecover(message)) reloadOnce();
+            });
+            window.addEventListener('load', function () {
+              if (isDev && hasMixedViteDepHashes()) reloadOnce();
+              try { sessionStorage.removeItem(reloadKey); } catch (_) {}
+            });
+          })();
+        `),
+          }}
+        />
         <script
           dangerouslySetInnerHTML={{
             __html: wrapInlineScript(`

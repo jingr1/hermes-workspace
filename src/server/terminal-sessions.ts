@@ -9,6 +9,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { homedir } from 'node:os'
 import EventEmitter from 'node:events'
+import { isTmuxAttachCommand } from '../lib/tmux-attach'
 import type { ChildProcess } from 'node:child_process'
 
 export type TerminalSessionEvent = {
@@ -84,6 +85,19 @@ export function createTerminalSession(params: {
   const cols = params.cols ?? 80
   const rows = params.rows ?? 24
 
+  const baseEnv = {
+    ...process.env,
+    ...params.env,
+    TERM: 'xterm-256color',
+    COLORTERM: 'truecolor',
+    COLUMNS: String(cols),
+    LINES: String(rows),
+  } as Record<string, string>
+  if (isTmuxAttachCommand(command)) {
+    delete baseEnv.TMUX
+    delete baseEnv.TMUX_PANE
+  }
+
   // Buffer early output before any listener registers
   const earlyBuffer: Array<TerminalSessionEvent> = []
   let hasListeners = false
@@ -113,14 +127,7 @@ export function createTerminalSession(params: {
   if (process.platform === 'win32') {
     proc = spawn(command[0], command.slice(1), {
       cwd,
-      env: {
-        ...process.env,
-        ...params.env,
-        TERM: 'xterm-256color',
-        COLORTERM: 'truecolor',
-        COLUMNS: String(cols),
-        LINES: String(rows),
-      } as Record<string, string>,
+      env: baseEnv,
       stdio: ['pipe', 'pipe', 'pipe'],
     })
   } else {
@@ -128,14 +135,7 @@ export function createTerminalSession(params: {
       'python3',
       [PTY_HELPER, cwd, String(cols), String(rows), '--', ...command],
       {
-        env: {
-          ...process.env,
-          ...params.env,
-          TERM: 'xterm-256color',
-          COLORTERM: 'truecolor',
-          COLUMNS: String(cols),
-          LINES: String(rows),
-        } as Record<string, string>,
+        env: baseEnv,
         stdio: ['pipe', 'pipe', 'pipe'],
       },
     )

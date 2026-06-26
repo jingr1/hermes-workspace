@@ -12,6 +12,7 @@ import {
   Settings01Icon,
 } from '@hugeicons/core-free-icons'
 import type { CrewMember } from '@/hooks/use-crew-status'
+import { isSwarmDispatchWorkerId } from '@/lib/swarm-workers'
 import { cn } from '@/lib/utils'
 
 type Mode = 'auto' | 'manual' | 'broadcast'
@@ -40,7 +41,47 @@ type DispatchResult = {
 export type DispatchResponse = {
   dispatchedAt: number
   completedAt: number
+  missionId?: string
   results: Array<DispatchResult>
+}
+
+type MissionAssignment = {
+  workerId: string
+  state: string
+  checkpoint?: { stateLabel?: string; result?: string | null } | null
+}
+
+type MissionSnapshot = {
+  id: string
+  state: string
+  assignments: Array<MissionAssignment>
+}
+
+const MISSION_POLL_MS = 4_000
+const MISSION_POLL_MAX_MS = 45 * 60_000
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function missionStillRunning(mission: MissionSnapshot | null | undefined): boolean {
+  if (!mission) return false
+  if (mission.state === 'executing' || mission.state === 'planning') return true
+  return mission.assignments.some((assignment) => assignment.state === 'dispatched' || assignment.state === 'queued')
+}
+
+async function pollMissionUntilSettled(missionId: string): Promise<MissionSnapshot | null> {
+  const started = Date.now()
+  let latest: MissionSnapshot | null = null
+  while (Date.now() - started < MISSION_POLL_MAX_MS) {
+    const res = await fetch(`/api/swarm-missions?id=${encodeURIComponent(missionId)}&sync=1`)
+    if (!res.ok) break
+    const data = (await res.json()) as { mission?: MissionSnapshot | null }
+    latest = data.mission ?? null
+    if (!missionStillRunning(latest)) return latest
+    await sleep(MISSION_POLL_MS)
+  }
+  return latest
 }
 
 type FollowUpResponse = {
@@ -101,9 +142,19 @@ export function RouterChat({
   const [assignments, setAssignments] = useState<Array<Assignment>>([])
   const [unassigned, setUnassigned] = useState<Array<string>>([])
   const [dispatching, setDispatching] = useState(false)
+  const [watchingMission, setWatchingMission] = useState(false)
   const [dispatchError, setDispatchError] = useState<string | null>(null)
   const [results, setResults] = useState<DispatchResponse | null>(null)
   const [followUp, setFollowUp] = useState<FollowUpResponse | null>(null)
+
+  function handleModeChange(next: Mode) {
+    if (next !== mode) {
+      setAssignments([])
+      setUnassigned([])
+      setDecomposeError(null)
+    }
+    setMode(next)
+  }
 
   useEffect(() => {
     if (!seedPrompt?.trim()) return
@@ -121,6 +172,7 @@ export function RouterChat({
     if (
       mode === 'manual' &&
       selectedId &&
+      isSwarmDispatchWorkerId(selectedId) &&
       assignments.length === 0 &&
       prompt.trim()
     ) {
@@ -150,7 +202,9 @@ export function RouterChat({
     )
   }
 
-  const eligibleWorkers = members.map((m) => ({
+  const eligibleWorkers = members
+    .filter((member) => isSwarmDispatchWorkerId(member.id))
+    .map((m) => ({
     id: m.id,
     role: m.role,
     model: m.model,
@@ -214,7 +268,10 @@ export function RouterChat({
         plan = assignments
       }
     } else if (mode === 'manual') {
-      if (!selectedId) return
+      if (!selectedId || !isSwarmDispatchWorkerId(selectedId)) {
+        setDispatchError('Workspace is the UI shell — pick a swarm worker (researcher, builder, …).')
+        return
+      }
       plan = [
         {
           workerId: selectedId,
@@ -223,15 +280,22 @@ export function RouterChat({
         },
       ]
     } else {
-      const targets = roomIds.length > 0 ? roomIds : members.map((m) => m.id)
+      const targets = (roomIds.length > 0 ? roomIds : members.map((m) => m.id)).filter((id) =>
+        isSwarmDispatchWorkerId(id),
+      )
       plan = targets.map((id) => ({
         workerId: id,
         task: prompt.trim(),
         rationale: 'Broadcast.',
       }))
     }
-    if (plan.length === 0) return
+    plan = plan.filter((assignment) => isSwarmDispatchWorkerId(assignment.workerId))
+    if (plan.length === 0) {
+      setDispatchError('No swarm workers available to dispatch.')
+      return
+    }
     setDispatching(true)
+    setWatchingMission(false)
     setDispatchError(null)
     setResults(null)
     setFollowUp(null)
@@ -243,8 +307,9 @@ export function RouterChat({
           assignments: plan,
           timeoutSeconds: 300,
           waitForCheckpoint: false,
+          allowAsync: true,
         }),
-        signal: AbortSignal.timeout(60_000),
+        signal: AbortSignal.timeout(30_000),
       })
       if (!res.ok) {
         const text = await res.text()
@@ -253,6 +318,39 @@ export function RouterChat({
       const data = (await res.json()) as DispatchResponse
       setResults(data)
       onResults(data)
+
+      const missionId = data.missionId
+      if (missionId) {
+        setWatchingMission(true)
+        const settledMission = await pollMissionUntilSettled(missionId)
+        setWatchingMission(false)
+        if (settledMission) {
+          setResults((current) => {
+            if (!current) return current
+            return {
+              ...current,
+              completedAt: Date.now(),
+              results: current.results.map((result) => {
+                const assignment = settledMission.assignments.find((item) => item.workerId === result.workerId)
+                const checkpoint = assignment?.checkpoint
+                if (!checkpoint) return result
+                return {
+                  ...result,
+                  ok: true,
+                  checkpointStatus: 'checkpointed' as const,
+                  checkpoint: {
+                    stateLabel: checkpoint.stateLabel ?? 'DONE',
+                    result: checkpoint.result ?? null,
+                    blocker: null,
+                    nextAction: null,
+                  },
+                }
+              }),
+            }
+          })
+        }
+      }
+
       if (plan.length > 1 && data.results.some((result) => result.checkpointStatus === 'checkpointed')) {
         const reviewer = members.find((member) => member.id === 'swarm6') ?? members.find((member) => /review|qa|critic/i.test(`${member.role} ${member.specialty ?? ''}`))
         const follow = await fetch('/api/swarm-orchestrator-loop', {
@@ -273,6 +371,7 @@ export function RouterChat({
       setDispatchError(err instanceof Error ? err.message : 'dispatch failed')
     } finally {
       setDispatching(false)
+      setWatchingMission(false)
     }
   }
 
@@ -309,7 +408,7 @@ export function RouterChat({
             ) : null}
           </div>
           <div className="flex items-center gap-2">
-            {!embedded ? <ModeToggle mode={mode} setMode={setMode} /> : null}
+            {!embedded ? <ModeToggle mode={mode} setMode={handleModeChange} /> : null}
             {!embedded ? (
               <button
                 type="button"
@@ -350,7 +449,7 @@ export function RouterChat({
                     key={quick}
                     type="button"
                     onClick={() => {
-                      setMode('auto')
+                      handleModeChange('auto')
                       setPrompt((cur) =>
                         cur
                           ? cur
@@ -367,7 +466,7 @@ export function RouterChat({
             <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
               {embedded ? (
                 <div className="flex flex-wrap items-center gap-3">
-                  <ModeToggle mode={mode} setMode={setMode} />
+                  <ModeToggle mode={mode} setMode={handleModeChange} />
                 </div>
               ) : (
                 <div className="text-[11px] text-[var(--theme-muted)]">
@@ -393,6 +492,7 @@ export function RouterChat({
                   onClick={dispatch}
                   disabled={
                     dispatching ||
+                    watchingMission ||
                     decomposing ||
                     !prompt.trim() ||
                     (mode === 'manual' && !selectedId)
@@ -408,10 +508,14 @@ export function RouterChat({
                     icon={mode === 'manual' ? SentIcon : mode === 'auto' ? Settings01Icon : Rocket01Icon}
                     size={12}
                   />
-                  {dispatching || decomposing
+                  {dispatching || decomposing || watchingMission
                     ? mode === 'auto'
-                      ? 'Routing…'
-                      : 'Sending…'
+                      ? watchingMission
+                        ? 'Watching workers…'
+                        : 'Routing…'
+                      : watchingMission
+                        ? 'Watching…'
+                        : 'Sending…'
                     : mode === 'manual'
                       ? `Send to ${selectedId ?? '—'}`
                       : mode === 'broadcast'

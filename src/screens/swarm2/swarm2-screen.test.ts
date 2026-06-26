@@ -81,6 +81,7 @@ describe('Swarm2 surface contract', () => {
   })
 })
 
+import { buildTmuxAttachCommand } from '@/lib/tmux-attach'
 import { __runtimeTabInternals } from './swarm2-screen'
 
 describe('Swarm2 runtime tab command resolution', () => {
@@ -101,7 +102,7 @@ describe('Swarm2 runtime tab command resolution', () => {
       terminalKind: 'tmux',
     })
     expect(result.kind).toBe('tmux')
-    expect(result.command).toEqual(['tmux', 'attach', '-t', 'swarm-swarm4'])
+    expect(result.command).toEqual(buildTmuxAttachCommand('swarm-swarm4'))
     expect(result.label).toContain('tmux:swarm-swarm4')
   })
 

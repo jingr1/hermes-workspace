@@ -200,6 +200,33 @@ function syncSwarmSkills(w, profileDir) {
   }
 }
 
+/** ~/.hermes/skills/swarm/ — canonical path for /slash-skill discovery (skill_view). */
+function syncGlobalSwarmSkills(swarmWorkers) {
+  const wsSkills = path.join(WS, 'skills', 'swarm')
+  const globalSwarm = path.join(os.homedir(), '.hermes', 'skills', 'swarm')
+  const globalRoot = path.join(os.homedir(), '.hermes', 'skills')
+  const names = new Set()
+  for (const w of swarmWorkers) {
+    for (const skill of w.skills ?? []) names.add(skill)
+  }
+  fs.mkdirSync(globalSwarm, { recursive: true })
+  let synced = 0
+  for (const skill of names) {
+    const src = path.join(wsSkills, skill)
+    if (!fs.existsSync(src)) continue
+    const dest = path.join(globalSwarm, skill)
+    fs.rmSync(dest, { recursive: true, force: true })
+    fs.cpSync(src, dest, { recursive: true })
+    synced++
+    // Duplicate top-level copy breaks /slash load (skill name collision).
+    const dup = path.join(globalRoot, skill)
+    if (fs.existsSync(dup) && fs.statSync(dup).isDirectory()) {
+      fs.rmSync(dup, { recursive: true, force: true })
+    }
+  }
+  return synced
+}
+
 const results = []
 for (const w of swarm.workers) {
   const profileDir = path.join(PROFILES, w.id)
@@ -238,11 +265,26 @@ for (const w of swarm.workers) {
   fs.mkdirSync(memDir, { recursive: true })
   fs.writeFileSync(path.join(memDir, 'IDENTITY.md'), renderIdentity(w))
   syncSwarmSkills(w, profileDir)
+  const staleSwarmNest = path.join(profileDir, 'skills', 'swarm')
+  if (fs.existsSync(staleSwarmNest)) {
+    fs.rmSync(staleSwarmNest, { recursive: true, force: true })
+    results.push(`${w.id}: removed skills/swarm/ nest (fixes /slash name collision)`)
+  }
+  if (w.id === 'orchestrator') {
+    const staleDispatch = path.join(profileDir, 'skills', 'workspace-dispatch')
+    if (fs.existsSync(staleDispatch)) {
+      fs.rmSync(staleDispatch, { recursive: true, force: true })
+      results.push(`${w.id}: removed workspace-dispatch from profile (not for CLI orchestrator)`)
+    }
+  }
   results.push(
     w.id === 'learning'
       ? `${w.id}: SOUL.md merged (base + swarm extension), IDENTITY.md, swarm skills synced`
       : `${w.id}: SOUL.md, IDENTITY.md, swarm skills synced`,
   )
 }
+
+const globalSynced = syncGlobalSwarmSkills(swarm.workers)
+results.push(`global: ${globalSynced} swarm skills → ~/.hermes/skills/swarm/ (for /slash commands)`)
 
 console.log(results.join('\n'))

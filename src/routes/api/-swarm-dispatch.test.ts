@@ -7,11 +7,25 @@ import {
   checkpointFromRuntimeSnapshot,
   dispatchBlockReason,
   resolveDeliveryMode,
+  resolveWaitForCheckpoint,
   runtimeCheckpointSignature,
   runtimeSnapshotIsFresh,
   tmuxPaneLooksLikeHermesTui,
   tmuxPaneLooksLikeShellReady,
 } from './swarm-dispatch'
+
+describe('resolveWaitForCheckpoint', () => {
+  it('waits by default for curl-style callers', () => {
+    expect(resolveWaitForCheckpoint({})).toBe(true)
+    expect(resolveWaitForCheckpoint({ waitForCheckpoint: true })).toBe(true)
+  })
+
+  it('does not wait when explicitly async', () => {
+    expect(resolveWaitForCheckpoint({ waitForCheckpoint: false })).toBe(false)
+    expect(resolveWaitForCheckpoint({ allowAsync: true })).toBe(false)
+    expect(resolveWaitForCheckpoint({ waitForCheckpoint: false, allowAsync: true })).toBe(false)
+  })
+})
 
 describe('resolveDeliveryMode', () => {
   const originalForceOneshot = process.env.HERMES_SWARM_FORCE_ONESHOT

@@ -54,11 +54,18 @@ export const Route = createFileRoute('/api/swarm-kanban')({
   server: {
     handlers: {
       GET: async () => {
-        return json({
-          ok: true,
-          cards: await listKanbanCards(),
-          backend: getKanbanBackendMeta(),
-        })
+        try {
+          return json({
+            ok: true,
+            cards: await listKanbanCards(),
+            backend: getKanbanBackendMeta(),
+          })
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : 'Failed to load kanban cards'
+          console.error('[swarm-kanban] GET failed:', error)
+          return json({ ok: false, error: message, cards: [] }, { status: 503 })
+        }
       },
       POST: async ({ request }) => {
         let body: unknown

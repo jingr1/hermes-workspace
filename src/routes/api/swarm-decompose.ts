@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../server/auth-middleware'
+import { isSwarmDispatchWorkerId } from '../../lib/swarm-workers'
 import { ensureGatewayProbed, getResolvedUrls } from '../../server/gateway-capabilities'
 import { getBearerToken } from '../../server/openai-compat-api'
 
@@ -185,7 +186,7 @@ export const Route = createFileRoute('/api/swarm-decompose')({
           if (!entry || typeof entry !== 'object') continue
           const obj = entry as Record<string, unknown>
           const id = typeof obj.id === 'string' ? obj.id.trim() : ''
-          if (!id || id === 'workspace') continue
+          if (!id || !isSwarmDispatchWorkerId(id)) continue
           workers.push({
             id,
             role: typeof obj.role === 'string' ? obj.role : undefined,

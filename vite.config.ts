@@ -463,6 +463,10 @@ const config = defineConfig(({ mode, command }) => {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
       },
+      // Single React instance for ESM + CJS interop (vitest inline comment applies here too).
+      // Without dedupe, react-dom may bind the dispatcher on a different copy than hooks use
+      // → "Cannot read properties of null (reading 'useContext')".
+      dedupe: ['react', 'react-dom'],
     },
     ssr: {
       external: [
@@ -473,31 +477,44 @@ const config = defineConfig(({ mode, command }) => {
       ],
     },
     optimizeDeps: {
+      holdUntilCrawlEnd: true,
+      // Pre-bundle xterm so the client never requests a missing `.vite/deps/xterm.js`.
+      // Excluding xterm left metadata pointing at deps/ without generating the file → black terminals.
+      include: [
+        'react',
+        'react-dom',
+        'react/jsx-runtime',
+        'react/jsx-dev-runtime',
+        'zustand',
+        '@tanstack/react-router',
+        '@tanstack/react-query',
+        'motion/react',
+        'xterm',
+        'xterm-addon-fit',
+        'xterm-addon-web-links',
+      ],
       exclude: [
         'playwright',
         'playwright-core',
         'playwright-extra',
         'puppeteer-extra-plugin-stealth',
-        // xterm is pre-minified CJS; pre-bundling often 504/timeouts and breaks lazy chunks.
+      ],
+      needsInterop: [
         'xterm',
         'xterm-addon-fit',
-        'xterm-addon-search',
         'xterm-addon-web-links',
       ],
     },
     server: {
-      // Cross-origin isolation so the embedded HermesWorld WebGL client keeps
-      // SharedArrayBuffer multithreading (matches the standalone web client at
-      // play.hermes-world.ai). Without these, the iframe silently drops to a
-      // single thread → render+physics+netcode contend on one thread → inflated
-      // ping / worse frame pacing even though network RTT is identical.
-      // COEP 'credentialless' enables isolation WITHOUT requiring CORP headers
-      // on every cross-origin asset (fonts/images); the web client already sends
-      // cross-origin-resource-policy: cross-origin so the iframe still embeds.
-      // Same-origin agent API (/ws-claude, /api/claude-proxy) is unaffected.
-      headers: {
-        'Cross-Origin-Opener-Policy': 'same-origin',
-        'Cross-Origin-Embedder-Policy': 'credentialless',
+      // Cross-origin isolation is only needed for HermesWorld / Playground (SharedArrayBuffer).
+      // Applying COOP/COEP globally on HTTP LAN IPs triggers browser warnings and is ignored
+      // on non-trustworthy origins anyway — see configureServer middleware below.
+      warmup: {
+        clientFiles: [
+          './src/routes/__root.tsx',
+          './src/components/workspace-shell.tsx',
+          './src/screens/chat/chat-screen.tsx',
+        ],
       },
       // Force IPv4 — 'localhost' resolves to ::1 (IPv6) on Windows, breaking connectivity
       host: '0.0.0.0',
@@ -589,20 +606,37 @@ const config = defineConfig(({ mode, command }) => {
       tanstackStart(),
       viteReact(),
       {
+        name: 'hermes-dev-no-cache',
+        apply: 'serve',
+        configureServer(server) {
+          server.middlewares.use((_req, res, next) => {
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+            res.setHeader('Pragma', 'no-cache')
+            res.setHeader('Expires', '0')
+            next()
+          })
+        },
+      },
+      {
         name: 'workspace-daemon',
         buildStart() {
           if (command !== 'serve') return
         },
         configureServer(server) {
-          // Cross-origin isolation headers on EVERY response so the embedded
-          // HermesWorld WebGL client keeps SharedArrayBuffer multithreading
-          // (matches play.hermes-world.ai). Injected via middleware because the
-          // TanStack Start SSR handler owns the HTML response and overrides
-          // vite's server.headers. COEP 'credentialless' avoids requiring CORP
-          // on every cross-origin asset; same-origin agent API is unaffected.
-          server.middlewares.use((_req, res, next) => {
-            res.setHeader('Cross-Origin-Opener-Policy', 'same-origin')
-            res.setHeader('Cross-Origin-Embedder-Policy', 'credentialless')
+          // Cross-origin isolation headers for HermesWorld / Playground only.
+          server.middlewares.use((req, res, next) => {
+            const requestPath = req.url?.split('?')[0] ?? ''
+            const needsIsolation =
+              requestPath === '/hermes-world' ||
+              requestPath.startsWith('/hermes-world/') ||
+              requestPath === '/world' ||
+              requestPath.startsWith('/world/') ||
+              requestPath === '/playground' ||
+              requestPath.startsWith('/playground/')
+            if (needsIsolation) {
+              res.setHeader('Cross-Origin-Opener-Policy', 'same-origin')
+              res.setHeader('Cross-Origin-Embedder-Policy', 'credentialless')
+            }
             next()
           })
           // Content Security Policy as a real HTTP response header. Sending
@@ -808,8 +842,13 @@ const config = defineConfig(({ mode, command }) => {
               path.startsWith('/api/sse') ||
               path.startsWith('/sse') ||
               path.startsWith('/api/live') ||
+              path === '/api/terminal-stream' ||
+              path === '/api/terminal-input' ||
+              path === '/api/terminal-resize' ||
               path === '/api/swarm-direct-chat' ||
-              path === '/api/swarm-dispatch'
+              path === '/api/swarm-dispatch' ||
+              path === '/api/swarm-decompose' ||
+              path === '/api/conductor-spawn'
             const timeout = isLongRunning ? 0 : 15_000
             socket.setTimeout(timeout)
             next()

@@ -18,7 +18,7 @@ import {
   MessageMultiple01Icon,
   UserMultipleIcon,
 } from '@hugeicons/core-free-icons'
-import type { CrewMember } from '@/hooks/use-crew-status'
+import { buildTmuxAttachCommand } from '@/lib/tmux-attach'
 import { getOnlineStatus, useCrewStatus } from '@/hooks/use-crew-status'
 import { toast } from '@/components/ui/toast'
 import { OperationalWorkerCard } from './operational-worker-card'
@@ -448,7 +448,7 @@ export function commandForRuntime(
   // auto
   if (runtime?.tmuxAttachable && runtime.tmuxSession) {
     return {
-      command: ['tmux', 'attach', '-t', runtime.tmuxSession],
+      command: buildTmuxAttachCommand(runtime.tmuxSession),
       kind: 'tmux',
       label: `tmux:${runtime.tmuxSession}`,
     }

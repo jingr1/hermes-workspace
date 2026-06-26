@@ -607,23 +607,53 @@ export function resolveKanbanBackend(): KanbanBackend {
   return localBackend
 }
 
+function resolveKanbanFallbackBackend(): KanbanBackend {
+  const claudeMeta = claudeBackend.meta()
+  if (claudeMeta.detected) return claudeBackend
+  return localBackend
+}
+
+function shouldFallbackFromDashboardProxy(): boolean {
+  const preference = (env('CLAUDE_KANBAN_BACKEND') ?? 'auto').toLowerCase()
+  return preference === 'auto'
+}
+
+async function invokeKanbanBackend<T>(
+  operation: (backend: KanbanBackend) => T | Promise<T>,
+): Promise<T> {
+  const backend = resolveKanbanBackend()
+  try {
+    return await Promise.resolve(operation(backend))
+  } catch (error) {
+    if (backend !== dashboardProxyBackend || !shouldFallbackFromDashboardProxy()) {
+      throw error
+    }
+    const fallback = resolveKanbanFallbackBackend()
+    const message = error instanceof Error ? error.message : String(error)
+    console.warn(
+      `[kanban] Hermes Dashboard proxy unavailable; falling back to ${fallback.meta().id}: ${message}`,
+    )
+    return await Promise.resolve(operation(fallback))
+  }
+}
+
 export function getKanbanBackendMeta(): KanbanBackendMeta {
   return resolveKanbanBackend().meta()
 }
 
 export async function listKanbanCards(): Promise<SwarmKanbanCard[]> {
-  return Promise.resolve(resolveKanbanBackend().list())
+  return invokeKanbanBackend((backend) => backend.list())
 }
 
 export async function createKanbanCard(
   input: CreateSwarmKanbanCardInput,
 ): Promise<SwarmKanbanCard> {
-  return Promise.resolve(resolveKanbanBackend().create(input))
+  return invokeKanbanBackend((backend) => backend.create(input))
 }
 
 export async function updateKanbanCard(
   cardId: string,
   updates: UpdateSwarmKanbanCardInput,
 ): Promise<SwarmKanbanCard | null> {
-  return Promise.resolve(resolveKanbanBackend().update(cardId, updates))
+  return invokeKanbanBackend((backend) => backend.update(cardId, updates))
 }
