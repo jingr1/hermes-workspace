@@ -363,6 +363,39 @@ def _read_handoff(source_id: str) -> str:
     return ""
 
 
+def _worker_runtime_path(worker_id: str) -> Path:
+    """Resolve <profiles>/<worker_id>/runtime.json (env override honoured)."""
+    base = os.environ.get("HERMES_PROFILES_DIR") or os.path.expanduser("~/.hermes/profiles")
+    return Path(base) / worker_id / "runtime.json"
+
+
+def _worker_processed_state(worker_id: str) -> str:
+    """Return the STATE label of the worker's last orchestrator-processed
+    checkpoint (from runtime.json's orchestratorProcessedRaw), upper-cased.
+
+    Empty string when unavailable. This reflects the worker's real terminal
+    output, and unlike cp_map it is NOT overwritten by the synthetic BLOCKED
+    that the poll-timeout path fabricates.
+    """
+    try:
+        path = _worker_runtime_path(worker_id)
+        if not path.exists():
+            return ""
+        rt = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+    processed = rt.get("orchestratorProcessedRaw")
+    if not isinstance(processed, str) or not processed.strip():
+        return ""
+    for line in processed.splitlines():
+        # Tolerate markdown noise: leading '#', bold '**', code-fence lines.
+        s = line.strip().lstrip("#").replace("*", "").strip()
+        if s.upper().startswith("STATE:"):
+            value = s.split(":", 1)[1].strip().upper()
+            return value.split()[0] if value else ""
+    return ""
+
+
 RESEARCH_ADVERSARIAL_WORKFLOWS = frozenset({"research_adversarial_review"})
 
 
@@ -960,6 +993,26 @@ async def route_workflow(state: OrchestratorState) -> dict:
                             "  → developer already DONE; skip stale architect→developer re-dispatch"
                         )
                         continue
+                # Root-cause guard: do not re-dispatch a worker that already
+                # produced a terminal DONE. The poll-timeout path fabricates a
+                # synthetic BLOCKED (blocker_type=timeout) when harvest's
+                # per-worker dedup (orchestratorProcessedRaw == raw) suppresses a
+                # re-recorded checkpoint. That BLOCKED then drives a retry, which
+                # times out again → infinite re-dispatch loop that flips the card
+                # back to BLOCKED. cp_map here holds the synthetic BLOCKED, so we
+                # consult the worker's real runtime state instead. Scoped to
+                # self-loop retries only so genuine forward hand-offs and real
+                # blockers (missing_dependency/test_failure/…) still route.
+                if (
+                    decision.action == "retry"
+                    and c.blocker_type == "timeout"
+                    and _worker_processed_state(target) == "DONE"
+                ):
+                    analysis_parts.append(
+                        f"  → {target} already produced terminal DONE; "
+                        f"skip stale timeout retry (no re-dispatch)"
+                    )
+                    continue
                 key = f"{c.worker_id}→{target}"
                 transition_counts[key] = transition_counts.get(key, 0) + 1
                 dispatched.add(target)
