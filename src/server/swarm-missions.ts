@@ -335,6 +335,7 @@ export function recordMissionAssignmentBlocked(input: {
     result: null,
     blocker: reason,
     nextAction: 'Fix blocker and retry dispatch.',
+    reviewOutcome: null,
     raw: `STATE: BLOCKED\nFILES_CHANGED: none\nCOMMANDS_RUN: none\nRESULT: none\nBLOCKER: ${reason}\nNEXT_ACTION: Fix blocker and retry dispatch.`,
   }
   const changed = assignment.state !== 'blocked' || assignment.checkpoint?.raw !== checkpoint.raw

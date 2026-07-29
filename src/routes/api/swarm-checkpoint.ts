@@ -9,6 +9,7 @@ import { isSwarmWorkerId } from '../../server/swarm-roster'
 import { appendSwarmMemoryEvent } from '../../server/swarm-memory'
 import { checkpointFromRuntimeSnapshot, readRuntimeCheckpointSnapshot } from './swarm-dispatch'
 import { publishSwarmCheckpointNotification } from '../../server/swarm-notifications'
+import { recordMissionCheckpoint } from '../../server/swarm-missions'
 
 type CheckpointRequest = {
   workerId?: unknown
@@ -133,6 +134,41 @@ export const Route = createFileRoute('/api/swarm-checkpoint')({
 
         const runtimeSnapshot = readRuntimeCheckpointSnapshot(profilePath)
         const parsedCheckpoint = checkpointFromRuntimeSnapshot(runtimeSnapshot)
+
+        // B1: close the mission directly from the checkpoint report, decoupled from
+        // the orchestrator tmux relay. When a worker self-reports a checkpoint after
+        // the dispatch poll window has already returned (late DONE), the dispatch path
+        // never recorded it into the mission store, and the tmux notification path
+        // (publishSwarmCheckpointNotification) only pushes to the orchestrator pane —
+        // it never touches the store. If that pane is gone, the mission stayed open
+        // forever, got re-dispatched, went stale, and flipped the card back to BLOCKED.
+        // Recording here makes terminal checkpoints settle the mission regardless of
+        // whether the orchestrator session is alive.
+        let missionClosed = false
+        if (parsedCheckpoint && missionId) {
+          const updatedMission = recordMissionCheckpoint({
+            missionId,
+            assignmentId,
+            workerId,
+            checkpoint: parsedCheckpoint,
+            source: 'swarm-checkpoint',
+          })
+          missionClosed = Boolean(updatedMission?._completed)
+          if (missionClosed) {
+            try {
+              for (const wId of new Set(updatedMission!.assignments.map((a) => a.workerId))) {
+                appendSwarmMemoryEvent({
+                  workerId: wId,
+                  missionId: updatedMission!.id,
+                  type: 'complete',
+                  title: updatedMission!.title,
+                  summary: `Mission complete: ${updatedMission!.title}`,
+                })
+              }
+            } catch { /* memory write best-effort */ }
+          }
+        }
+
         const notification = parsedCheckpoint
           ? publishSwarmCheckpointNotification({
               workerId,
@@ -143,7 +179,7 @@ export const Route = createFileRoute('/api/swarm-checkpoint')({
             })
           : { published: false, sessionKey: typeof next.notifySessionKey === 'string' ? next.notifySessionKey : 'main' }
 
-        return json({ ok: true, workerId, runtimePath, checkpoint: next, savedAt: Date.now(), notification })
+        return json({ ok: true, workerId, runtimePath, checkpoint: next, savedAt: Date.now(), notification, missionClosed })
       },
     },
   },

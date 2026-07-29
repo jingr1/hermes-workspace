@@ -6,7 +6,6 @@ import {
   Alert02Icon,
   Cancel01Icon,
   ComputerTerminal01Icon,
-  MessageMultiple01Icon,
   Settings01Icon,
   ViewIcon,
 } from '@hugeicons/core-free-icons'
@@ -207,18 +206,6 @@ export function Swarm2OrchestratorCard({
                 <span className="absolute -right-1 -top-1 size-2 rounded-full bg-red-500 ring-2 ring-[var(--theme-card)]" />
               </button>
             ) : null}
-            <button
-              type="button"
-              onClick={onOpenRouter}
-              className="inline-flex h-9 items-center gap-1 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--theme-muted)] hover:bg-[var(--theme-card2)] hover:text-[var(--theme-text)]"
-            >
-              <HugeiconsIcon
-                icon={MessageMultiple01Icon}
-                size={13}
-                strokeWidth={1.8}
-              />
-              Router
-            </button>
             <button
               type="button"
               onClick={openSettings}

@@ -29,7 +29,6 @@ import { Swarm2KanbanBoard } from './swarm2-kanban-board'
 import { Swarm2ReportsView, buildSwarm2InboxLanes, type Swarm2InboxItem } from './swarm2-reports-view'
 import { HumanGatePanel } from './components/human-gate-panel'
 import { useHumanGate } from './hooks/use-human-gate'
-import { RouterChat } from '@/components/swarm/router-chat'
 import { SwarmTerminal } from '@/components/swarm/swarm-terminal'
 import { WorkflowHelpModal } from '@/components/workflow-help-modal'
 import { cn } from '@/lib/utils'
@@ -1005,7 +1004,6 @@ export function Swarm2Screen() {
     }
   })
   const [viewMode, setViewMode] = useState<ViewMode>('cards')
-  const [routerOpen, setRouterOpen] = useState(false)
   const [routerSeed, setRouterSeed] = useState<{ key: number; prompt: string; mode: 'auto' | 'manual' | 'broadcast' } | null>(null)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [humanGateOpen, setHumanGateOpen] = useState(false)
@@ -1236,6 +1234,12 @@ export function Swarm2Screen() {
     return scheduleScrollContextToTop(topRef.current)
   }, [])
 
+  // Router chat is now the always-visible orchestrator hub card; "open router"
+  // actions just bring it into view instead of toggling a floating dock.
+  const scrollToRouter = useCallback(() => {
+    topRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }, [])
+
 
   const activeRuntimeCount = members.filter((member) =>
     isRuntimeActive(runtimeByWorker.get(member.id)),
@@ -1382,9 +1386,9 @@ export function Swarm2Screen() {
         `Next action: ${item.nextAction ?? 'none'}`,
       ].join('\n'),
     })
-    setRouterOpen(true)
+    scrollToRouter()
     setViewMode('reports')
-  }, [])
+  }, [scrollToRouter])
 
   const swarmNotifications = useMemo(() => {
     const laneItems = [
@@ -1512,8 +1516,7 @@ export function Swarm2Screen() {
     <div ref={topRef} className="min-h-full bg-surface text-primary-900" style={SWARM2_OPERATION_THEME}>
       <div
         className={cn(
-          'mx-auto flex min-h-full max-w-[1680px] flex-col gap-3 px-3 pt-3 sm:px-4 lg:px-5',
-          routerOpen ? 'pb-[30rem]' : 'pb-24',
+          'mx-auto flex min-h-full max-w-[1680px] flex-col gap-3 px-3 pt-3 pb-24 sm:px-4 lg:px-5',
         )}
       >
         <header className="rounded-xl border border-primary-200 bg-primary-50/80 px-5 py-3 shadow-sm">
@@ -1667,7 +1670,7 @@ export function Swarm2Screen() {
             activeAgents={activeAgents}
             viewMode={viewMode}
             onViewModeChange={setViewMode}
-            onOpenRouter={() => setRouterOpen(true)}
+            onOpenRouter={scrollToRouter}
             onOpenHumanGate={() => setHumanGateOpen(true)}
             humanGateActive={Boolean(humanGate)}
             onRouterMissionStarted={() => {
@@ -1690,7 +1693,7 @@ export function Swarm2Screen() {
             }}
             onOpenTasks={(workerId) => {
               setSelectedId(workerId)
-              setRouterOpen(true)
+              scrollToRouter()
             }}
             runtimeByWorker={runtimeByWorker}
             recentUpdates={recentUpdates}
@@ -1823,26 +1826,6 @@ export function Swarm2Screen() {
           </div>
         </div>
       ) : null}
-
-      <RouterChat
-        members={members}
-        roomIds={roomIds}
-        selectedId={selectedId}
-        open={routerOpen}
-        showClosedDock={false}
-        seedPrompt={routerSeed?.prompt ?? null}
-        seedMode={routerSeed?.mode}
-        seedKey={routerSeed?.key ?? null}
-        onOpen={() => setRouterOpen(true)}
-        onClose={() => setRouterOpen(false)}
-        onResults={() => {
-          void runtimeQuery.refetch()
-          void missionsQuery.refetch()
-        }}
-        onMissionStarted={() => {
-          void missionsQuery.refetch()
-        }}
-      />
     </div>
   )
 }

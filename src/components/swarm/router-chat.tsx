@@ -620,7 +620,7 @@ export function RouterChat({
             ) : null}
           </div>
 
-          {!embedded ? (
+          {orchestrationMode !== 'workflow' && (mode === 'auto' || assignments.length > 0) ? (
           <div className="flex min-h-[180px] flex-col gap-2 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3">
             <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--theme-muted)]">
               Routing plan
@@ -693,8 +693,8 @@ export function RouterChat({
           ) : null}
         </div>
 
-        {!embedded && results ? (
-          <div className="max-h-64 overflow-y-auto border-t border-[var(--theme-border)] px-5 py-3">
+        {results ? (
+          <div className={cn('max-h-64 overflow-y-auto border-t border-[var(--theme-border)] py-3', embedded ? 'px-3' : 'px-5')}>
             <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.18em] text-[var(--theme-muted)]">
               <span>Dispatch results</span>
               <span className="inline-flex items-center gap-1 text-[var(--theme-muted)]">
@@ -768,8 +768,8 @@ export function RouterChat({
           </div>
         ) : null}
 
-        {!embedded && followUp ? (
-          <div className="border-t border-[var(--theme-border)] px-5 py-3 text-[11px] text-[var(--theme-text)]">
+        {followUp ? (
+          <div className={cn('border-t border-[var(--theme-border)] py-3 text-[11px] text-[var(--theme-text)]', embedded ? 'px-3' : 'px-5')}>
             <div className="font-semibold uppercase tracking-[0.18em] text-[var(--theme-muted)]">
               Orchestrator follow-up
             </div>
