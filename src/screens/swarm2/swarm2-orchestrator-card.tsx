@@ -57,9 +57,10 @@ export type Swarm2OrchestratorCardProps = {
   onOpenHumanGate?: () => void
   humanGateActive?: boolean
   onRouterResults?: (response: DispatchResponse) => void
+  onMissionStarted?: (missionId: string) => void
   /**
-   * Bubble the bottom-center anchor of this card up to the parent so that
-   * the wires SVG can originate from a real DOM rect.
+   * Bubble up bottom-center anchor of this card to parent so that
+   * wires SVG can originate from a real DOM rect.
    */
   onAnchorRef?: (node: HTMLDivElement | null) => void
   className?: string
@@ -92,6 +93,7 @@ export function Swarm2OrchestratorCard({
   onOpenHumanGate,
   humanGateActive,
   onRouterResults,
+  onMissionStarted,
   onAnchorRef,
   className,
 }: Swarm2OrchestratorCardProps) {
@@ -289,6 +291,7 @@ export function Swarm2OrchestratorCard({
             seedKey={routerSeed?.key ?? null}
             onClose={() => undefined}
             onResults={(response) => onRouterResults?.(response)}
+            onMissionStarted={onMissionStarted}
           />
         </div>
 

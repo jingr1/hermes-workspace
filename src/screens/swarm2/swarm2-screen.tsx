@@ -19,7 +19,7 @@ import {
   UserMultipleIcon,
 } from '@hugeicons/core-free-icons'
 import { buildTmuxAttachCommand } from '@/lib/tmux-attach'
-import { getOnlineStatus, useCrewStatus } from '@/hooks/use-crew-status'
+import { getOnlineStatus, useCrewStatus, type CrewMember } from '@/hooks/use-crew-status'
 import { toast } from '@/components/ui/toast'
 import { OperationalWorkerCard } from './operational-worker-card'
 import { Swarm2OrchestratorCard } from './swarm2-orchestrator-card'
@@ -28,7 +28,6 @@ import { Swarm2ActivityFeed } from './swarm2-activity-feed'
 import { Swarm2KanbanBoard } from './swarm2-kanban-board'
 import { Swarm2ReportsView, buildSwarm2InboxLanes, type Swarm2InboxItem } from './swarm2-reports-view'
 import { HumanGatePanel } from './components/human-gate-panel'
-import { LanggraphAutopilotPanel } from './components/langgraph-autopilot-panel'
 import { useHumanGate } from './hooks/use-human-gate'
 import { RouterChat } from '@/components/swarm/router-chat'
 import { SwarmTerminal } from '@/components/swarm/swarm-terminal'
@@ -639,8 +638,8 @@ function cleanSwarmLabel(rawValue: string, fallback = 'Ready for task', maxLengt
 }
 
 function displayTaskTitle(runtime: RuntimeEntry | undefined, fallback: string): string {
-  const realSummary = runtime?.lastRealSummary ?? null
-  const realResult = runtime?.lastRealResult ?? null
+  const realSummary = runtime?.lastSummary ?? null
+  const realResult = runtime?.lastResult ?? null
   return cleanSwarmLabel(runtime?.blockedReason || runtime?.currentTask || realSummary || runtime?.lastSummary || realResult || runtime?.lastResult || fallback || '', 'Ready for task', 64)
 }
 
@@ -676,6 +675,8 @@ type ControlPlaneStageProps = {
   onOpenHumanGate?: () => void
   humanGateActive?: boolean
   onRouterResults: () => void
+  onRouterMissionStarted?: () => void
+  onMissionStarted?: () => void
   onSelect: (workerId: string) => void
   onToggleRoom: (workerId: string) => void
   onOpenTui: (workerId: string) => void
@@ -716,6 +717,8 @@ function ControlPlaneStage({
   onOpenHumanGate,
   humanGateActive,
   onRouterResults,
+  onRouterMissionStarted,
+  onMissionStarted,
   onSelect,
   onToggleRoom,
   onOpenTui,
@@ -828,6 +831,7 @@ function ControlPlaneStage({
           onRouterResults={() => {
             void onRouterResults()
           }}
+          onMissionStarted={onMissionStarted}
           onAnchorRef={setAnchor}
           className="w-full max-w-5xl"
         />
@@ -851,7 +855,7 @@ function ControlPlaneStage({
                       runtimeState={runtime?.state ?? null}
                       recentLines={recentLines(runtime)}
                       recentOutputAt={runtime?.lastOutputAt ?? runtime?.lastSessionStartedAt ?? null}
-                      recentSummary={runtime?.lastRealSummary ?? runtime?.lastRealResult ?? runtime?.lastSummary ?? runtime?.lastResult ?? runtime?.blockedReason ?? null}
+                      recentSummary={runtime?.lastSummary ?? runtime?.lastResult ?? runtime?.blockedReason ?? null}
                       artifacts={runtime?.artifacts ?? []}
                       previews={runtime?.previews ?? []}
                       inRoom={roomIds.includes(member.id)}
@@ -1006,7 +1010,6 @@ export function Swarm2Screen() {
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [humanGateOpen, setHumanGateOpen] = useState(false)
   const [humanGateSeen, setHumanGateSeen] = useState(false)
-  const [langgraphOpen, setLanggraphOpen] = useState(false)
   const [addSwarmOpen, setAddSwarmOpen] = useState(false)
   const [addSwarmSaving, setAddSwarmSaving] = useState(false)
   const [addSwarmError, setAddSwarmError] = useState<string | null>(null)
@@ -1429,7 +1432,7 @@ export function Swarm2Screen() {
       .map((member) => {
         const runtime = runtimeByWorker.get(member.id)
         const ts = runtime?.lastOutputAt ?? runtime?.lastSessionStartedAt ?? member.lastSessionAt ?? null
-        const rawText = runtime?.lastRealSummary ?? runtime?.lastRealResult ?? runtime?.lastSummary ?? runtime?.lastResult ?? runtime?.blockedReason ?? runtime?.currentTask ?? member.lastSessionTitle ?? `Ready in ${member.role || 'worker'} lane`
+        const rawText = runtime?.lastSummary ?? runtime?.lastResult ?? runtime?.blockedReason ?? runtime?.currentTask ?? member.lastSessionTitle ?? `Ready in ${member.role || 'worker'} lane`
         const state = (runtime?.phase || runtime?.currentTask || '').toLowerCase()
         const tone: 'idle' | 'active' | 'warning' = runtime?.blockedReason
           ? 'warning'
@@ -1532,13 +1535,6 @@ export function Swarm2Screen() {
             </div>
 
             <div className="relative flex shrink-0 items-center gap-2 text-sm text-[var(--theme-muted)]">
-              <button
-                type="button"
-                onClick={() => setLanggraphOpen(true)}
-                className="inline-flex h-10 items-center rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 text-xs font-semibold text-[var(--theme-text)] shadow-sm hover:bg-[var(--theme-card2)]"
-              >
-                LangGraph
-              </button>
               {humanGate ? (
                 <button
                   type="button"
@@ -1657,7 +1653,6 @@ export function Swarm2Screen() {
             }}
           />
         ) : null}
-        <LanggraphAutopilotPanel open={langgraphOpen} onOpenChange={setLanggraphOpen} />
 
         <div className="grid min-h-0 grid-cols-1 gap-3">
           <ControlPlaneStage
@@ -1675,15 +1670,23 @@ export function Swarm2Screen() {
             onOpenRouter={() => setRouterOpen(true)}
             onOpenHumanGate={() => setHumanGateOpen(true)}
             humanGateActive={Boolean(humanGate)}
+            onRouterMissionStarted={() => {
+              void missionsQuery.refetch()
+            }}
             onRouterResults={() => {
               void runtimeQuery.refetch()
+              void missionsQuery.refetch()
+            }}
+            onMissionStarted={() => {
               void missionsQuery.refetch()
             }}
             onSelect={(workerId) => setSelectedId(workerId)}
             onToggleRoom={(workerId) => toggleRoom(workerId)}
             onOpenTui={(workerId) => {
               setSelectedId(workerId)
+              setFocusedRuntimeWorkerId(workerId)
               setViewMode('runtime')
+              setHumanGateOpen(false)
             }}
             onOpenTasks={(workerId) => {
               setSelectedId(workerId)
@@ -1834,6 +1837,9 @@ export function Swarm2Screen() {
         onClose={() => setRouterOpen(false)}
         onResults={() => {
           void runtimeQuery.refetch()
+          void missionsQuery.refetch()
+        }}
+        onMissionStarted={() => {
           void missionsQuery.refetch()
         }}
       />

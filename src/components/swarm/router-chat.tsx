@@ -17,7 +17,19 @@ import { cn } from '@/lib/utils'
 
 type Mode = 'auto' | 'manual' | 'broadcast'
 
+type OrchestrationMode = 'auto' | 'workflow'
+
+type AutoSubStrategy = 'auto-review' | 'auto-execute'
+
 type Assignment = { workerId: string; task: string; rationale: string; expectedOutput?: string; dependsOn?: Array<string>; reviewRequired?: boolean }
+
+const WORKFLOW_OPTIONS = [
+  { value: 'rdi', label: 'RDI', description: 'Research → design → implement → review' },
+  { value: 'research_only', label: 'Research only', description: 'Adversarial research review loop' },
+  { value: 'design_implement', label: 'Design + implement', description: 'Skip research, design then build' },
+]
+
+const DEFAULT_WORKFLOW = 'rdi'
 type ParsedCheckpoint = {
   stateLabel: string
   result: string | null
@@ -104,6 +116,7 @@ type Props = {
   seedMode?: Mode
   seedKey?: string | number | null
   onResults: (response: DispatchResponse) => void
+  onMissionStarted?: (missionId: string) => void
 }
 
 function roleForMember(members: Array<CrewMember>, id: string): string {
@@ -134,8 +147,12 @@ export function RouterChat({
   seedMode,
   seedKey,
   onResults,
+  onMissionStarted,
 }: Props) {
   const [mode, setMode] = useState<Mode>('auto')
+  const [orchestrationMode, setOrchestrationMode] = useState<OrchestrationMode>('auto')
+  const [autoSubStrategy, setAutoSubStrategy] = useState<AutoSubStrategy>('auto-review')
+  const [workflow, setWorkflow] = useState(DEFAULT_WORKFLOW)
   const [prompt, setPrompt] = useState('')
   const [decomposing, setDecomposing] = useState(false)
   const [decomposeError, setDecomposeError] = useState<string | null>(null)
@@ -258,6 +275,57 @@ export function RouterChat({
   }
 
   async function dispatch() {
+    // Workflow mode: use LangGraph orchestrator
+    if (orchestrationMode === 'workflow') {
+      try {
+        setDispatching(true)
+        setDispatchError(null)
+        setResults(null)
+        setFollowUp(null)
+
+        const res = await fetch('/api/swarm-langgraph/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            missionGoal: prompt.trim(),
+            workflowId: workflow,
+            maxIterations: 5,
+          }),
+          signal: AbortSignal.timeout(30_000),
+        })
+        if (!res.ok) {
+          const text = await res.text()
+          throw new Error(text || `HTTP ${res.status}`)
+        }
+        const data = await res.json() as { ok: boolean; missionId: string; accepted: boolean; error?: string }
+        if (!data.ok) throw new Error(data.error || 'Workflow dispatch failed')
+
+        // Notify parent that mission started for refetch
+        if (data.missionId && onMissionStarted) {
+          onMissionStarted(data.missionId)
+        }
+
+        setResults({
+          dispatchedAt: Date.now(),
+          completedAt: Date.now(),
+          missionId: data.missionId,
+          results: [], // LangGraph runs asynchronously
+        })
+        onResults({
+          dispatchedAt: Date.now(),
+          completedAt: Date.now(),
+          missionId: data.missionId,
+          results: [],
+        })
+      } catch (err) {
+        setDispatchError(err instanceof Error ? err.message : 'Workflow dispatch failed')
+      } finally {
+        setDispatching(false)
+      }
+      return
+    }
+
+    // Legacy modes: auto/manual/broadcast via swarm-dispatch
     let plan: Array<Assignment> = []
     if (mode === 'auto') {
       if (assignments.length === 0) {
@@ -351,17 +419,16 @@ export function RouterChat({
         }
       }
 
+      // Orchestrator Loop: only auto sub-strategy modes trigger it
       if (plan.length > 1 && data.results.some((result) => result.checkpointStatus === 'checkpointed')) {
-        const reviewer = members.find((member) => member.id === 'swarm6') ?? members.find((member) => /review|qa|critic/i.test(`${member.role} ${member.specialty ?? ''}`))
         const follow = await fetch('/api/swarm-orchestrator-loop', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            workerIds: [...new Set([...plan.map((item) => item.workerId), ...(reviewer ? [reviewer.id] : [])])],
+            workerIds: [...new Set(plan.map((item) => item.workerId))],
             staleMinutes: 3,
             autoContinue: true,
-            allowExecution: false,
-            reviewWorkerId: reviewer?.id,
+            allowExecution: autoSubStrategy === 'auto-execute',
           }),
         })
         const followData = (await follow.json().catch(() => null)) as FollowUpResponse | null
@@ -408,7 +475,7 @@ export function RouterChat({
             ) : null}
           </div>
           <div className="flex items-center gap-2">
-            {!embedded ? <ModeToggle mode={mode} setMode={handleModeChange} /> : null}
+            {!embedded ? <ModeToggle mode={mode} setMode={handleModeChange} orchestrationMode={orchestrationMode} setOrchestrationMode={setOrchestrationMode} autoSubStrategy={autoSubStrategy} setAutoSubStrategy={setAutoSubStrategy} workflow={workflow} setWorkflow={setWorkflow} /> : null}
             {!embedded ? (
               <button
                 type="button"
@@ -466,15 +533,26 @@ export function RouterChat({
             <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
               {embedded ? (
                 <div className="flex flex-wrap items-center gap-3">
-                  <ModeToggle mode={mode} setMode={handleModeChange} />
+                  <ModeToggle
+                    mode={mode}
+                    setMode={handleModeChange}
+                    orchestrationMode={orchestrationMode}
+                    setOrchestrationMode={setOrchestrationMode}
+                    autoSubStrategy={autoSubStrategy}
+                    setAutoSubStrategy={setAutoSubStrategy}
+                    workflow={workflow}
+                    setWorkflow={setWorkflow}
+                  />
                 </div>
               ) : (
                 <div className="text-[11px] text-[var(--theme-muted)]">
-                  {`${prompt.trim().length} chars · ${mode === 'auto'
-                    ? 'auto-route by role'
-                    : mode === 'manual'
-                      ? `→ ${selectedId ?? 'no target'}`
-                      : `broadcast to ${roomIds.length || members.length}`}`}
+                  {orchestrationMode === 'workflow'
+                    ? `Workflow: ${workflow}`
+                    : `${prompt.trim().length} chars · ${mode === 'auto'
+                        ? 'auto-route by role'
+                        : mode === 'manual'
+                          ? `→ ${selectedId ?? 'no target'}`
+                          : `broadcast to ${roomIds.length || members}`}`}
                 </div>
               )}
               <div className="flex items-center gap-2">
@@ -495,7 +573,7 @@ export function RouterChat({
                     watchingMission ||
                     decomposing ||
                     !prompt.trim() ||
-                    (mode === 'manual' && !selectedId)
+                    (orchestrationMode !== 'workflow' && mode === 'manual' && !selectedId)
                   }
                   className={cn(
                     'inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold',
@@ -505,22 +583,28 @@ export function RouterChat({
                   )}
                 >
                   <HugeiconsIcon
-                    icon={mode === 'manual' ? SentIcon : mode === 'auto' ? Settings01Icon : Rocket01Icon}
+                    icon={orchestrationMode === 'workflow' ? Settings01Icon : mode === 'manual' ? SentIcon : mode === 'auto' ? Settings01Icon : Rocket01Icon}
                     size={12}
                   />
                   {dispatching || decomposing || watchingMission
-                    ? mode === 'auto'
+                    ? orchestrationMode === 'workflow'
                       ? watchingMission
-                        ? 'Watching workers…'
-                        : 'Routing…'
-                      : watchingMission
-                        ? 'Watching…'
-                        : 'Sending…'
-                    : mode === 'manual'
-                      ? `Send to ${selectedId ?? '—'}`
-                      : mode === 'broadcast'
-                        ? `Broadcast to ${roomIds.length || members.length}`
-                        : 'Route mission'}
+                        ? 'Running…'
+                        : 'Starting…'
+                      : mode === 'auto'
+                        ? watchingMission
+                          ? 'Watching workers…'
+                          : 'Routing…'
+                        : watchingMission
+                          ? 'Watching…'
+                          : 'Sending…'
+                    : orchestrationMode === 'workflow'
+                      ? `Run ${workflow}`
+                      : mode === 'manual'
+                        ? `Send to ${selectedId ?? '—'}`
+                        : mode === 'broadcast'
+                          ? `Broadcast to ${roomIds.length || members.length}`
+                          : 'Route mission'}
                 </button>
               </div>
             </div>
@@ -700,6 +784,90 @@ export function RouterChat({
   )
 }
 
+function ModeToggle({
+  mode,
+  setMode,
+  orchestrationMode,
+  setOrchestrationMode,
+  autoSubStrategy,
+  setAutoSubStrategy,
+  workflow,
+  setWorkflow,
+}: {
+  mode: Mode
+  setMode: (m: Mode) => void
+  orchestrationMode: OrchestrationMode
+  setOrchestrationMode: (m: OrchestrationMode) => void
+  autoSubStrategy: AutoSubStrategy
+  setAutoSubStrategy: (s: AutoSubStrategy) => void
+  workflow: string
+  setWorkflow: (w: string) => void
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {/* Primary routing mode: one agent / auto / broadcast / workflow */}
+      <div className="flex rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-1 text-[10px] uppercase tracking-[0.18em] text-[var(--theme-muted)]">
+        {(['manual', 'auto', 'broadcast', 'workflow'] as Array<Mode | 'workflow'>).map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => {
+              if (m === 'workflow') {
+                setOrchestrationMode('workflow')
+              } else {
+                setOrchestrationMode('auto')
+                setMode(m as Mode)
+              }
+            }}
+            className={cn(
+              'rounded-lg px-3 py-1 transition-colors',
+              (m === 'workflow' && orchestrationMode === 'workflow') || (m !== 'workflow' && orchestrationMode === 'auto' && mode === m)
+                ? 'bg-[var(--theme-accent)] text-primary-950'
+                : 'hover:bg-[var(--theme-card2)] hover:text-[var(--theme-text)]',
+            )}
+          >
+            {m === 'manual' ? 'one agent' : m}
+          </button>
+        ))}
+      </div>
+
+      {/* Auto sub-strategy: only visible when auto mode */}
+      {orchestrationMode === 'auto' && mode === 'auto' ? (
+        <div className="flex rounded-xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-card)] p-1 text-[10px] uppercase tracking-[0.14em] text-[var(--theme-muted)]">
+          {(['auto-review', 'auto-execute'] as Array<AutoSubStrategy>).map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setAutoSubStrategy(s)}
+              className={cn(
+                'rounded-lg px-2 py-1 transition-colors',
+                autoSubStrategy === s ? 'bg-[var(--theme-accent)] text-primary-950' : 'hover:bg-[var(--theme-card2)] hover:text-[var(--theme-text)]',
+              )}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {/* Workflow selector: only visible when workflow mode */}
+      {orchestrationMode === 'workflow' ? (
+        <select
+          value={workflow}
+          onChange={(e) => setWorkflow(e.target.value)}
+          className="rounded-xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-card)] px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)]"
+        >
+          {WORKFLOW_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      ) : null}
+    </div>
+  )
+}
+
 function RouterClosedDock({
   targetLabel,
   mode,
@@ -730,31 +898,5 @@ function RouterClosedDock({
         Open
       </span>
     </button>
-  )
-}
-
-function ModeToggle({
-  mode,
-  setMode,
-}: {
-  mode: Mode
-  setMode: (m: Mode) => void
-}) {
-  return (
-    <div className="flex rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-1 text-[10px] uppercase tracking-[0.18em] text-[var(--theme-muted)]">
-      {(['auto', 'manual', 'broadcast'] as Array<Mode>).map((m) => (
-        <button
-          key={m}
-          type="button"
-          onClick={() => setMode(m)}
-          className={cn(
-            'rounded-lg px-3 py-1 transition-colors',
-            mode === m ? 'bg-[var(--theme-accent)] text-primary-950' : 'hover:bg-[var(--theme-card2)] hover:text-[var(--theme-text)]',
-          )}
-        >
-          {m === 'manual' ? 'one agent' : m}
-        </button>
-      ))}
-    </div>
   )
 }

@@ -30,7 +30,6 @@ workers:
       - gstack-for-hermes
       - llm-wiki
       - kanban-orchestrator
-      - subagent-driven-development
       - writing-plans
       - autoresearch
       - autoresearch-plan

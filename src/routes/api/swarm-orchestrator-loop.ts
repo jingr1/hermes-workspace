@@ -20,7 +20,6 @@ type LoopRequest = {
   staleMinutes?: unknown
   dryRun?: unknown
   autoContinue?: unknown
-  reviewWorkerId?: unknown
   missionId?: unknown
   allowExecution?: unknown
 }
@@ -229,39 +228,10 @@ async function runWorkerLoop(workerId: string, staleMs: number, dryRun: boolean)
 }
 
 
-function isReviewer(workerId: string, allWorkerIds: Array<string>): boolean {
-  const worker = readSwarmRoster(allWorkerIds).workers.find((entry) => entry.id === workerId)
-  return /review|qa|critic/i.test(`${worker?.role ?? ''} ${worker?.specialty ?? ''}`)
-}
-
 function chooseByRole(workerIds: Array<string>, pattern: RegExp): string | null {
   const roster = readSwarmRoster(workerIds)
   const worker = roster.workers.find((entry) => pattern.test(`${entry.role} ${entry.specialty}`))
   return worker?.id ?? null
-}
-
-function chooseReviewer(workerIds: Array<string>, requested: unknown): string | null {
-  if (typeof requested === 'string' && isSwarmWorkerId(requested)) return requested.trim()
-  if (workerIds.includes('reviewer')) return 'reviewer'
-  if (workerIds.includes('swarm6')) return 'swarm6'
-  return chooseByRole(workerIds, /review|qa|critic/i)
-}
-
-function buildReviewAssignment(results: Array<WorkerLoopResult>, reviewerId: string, allWorkerIds: Array<string>): { workerId: string; task: string; rationale: string } | null {
-  const done = results.filter((item) => item.status === 'checkpointed' && item.checkpoint?.stateLabel === 'DONE' && !isReviewer(item.workerId, allWorkerIds))
-  if (done.length === 0) return null
-  const summary = done.map((item) => [
-    `Worker: ${item.workerId}`,
-    `Result: ${item.checkpoint?.result ?? 'none'}`,
-    `Files: ${item.checkpoint?.filesChanged ?? 'none'}`,
-    `Commands: ${item.checkpoint?.commandsRun ?? 'none'}`,
-    `Next: ${item.checkpoint?.nextAction ?? 'none'}`,
-  ].join('\n')).join('\n\n---\n\n')
-  return {
-    workerId: reviewerId,
-    rationale: 'Autopilot review gate for completed worker checkpoints.',
-    task: `Review these completed Swarm2 worker checkpoints. Do not edit files. Return the required checkpoint format. Decide if the workflow can continue, what the next task should be, and what regression risk remains.\n\n${summary}`,
-  }
 }
 
 function buildNextActionAssignments(results: Array<WorkerLoopResult>, workerIds: Array<string>, allowExecution: boolean): Array<{ workerId: string; task: string; rationale: string }> {
@@ -276,9 +246,7 @@ function buildNextActionAssignments(results: Array<WorkerLoopResult>, workerIds:
       ? chooseByRole(workerIds, /builder|backend|ui/i)
       : /research|investigate|options/i.test(next)
         ? chooseByRole(workerIds, /research/i)
-        : /review|verify|test|gate/i.test(next)
-          ? chooseReviewer(workerIds, null)
-          : null
+        : null
     if (!target || target === item.workerId) continue
     assignments.push({
       workerId: target,
@@ -429,11 +397,7 @@ export const Route = createFileRoute('/api/swarm-orchestrator-loop')({
         if (autoContinue && !dryRun) {
           const assignments = buildStaleAssignments(results)
           assignments.push(...buildNextActionAssignments(results, workerIds, allowExecution))
-          const reviewerId = chooseReviewer(workerIds, body.reviewWorkerId)
-          const hasReviewerDone = results.some((item) => item.status === 'checkpointed' && item.checkpoint?.stateLabel === 'DONE' && isReviewer(item.workerId, workerIds))
-          const reviewAssignment = reviewerId && !hasReviewerDone ? buildReviewAssignment(results, reviewerId, workerIds) : null
-          if (reviewAssignment && !assignments.some((item) => item.workerId === reviewAssignment.workerId && item.task === reviewAssignment.task)) assignments.push(reviewAssignment)
-          continuation = await dispatchAssignments(request, assignments, missionId)
+          continuation = assignments.length > 0 ? await dispatchAssignments(request, assignments, missionId) : null
         }
 
         return json({
