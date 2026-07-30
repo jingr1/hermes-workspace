@@ -365,6 +365,19 @@ export function RouterChat({
       }))
     }
     plan = plan.filter((assignment) => isSwarmDispatchWorkerId(assignment.workerId))
+    // Merge duplicate worker assignments — same worker cannot run two tasks in parallel.
+    // Combine tasks and rationales so no work is lost.
+    const merged = new Map<string, Assignment>()
+    for (const a of plan) {
+      const existing = merged.get(a.workerId)
+      if (existing) {
+        existing.task = `${existing.task}\n\n---\n\n${a.task}`
+        existing.rationale = `${existing.rationale ?? ''} / ${a.rationale ?? ''}`.trim()
+      } else {
+        merged.set(a.workerId, { ...a })
+      }
+    }
+    plan = Array.from(merged.values())
     if (plan.length === 0) {
       setDispatchError('No swarm workers available to dispatch.')
       return

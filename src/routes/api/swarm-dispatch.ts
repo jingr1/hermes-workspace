@@ -601,6 +601,10 @@ function markDispatchStarted(workerId: string, task: string, missionId?: string 
     lastControlMessage: controlMessage,
     nextAction: 'Worker should execute and return the required checkpoint format.',
     notifySessionKey: notifySessionKey ?? 'main',
+    // Clear stale checkpoint and processed marker so harvest does not pick up
+    // the previous task's DONE as the result for this new dispatch.
+    checkpointRaw: null,
+    orchestratorProcessedRaw: null,
   })
 }
 

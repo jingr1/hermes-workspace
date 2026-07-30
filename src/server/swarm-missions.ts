@@ -195,7 +195,11 @@ export function createOrUpdateMission(input: {
 
   mission.title = input.title || mission.title
   for (const assignment of input.assignments) {
-    const existing = mission.assignments.find((item) => item.workerId === assignment.workerId && item.task === assignment.task)
+    // One active assignment per worker per mission. Skip if the worker already
+    // has a non-terminal assignment, regardless of task text differences.
+    const existing = mission.assignments.find(
+      (item) => item.workerId === assignment.workerId && !isTerminalAssignment(item)
+    )
     if (existing) continue
     const id = shortId('assign')
     mission.assignments.push({
