@@ -132,18 +132,55 @@ function scoreWorker(prompt: string, worker: WorkerHint): number {
     .toLowerCase()
   const lower = prompt.toLowerCase()
   let score = 0
+
+  // Bilingual keyword rules: [prompt regex, terms to look for in worker text]
   const pairs: Array<[RegExp, Array<string>]> = [
-    [/research|investigate|options|tradeoff|source|synth/i, ['research', 'analysis']],
-    [/build|implement|code|patch|ui|frontend|backend|api|fix/i, ['builder', 'implementation', 'ui', 'backend', 'runtime']],
-    [/review|test|verify|quality|regression|gate/i, ['reviewer', 'review', 'pr', 'issues']],
-    [/pr|issue|github|repro/i, ['pr', 'issues', 'github']],
-    [/ops|health|runtime|tmux|gateway/i, ['ops', 'runtime', 'backend']],
-    [/docs|handoff|spec|readme/i, ['docs', 'scribe']],
+    // Research / investigation (English + Chinese)
+    [/research|investigate|investigation|survey|literature|source|synth|options|tradeoff|现状|调研|研究|调查|文献|综述|分析/i, [
+      'research', 'researcher', 'analysis', 'analyst', 'investigate', 'survey', 'source', 'wiki', 'fact',
+      '调研', '研究', '调查', '文献', '综述', '分析',
+    ]],
+    // Implementation / coding
+    [/build|implement|code|patch|ui|frontend|backend|api|fix|开发|实现|编写|修复|代码|前端|后端/i, [
+      'builder', 'implementation', 'developer', 'ui', 'backend', 'frontend', 'runtime', 'debugging', 'testing',
+      '开发', '实现', '编写', '代码', '前端', '后端',
+    ]],
+    // Review / quality / testing
+    [/review|test|verify|quality|regression|gate|验证|测试|审查|审核|质检/i, [
+      'reviewer', 'review', 'pr', 'issues', 'github', 'test', 'verify', 'quality',
+      '验证', '测试', '审查', '审核',
+    ]],
+    // Architecture / design
+    [/architecture|architect|design|spec|structure|架构|设计|规范|结构/i, [
+      'architect', 'architecture', 'design', 'specification', 'technical-direction',
+      '架构', '设计', '规范',
+    ]],
+    // Operations / runtime / infra
+    [/ops|health|runtime|tmux|gateway|deploy|运维|运行|部署|监控/i, [
+      'ops', 'runtime', 'backend', 'deploy',
+      '运维', '运行', '部署',
+    ]],
+    // Documentation / handoff
+    [/docs|handoff|spec|readme|document|文档|手册|记录|回顾/i, [
+      'docs', 'scribe', 'documentation', 'retrospective', 'knowledge-capture',
+      '文档', '记录', '回顾',
+    ]],
   ]
   for (const [pattern, terms] of pairs) {
     if (!pattern.test(lower)) continue
-    for (const term of terms) if (text.includes(term)) score += 3
+    for (const term of terms) {
+      if (text.includes(term)) score += 3
+    }
   }
+
+  // Direct id-based bonus when the prompt language clearly signals a single role.
+  if (/调研|研究|调查|文献|综述/i.test(lower) && worker.id === 'researcher') score += 10
+  if (/开发|实现|代码|编写|修复/i.test(lower) && worker.id === 'developer') score += 10
+  if (/架构|设计|规范/i.test(lower) && worker.id === 'architect') score += 10
+  if (/测试|验证|审查|审核/i.test(lower) && worker.id === 'architect') score += 6
+  if (/文档|记录|回顾|总结/i.test(lower) && worker.id === 'learning') score += 10
+  if (/运维|运行|部署|监控/i.test(lower) && worker.id === 'developer') score += 6
+
   if (text.includes('swarm-worker-core')) score += 1
   return score
 }
@@ -153,16 +190,30 @@ function heuristicAssignments(prompt: string, workers: WorkerHint[]): { assignme
     .map((worker) => ({ worker, score: scoreWorker(prompt, worker) }))
     .sort((a, b) => b.score - a.score || a.worker.id.localeCompare(b.worker.id))
   const selected = ranked.filter((row) => row.score > 0).slice(0, Math.min(3, workers.length))
-  const fallback = selected.length ? selected : ranked.slice(0, Math.min(2, workers.length))
-  const assignments = fallback.map(({ worker }) => ({
-    workerId: worker.id,
-    task: `Handle your lane for this Swarm2 mission and return only the required proof checkpoint. Mission: ${prompt}`,
-    rationale: `Fallback roster match for ${worker.role || worker.id}.`,
-  }))
-  return {
-    assignments,
-    unassigned: selected.length ? [] : ['Model decomposition failed or produced no confident matches; used deterministic roster fallback.'],
+  if (selected.length > 0) {
+    return {
+      assignments: selected.map(({ worker }) => ({
+        workerId: worker.id,
+        task: `Handle your lane for this Swarm2 mission and return only the required proof checkpoint. Mission: ${prompt}`,
+        rationale: `Fallback roster match for ${worker.role || worker.id}.`,
+      })),
+      unassigned: [],
+    }
   }
+  // No confident matches: escalate to the orchestrator and let it decompose/route.
+  const orchestrator = workers.find((worker) => worker.id === 'orchestrator')
+  if (orchestrator) {
+    return {
+      assignments: [{
+        workerId: orchestrator.id,
+        task: `No confident automatic decomposition was possible for this mission. Decompose the mission into focused sub-tasks, route each to the most appropriate worker in the swarm, and ensure every assigned worker returns the required checkpoint format. Mission: ${prompt}`,
+        rationale: 'Orchestrator escalation: automatic decomposition produced no confident matches.',
+      }],
+      unassigned: ['Model decomposition failed or produced no confident matches; escalated to orchestrator for manual routing.'],
+    }
+  }
+  // No orchestrator in roster: this is a configuration error. Do not dispatch blindly.
+  throw new Error('No confident decomposition matches and no orchestrator available to escalate.')
 }
 
 export const Route = createFileRoute('/api/swarm-decompose')({
@@ -212,13 +263,18 @@ export const Route = createFileRoute('/api/swarm-decompose')({
           })
         } catch (error) {
           const fallback = heuristicAssignments(prompt, workers)
+          const warningText = error instanceof Error ? error.message : 'decompose failed'
           return json({
             ok: true,
             fallback: true,
-            warning: error instanceof Error ? error.message : 'decompose failed',
+            warning: warningText,
             decomposedAt: Date.now(),
             model: requestedModel,
-            ...fallback,
+            assignments: fallback.assignments,
+            unassigned: [
+              `Decompose failed: ${warningText}`,
+              ...fallback.unassigned,
+            ],
           })
         }
       },

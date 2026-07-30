@@ -158,6 +158,7 @@ export function RouterChat({
   const [decomposeError, setDecomposeError] = useState<string | null>(null)
   const [assignments, setAssignments] = useState<Array<Assignment>>([])
   const [unassigned, setUnassigned] = useState<Array<string>>([])
+  const [decomposeWarning, setDecomposeWarning] = useState<string | null>(null)
   const [dispatching, setDispatching] = useState(false)
   const [watchingMission, setWatchingMission] = useState(false)
   const [dispatchError, setDispatchError] = useState<string | null>(null)
@@ -169,6 +170,7 @@ export function RouterChat({
       setAssignments([])
       setUnassigned([])
       setDecomposeError(null)
+      setDecomposeWarning(null)
     }
     setMode(next)
   }
@@ -182,6 +184,7 @@ export function RouterChat({
     setResults(null)
     setFollowUp(null)
     setDecomposeError(null)
+    setDecomposeWarning(null)
     setDispatchError(null)
   }, [seedKey, seedMode, seedPrompt])
 
@@ -257,6 +260,8 @@ export function RouterChat({
       }
       const data = (await res.json()) as {
         ok: boolean
+        fallback?: boolean
+        warning?: string
         assignments?: Array<Assignment>
         unassigned?: Array<string>
         error?: string
@@ -265,9 +270,11 @@ export function RouterChat({
       const nextAssignments = data.assignments ?? []
       setAssignments(nextAssignments)
       setUnassigned(data.unassigned ?? [])
+      setDecomposeWarning(data.fallback && data.warning ? data.warning : null)
       return nextAssignments
     } catch (err) {
       setDecomposeError(err instanceof Error ? err.message : 'decompose failed')
+      setDecomposeWarning(null)
       return null
     } finally {
       setDecomposing(false)
@@ -677,6 +684,15 @@ export function RouterChat({
                 ))}
               </ol>
             )}
+            {decomposeWarning ? (
+              <div className="rounded-md border border-[var(--theme-warning-border)] bg-[var(--theme-warning-soft)] px-3 py-2 text-[11px] text-[var(--theme-text)]">
+                <div className="mb-1 inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--theme-warning-text)]">
+                  <HugeiconsIcon icon={AlertCircleIcon} size={12} />
+                  Auto decomposition failed — fallback roster used
+                </div>
+                <div className="font-mono text-[10px] leading-relaxed opacity-90">{decomposeWarning}</div>
+              </div>
+            ) : null}
             {unassigned.length > 0 ? (
               <div className="rounded-md border border-[var(--theme-warning-border)] bg-[var(--theme-warning-soft)] px-2 py-1 text-[11px] text-[var(--theme-text)]">
                 <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--theme-muted)]">
