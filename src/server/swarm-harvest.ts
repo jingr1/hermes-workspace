@@ -106,7 +106,7 @@ export async function harvestSwarmWorkerCheckpoint(
   const profilePath = join(getProfilesDir(), workerId)
   const runtimePath = join(profilePath, 'runtime.json')
   const current = readRuntimeJson(runtimePath)
-  const chat = readWorkerMessages(profilePath, 50)
+  const chat = readWorkerMessages(profilePath, 50, typeof current.lastDispatchAt === 'number' ? current.lastDispatchAt : 0)
   if (!chat.ok) return false
 
   const checkpoint = newestCheckpointFromMessages(chat.messages)

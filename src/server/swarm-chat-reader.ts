@@ -21,6 +21,7 @@ const PYTHON_SCRIPT = `import json, sqlite3, sys
 
 db_path = sys.argv[1]
 limit = int(sys.argv[2])
+dispatched_after_ms = int(sys.argv[3]) if len(sys.argv) > 3 else 0
 
 conn = sqlite3.connect("file:" + db_path + "?mode=ro", uri=True)
 conn.row_factory = sqlite3.Row
@@ -47,8 +48,16 @@ if "sessions" in table_names:
         select_cols.append(title_col)
     if started_col:
         select_cols.append(started_col)
+    # Only consider sessions that started AFTER the last dispatch so we never
+    # reuse a terminal checkpoint from a previous mission.
+    # dispatched_after_ms is in milliseconds; started_at in state.db is in seconds.
+    if started_col and dispatched_after_ms > 0:
+        dispatched_after_s = dispatched_after_ms / 1000.0
+        where_clause = "WHERE CAST(" + started_col + " AS REAL) >= " + str(dispatched_after_s)
+    else:
+        where_clause = ""
     row = cur.execute(
-        "SELECT " + ", ".join(select_cols) + " FROM sessions " + order_clause + " LIMIT 1"
+        "SELECT " + ", ".join(select_cols) + " FROM sessions " + where_clause + " " + order_clause + " LIMIT 1"
     ).fetchone()
     if row is not None:
         session_id = row["id"]
@@ -139,7 +148,7 @@ print(json.dumps({
 }))
 `
 
-export function readWorkerMessages(profilePath: string, limit: number): SwarmChatReadResult {
+export function readWorkerMessages(profilePath: string, limit: number, dispatchedAfterMs = 0): SwarmChatReadResult {
   const dbPath = join(profilePath, 'state.db')
   if (!existsSync(dbPath)) {
     return {
@@ -152,7 +161,7 @@ export function readWorkerMessages(profilePath: string, limit: number): SwarmCha
   try {
     const raw = execFileSync(
       'python3',
-      ['-c', PYTHON_SCRIPT, dbPath, String(limit)],
+      ['-c', PYTHON_SCRIPT, dbPath, String(limit), String(Math.floor(dispatchedAfterMs))],
       { encoding: 'utf-8', timeout: 5_000 },
     )
     const parsed = JSON.parse(raw) as {
