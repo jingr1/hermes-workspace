@@ -341,6 +341,7 @@ async def _harvest_worker_checkpoints(
                     "dryRun": False,
                     "autoContinue": False,
                     "allowExecution": False,
+                    "staleMinutes": 30,
                 },
                 headers=_swarm_http_headers(),
             )
@@ -916,6 +917,23 @@ async def classify_workers(state: OrchestratorState) -> dict:
 # ============================================================
 # Node: route_workflow — roster-driven routing (replaces resolve_next)
 # ============================================================
+_STALE_BLOCKER_SIGNATURES = (
+    "no parseable checkpoint found before stale threshold",
+    "timeout after",  # wait_for_checkpoints poll timeout
+    "checkpoint poll timeout",
+    "worker did not produce a terminal checkpoint",
+)
+
+
+def _is_stale_synthetic_checkpoint(cp: WorkerCheckpoint) -> bool:
+    """Return True when the checkpoint was injected by the harvester or poll
+    timeout — not a real worker output — and should be auto-retried without
+    going to the Human Gate."""
+    blocker = (cp.get("blocker") or "").lower()
+    raw = (cp.get("raw") or "").lower()
+    return any(sig in blocker or sig in raw for sig in _STALE_BLOCKER_SIGNATURES)
+
+
 async def route_workflow(state: OrchestratorState) -> dict:
     """Build assignments from classifications using workflow.yaml + route_by_workflow."""
     classifications = state.get("classifications", []) or []
@@ -958,6 +976,24 @@ async def route_workflow(state: OrchestratorState) -> dict:
             continue
 
         if decision.action == "human":
+            # If the checkpoint is a synthetic stale/timeout injection (not a real
+            # worker output), skip the Human Gate and auto-retry the worker instead.
+            _stale_cp = cp_map.get(c.worker_id)
+            if _stale_cp and _is_stale_synthetic_checkpoint(_stale_cp):
+                retry_task = _build_task_for_transition(
+                    c.worker_id, c.worker_id, _stale_cp, c, decision, state
+                )
+                assignments.append({
+                    "worker_id": c.worker_id,
+                    "task": retry_task,
+                    "rationale": f"auto-retry after stale synthetic checkpoint (bypassing human gate): {c.blocker_summary}",
+                })
+                analysis_parts.append(
+                    f"  → stale synthetic checkpoint for {c.worker_id}; auto-retry, skip human gate"
+                )
+                log(f"[route] stale synthetic checkpoint for {c.worker_id} — auto-retry, skip human gate")
+                continue
+
             needs_human = True
             gate_task = (
                 f"Human gate cleared. Retry previous task. "
@@ -1322,6 +1358,7 @@ async def wait_for_checkpoints(state: OrchestratorState) -> dict:
                         "dryRun": False,
                         "autoContinue": False,
                         "allowExecution": False,
+                        "staleMinutes": 30,
                     },
                     headers=_swarm_http_headers(),
                 )

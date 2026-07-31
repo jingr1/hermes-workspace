@@ -259,6 +259,16 @@ export function HumanGatePanel({
             </Section>
           ) : null}
 
+          {gate.logEntries.length > 0 ? (
+            <Section label="执行日志">
+              <div className="max-h-48 overflow-auto rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-2.5 font-mono text-xs leading-relaxed text-[var(--theme-muted-2)]">
+                {gate.logEntries.map((entry, i) => (
+                  <div key={i} className="py-0.5">{entry}</div>
+                ))}
+              </div>
+            </Section>
+          ) : null}
+
           {cp ? (
             <div className="space-y-3 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3">
               <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--theme-muted)]">

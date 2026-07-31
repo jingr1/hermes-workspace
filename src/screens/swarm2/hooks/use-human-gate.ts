@@ -63,6 +63,7 @@ export type HumanGate = {
   analysis: string
   iteration: number
   maxIterations: number
+  logEntries: Array<string>
 }
 
 async function fetchOrchestratorState(missionId: string): Promise<OrchestratorState | null> {
@@ -155,6 +156,7 @@ function deriveGate(state: OrchestratorState | null | undefined): HumanGate | nu
     analysis,
     iteration: state.iteration ?? 0,
     maxIterations: state.max_iterations ?? 5,
+    logEntries: state.log_entries ?? [],
   }
 }
 

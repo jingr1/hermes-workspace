@@ -558,6 +558,9 @@ const config = defineConfig(({ mode, command }) => {
           '**/.cursor/**',
           // Loose log files.
           '**/*.log',
+          // Runtime config written by the swarm PATCH API — not imported by
+          // the module graph; writing it must not trigger a Vite HMR reload.
+          '**/swarm.yaml',
         ],
       },
       proxy: {

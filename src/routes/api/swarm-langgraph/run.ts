@@ -61,13 +61,14 @@ export const Route = createFileRoute('/api/swarm-langgraph/run')({
           args.push('--workflow', resolveWorkflowArg(workflowId))
         }
 
-        const { pid } = spawnLanggraphDetached(args)
+        const { pid, logFile } = spawnLanggraphDetached(args)
         return json({
           ok: true,
           accepted: true,
           missionId,
           threadId: missionId,
           pid,
+          logFile,
           mock: useMock,
           workflowId: workflowId ?? null,
         })

@@ -110,6 +110,18 @@ function tmuxHasSession(name: string): Promise<boolean> {
   })
 }
 
+/** Return the current foreground command in the first pane of a tmux session. */
+function tmuxPaneCommand(sessionName: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const child = execFile(
+      resolveTmuxBin(),
+      ['display-message', '-p', '-t', `${sessionName}:0`, '#{pane_current_command}'],
+      (error, stdout) => resolve(error ? null : stdout.trim() || null),
+    )
+    setTimeout(() => { resolve(null); try { child.kill() } catch {} }, 2000)
+  })
+}
+
 function tmuxIsInstalled(): Promise<boolean> {
   return new Promise((resolve) => {
     const child = execFile(resolveTmuxBin(), ['-V'], (error) => resolve(!error))
@@ -150,6 +162,30 @@ async function buildEntry(
     ? await probeTmuxName(workerId, getSwarmTmuxSessionName(workerId))
     : null
   const tmuxAttachable = Boolean(matched)
+
+  // Detect zombie executing state: runtime says executing but the tmux pane
+  // has returned to shell (hermes process exited without writing a final checkpoint).
+  // Grace period: 2 minutes after dispatch to allow slow startup.
+  const EXECUTING_GRACE_MS = 2 * 60_000
+  const lastDispatchAt = typeof runtime.lastDispatchAt === 'number' ? runtime.lastDispatchAt : 0
+  const dispatchAge = Date.now() - lastDispatchAt
+  let effectiveState = runtime.state
+  let effectiveCheckpointStatus = runtime.checkpointStatus
+  let effectiveBlockedReason = runtime.blockedReason
+  if (
+    runtime.state === 'executing' &&
+    matched &&
+    dispatchAge > EXECUTING_GRACE_MS
+  ) {
+    const paneCmd = await tmuxPaneCommand(matched)
+    // If pane is at shell prompt (bash/zsh/sh) the worker process has exited.
+    const shellNames = new Set(['bash', 'zsh', 'sh', 'fish', 'dash'])
+    if (paneCmd && shellNames.has(paneCmd)) {
+      effectiveState = 'blocked'
+      effectiveCheckpointStatus = 'blocked'
+      effectiveBlockedReason = `Process exited without checkpoint (pane returned to ${paneCmd})`
+    }
+  }
   let terminalKind: SwarmTerminalKind = 'none'
   if (tmuxAttachable) terminalKind = 'tmux'
   else if (runtime.cwd) terminalKind = 'shell'
@@ -173,11 +209,11 @@ async function buildEntry(
     wrapperExists: Boolean(resolvedWrapperPath),
   })
   const lifecycle: SwarmLifecycleMetadata = {
-    state: runtime.state,
+    state: effectiveState,
     phase: runtime.phase,
-    checkpointStatus: runtime.checkpointStatus,
+    checkpointStatus: effectiveCheckpointStatus,
     needsHuman: runtime.needsHuman,
-    blockedReason: runtime.blockedReason,
+    blockedReason: effectiveBlockedReason,
     startedAt: runtime.startedAt,
     lastOutputAt: runtime.lastOutputAt,
     lastCheckIn: runtime.lastCheckIn,
@@ -206,11 +242,11 @@ async function buildEntry(
     cwd: runtime.cwd,
     currentTask: runtime.currentTask,
     activeTool: runtime.activeTool,
-    state: runtime.state,
+    state: effectiveState,
     phase: runtime.phase,
-    checkpointStatus: runtime.checkpointStatus,
+    checkpointStatus: effectiveCheckpointStatus,
     needsHuman: runtime.needsHuman,
-    blockedReason: runtime.blockedReason,
+    blockedReason: effectiveBlockedReason,
     lastCheckIn: runtime.lastCheckIn,
     lastSummary: runtime.lastSummary,
     nextAction: runtime.nextAction,

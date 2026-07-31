@@ -84,12 +84,16 @@ function missionStillRunning(mission: MissionSnapshot | null | undefined): boole
 async function pollMissionUntilSettled(missionId: string): Promise<MissionSnapshot | null> {
   const started = Date.now()
   let latest: MissionSnapshot | null = null
+  let missionEverSeen = false
   while (Date.now() - started < MISSION_POLL_MAX_MS) {
     const res = await fetch(`/api/swarm-missions?id=${encodeURIComponent(missionId)}&sync=1`)
     if (!res.ok) break
     const data = (await res.json()) as { mission?: MissionSnapshot | null }
     latest = data.mission ?? null
-    if (!missionStillRunning(latest)) return latest
+    if (latest) missionEverSeen = true
+    // Only exit once we have seen the mission appear at least once.
+    // When mission is still null the LangGraph process is starting up — keep waiting.
+    if (missionEverSeen && !missionStillRunning(latest)) return latest
     await sleep(MISSION_POLL_MS)
   }
   return latest

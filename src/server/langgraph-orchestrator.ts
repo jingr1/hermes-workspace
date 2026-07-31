@@ -1,4 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process'
+import { closeSync, mkdirSync, openSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 export function resolveLanggraphWorkspaceRoot(): string {
@@ -32,15 +34,21 @@ export function parseJsonFromStdout(stdout: string): unknown {
 export function spawnLanggraphDetached(
   args: Array<string>,
   env: NodeJS.ProcessEnv = process.env,
-): { pid: number | null } {
+): { pid: number | null; logFile: string } {
   const python = resolveLanggraphPythonBin()
+  const logDir = join(homedir(), '.hermes', 'logs')
+  mkdirSync(logDir, { recursive: true })
+  const missionId = args[args.indexOf('--mission-id') + 1] ?? `lg-${Date.now().toString(36)}`
+  const logFile = join(logDir, `langgraph-${missionId}.log`)
+  const logFd = openSync(logFile, 'a')
   const child = spawn(python, ['-m', 'hermes_langgraph_orchestrator', ...args], {
     detached: true,
-    stdio: 'ignore',
+    stdio: ['ignore', logFd, logFd],
     env: langgraphSpawnEnv(env),
   })
   child.unref()
-  return { pid: child.pid ?? null }
+  closeSync(logFd)
+  return { pid: child.pid ?? null, logFile }
 }
 
 export function runLanggraphSync(

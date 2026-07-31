@@ -214,7 +214,13 @@ async function runWorkerLoop(workerId: string, staleMs: number, dryRun: boolean)
         nextAction: 'Orchestrator should re-prompt this worker with the required checkpoint format.',
         lastCheckIn: new Date().toISOString(),
       }
-    : {}
+    : {
+        // Refresh lastCheckIn so the stale clock doesn't accumulate across
+        // repeated harvester calls while the worker is still running.
+        // Without this, a slow worker exceeds staleMs purely from wall-clock
+        // drift even when the harvester is actively monitoring it.
+        lastCheckIn: new Date().toISOString(),
+      }
   const savedPath = Object.keys(patch).length ? writeRuntimePatch(workerId, patch, dryRun) : runtimePath
   return {
     workerId,
