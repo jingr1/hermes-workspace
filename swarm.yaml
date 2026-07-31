@@ -124,7 +124,7 @@ workers:
     specialty: technical translation (architecture, data models, interfaces, tech
       selection); direction decisions (hypothesis stack, kill criteria,
       milestones); implementation review against design intent
-    model: tokenx/Kimi-K2.7-Code
+    model: tokenx/GLM-4.7
     mission: Translate upstream strategy into decision-grade technical designs with
       explicit interfaces, data models, and tech choices. Own technical
       direction — hypothesis stack, kill criteria, and milestones. Review

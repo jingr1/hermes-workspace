@@ -603,8 +603,12 @@ function markDispatchStarted(workerId: string, task: string, missionId?: string 
     notifySessionKey: notifySessionKey ?? 'main',
     // Clear stale checkpoint and processed marker so harvest does not pick up
     // the previous task's DONE as the result for this new dispatch.
+    // Also clear lastOutputAt so the stale-threshold check in runWorkerLoop
+    // falls back to lastDispatchAt (just set above) instead of a timestamp
+    // from a previous run that would make the worker appear stale immediately.
     checkpointRaw: null,
     orchestratorProcessedRaw: null,
+    lastOutputAt: null,
   })
 }
 

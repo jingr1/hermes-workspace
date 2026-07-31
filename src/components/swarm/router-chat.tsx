@@ -311,11 +311,16 @@ export function RouterChat({
           onMissionStarted(data.missionId)
         }
 
+        // Keep dispatching=true while we poll for mission completion.
+        // The LangGraph process is detached so the API returns immediately;
+        // without polling the button unlocks before any worker has even started.
+        const settled = await pollMissionUntilSettled(data.missionId)
+
         setResults({
           dispatchedAt: Date.now(),
           completedAt: Date.now(),
           missionId: data.missionId,
-          results: [], // LangGraph runs asynchronously
+          results: [],
         })
         onResults({
           dispatchedAt: Date.now(),

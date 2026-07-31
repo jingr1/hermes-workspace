@@ -629,7 +629,11 @@ def _build_task_for_transition(
             "",
         ]
     )
-    if handoff:
+    # Only inject the handoff file when the in-state checkpoint carries no
+    # result text.  When result is present it comes from the current mission's
+    # checkpoint and is more authoritative than the global *-latest.md file,
+    # which may belong to a different mission entirely.
+    if handoff and not result:
         lines.extend(
             [
                 f"## Structured handoff from {source_id}",
