@@ -28,7 +28,6 @@ const WORKFLOW_OPTIONS = [
   { value: 'research_only', label: 'Research only', description: 'Adversarial research review loop' },
   { value: 'design_implement', label: 'Design + implement', description: 'Skip research, design then build' },
 ]
-
 const DEFAULT_WORKFLOW = 'rdi'
 type ParsedCheckpoint = {
   stateLabel: string

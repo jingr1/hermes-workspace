@@ -104,13 +104,16 @@ function resolveTmuxBin(): string {
 
 function tmuxHasSession(name: string): Promise<boolean> {
   return new Promise((resolve) => {
-    execFile(resolveTmuxBin(), ['has-session', '-t', name], (error) => resolve(!error))
+    const child = execFile(resolveTmuxBin(), ['has-session', '-t', name], (error) => resolve(!error))
+    // Bail out quickly if tmux is unresponsive — avoids blocking the runtime poll.
+    setTimeout(() => { resolve(false); try { child.kill() } catch {} }, 2000)
   })
 }
 
 function tmuxIsInstalled(): Promise<boolean> {
   return new Promise((resolve) => {
-    execFile(resolveTmuxBin(), ['-V'], (error) => resolve(!error))
+    const child = execFile(resolveTmuxBin(), ['-V'], (error) => resolve(!error))
+    setTimeout(() => { resolve(false); try { child.kill() } catch {} }, 2000)
   })
 }
 
@@ -126,12 +129,11 @@ async function probeTmuxName(
     `agent-${workerId}`,
   ].filter((value): value is string => Boolean(value))
   const seen = new Set<string>()
-  for (const candidate of candidates) {
-    if (seen.has(candidate)) continue
-    seen.add(candidate)
-    if (await tmuxHasSession(candidate)) return candidate
-  }
-  return null
+  const unique = candidates.filter((c) => { if (seen.has(c)) return false; seen.add(c); return true })
+  // Probe all candidates in parallel instead of sequentially to avoid stacking
+  // multiple serial tmux calls per worker (which causes 30s+ GET /api/swarm-runtime).
+  const results = await Promise.all(unique.map(async (c) => (await tmuxHasSession(c) ? c : null)))
+  return results.find((r) => r !== null) ?? null
 }
 
 async function buildEntry(
@@ -195,8 +197,8 @@ async function buildEntry(
     role: roster?.role || runtime.role,
     specialty: roster?.specialty || null,
     mission: roster?.mission || null,
-    skills: roster.skills.length ? roster.skills : [],
-    capabilities: roster.capabilities.length ? roster.capabilities : [],
+    skills: roster?.skills?.length ? roster.skills : [],
+    capabilities: roster?.capabilities?.length ? roster.capabilities : [],
     source,
     pid: lifecycle.pid,
     startedAt: runtime.startedAt,

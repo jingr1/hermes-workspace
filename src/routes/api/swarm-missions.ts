@@ -4,6 +4,7 @@ import { isAuthenticated } from '../../server/auth-middleware'
 import { SWARM_MISSIONS_PATH, cancelSwarmAssignment, cancelSwarmMission, getSwarmMission, listSwarmMissions, listSwarmReports } from '../../server/swarm-missions'
 import { syncSwarmMissionCheckpoints } from '../../server/swarm-mission-sync'
 import { resetSwarmWorkerRuntime } from '../../server/swarm-runtime-reset'
+import '../../server/swarm-background-harvest'
 
 type CancelPostBody = {
   action?: unknown
