@@ -239,6 +239,10 @@ export function markMissionAssignmentDispatched(input: {
   if (isTerminalAssignment(assignment)) return mission
   assignment.state = 'dispatched'
   assignment.dispatchedAt = now()
+  // Clearing any stale checkpoint from a previous dispatch prevents the
+  // harvester from confusing the old result with output from this new run.
+  assignment.checkpoint = null
+  assignment.completedAt = null
   mission.events.push(event('assignment_dispatched', `Dispatched ${assignment.id} to ${input.workerId}`, {
     workerId: input.workerId,
     assignmentId: assignment.id,

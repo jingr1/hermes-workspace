@@ -49,12 +49,18 @@ function resolveTerminalCheckpoint(input: {
   dispatchedAt: number
   snapshot: ReturnType<typeof readRuntimeCheckpointSnapshot>
 }): ParsedSwarmCheckpoint | null {
-  let checkpoint = checkpointFromRuntimeSnapshot(input.snapshot)
-  if (checkpoint && TERMINAL_CHECKPOINT_LABELS.has(checkpoint.stateLabel)) {
+  // Prefer the runtime snapshot's checkpoint if it was produced after this
+  // assignment was dispatched.
+  const checkpoint = checkpointFromRuntimeSnapshot(input.snapshot)
+  if (
+    checkpoint &&
+    TERMINAL_CHECKPOINT_LABELS.has(checkpoint.stateLabel) &&
+    input.snapshot.checkpointTimestamp >= input.dispatchedAt
+  ) {
     return checkpoint
   }
 
-  const chat = readWorkerMessages(input.profilePath, 80)
+  const chat = readWorkerMessages(input.profilePath, 80, input.dispatchedAt)
   if (chat.ok) {
     const postDispatch = chat.messages.filter(
       (message) =>
@@ -68,12 +74,7 @@ function resolveTerminalCheckpoint(input: {
     }
   }
 
-  const runtime = readRuntimeRecord(input.profilePath)
-  return (
-    parseCheckpointFromRuntimeText(runtime.orchestratorProcessedRaw)
-    ?? parseCheckpointFromRuntimeText(runtime.checkpointRaw)
-    ?? parseCheckpointFromRuntimeText(input.snapshot.checkpointRaw)
-  )
+  return null
 }
 
 /**

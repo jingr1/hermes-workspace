@@ -101,6 +101,7 @@ describe('checkpointFromRuntimeSnapshot', () => {
       lastCheckIn: '2026-04-28T20:00:00.000Z',
       lastOutputAt: 1_746_000_000_000,
       checkpointRaw: null,
+      checkpointTimestamp: 1_000_000,
     })
 
     expect(checkpoint).not.toBeNull()
@@ -122,6 +123,7 @@ describe('checkpointFromRuntimeSnapshot', () => {
       lastCheckIn: '2026-04-28T20:00:00.000Z',
       lastOutputAt: 1_746_000_000_000,
       checkpointRaw: null,
+      checkpointTimestamp: 1_000_000,
     })
 
     expect(checkpoint).toBeNull()
@@ -148,6 +150,7 @@ describe('runtimeSnapshotIsFresh', () => {
       lastCheckIn: '2026-04-28T19:59:00.000Z',
       lastOutputAt: 1_745_999_900_000,
       checkpointRaw: null,
+      checkpointTimestamp: 1_745_999_900_000,
     }
     const dispatchedAt = 1_746_000_000_000
 
@@ -160,6 +163,7 @@ describe('runtimeSnapshotIsFresh', () => {
       nextAction: 'Hand off to UI',
       lastCheckIn: '2026-04-28T20:00:01.000Z',
       lastOutputAt: 1_746_000_001_000,
+      checkpointTimestamp: 1_746_000_001_000,
     }
 
     expect(runtimeSnapshotIsFresh(updated, runtimeCheckpointSignature(baseline), dispatchedAt)).toBe(true)
@@ -178,6 +182,7 @@ describe('checkpoint filtering', () => {
       lastCheckIn: '2026-04-28T20:00:01.000Z',
       lastOutputAt: 1_746_000_001_000,
       checkpointRaw: null,
+      checkpointTimestamp: 1_000_000,
     })
 
     expect(checkpoint?.stateLabel).toBe('IN_PROGRESS')

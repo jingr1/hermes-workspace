@@ -48,6 +48,7 @@ describe('swarm-missions', () => {
         result: 'Recorded canonical checkpoint',
         blocker: null,
         nextAction: 'handoff to reviewer',
+        reviewOutcome: null,
         raw: 'STATE: DONE\nFILES_CHANGED: src/server/swarm-missions.ts\nCOMMANDS_RUN: pnpm vitest src/server/swarm-missions.test.ts\nRESULT: Recorded canonical checkpoint\nBLOCKER: none\nNEXT_ACTION: handoff to reviewer',
       },
       source: 'swarm-orchestrator-loop',
@@ -92,6 +93,7 @@ describe('swarm-missions', () => {
       result: 'Same checkpoint',
       blocker: null,
       nextAction: 'none',
+      reviewOutcome: null,
       raw: 'STATE: DONE\nFILES_CHANGED: none\nCOMMANDS_RUN: none\nRESULT: Same checkpoint\nBLOCKER: none\nNEXT_ACTION: none',
     }
 
@@ -131,6 +133,7 @@ describe('swarm-missions', () => {
         result: 'workspace swarm dispatch API smoke passed',
         blocker: null,
         nextAction: 'none',
+        reviewOutcome: null,
         raw: 'STATE: DONE\nFILES_CHANGED: none\nCOMMANDS_RUN: none\nRESULT: workspace swarm dispatch API smoke passed\nBLOCKER: none\nNEXT_ACTION: none',
       },
       source: 'swarm-dispatch',
@@ -189,6 +192,7 @@ describe('swarm-missions', () => {
       result: 'Implementation complete',
       blocker: null,
       nextAction: 'Request QA review',
+      reviewOutcome: null,
       raw: 'STATE: DONE\nFILES_CHANGED: src/routes/api/swarm-orchestrator-loop.ts\nCOMMANDS_RUN: pnpm vitest run src/server/swarm-missions.test.ts\nRESULT: Implementation complete\nBLOCKER: none\nNEXT_ACTION: Request QA review',
     }
 
@@ -253,6 +257,7 @@ describe('swarm-missions', () => {
         result: 'Stale checkpoint after cancel',
         blocker: null,
         nextAction: 'none',
+        reviewOutcome: null,
         raw: 'STATE: DONE\nRESULT: stale',
       },
       source: 'stale-worker',

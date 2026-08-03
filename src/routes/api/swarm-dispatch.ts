@@ -167,6 +167,7 @@ type RuntimeCheckpointSnapshot = {
   lastCheckIn: string | null
   lastOutputAt: number | null
   checkpointRaw: string | null
+  checkpointTimestamp: number
 }
 
 const MAX_PROMPT_CHARS = 32_000
@@ -399,6 +400,11 @@ export function readRuntimeCheckpointSnapshot(profilePath: string): RuntimeCheck
     lastCheckIn: cleanRuntimeText(raw.lastCheckIn),
     lastOutputAt: cleanRuntimeNumber(raw.lastOutputAt),
     checkpointRaw: cleanRuntimeText(raw.checkpointRaw),
+    checkpointTimestamp: Math.max(
+      cleanRuntimeNumber(raw.lastOutputAt) ?? 0,
+      isoToMs(typeof raw.lastCheckIn === 'string' ? raw.lastCheckIn : null) ?? 0,
+      cleanRuntimeNumber(raw.lastDispatchAt) ?? 0,
+    ),
   }
 }
 
