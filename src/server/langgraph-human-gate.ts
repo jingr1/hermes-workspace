@@ -4,6 +4,7 @@ export type LanggraphHumanGatePayload = {
   choice: HumanGateChoice
   humanNote: string
   targetWorkerId: string
+  continueWaitMinutes?: number
 }
 
 function cleanString(value: unknown): string | null {
@@ -40,6 +41,11 @@ export function langgraphEnvWithHumanGate(
     next.HERMES_LANGGRAPH_RESUME_TARGET = payload.targetWorkerId
   } else {
     delete next.HERMES_LANGGRAPH_RESUME_TARGET
+  }
+  if (payload.continueWaitMinutes !== undefined) {
+    next.HERMES_LANGGRAPH_CONTINUE_WAIT_MINUTES = String(payload.continueWaitMinutes)
+  } else {
+    delete next.HERMES_LANGGRAPH_CONTINUE_WAIT_MINUTES
   }
   return next
 }

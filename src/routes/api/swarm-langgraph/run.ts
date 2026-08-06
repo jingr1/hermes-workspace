@@ -6,7 +6,10 @@ import { spawnLanggraphDetached } from '../../../server/langgraph-orchestrator'
 
 function resolveWorkflowArg(workflowId: string): string {
   if (workflowId.startsWith('/')) return workflowId
-  return join(process.cwd(), workflowId)
+  if (workflowId.includes('/') || workflowId.includes('\\')) {
+    return join(process.cwd(), workflowId)
+  }
+  return workflowId
 }
 
 type RunBody = {

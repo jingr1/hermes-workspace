@@ -133,6 +133,10 @@ export function HumanGatePanel({
         ? gate.workerId
         : options.primary.targetWorkerId
 
+  // Determine wait duration if selected option has waitMinutesOptions
+  const selectedOption = effectiveChoice === 'secondary' ? options.secondary : options.primary
+  const continueWaitMinutes = selectedOption.waitMinutesOptions?.[0] || undefined
+
   const canApprove = effectiveChoice !== 'custom' || humanNote.trim().length > 0
 
   const handleResume = (action: 'approved' | 'abort') => {
@@ -147,8 +151,10 @@ export function HumanGatePanel({
       choice: effectiveChoice,
       humanNote: humanNote.trim(),
       targetWorkerId: resolvedTarget,
+      continueWaitMinutes,
       mock: useMock,
     })
+    onOpenChange(false)
   }
 
   const cp = gate.checkpoint

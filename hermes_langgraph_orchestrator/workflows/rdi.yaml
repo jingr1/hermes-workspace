@@ -52,10 +52,10 @@ blockers:
   escalate:
     - architecture_decision
     - missing_credential
+    - timeout
   retry:
     - missing_dependency
     - test_failure
-    - timeout
 
 settings:
   max_iterations: 8

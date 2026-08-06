@@ -92,6 +92,7 @@ export type HumanGateResumeRequest = {
   choice?: HumanGateChoice
   humanNote?: string
   targetWorkerId?: string
+  continueWaitMinutes?: number
   mock?: boolean
 }
 

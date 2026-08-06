@@ -28,10 +28,7 @@ export function buildHermesTmuxTuiCommand(input: {
     input.ghToken ? `GITHUB_TOKEN='${shellEscapeSingle(input.ghToken)}'` : '',
   ].filter(Boolean).join(' ')
   const hermesBin = shellEscapeSingle(input.hermesBin)
-  if (input.useExec === false) {
-    return `${launchPrefix} '${hermesBin}' chat --tui; status=$?; printf '\\n[Hermes worker exited with status %s]\\n' "$status"`
-  }
-  return `${launchPrefix} exec '${hermesBin}' chat --tui`
+  return `${launchPrefix} exec ${hermesBin} chat --tui`
 }
 
 /** tmux-cli: long-lived bash with Hermes env; dispatch runs `hermes chat -q` per task. */
@@ -92,11 +89,10 @@ export function tmuxPaneLooksLikeShellReady(
   if (paneCommand && !SHELL_COMMANDS.test(paneCommand.trim())) {
     return false
   }
-  const tail = paneText.trim().split('\n').slice(-6).join('\n')
+  const tail = paneText.trim().split('\n').slice(-12).join('\n')
   if (/Execute: command not found/i.test(tail)) return false
   if (tmuxPaneLooksLikeHermesTui(paneText)) return false
-  return (
-    /[$#]\s*$/m.test(tail)
-    || /\)\s+[\w.-]+@[\w.-]+:.*[$#]\s*$/m.test(tail)
-  )
+  // Match common shell prompts: $, #, or ~$ at end of line (with optional spaces)
+  // Supports: user@host:~$, user@host:path$, user@host:dir$, etc.
+  return /[$#~]\s*$/m.test(tail.trim())
 }

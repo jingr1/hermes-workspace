@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { json } from '@tanstack/react-start'
 import { createFileRoute } from '@tanstack/react-router'
 import { isAuthenticated } from '../../server/auth-middleware'
+import { getProfilesDir } from '../../server/claude-paths'
 import { rosterByWorkerId } from '../../server/swarm-roster'
 import { parseSwarmModelLabel } from '../../server/swarm-model-resolver'
 import { syncSwarmProfileModel } from '../../server/swarm-profile-config'
@@ -18,27 +19,13 @@ import {
   type TmuxTransportMode,
 } from '../../server/swarm-tmux-delivery'
 
-// Inlined to avoid SSR module-resolution races against freshly-written
-// helpers; mirrors `src/server/claude-paths.ts` getProfilesDir().
-function getProfilesDir(): string {
-  const envHome = process.env.HERMES_HOME || process.env.CLAUDE_HOME
-  if (envHome) {
-    const parts = envHome.split('/').filter(Boolean)
-    if (parts.length >= 2 && parts.at(-2) === 'profiles') {
-      return envHome.split('/').slice(0, -1).join('/')
-    }
-    return join(envHome, 'profiles')
-  }
-  return join(homedir(), '.hermes', 'profiles')
-}
-
 /**
  * POST /api/swarm-tmux-start
  * Body: { workerId: "swarm1" }
  *
  * Idempotently ensures a long-lived tmux session exists for a worker.
  * - tmux-tui (default): `hermes chat --tui` — dispatch pastes into TUI prompt
- * - tmux-cli (HERMES_SWARM_TMUX_MODE=cli): `bash -l` — dispatch runs `hermes chat -q`
+ * - tmux-cli (HERMES_SWARM_TMUX_MODE=cli): `bash -l` — dispatch runs `hermes chat -q` per task
  *
  * Returns: { workerId, sessionName, alreadyRunning, started, transportMode }
  */
@@ -107,17 +94,17 @@ function captureTmuxPane(tmuxBin: string, sessionName: string): Promise<string> 
   })
 }
 
-async function sessionHasHermesTui(tmuxBin: string, sessionName: string): Promise<boolean> {
-  const pane = await captureTmuxPane(tmuxBin, sessionName)
-  return tmuxPaneLooksLikeHermesTui(pane)
-}
-
 function getPaneCurrentCommand(tmuxBin: string, sessionName: string): Promise<string> {
   return new Promise((resolve) => {
     execFile(tmuxBin, ['list-panes', '-t', sessionName, '-F', '#{pane_current_command}'], (error, stdout) => {
       resolve(error ? '' : stdout.toString().trim().split('\n')[0] || '')
     })
   })
+}
+
+async function sessionHasHermesTui(tmuxBin: string, sessionName: string): Promise<boolean> {
+  const pane = await captureTmuxPane(tmuxBin, sessionName)
+  return tmuxPaneLooksLikeHermesTui(pane)
 }
 
 async function sessionHasShellReady(tmuxBin: string, sessionName: string): Promise<boolean> {
@@ -167,13 +154,13 @@ function startSession(
 ): Promise<{ ok: boolean; error?: string }> {
   const handoff = readHandoff(workerId)
   const handoffEnv = handoff
-    ? `HERMES_HANDOFF_PATH='${handoffPath(workerId).replace(/'/g, `'\\''`)}' `
+    ? `HERMES_HANDOFF_PATH='${handoffPath(workerId).replace(/'/g, `'\\\\''`)}' `
     : ''
   const hermesBin = resolveHermesBin()
   const ghToken = resolveGithubToken()
   const startCommand = transport === 'cli'
     ? `${handoffEnv}${buildHermesTmuxShellCommand({ profilePath, hermesBin, ghToken })}`
-    : `${handoffEnv}${buildHermesTmuxTuiCommand({ profilePath, hermesBin, ghToken, useExec: true })}`
+    : `${handoffEnv}${buildHermesTmuxTuiCommand({ profilePath, hermesBin, ghToken })}`
   return new Promise((resolve) => {
     const child = execFile(
       tmuxBin,
@@ -199,7 +186,7 @@ function startSession(
         if (!(await tmuxHasSession(tmuxBin, sessionName))) {
           resolve({
             ok: false,
-            error: `Hermes worker session ${sessionName} exited during startup. Check the profile and Hermes logs.`,
+            error: `Hermes worker session ${sessionName} exited during startup. Check profile and Hermes logs.`,
           })
           return
         }
@@ -233,8 +220,8 @@ async function injectHandoffPrompt(
   const handoff = readHandoff(workerId)
   if (!handoff) return
   const prompt =
-    `CONTEXT_HANDOFF. Your latest structured handoff is at ${handoffPath(workerId)}. ` +
-    `Read it (and the matching .md file) to re-ground, then wait for the next assignment.`
+    `CONTEXT_HANDOFF. You latest structured handoff is at ${handoffPath(workerId)}. ` +
+    `Read it (and matching .md file) to re-ground, then wait for the next assignment.`
   try {
     await new Promise<void>((resolve, reject) => {
       const child = execFile(tmuxBin, ['load-buffer', '-b', `swarm-start-${workerId}`, '-'], {
@@ -281,7 +268,7 @@ function resolveWorkerCwd(workerId: string): string {
   if (existsSync(wrapperPath)) {
     try {
       const text = readFileSync(wrapperPath, 'utf8')
-      const m = text.match(/cd\s+'([^']+)'/)
+      const m = text.match(/cd\\s+'([^']+)'/)
       if (m && m[1] && existsSync(m[1])) return m[1]
     } catch {
       /* noop */
@@ -316,8 +303,8 @@ export const Route = createFileRoute('/api/swarm-tmux-start')({
 
         const profilesDir = getProfilesDir()
         const profilePath = join(profilesDir, workerId)
-        // Skip the existsSync gate; tmux new-session will fail loudly if the
-        // path is bogus, and the sandbox quirks on this host make existsSync
+        // Skip existsSync gate; tmux new-session will fail loudly if
+        // path is bogus, and sandbox quirks on this host make existsSync
         // unreliable for parent dirs even when leaf paths work.
         // We still verify the wrapper exists as a sanity check.
         const worker = rosterByWorkerId([workerId]).get(workerId)
@@ -338,7 +325,7 @@ export const Route = createFileRoute('/api/swarm-tmux-start')({
           )
         }
 
-        // Sync the worker's profile config.yaml model section to the
+        // Sync the worker's profile config.yaml model section to
         // roster's `model:` label before we (re)attach tmux. Hermes Agent
         // reads config.yaml on every invocation, and the wrapper does not
         // pass `--model`, so this is the only way the roster value is
@@ -363,7 +350,7 @@ export const Route = createFileRoute('/api/swarm-tmux-start')({
               if (result.previous) {
                 modelSync.previous = `${result.previous.provider}/${result.previous.default}`
               }
-            } else {
+            } else if (!result.ok) {
               modelSync.error = result.error
             }
           }

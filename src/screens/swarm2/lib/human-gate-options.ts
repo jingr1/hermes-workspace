@@ -2,17 +2,25 @@ import type { HumanGate } from '../hooks/use-human-gate'
 
 export type HumanGateChoice = 'primary' | 'secondary' | 'custom'
 
+export type HumanGateAbort = {
+  id: 'abort'
+  label: string
+  description: string
+}
+
 export type HumanGateOption = {
   id: Exclude<HumanGateChoice, 'custom'>
   label: string
   description: string
   targetWorkerId: string
+  waitMinutesOptions?: number[]
 }
 
 export type HumanGateOptions = {
   primary: HumanGateOption
   secondary: HumanGateOption
   customPlaceholder: string
+  abort?: HumanGateAbort
 }
 
 /** Two preset choices + optional free-text (Claude Code / Hermes clarify style). */
@@ -83,6 +91,33 @@ export function deriveHumanGateOptions(gate: HumanGate): HumanGateOptions {
   }
 
   if (verdict === 'BLOCKED') {
+    // If blocker is timeout, offer "continue wait" option with preset durations
+    const isTimeout = gate.blockerType === 'timeout'
+    if (isTimeout) {
+      return {
+        primary: {
+          id: 'primary',
+          label: '继续等待 15 分钟',
+          description: '延长超时窗口到 15 分钟，让 worker 完成当前任务。',
+          targetWorkerId: workerId,
+          waitMinutesOptions: [15],
+        },
+        secondary: {
+          id: 'secondary',
+          label: '继续等待 60 分钟',
+          description: '延长超时窗口到 60 分钟，适用于长耗时任务。',
+          targetWorkerId: workerId,
+          waitMinutesOptions: [60],
+        },
+        customPlaceholder: '自定义等待时长（分钟），或说明如何处理阻塞…',
+        abort: {
+          id: 'abort',
+          label: '结束任务',
+          description: '终止当前 workflow，不再派发后续 worker。',
+        },
+      }
+    }
+    // Non-timeout blockers: offer retry + continue wait
     return {
       primary: {
         id: 'primary',
@@ -97,6 +132,11 @@ export function deriveHumanGateOptions(gate: HumanGate): HumanGateOptions {
         targetWorkerId: 'orchestrator',
       },
       customPlaceholder: '说明重试策略、环境修复步骤或希望转派的 worker…',
+      abort: {
+        id: 'abort',
+        label: '结束任务',
+        description: '终止当前 workflow，不再派发后续 worker。',
+      },
     }
   }
 

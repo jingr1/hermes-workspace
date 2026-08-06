@@ -10,6 +10,7 @@ import asyncio
 import json
 import os
 import re
+import subprocess
 from datetime import datetime, timezone
 from typing import Any
 
@@ -919,9 +920,9 @@ async def classify_workers(state: OrchestratorState) -> dict:
 # ============================================================
 _STALE_BLOCKER_SIGNATURES = (
     "no parseable checkpoint found before stale threshold",
-    "timeout after",  # wait_for_checkpoints poll timeout
-    "checkpoint poll timeout",
-    "worker did not produce a terminal checkpoint",
+    # Removed "timeout after" and "checkpoint poll timeout" because
+    # genuine timeout blockers should escalate to Human Gate per workflow.yaml,
+    # not be auto-retried as stale synthetic checkpoints.
 )
 
 
@@ -1348,6 +1349,16 @@ async def wait_for_checkpoints(state: OrchestratorState) -> dict:
 
         # Drive the Swarm harvester so chat checkpoints get recorded to the
         # mission store even when no UI autopilot is running.
+        # Read custom wait timeout from env (set by Human Gate "continue wait" action).
+        custom_wait_minutes = os.environ.get("HERMES_LANGGRAPH_CONTINUE_WAIT_MINUTES")
+        stale_minutes = 30
+        if custom_wait_minutes:
+            try:
+                stale_minutes = max(1, int(custom_wait_minutes))
+                log(f"[wait] 使用 Human Gate 指定的等待时长: {stale_minutes} 分钟")
+            except ValueError:
+                log(f"[wait] 无效的 HERMES_LANGGRAPH_CONTINUE_WAIT_MINUTES: {custom_wait_minutes}, 使用默认 30 分钟")
+
         try:
             async with _workspace_http_client(swarm_url) as client:
                 await client.post(
@@ -1358,7 +1369,7 @@ async def wait_for_checkpoints(state: OrchestratorState) -> dict:
                         "dryRun": False,
                         "autoContinue": False,
                         "allowExecution": False,
-                        "staleMinutes": 30,
+                        "staleMinutes": stale_minutes,
                     },
                     headers=_swarm_http_headers(),
                 )
@@ -1407,8 +1418,10 @@ async def wait_for_checkpoints(state: OrchestratorState) -> dict:
         await asyncio.sleep(poll_interval)
 
     log(f"[wait] {max_polls} 次轮询后仍有 worker 未完成")
-    # Surface the timeout as a BLOCKED checkpoint so the downstream classifier
-    # routes to the human gate instead of looping on SKIP/IN_PROGRESS.
+    # Surface timeout as a BLOCKED checkpoint so downstream classifier
+    # routes to human gate instead of looping on SKIP/IN_PROGRESS.
+    # Use Chinese "超时" to trigger blocker_type=timeout while avoiding
+    # _STALE_BLOCKER_SIGNATURES (which only matches English "timeout after").
     for wid in current_workers:
         if wid not in cp_map or cp_map[wid]["state"] not in terminal_states:
             cp_map[wid] = WorkerCheckpoint(
@@ -1417,9 +1430,9 @@ async def wait_for_checkpoints(state: OrchestratorState) -> dict:
                 result=f"Checkpoint poll timeout after {max_polls} attempts",
                 files_changed="",
                 commands_run="",
-                blocker="Worker did not produce a terminal checkpoint within the poll window",
+                blocker=f"Worker did not produce a terminal checkpoint within poll window (超时 after {max_polls} polls)",
                 next_action="Orchestrator should verify worker state and retry or escalate",
-                raw=f"STATE: BLOCKED\nBLOCKER: Timeout after {max_polls} polls\nNEXT_ACTION: Verify worker and retry",
+                raw=f"STATE: BLOCKED\nBLOCKER: 超时 after {max_polls} polls\nNEXT_ACTION: Verify worker and retry",
             )
     return {
         "checkpoints": [cp_map[wid] for wid in current_workers],
@@ -1461,14 +1474,41 @@ async def finalize_mission(state: OrchestratorState) -> dict:
     """Terminal node: log execution outcome and mark done."""
     mission_id = state.get("mission_id", "unknown")
     log(f"[finalize] mission={mission_id} 完成")
-    # log_execution writes logs/execute_*.json.
+    
+    # 清理所有 dispatch 的 worker 的 Swarm 状态
+    dispatched_workers = state.get("dispatched_workers", []) or []
+    cleanup_log_entries = []
+    
+    for worker_id in dispatched_workers:
+        try:
+            # 1. 杀掉 tmux session
+            subprocess.run(['tmux', 'kill-session', '-t', f'swarm-{worker_id}'], 
+                          timeout=5, capture_output=True)
+            cleanup_log_entries.append(f"[finalize] killed tmux session swarm-{worker_id}")
+        except Exception as e:
+            cleanup_log_entries.append(f"[finalize] failed to kill tmux session swarm-{worker_id}: {e}")
+        
+        try:
+            # 2. 清空 runtime.json（设置为 idle）
+            runtime_path = os.path.expanduser(f"~/.hermes/profiles/{worker_id}/runtime.json")
+            with open(runtime_path, 'w') as f:
+                f.write('{"state": "idle"}')
+            cleanup_log_entries.append(f"[finalize] reset runtime.json for {worker_id}")
+        except Exception as e:
+            cleanup_log_entries.append(f"[finalize] failed to reset runtime.json for {worker_id}: {e}")
+    
+    # 写入日志
     exec_log = await log_execution(state)
+    
     return {
         "all_done": True,
         "langgraph_needs_human": False,
         "human_resume_action": None,
-        "log_entries": [f"[finalize] mission={mission_id} complete"]
-        + exec_log.get("log_entries", []),
+        "log_entries": (
+            [f"[finalize] mission={mission_id} complete"]
+            + cleanup_log_entries
+            + exec_log.get("log_entries", [])
+        ),
     }
 
 

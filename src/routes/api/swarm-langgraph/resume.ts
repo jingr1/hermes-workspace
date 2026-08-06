@@ -13,10 +13,20 @@ type ResumeBody = {
   choice?: unknown
   humanNote?: unknown
   targetWorkerId?: unknown
+  continueWaitMinutes?: unknown
 }
 
 function cleanString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function cleanNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const parsed = parseFloat(value)
+    if (Number.isFinite(parsed) && parsed > 0) return parsed
+  }
+  return null
 }
 
 export const Route = createFileRoute('/api/swarm-langgraph/resume')({
