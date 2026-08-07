@@ -80,14 +80,13 @@ def build_phase2_graph(
             return "human_approval"
         if state.get("awaiting_checkpoint", False):
             return "wait_for_checkpoints"
-        iteration = state.get("iteration", 0)
-        max_iter = state.get("max_iterations", 5)
-        if iteration >= max_iter:
-            return "finalize_mission"
+        # 有 assignments 时优先派发，避免 side-effect 已发生但状态被截断
         assignments = state.get("langgraph_assignments") or []
         if assignments:
             return "ensure_sessions"
-        if state.get("human_resume_action") == "abort":
+        iteration = state.get("iteration", 0)
+        max_iter = state.get("max_iterations", 5)
+        if iteration >= max_iter:
             return "finalize_mission"
         return "ensure_sessions"
 

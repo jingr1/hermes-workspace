@@ -1071,14 +1071,20 @@ async def route_workflow(state: OrchestratorState) -> dict:
                         "worker_id": target,
                         "task": task,
                         "reason": decision.reason,
+                        "action": decision.action,
                     }
                 )
             elif target and target in dispatched:
                 analysis_parts.append(f"  → {target} 已派发，跳过")
 
-    iteration = state.get("iteration", 0) + 1
+    iteration = state.get("iteration", 0)
     max_iter = state.get("max_iterations", workflow_spec.settings.max_iterations)
-    exceeded = iteration >= max_iter
+
+    # iteration 只记录系统自动 retry 次数，用于防止异常无限循环。
+    # 正常 workflow 推进、human gate 阻塞、人工批准的重试/转向均不计入。
+    has_auto_retry = any(a.get("action") == "retry" for a in assignments)
+    next_iteration = iteration + 1 if has_auto_retry else iteration
+    exceeded = next_iteration >= max_iter
 
     # Done only when we hit a terminal route, no human gate, no new work, and under limit.
     all_done = terminal and not needs_human and not assignments and not exceeded
@@ -1112,7 +1118,7 @@ async def route_workflow(state: OrchestratorState) -> dict:
         "dispatched_workers": list(dispatched),
         "dispatch_counts": dispatch_counts,
         "transition_counts": transition_counts,
-        "iteration": iteration,
+        "iteration": next_iteration,
         "all_done": all_done,
         "log_entries": [
             f"[route] {len(assignments)} assignments, "

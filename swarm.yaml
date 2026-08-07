@@ -67,7 +67,7 @@ workers:
     role: Fact-Finding Research
     specialty: establish facts — competitive analysis, data validation, source
       tracing; wiki-first lookup (llm-wiki)
-    model: nvidia/minimaxai/minimax-m3
+    model: tokenx/Kimi-K2.7-Code
     mission: Produce evidence-backed factual research with brain-first context,
       external verification, explicit uncertainty, and full source trails. Do
       not make strategy judgments, recommendations, or direction choices — those

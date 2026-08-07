@@ -92,7 +92,12 @@ async def main():
         default="",
         help="初始派发的 worker 列表，逗号分隔。如 'researcher' 或 'architect,developer'",
     )
-    parser.add_argument("--max-iterations", type=int, default=5)
+    parser.add_argument(
+        "--max-iterations",
+        type=int,
+        default=None,
+        help="最大路由迭代次数；默认读取 workflow YAML 的 settings.max_iterations",
+    )
     parser.add_argument(
         "--checkpoint-path",
         type=str,
@@ -147,7 +152,8 @@ async def main():
         print("=" * 60)
         print(f"  Goal: {goal}")
         print(f"  Mode: {mode}")
-        print(f"  Max iterations: {args.max_iterations}")
+        if args.max_iterations is not None:
+            print(f"  Max iterations: {args.max_iterations}")
         if args.workflow:
             print(f"  Workflow: {args.workflow}")
         print()
@@ -264,6 +270,23 @@ async def main():
                     "phase": "phase2_execute",
                     "log_entries": [],
                 }
+
+                # 默认 max_iterations 回退到 workflow YAML 的 settings
+                if args.max_iterations is None:
+                    workflow_path = args.workflow or ""
+                    if workflow_path and os.path.exists(workflow_path):
+                        try:
+                            wf_spec = load_workflow(workflow_path)
+                            initial["max_iterations"] = wf_spec.settings.max_iterations
+                            if not args.get_state and not args.list_active_gates:
+                                print(f"ℹ️  max_iterations 使用 workflow 默认值: {wf_spec.settings.max_iterations}")
+                        except Exception as e:
+                            if not args.get_state and not args.list_active_gates:
+                                print(f"⚠️  读取 workflow 失败，使用默认 5: {e}")
+                            initial["max_iterations"] = 5
+                    else:
+                        initial["max_iterations"] = 5
+
                 existing = await graph.aget_state(config)
                 if existing and existing.values:
                     print(

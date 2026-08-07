@@ -112,7 +112,7 @@ def build_human_gate_assignments(
         task = "".join(context_lines)
         reason = f"human gate {choice_label}: {source_id} → {target_id}"
 
-    return [{"worker_id": target_id, "task": task, "reason": reason}]
+    return [{"worker_id": target_id, "task": task, "reason": reason, "action": "human"}]
 
 
 def build_resume_command(
