@@ -1,0 +1,78 @@
+name: research_architect_developer_writer
+version: 1
+entry: researcher
+description: |
+  Research → Architect → Developer or Writer → Architect review.
+  Architect decides the deliverable type (code / visual / document) via
+  DELIVERABLE_TYPE in the checkpoint. Code goes to developer; visual or
+  document goes to writer. After implementation/authoring, architect reviews
+  and either approves or requests changes.
+
+transitions:
+  - from: researcher
+    "on":
+      verdict: DONE
+    to: architect
+    reason: "调研完成，进入架构设计"
+
+  # Terminal review approval MUST come before non-review architect transitions,
+  # because an approved architect also matches the generic DONE rule below.
+  - from: architect
+    "on":
+      verdict: DONE
+      review_outcome: approved
+    to: null
+    reason: "审查通过，任务完成"
+
+  # Typed routes come before the default fallback so the more specific metadata
+  # conditions are evaluated first.
+  - from: architect
+    "on":
+      verdict: DONE
+      metadata:
+        deliverable_type: "visual,document"
+    to: writer
+    reason: "设计完成且交付物类型为 visual/document，进入内容创作"
+
+  - from: architect
+    "on":
+      verdict: DONE
+      metadata:
+        deliverable_type: "code"
+    to: developer
+    reason: "设计完成且交付物类型为 code，进入开发"
+
+  # Default fallback: if architect did not emit a deliverable type, treat as code.
+  - from: architect
+    "on":
+      verdict: DONE
+    to: developer
+    reason: "设计完成，进入代码实现（默认）"
+
+  # Review loops: developer/writer hand back to architect for review.
+  - from: developer
+    "on":
+      verdict: DONE
+    to: architect
+    max_iterations: 3
+    reason: "实现完成，交回 architect 审查"
+
+  - from: writer
+    "on":
+      verdict: DONE
+    to: architect
+    max_iterations: 3
+    reason: "内容创作完成，交回 architect 审查"
+
+blockers:
+  escalate:
+    - architecture_decision
+    - missing_credential
+    - timeout
+  retry:
+    - missing_dependency
+    - test_failure
+
+settings:
+  max_iterations: 8
+  terminal_docs: false

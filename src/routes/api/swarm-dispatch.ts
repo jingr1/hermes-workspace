@@ -23,6 +23,7 @@ import {
   shellEscapeSingle,
   tmuxPaneLooksLikeHermesTui,
   tmuxPaneLooksLikeShellReady,
+  tmuxPasteWithBracketedPaste,
   type TmuxTransportMode,
 } from '../../server/swarm-tmux-delivery'
 
@@ -834,7 +835,7 @@ async function captureTmuxPane(tmuxBin: string, sessionName: string): Promise<st
   return captured.ok ? captured.stdout.trim() : ''
 }
 
-async function tmuxSessionHasHermesTui(tmuxBin: string, sessionName: string): Promise<boolean> {
+export async function tmuxSessionHasHermesTui(tmuxBin: string, sessionName: string): Promise<boolean> {
   const pane = await captureTmuxPane(tmuxBin, sessionName)
   return tmuxPaneLooksLikeHermesTui(pane)
 }
@@ -863,7 +864,7 @@ async function getPaneCurrentCommand(tmuxBin: string, sessionName: string): Prom
   return captured.ok ? captured.stdout.trim().split('\n')[0] || '' : ''
 }
 
-async function tmuxSessionHasShellReady(tmuxBin: string, sessionName: string): Promise<boolean> {
+export async function tmuxSessionHasShellReady(tmuxBin: string, sessionName: string): Promise<boolean> {
   const pane = await captureTmuxPane(tmuxBin, sessionName)
   const paneCommand = await getPaneCurrentCommand(tmuxBin, sessionName)
   return tmuxPaneLooksLikeShellReady(pane, paneCommand)
@@ -978,7 +979,14 @@ export async function ensureLiveTmuxSession(
   )
 
   if (sessionUsable && sessionReady) {
-    return { ok: true, tmuxBin, sessionName, transport }
+    // Verify that the TUI session is actually running Hermes, not just an empty
+    // shell. `tmuxSessionHasHermesTui` is cheap and catches the common case where
+    // a previous TUI process crashed and left behind a bare bash pane.
+    if (transport === 'tui' && !(await tmuxSessionHasHermesTui(tmuxBin, sessionName))) {
+      await tmuxKillSession(tmuxBin, sessionName)
+    } else {
+      return { ok: true, tmuxBin, sessionName, transport }
+    }
   }
 
   if (sessionExists) {
@@ -1038,6 +1046,8 @@ async function sendPromptToLiveSession(workerId: string, prompt: string): Promis
   // Persist the full prompt to disk and deliver a short, single-line instruction
   // to the TUI. Multiline pastes into prompt_toolkit can enter continuation mode
   // and never submit; pointing the agent at a file keeps the pasted input short.
+  // The actual paste is additionally wrapped with bracketed-paste sequences so
+  // that even the short instruction is accepted as a single paste block.
   try {
     writeFileSync(taskFilePath, prompt, 'utf8')
   } catch (err) {
@@ -1089,31 +1099,24 @@ async function sendPromptToLiveSession(workerId: string, prompt: string): Promis
     }
   }
 
-  const pasted = await execFileAsync(tmuxBin, [
-    'paste-buffer',
-    '-d',
-    '-b',
-    `swarm-dispatch-${workerId}`,
-    '-t',
-    sessionName,
-  ])
-  if (!pasted.ok) {
+  try {
+    await tmuxPasteWithBracketedPaste(tmuxBin, sessionName, instruction)
+  } catch (err) {
     return {
       workerId,
       ok: false,
       output: '',
-      error: pasted.error,
+      error: err instanceof Error ? err.message : String(err),
       durationMs: Date.now() - startedAt,
       exitCode: null,
       delivery: 'tmux-tui',
     }
   }
 
-  // Give the TUI enough time to ingest the paste before submitting. The Hermes
-  // prompt can visually contain the pasted text before prompt_toolkit is ready
-  // to accept Enter; sending a confirmation Enter shortly after the first one
-  // prevents the user-visible failure mode where the task sits at the prompt.
-  await sleep(2000)
+  // Give the TUI enough time to ingest the paste before submitting. With
+  // bracketed-paste the content is accepted as a single block, so we only need
+  // a short settle before sending Enter.
+  await sleep(500)
   const enter = await execFileAsync(tmuxBin, ['send-keys', '-t', sessionName, 'C-m'])
   if (!enter.ok) {
     return {
@@ -1121,19 +1124,6 @@ async function sendPromptToLiveSession(workerId: string, prompt: string): Promis
       ok: false,
       output: '',
       error: enter.error,
-      durationMs: Date.now() - startedAt,
-      exitCode: null,
-      delivery: 'tmux-tui',
-    }
-  }
-  await sleep(1000)
-  const confirmEnter = await execFileAsync(tmuxBin, ['send-keys', '-t', sessionName, 'C-m'])
-  if (!confirmEnter.ok) {
-    return {
-      workerId,
-      ok: false,
-      output: '',
-      error: confirmEnter.error,
       durationMs: Date.now() - startedAt,
       exitCode: null,
       delivery: 'tmux-tui',

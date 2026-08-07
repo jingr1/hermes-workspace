@@ -5,7 +5,8 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { isAuthenticated } from '../../server/auth-middleware'
 import { readWorkerMessages, type SwarmChatMessage } from '../../server/swarm-chat-reader'
-import { ensureLiveTmuxSession } from './swarm-dispatch'
+import { ensureLiveTmuxSession, tmuxSessionHasHermesTui, tmuxSessionHasShellReady } from './swarm-dispatch'
+import { tmuxPasteWithBracketedPaste } from '../../server/swarm-tmux-delivery'
 
 type DirectChatRequest = {
   workerId?: unknown
@@ -76,20 +77,52 @@ function execFileAsync(
 }
 
 async function sendPromptToLiveSession(workerId: string, prompt: string): Promise<{ ok: true; delivery: 'tmux' } | { ok: false; error: string }> {
-  const ensured = await ensureLiveTmuxSession(workerId)
+  let ensured = await ensureLiveTmuxSession(workerId)
   if (!ensured.ok) return { ok: false, error: ensured.error }
-  const { tmuxBin, sessionName } = ensured
-  const bufferName = `swarm-direct-chat-${workerId}`
+  let { tmuxBin, sessionName, transport } = ensured
+
+  // Guard: the session must actually be running Hermes (TUI or CLI). If the
+  // pane is only a bare shell, pasting would execute the prompt as a shell
+  // command instead of sending it to the agent.
+  const hasHermes = transport === 'cli'
+    ? await tmuxSessionHasShellReady(tmuxBin, sessionName)
+    : await tmuxSessionHasHermesTui(tmuxBin, sessionName)
+  if (!hasHermes) {
+    // Kill the stale shell-only session and recreate it with Hermes running.
+    const killed = await execFileAsync(tmuxBin, ['kill-session', '-t', sessionName])
+    if (!killed.ok) {
+      return { ok: false, error: `Session ${sessionName} has no Hermes agent and could not be killed: ${killed.error}` }
+    }
+    ensured = await ensureLiveTmuxSession(workerId)
+    if (!ensured.ok) return { ok: false, error: ensured.error }
+    tmuxBin = ensured.tmuxBin
+    sessionName = ensured.sessionName
+    transport = ensured.transport
+  }
+
   const normalizedPrompt = prompt.replace(/\r\n/g, '\n')
 
-  const loaded = await execFileAsync(tmuxBin, ['load-buffer', '-b', bufferName, '-'], 8_000, normalizedPrompt)
-  if (!loaded.ok) return { ok: false, error: loaded.error }
-
-  const cleared = await execFileAsync(tmuxBin, ['send-keys', '-t', sessionName, 'C-u'])
-  if (!cleared.ok) return { ok: false, error: cleared.error }
-
-  const pasted = await execFileAsync(tmuxBin, ['paste-buffer', '-d', '-b', bufferName, '-t', sessionName])
-  if (!pasted.ok) return { ok: false, error: pasted.error }
+  // TUI mode: prompt_toolkit handles Ctrl-C as exit by default, so do not
+  // send C-c/C-u. Just paste with bracketed-paste markers so the content is
+  // submitted as a single block.
+  if (transport === 'tui') {
+    try {
+      await tmuxPasteWithBracketedPaste(tmuxBin, sessionName, normalizedPrompt)
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  } else {
+    const bufferName = `swarm-direct-chat-${workerId}`
+    const loaded = await execFileAsync(tmuxBin, ['load-buffer', '-b', bufferName, '-'], 8_000, normalizedPrompt)
+    if (!loaded.ok) return { ok: false, error: loaded.error }
+    const cleared = await execFileAsync(tmuxBin, ['send-keys', '-t', sessionName, 'C-c'])
+    if (!cleared.ok) return { ok: false, error: cleared.error }
+    await sleep(100)
+    const clearedLine = await execFileAsync(tmuxBin, ['send-keys', '-t', sessionName, 'C-u'])
+    if (!clearedLine.ok) return { ok: false, error: clearedLine.error }
+    const pasted = await execFileAsync(tmuxBin, ['paste-buffer', '-d', '-b', bufferName, '-t', sessionName])
+    if (!pasted.ok) return { ok: false, error: pasted.error }
+  }
 
   await sleep(120)
   const entered = await execFileAsync(tmuxBin, ['send-keys', '-t', sessionName, 'Enter'])

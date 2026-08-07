@@ -24,6 +24,12 @@ from .state import OrchestratorState, WorkerClassification
 class TransitionOn:
     verdict: str | None = None
     review_outcome: str | None = None
+    metadata: dict[str, str] = field(default_factory=dict)
+
+    def __hash__(self):
+        # dict is not hashable; freeze metadata into a sorted tuple of items.
+        metadata_tuple = tuple(sorted((k, v) for k, v in self.metadata.items()))
+        return hash((self.verdict, self.review_outcome, metadata_tuple))
 
 
 @dataclass(frozen=True)
@@ -89,12 +95,17 @@ def load_workflow(path: str | os.PathLike[str]) -> WorkflowSpec:
         on_raw = raw.get("on") or {}
         if not isinstance(on_raw, dict):
             on_raw = {}
+        metadata_raw = on_raw.get("metadata") or {}
+        if not isinstance(metadata_raw, dict):
+            metadata_raw = {}
+        metadata = {str(k).strip(): str(v).strip() for k, v in metadata_raw.items()}
         transitions.append(
             WorkflowTransition(
                 from_worker=str(raw["from"]).strip(),
                 on=TransitionOn(
                     verdict=_coerce_str(on_raw.get("verdict")),
                     review_outcome=_coerce_str(on_raw.get("review_outcome")),
+                    metadata=metadata,
                 ),
                 to=_coerce_str(raw.get("to")),
                 reason=str(raw.get("reason", "")).strip(),
@@ -195,6 +206,14 @@ def _transition_matches(
         and transition.on.review_outcome != classification.review_outcome
     ):
         return False
+    # Metadata conditions are ANDed. Empty metadata always matches.
+    classification_metadata = getattr(classification, "metadata", None) or {}
+    for key, expected in transition.on.metadata.items():
+        actual = str(classification_metadata.get(key, "")).strip()
+        # Support comma-separated OR values, e.g. "visual,document".
+        expected_values = {v.strip() for v in expected.split(",") if v.strip()}
+        if actual not in expected_values:
+            return False
     return True
 
 

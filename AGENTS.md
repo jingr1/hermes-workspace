@@ -76,23 +76,25 @@ When the Phase 2 orchestrator raises `needs_human=True`, use one of:
 ## Swarm dispatch environment variables
 
 - `HERMES_SWARM_FORCE_ONESHOT=1` — force wrapper oneshot (`hermes -p <worker> chat -q`) instead of the default tmux live-session delivery. Use in CI or hosts without tmux.
-- `HERMES_SWARM_TMUX_MODE=cli` — **必需配置**。tmux session runs `bash -l`; dispatch uses `send-keys` to run `hermes chat -q` per task (`tmux-cli`)。此模式下 shell ready 检测能识别 `.bashrc` 输出噪音（conda 插件警告、VS Code shell 集成失败等），更稳定。
-- **tmux 全局配置要求**（CLI 模式依赖）：在 `~/.tmux.conf` 添加以下两行，防止最后一个 session 关闭时 tmux server 退出：
+- `HERMES_SWARM_TMUX_MODE=tui` — **默认/推荐配置**。tmux session 长驻运行 `hermes chat --tui`；WebUI 输入区消息通过 bracketed-paste 直接送达 TUI prompt，支持实时对话。
+- `HERMES_SWARM_TMUX_MODE=cli` — **可选 fallback**。tmux session 运行 `bash -l`；dispatch 使用 `send-keys` 每轮单独运行 `hermes chat -q`。CLI 模式不支持 WebUI 实时聊天，但 paste 更稳定，可用于纯编排场景或 TUI 不可用的环境。
+- **tmux 全局配置要求**（TUI/CLI 共同依赖）：在 `~/.tmux.conf` 添加以下两行，防止最后一个 session 关闭时 tmux server 退出：
   ```
   set -g exit-empty off
   set -g exit-unattached off
-  - `HERMES_SWARM_TMUX_MODE=cli` — **必需配置**。tmux session 跑 `bash -l`; dispatch 使用 `send-keys` 跑 `hermes chat -q`。此模式下 shell ready 检测依赖增强的 `tmuxPaneLooksLikeShellReady`。
-  - `~/.tmux.conf` — 全局 tmux 配置，防止最后一个 session 关闭时 server 退出。
+  ```
 
   **相关修复**：
 
-  1. **TUI 启动命令恢复**：恢复 `src/server/swarm-tmux-delivery.ts` 的 `buildHermesTmuxTuiCommand` 为直接 `exec hermes chat --tui`，移除 bash wrapper。TUI 启动更快、检测更可靠。
+  1. **TUI bracketed-paste 包装**：`src/server/swarm-tmux-delivery.ts` 新增 `tmuxPasteWithBracketedPaste`，在 `\e[?2004h` / `\e[200~` / `\e[201~` / `\e[?2004l` 序列内包装 `tmux paste-buffer`，解决 prompt_toolkit 多行 paste 进入 continuation 模式的问题。
 
-  2. **CLI shell ready 检测增强**：修改 `src/server/swarm-tmux-delivery.ts` 的 `tmuxPaneLooksLikeShellReady`，允许识别 `~$` 结尾、忽略 `.bashrc` 噪音（conda 插件警告、VS Code shell 集成失败等）。这解决 CLI 模式下 shell ready 检测过不了的问题。
+  2. **TUI session 空壳检测与自动重启**：`src/routes/api/swarm-direct-chat.ts` 在发送消息前检测 tmux session 是否实际运行 Hermes；若只有 bare shell，则 kill 并重建 session，避免消息被当成 shell 命令执行。
 
-  3. **workflowId 解析修复**：修改`src/routes/api/swarm-langgraph/run.ts`，不把短 workflow 名称（如 `rdi`）当成路径。只有包含 `/` 或 `\` 时才当作绝对路径。
+  3. **CLI shell ready 检测增强**：修改 `src/server/swarm-tmux-delivery.ts` 的 `tmuxPaneLooksLikeShellReady`，允许识别 `~$` 结尾、忽略 `.bashrc` 噪音（conda 插件警告、VS Code shell 集成失败等）。
 
-  4. **Human Gate 继续等待支持**：完整实现链路：
+  4. **workflowId 解析修复**：修改 `src/routes/api/swarm-langgraph/run.ts`，不把短 workflow 名称（如 `rdi`）当成路径。只有包含 `/` 或 `\` 时才当作绝对路径。
+
+  5. **Human Gate 继续等待支持**：完整实现链路：
      - `src/server/langgraph-human-gate.ts`：增加 `continueWaitMinutes` 字段
      - `src/routes/api/swarm-langgraph/resume.ts`：读取并写入环境变量 `HERMES_LANGGRAPH_CONTINUE_WAIT_MINUTES`
      - `hermes_langgraph_orchestrator/nodes.py`：`wait_for_checkpoints` 从环境变量读取并覆盖 `staleMinutes`
@@ -100,9 +102,7 @@ When the Phase 2 orchestrator raises `needs_human=True`, use one of:
      - `src/screens/swarm2/components/human-gate-panel.tsx`：传递 `continueWaitMinutes` 到 resume API
      - `src/screens/swarm2/hooks/use-human-gate.ts`：`HumanGateResumeRequest` 类型增加 `continueWaitMinutes?`
 
-  5. **workflow 超时处理**：`rdi.yaml` 把 `timeout` 从 `retry` 移到 `escalate`，触发 Human Gate 而不是无限重试。
-
-  5. **workflow 超时处理**：`rdi.yaml` 把 `timeout` 从 `retry` 移到 `escalate`，触发 Human Gate 而不是无限重试。
+  6. **workflow 超时处理**：`rdi.yaml` 把 `timeout` 从 `retry` 移到 `escalate`，触发 Human Gate 而不是无限重试。
 
   - `HERMES_SWARM_USE_LIVE=1` — **deprecated** (tmux is now the default). Setting it only emits a warning.
   - `HERMES_SWARM_MOCK_BIN=<dir>` — when set, `src/routes/api/swarm-dispatch.ts` looks for worker wrapper scripts in `<dir>` before falling back to `~/.local/bin/`. Useful for validating workflow routing without invoking real LLM workers.

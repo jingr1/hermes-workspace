@@ -238,6 +238,74 @@ workers:
     maxConcurrentTasks: 1
     acceptsBroadcast: true
     reviewRequired: true
+  - id: writer
+    name: Writer
+    role: Content & Visual Deliverables Agent
+    specialty: produce visual and narrative deliverables from approved specs —
+      slides, HTML, video scripts, social copy, documents
+    model: tokenx/Kimi-K2.7-Code
+    mission: Transform approved designs and research into polished,
+      audience-ready deliverables. Follow the architect's specifications for
+      structure, tone, and format. Hand off to architect for quality and intent
+      review. Do not make architecture decisions, change technical facts, or
+      skip accessibility/brand constraints — escalate content gaps to architect.
+    profile: writer
+    modes:
+      - author
+      - autoresearch
+    tools:
+      - terminal
+      - file
+      - web
+      - browser
+      - session_search
+      - skills
+      - todo
+      - vision
+    skills:
+      - gstack-for-hermes
+      - mission-memory-layout
+      - llm-wiki
+      - powerpoint
+      - docx
+      - pdf
+      - popular-web-designs
+      - excalidraw
+      - architecture-diagram
+      - claude-design
+      - songwriting-and-ai-music
+      - media
+      - writing-plans
+      - autoresearch
+      - autoresearch-execute
+    plugins: []
+    pluginToolsets: []
+    mcpServers: []
+    wrapper: writer:author
+    capabilities:
+      - content-authoring
+      - slide-design
+      - visual-design
+      - narrative-design
+      - html-presentation
+      - document-production
+      - social-media-copy
+    preferredTaskTypes:
+      - slide-deck
+      - html-presentation
+      - document
+      - visual-design
+      - video-script
+      - social-copy
+      - autoresearch-execute
+    greenlightRequiredFor:
+      - publish
+      - external-send
+      - destructive
+      - long-running-loop
+    maxConcurrentTasks: 1
+    acceptsBroadcast: true
+    reviewRequired: true
   - id: learning
     name: Learning
     role: Retrospective / Documentation

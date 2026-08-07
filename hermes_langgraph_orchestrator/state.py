@@ -40,7 +40,8 @@ class WorkerClassification:
     blocker_type: str      # missing_dependency | test_failure | timeout | architecture_decision | missing_credential | unknown | ""
     blocker_summary: str
     reasoning: str
-    review_outcome: str    # "" | "approved" | "changes_requested" — 仅 architect 审查 developer 时有效
+    review_outcome: str    # "" | "approved" | "changes_requested" — 仅 architect 审查 developer 实现时有效
+    metadata: dict = field(default_factory=dict)
 
 
 @dataclass

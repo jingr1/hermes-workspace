@@ -81,7 +81,70 @@ export function tmuxPaneLooksLikeHermesTui(paneText: string): boolean {
 
 const SHELL_COMMANDS = /^(bash|sh|zsh|fish|dash|login)$/i
 
-/** True when the pane is an idle shell ready to accept a CLI dispatch command. */
+const BRACKETED_PASTE_START = '\x1b[200~'
+const BRACKETED_PASTE_END = '\x1b[201~'
+
+/**
+ * Paste content into a tmux pane wrapped with bracketed-paste escape sequences
+ * so that prompt_toolkit receives the whole content as a single paste and does
+ * not enter multiline continuation mode.
+ */
+export async function tmuxPasteWithBracketedPaste(
+  tmuxBin: string,
+  sessionName: string,
+  content: string,
+): Promise<void> {
+  const wrapped = `${BRACKETED_PASTE_START}${content}${BRACKETED_PASTE_END}`
+  const bufferName = 'swarm-bp-wrapper'
+  const loaded = await execFileAsync(tmuxBin, ['load-buffer', '-b', bufferName, '-'], 8_000, wrapped)
+  if (!loaded.ok) throw new Error(`load-buffer failed: ${loaded.error}`)
+  const pasted = await execFileAsync(tmuxBin, ['paste-buffer', '-d', '-b', bufferName, '-t', sessionName])
+  if (!pasted.ok) throw new Error(`paste-buffer failed: ${pasted.error}`)
+}
+
+/** Send an escape sequence to a tmux pane as literal text. */
+export async function tmuxSendLiteralEscape(
+  tmuxBin: string,
+  sessionName: string,
+  sequence: string,
+): Promise<void> {
+  const { execFile } = await import('node:child_process')
+  await new Promise<void>((resolve, reject) => {
+    const child = execFile(tmuxBin, ['send-keys', '-t', sessionName, '-l', sequence], (err) => {
+      if (err) reject(err)
+      else resolve()
+    })
+    if (child.stdin) child.stdin.end()
+  })
+}
+
+/** Promisified wrapper around child_process.execFile. */
+function execFileAsync(
+  file: string,
+  args: string[],
+  timeoutMs = 8_000,
+  input?: string,
+): Promise<{ ok: true; stdout: string } | { ok: false; error: string }> {
+  const { execFile } = require('node:child_process') as typeof import('node:child_process')
+  return new Promise((resolve) => {
+    const child = execFile(file, args, { timeout: timeoutMs }, (err, stdout, stderr) => {
+      if (err) {
+        resolve({ ok: false, error: stderr || err.message })
+        return
+      }
+      resolve({ ok: true, stdout })
+    })
+    if (input !== undefined && child.stdin) {
+      child.stdin.write(input, 'utf8')
+      child.stdin.end()
+    }
+  })
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 export function tmuxPaneLooksLikeShellReady(
   paneText: string,
   paneCommand?: string | null,

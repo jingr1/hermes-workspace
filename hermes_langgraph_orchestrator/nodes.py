@@ -12,7 +12,7 @@ import os
 import re
 import subprocess
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 import httpx
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -440,12 +440,46 @@ def _transition_instructions(
             "otherwise use changes_requested and list concrete fixes in RESULT."
         )
 
+    if target_id == "architect" and source_id == "writer":
+        return (
+            "Review the visual/narrative deliverables produced by writer against the architecture/design. "
+            "The writer's structured handoff is included below. Inspect the files changed, "
+            "verify accuracy, tone, and format, and decide whether to approve or request changes. "
+            "This is a content review gate: you MUST end your checkpoint with a line exactly like:\n"
+            "REVIEW_OUTCOME: approved\n"
+            "or\n"
+            "REVIEW_OUTCOME: changes_requested\n"
+            "Use approved only if the deliverable matches the design intent and is ready for use; "
+            "otherwise use changes_requested and list concrete fixes in RESULT."
+        )
+
     if target_id == "developer" and source_id == "architect":
         return (
             "Implement the architecture/design produced by architect. "
             "The architect's structured handoff is included below for context. "
             "Produce concrete code, tests, and documentation. "
             "Return the required checkpoint format."
+        )
+
+    if target_id == "writer" and source_id == "architect":
+        return (
+            "Produce the visual or narrative deliverables specified by architect. "
+            "The architect's structured handoff is included below for context. "
+            "Follow the requested format (slides, HTML, video script, social copy, etc.), "
+            "audience, tone, and constraints. Return the required checkpoint format."
+        )
+
+    if target_id == "architect" and source_id == "writer":
+        return (
+            "Review the visual/narrative deliverables produced by writer against the architecture/design. "
+            "The writer's structured handoff is included below. Inspect the files changed, "
+            "verify accuracy, tone, and format, and decide whether to approve or request changes. "
+            "This is a content review gate: you MUST end your checkpoint with a line exactly like:\n"
+            "REVIEW_OUTCOME: approved\n"
+            "or\n"
+            "REVIEW_OUTCOME: changes_requested\n"
+            "Use approved only if the deliverable matches the design intent and is ready for use; "
+            "otherwise use changes_requested and list concrete fixes in RESULT."
         )
 
     if target_id == "architect" and source_id == "researcher":
@@ -465,6 +499,15 @@ def _transition_instructions(
             "Create the architecture/design specification based on the research findings. "
             "The researcher's structured handoff is included below for context. "
             "Define interfaces, data models, module boundaries, and validation criteria. "
+            "At the end of your checkpoint, include ONE line exactly like:\n"
+            "DELIVERABLE_TYPE: code\n"
+            "or\n"
+            "DELIVERABLE_TYPE: visual\n"
+            "or\n"
+            "DELIVERABLE_TYPE: document\n"
+            "Choose 'code' if the next step should produce software/tests/build artifacts; "
+            "'visual' if it should produce slides, HTML, video, or other visual/narrative assets; "
+            "'document' if it should produce a polished long-form report or article. "
             "Return the required checkpoint format."
         )
 
@@ -802,6 +845,18 @@ def _try_rule_classify(cp: WorkerCheckpoint) -> WorkerClassification | None:
                 review_outcome = line.split(":", 1)[1].strip().lower()
                 break
 
+    metadata: dict[str, str] = {}
+    for key in ("deliverable_type", "deliverable"):
+        if key in raw_lower or key.replace("_", "") in raw_lower:
+            for line in raw.splitlines():
+                if key.replace("_", "") in line.lower().replace("_", "") and ":" in line:
+                    value = line.split(":", 1)[1].strip().lower()
+                    if value:
+                        metadata["deliverable_type"] = value
+                        break
+            if metadata.get("deliverable_type"):
+                break
+
     blocker_type = ""
     if state_label == "BLOCKED":
         blocker_type = _infer_blocker_type(cp.get("blocker", ""), raw_lower)
@@ -813,6 +868,7 @@ def _try_rule_classify(cp: WorkerCheckpoint) -> WorkerClassification | None:
         blocker_summary=cp.get("blocker", ""),
         reasoning="rule classify from STATE",
         review_outcome=review_outcome,
+        metadata=metadata,
     )
 
 
@@ -895,6 +951,7 @@ async def classify_workers(state: OrchestratorState) -> dict:
                 blocker_summary=c.get("blocker_summary", ""),
                 reasoning=c.get("reasoning", ""),
                 review_outcome=c.get("review_outcome", ""),
+                metadata=cast(dict, c.get("metadata")) if isinstance(c.get("metadata"), dict) else {},
             ),
             checkpoints,
             state,

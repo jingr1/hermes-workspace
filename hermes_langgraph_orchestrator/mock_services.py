@@ -15,7 +15,7 @@ from .workflow import WorkflowSpec, load_default_workflow, load_workflow, resolv
 
 MockProfile = Literal["auto", "generic", "cdc", "human_gate"]
 
-DEFAULT_ROSTER = ["orchestrator", "researcher", "architect", "developer", "learning"]
+DEFAULT_ROSTER = ["orchestrator", "researcher", "architect", "developer", "writer", "learning"]
 
 
 def _checkpoint(
@@ -56,22 +56,24 @@ def _checkpoint(
 
 
 def _is_review_gate(workflow: WorkflowSpec, worker_id: str) -> bool:
-    approved = any(
+    """Return True if the workflow expects this worker to act as a review gate.
+
+    A review gate exists when the worker has at least one terminal-approved
+    transition. The presence of a changes_requested transition is optional;
+    if absent, any non-approval result falls through to the human gate.
+    """
+    return any(
         t.from_worker == worker_id and t.on.review_outcome == "approved"
         for t in workflow.transitions
     )
-    changes = any(
-        t.from_worker == worker_id and t.on.review_outcome == "changes_requested"
-        for t in workflow.transitions
-    )
-    return approved and changes
 
 
 def _review_loop_max(workflow: WorkflowSpec, worker_id: str) -> int | None:
+    """Return the max_iterations for the review loop targeting this worker."""
     for transition in workflow.transitions:
         if (
-            transition.from_worker == worker_id
-            and transition.on.review_outcome == "changes_requested"
+            transition.to == worker_id
+            and transition.on.verdict == "DONE"
             and transition.max_iterations is not None
         ):
             return transition.max_iterations
@@ -83,9 +85,22 @@ def _has_design_lane(workflow: WorkflowSpec, worker_id: str) -> bool:
         t.from_worker == worker_id
         and t.on.verdict == "DONE"
         and not t.on.review_outcome
-        and t.to == "developer"
+        and t.to in ("developer", "writer")
         for t in workflow.transitions
     )
+
+
+def _get_first_delivery_target(workflow: WorkflowSpec, worker_id: str) -> str:
+    """Return the first non-review DONE target for an architect-like worker."""
+    for t in workflow.transitions:
+        if (
+            t.from_worker == worker_id
+            and t.on.verdict == "DONE"
+            and not t.on.review_outcome
+            and t.to
+        ):
+            return t.to
+    return "developer"
 
 
 def resolve_mock_profile(workflow: WorkflowSpec, profile: str = "auto") -> MockProfile:
@@ -122,14 +137,27 @@ def build_mock_checkpoint(
 
     if worker_id == "architect" and _is_review_gate(workflow, worker_id):
         loop_max = _review_loop_max(workflow, worker_id) or 3
-        review_rounds = counts.get("architect→researcher", 0)
+        delivery_rounds = max(
+            counts.get("architect→developer", 0),
+            counts.get("architect→writer", 0),
+        )
         if call == 1 and _has_design_lane(workflow, worker_id):
+            target = _get_first_delivery_target(workflow, worker_id)
+            # Include DELIVERABLE_TYPE hint so the generic mock can route to writer
+            # when the first typed transition points to writer.
+            raw_lines = [
+                "STATE: DONE",
+                f"RESULT: [mock] design complete for {goal_hint}",
+                f"DELIVERABLE_TYPE: {'visual' if target == 'writer' else 'code'}",
+                f"NEXT_ACTION: {target} implements",
+            ]
             return _checkpoint(
                 worker_id,
                 result=f"[mock] design complete for {goal_hint}",
-                next_action="developer implements",
+                next_action=f"{target} implements",
+                raw="\n".join(raw_lines),
             )
-        if review_rounds >= loop_max - 1 or call >= 2:
+        if delivery_rounds >= loop_max - 1 or call >= 2:
             return _checkpoint(
                 worker_id,
                 result="[mock] review approved",
