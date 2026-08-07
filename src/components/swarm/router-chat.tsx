@@ -25,6 +25,7 @@ type Assignment = { workerId: string; task: string; rationale: string; expectedO
 
 const WORKFLOW_OPTIONS = [
   { value: 'rdi', label: 'RDI', description: 'Research → design → implement → review' },
+  { value: 'radw', label: 'RADW', description: 'Research → architect → developer or writer' },
   { value: 'research_only', label: 'Research only', description: 'Adversarial research review loop' },
   { value: 'design_implement', label: 'Design + implement', description: 'Skip research, design then build' },
 ]
@@ -895,8 +896,8 @@ function ModeToggle({
           className="rounded-xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-card)] px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)]"
         >
           {WORKFLOW_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
+            <option key={opt.value} value={opt.value} title={opt.description}>
+              {opt.label} — {opt.description}
             </option>
           ))}
         </select>
