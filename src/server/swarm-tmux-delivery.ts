@@ -8,6 +8,8 @@
  *   POST /api/swarm-tmux-stop   → tmux kill-session
  */
 
+import { execFile } from 'node:child_process'
+
 export type TmuxTransportMode = 'tui' | 'cli'
 
 export function shellEscapeSingle(value: string): string {
@@ -84,6 +86,20 @@ const SHELL_COMMANDS = /^(bash|sh|zsh|fish|dash|login)$/i
 const BRACKETED_PASTE_START = '\x1b[200~'
 const BRACKETED_PASTE_END = '\x1b[201~'
 
+/** Explicit first-pane target. Bare session names can fail with "can't find pane". */
+export function tmuxPaneTarget(sessionName: string): string {
+  return sessionName.includes(':') ? sessionName : `${sessionName}:0.0`
+}
+
+/** True when the session has at least one live pane. */
+export async function tmuxSessionHasPane(
+  tmuxBin: string,
+  sessionName: string,
+): Promise<boolean> {
+  const listed = await execFileAsync(tmuxBin, ['list-panes', '-t', sessionName], 5_000)
+  return listed.ok
+}
+
 /**
  * Paste content into a tmux pane wrapped with bracketed-paste escape sequences
  * so that prompt_toolkit receives the whole content as a single paste and does
@@ -94,11 +110,15 @@ export async function tmuxPasteWithBracketedPaste(
   sessionName: string,
   content: string,
 ): Promise<void> {
+  const target = tmuxPaneTarget(sessionName)
+  if (!(await tmuxSessionHasPane(tmuxBin, sessionName))) {
+    throw new Error(`paste-buffer failed: can't find pane: ${sessionName}`)
+  }
   const wrapped = `${BRACKETED_PASTE_START}${content}${BRACKETED_PASTE_END}`
-  const bufferName = 'swarm-bp-wrapper'
+  const bufferName = `swarm-bp-${process.pid}-${Date.now().toString(36)}`
   const loaded = await execFileAsync(tmuxBin, ['load-buffer', '-b', bufferName, '-'], 8_000, wrapped)
   if (!loaded.ok) throw new Error(`load-buffer failed: ${loaded.error}`)
-  const pasted = await execFileAsync(tmuxBin, ['paste-buffer', '-d', '-b', bufferName, '-t', sessionName])
+  const pasted = await execFileAsync(tmuxBin, ['paste-buffer', '-d', '-b', bufferName, '-t', target])
   if (!pasted.ok) throw new Error(`paste-buffer failed: ${pasted.error}`)
 }
 
@@ -108,7 +128,6 @@ export async function tmuxSendLiteralEscape(
   sessionName: string,
   sequence: string,
 ): Promise<void> {
-  const { execFile } = await import('node:child_process')
   await new Promise<void>((resolve, reject) => {
     const child = execFile(tmuxBin, ['send-keys', '-t', sessionName, '-l', sequence], (err) => {
       if (err) reject(err)
@@ -125,7 +144,6 @@ function execFileAsync(
   timeoutMs = 8_000,
   input?: string,
 ): Promise<{ ok: true; stdout: string } | { ok: false; error: string }> {
-  const { execFile } = require('node:child_process') as typeof import('node:child_process')
   return new Promise((resolve) => {
     const child = execFile(file, args, { timeout: timeoutMs }, (err, stdout, stderr) => {
       if (err) {
@@ -139,10 +157,6 @@ function execFileAsync(
       child.stdin.end()
     }
   })
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 export function tmuxPaneLooksLikeShellReady(

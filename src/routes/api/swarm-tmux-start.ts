@@ -190,9 +190,16 @@ function startSession(
           })
           return
         }
-        const ready = transport === 'cli'
-          ? await sessionHasShellReady(tmuxBin, sessionName)
-          : await sessionHasHermesTui(tmuxBin, sessionName)
+        // Wait up to ~20s for Hermes TUI markers (single 1.5s check races startup).
+        const deadline = Date.now() + 20_000
+        let ready = false
+        while (Date.now() < deadline) {
+          ready = transport === 'cli'
+            ? await sessionHasShellReady(tmuxBin, sessionName)
+            : await sessionHasHermesTui(tmuxBin, sessionName)
+          if (ready) break
+          await sleep(500)
+        }
         if (!ready) {
           resolve({
             ok: false,
@@ -235,26 +242,22 @@ async function injectHandoffPrompt(
       })
       child.on('error', reject)
     })
+    // Never send Ctrl-C into Hermes TUI — it exits the agent. Paste only.
+    const target = `${sessionName}:0.0`
     await new Promise<void>((resolve, reject) => {
-      execFile(tmuxBin, ['send-keys', '-t', sessionName, 'C-c'], () => {
-        setTimeout(() => {
-          execFile(tmuxBin, ['send-keys', '-t', sessionName, 'C-u'], () => {
-            execFile(
-              tmuxBin,
-              ['paste-buffer', '-d', '-b', `swarm-start-${workerId}`, '-t', sessionName],
-              (err) => {
-                if (err) return reject(err)
-                setTimeout(() => {
-                  execFile(tmuxBin, ['send-keys', '-t', sessionName, 'Enter'], (enterErr) => {
-                    if (enterErr) return reject(enterErr)
-                    resolve()
-                  })
-                }, 150)
-              },
-            )
-          })
-        }, 200)
-      })
+      execFile(
+        tmuxBin,
+        ['paste-buffer', '-d', '-b', `swarm-start-${workerId}`, '-t', target],
+        (err) => {
+          if (err) return reject(err)
+          setTimeout(() => {
+            execFile(tmuxBin, ['send-keys', '-t', target, 'Enter'], (enterErr) => {
+              if (enterErr) return reject(enterErr)
+              resolve()
+            })
+          }, 150)
+        },
+      )
     })
   } catch (err) {
     console.error(`[swarm-tmux-start] failed to inject handoff for ${workerId}:`, err)

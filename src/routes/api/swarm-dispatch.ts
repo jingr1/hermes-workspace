@@ -24,6 +24,8 @@ import {
   tmuxPaneLooksLikeHermesTui,
   tmuxPaneLooksLikeShellReady,
   tmuxPasteWithBracketedPaste,
+  tmuxPaneTarget,
+  tmuxSessionHasPane,
   type TmuxTransportMode,
 } from '../../server/swarm-tmux-delivery'
 
@@ -979,14 +981,10 @@ export async function ensureLiveTmuxSession(
   )
 
   if (sessionUsable && sessionReady) {
-    // Verify that the TUI session is actually running Hermes, not just an empty
-    // shell. `tmuxSessionHasHermesTui` is cheap and catches the common case where
-    // a previous TUI process crashed and left behind a bare bash pane.
-    if (transport === 'tui' && !(await tmuxSessionHasHermesTui(tmuxBin, sessionName))) {
-      await tmuxKillSession(tmuxBin, sessionName)
-    } else {
-      return { ok: true, tmuxBin, sessionName, transport }
-    }
+    // sessionReady already verified Hermes TUI / shell markers — do not
+    // re-probe and kill here. A second capture can false-negative while the
+    // TUI is redrawing and leave dispatch with no pane to paste into.
+    return { ok: true, tmuxBin, sessionName, transport }
   }
 
   if (sessionExists) {
@@ -1062,45 +1060,29 @@ async function sendPromptToLiveSession(workerId: string, prompt: string): Promis
     }
   }
   const instruction = `Execute the task in ${taskFilePath} and return the required checkpoint format.`
+  const paneTarget = tmuxPaneTarget(sessionName)
 
-  // Ensure we are sending a fresh prompt, not appending onto a partially typed
-  // or multi-line input left in the agent TUI. Ctrl-C cancels any pending
-  // input mode; Ctrl-U clears the current line.
-  await execFileAsync(tmuxBin, ['send-keys', '-t', sessionName, 'C-c'])
-  await sleep(200)
-  const cleared = await execFileAsync(tmuxBin, ['send-keys', '-t', sessionName, 'C-u'])
-  if (!cleared.ok) {
-    return {
-      workerId,
-      ok: false,
-      output: '',
-      error: cleared.error,
-      durationMs: Date.now() - startedAt,
-      exitCode: null,
-      delivery: 'tmux-tui',
-    }
-  }
+  // Do NOT send Ctrl-C here. Hermes prompt_toolkit treats C-c as exit, which
+  // tears down the TUI and yields "can't find pane: swarm-<id>" on paste.
+  // Bracketed paste replaces the prompt content as a single block.
 
-  const loaded = await execFileAsync(
-    tmuxBin,
-    ['load-buffer', '-b', `swarm-dispatch-${workerId}`, '-'],
-    8_000,
-    instruction,
-  )
-  if (!loaded.ok) {
-    return {
-      workerId,
-      ok: false,
-      output: '',
-      error: loaded.error,
-      durationMs: Date.now() - startedAt,
-      exitCode: null,
-      delivery: 'tmux-tui',
+  const pasteOnce = async (): Promise<void> => {
+    if (!(await tmuxSessionHasPane(tmuxBin, sessionName))) {
+      throw new Error(`can't find pane: ${sessionName}`)
     }
+    await tmuxPasteWithBracketedPaste(tmuxBin, sessionName, instruction)
   }
 
   try {
-    await tmuxPasteWithBracketedPaste(tmuxBin, sessionName, instruction)
+    try {
+      await pasteOnce()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (!/can't find (pane|session|window)/i.test(msg)) throw err
+      const restarted = await ensureLiveTmuxSession(workerId)
+      if (!restarted.ok) throw new Error(`${msg}; recreate failed: ${restarted.error}`)
+      await pasteOnce()
+    }
   } catch (err) {
     return {
       workerId,
@@ -1117,7 +1099,7 @@ async function sendPromptToLiveSession(workerId: string, prompt: string): Promis
   // bracketed-paste the content is accepted as a single block, so we only need
   // a short settle before sending Enter.
   await sleep(500)
-  const enter = await execFileAsync(tmuxBin, ['send-keys', '-t', sessionName, 'C-m'])
+  const enter = await execFileAsync(tmuxBin, ['send-keys', '-t', paneTarget, 'C-m'])
   if (!enter.ok) {
     return {
       workerId,

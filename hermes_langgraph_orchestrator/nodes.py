@@ -1543,18 +1543,34 @@ async def finalize_mission(state: OrchestratorState) -> dict:
     cleanup_log_entries = []
     
     for worker_id in dispatched_workers:
+        # Keep live TUI sessions by default so the next mission/retry can reuse
+        # them. Opt in to cleanup with HERMES_SWARM_CLEANUP_TMUX=1.
+        cleanup_tmux = os.environ.get("HERMES_SWARM_CLEANUP_TMUX", "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        if cleanup_tmux:
+            try:
+                subprocess.run(
+                    ["tmux", "kill-session", "-t", f"swarm-{worker_id}"],
+                    timeout=5,
+                    capture_output=True,
+                )
+                cleanup_log_entries.append(f"[finalize] killed tmux session swarm-{worker_id}")
+            except Exception as e:
+                cleanup_log_entries.append(
+                    f"[finalize] failed to kill tmux session swarm-{worker_id}: {e}"
+                )
+        else:
+            cleanup_log_entries.append(
+                f"[finalize] kept tmux session swarm-{worker_id} (set HERMES_SWARM_CLEANUP_TMUX=1 to kill)"
+            )
+
         try:
-            # 1. 杀掉 tmux session
-            subprocess.run(['tmux', 'kill-session', '-t', f'swarm-{worker_id}'], 
-                          timeout=5, capture_output=True)
-            cleanup_log_entries.append(f"[finalize] killed tmux session swarm-{worker_id}")
-        except Exception as e:
-            cleanup_log_entries.append(f"[finalize] failed to kill tmux session swarm-{worker_id}: {e}")
-        
-        try:
-            # 2. 清空 runtime.json（设置为 idle）
+            # Reset runtime.json（设置为 idle）
             runtime_path = os.path.expanduser(f"~/.hermes/profiles/{worker_id}/runtime.json")
-            with open(runtime_path, 'w') as f:
+            with open(runtime_path, "w") as f:
                 f.write('{"state": "idle"}')
             cleanup_log_entries.append(f"[finalize] reset runtime.json for {worker_id}")
         except Exception as e:
