@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { mergeModelEntries } from './models'
+import {
+  catalogFromConfig,
+  listConfigReferencedProviders,
+  mergeModelEntries,
+  modelsFromProviderCache,
+} from './models'
 
 describe('mergeModelEntries', () => {
   it('keeps local catalog entries and appends Hermes backend models without duplicates', () => {
@@ -30,5 +35,89 @@ describe('mergeModelEntries', () => {
         provider: 'openrouter',
       },
     ])
+  })
+})
+
+describe('catalogFromConfig', () => {
+  it('includes custom_providers map-form models and fallback providers', () => {
+    const catalog = catalogFromConfig({
+      providers: {},
+      fallback_providers: [{ provider: 'deepseek', model: 'deepseek-v4-pro' }],
+      custom_providers: [
+        {
+          name: 'moonshot-coding-plan',
+          default_model: 'kimi-for-coding',
+          models: {
+            'kimi-for-coding': { context_length: 262144 },
+            'kimi-for-coding-highspeed': { context_length: 262144 },
+            'k3-256k': { context_length: 262144 },
+            k3: { context_length: 1048576 },
+          },
+        },
+      ],
+    })
+
+    expect(catalog.map((model) => model.id)).toEqual([
+      'kimi-for-coding',
+      'kimi-for-coding-highspeed',
+      'k3-256k',
+      'k3',
+      'deepseek-v4-pro',
+    ])
+    expect(catalog.find((m) => m.id === 'k3')?.provider).toBe('moonshot-coding-plan')
+    expect(catalog.find((m) => m.id === 'k3')?.context_length).toBe(1048576)
+  })
+
+  it('accepts providers.*.models as either array or map', () => {
+    const catalog = catalogFromConfig({
+      providers: {
+        nvidia: {
+          models: ['minimaxai/minimax-m2.5', { id: 'moonshotai/kimi-k2.5', name: 'Kimi K2.5' }],
+        },
+        local: {
+          models: {
+            'qwen3:8b': { name: 'Qwen3 8B' },
+          },
+        },
+      },
+    })
+
+    expect(catalog.map((model) => model.id)).toEqual([
+      'minimaxai/minimax-m2.5',
+      'moonshotai/kimi-k2.5',
+      'qwen3:8b',
+    ])
+    expect(catalog.find((m) => m.id === 'qwen3:8b')?.name).toBe('Qwen3 8B')
+  })
+})
+
+describe('provider models cache expansion', () => {
+  it('lists deepseek from fallback_providers as a referenced provider', () => {
+    expect(
+      listConfigReferencedProviders({
+        model: { provider: 'moonshot-coding-plan', default: 'kimi-for-coding' },
+        fallback_providers: [{ provider: 'deepseek', model: 'deepseek-v4-pro' }],
+      }),
+    ).toEqual(['moonshot-coding-plan', 'deepseek'])
+  })
+
+  it('expands deepseek cache models for config-referenced providers only', () => {
+    const models = modelsFromProviderCache(
+      {
+        deepseek: {
+          models: ['deepseek-v4-pro', 'deepseek-v4-flash'],
+        },
+        nvidia: {
+          models: ['nvidia/nemotron-3-super-120b-a12b', 'openai/gpt-oss-120b'],
+        },
+      },
+      ['deepseek'],
+    )
+
+    expect(models.map((model) => model.id)).toEqual([
+      'deepseek-v4-pro',
+      'deepseek-v4-flash',
+    ])
+    expect(models.every((model) => model.provider === 'deepseek')).toBe(true)
   })
 })

@@ -48,7 +48,10 @@ import {
 import { useSettings } from '@/hooks/use-settings'
 import { MOBILE_TAB_BAR_OFFSET } from '@/components/mobile-tab-bar'
 import { useWorkspaceStore } from '@/stores/workspace-store'
-import { useSessionModelStore } from '@/stores/session-model-store'
+import {
+  PENDING_SESSION_MODEL_KEY,
+  useSessionModelStore,
+} from '@/stores/session-model-store'
 import { Button } from '@/components/ui/button'
 import { usePinnedModels } from '@/hooks/use-pinned-models'
 // import { ModeSelector } from '@/components/mode-selector'
@@ -1107,8 +1110,14 @@ function ChatComposerComponent({
   // Drives both the composer label and the model passed to startStreaming.
   // Replaces an earlier flow that PATCHed ~/.hermes/config.yaml — that path
   // 404s and would clobber the global default for every channel anyway.
-  const persistedSessionModel = useSessionModelStore((s) =>
-    s.getModel(sessionKey),
+  // New chats have no concrete session yet — persist under the pending key
+  // so the pick survives until chat-screen migrates it onto the real id.
+  const modelSessionKey =
+    typeof sessionKey === 'string' && sessionKey.trim().length > 0
+      ? sessionKey.trim()
+      : PENDING_SESSION_MODEL_KEY
+  const persistedSessionModel = useSessionModelStore(
+    (s) => s.models[modelSessionKey],
   )
   const setPersistedSessionModel = useSessionModelStore((s) => s.setModel)
 
@@ -1122,10 +1131,6 @@ function ChatComposerComponent({
     function handleModelSelect(nextModel: string, provider?: string) {
       const model = nextModel.trim()
       if (!model) return
-      const normalizedSessionKey =
-        typeof sessionKey === 'string' && sessionKey.trim().length > 0
-          ? sessionKey.trim()
-          : undefined
       if (
         shouldBlockZeroForkModelSwitch(
           gatewayModeQuery.data,
@@ -1141,14 +1146,12 @@ function ChatComposerComponent({
       // Per-session, browser-local persistence. No global config write —
       // picking a model here only affects this chat. The actual model is
       // passed on each request via the chat-completion `model` field.
-      if (normalizedSessionKey) {
-        setPersistedSessionModel(normalizedSessionKey, resolved)
-      }
+      setPersistedSessionModel(modelSessionKey, resolved)
       setIsModelMenuOpen(false)
     },
     [
       gatewayModeQuery.data,
-      sessionKey,
+      modelSessionKey,
       setPersistedSessionModel,
       zeroForkModelInfoFlags,
     ],

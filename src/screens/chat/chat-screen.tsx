@@ -106,7 +106,10 @@ import { ContextAlertModal } from '@/components/usage-meter/context-alert-modal'
 import { ErrorToastContainer, showErrorToast } from '@/components/error-toast'
 // ContextMeter removed — ContextBar (PR #32) replaces it
 import { persistRecoveryMessage, useChatStore } from '@/stores/chat-store'
-import { useSessionModelStore } from '@/stores/session-model-store'
+import {
+  PENDING_SESSION_MODEL_KEY,
+  useSessionModelStore,
+} from '@/stores/session-model-store'
 import { useResearchCard } from '@/hooks/use-research-card'
 // MOBILE_TAB_BAR_OFFSET removed — tab bar always hidden in chat
 import { useTapDebug } from '@/hooks/use-tap-debug'
@@ -1058,7 +1061,18 @@ export function ChatScreen({
   }, [modelsQuery.data])
 
   const gatewayModel = currentModelQuery.data || ''
-  const currentModel = _localModelOverride || gatewayModel
+  // Must match ChatComposer’s modelSessionKey so picker selections are the
+  // model actually sent on /api/send-stream (previously the store updated the
+  // button label only, while sends always used the gateway/default model).
+  const modelSessionKey = isNewChat
+    ? PENDING_SESSION_MODEL_KEY
+    : forcedSessionKey ||
+      resolvedSessionKey ||
+      activeCanonicalKey ||
+      activeSessionKey ||
+      PENDING_SESSION_MODEL_KEY
+  const sessionModel = useSessionModelStore((s) => s.models[modelSessionKey])
+  const currentModel = _localModelOverride || sessionModel || gatewayModel
 
   // Ref so sendMessage can always read latest thinkingLevel without being in deps
   const thinkingLevelRef = useRef<ThinkingLevel>(thinkingLevel)
@@ -2468,6 +2482,11 @@ export function ChatScreen({
         // In portable mode, use 'main' — no server-side sessions exist.
         // In enhanced mode, create a UUID thread for the sessions API.
         const threadId = isPortableMode ? 'main' : crypto.randomUUID()
+        // Promote the draft model pick onto the real session before send so
+        // later turns in this thread keep using it.
+        useSessionModelStore
+          .getState()
+          .transferModel(PENDING_SESSION_MODEL_KEY, threadId)
         const { optimisticMessage } = createOptimisticMessage(
           trimmedBody,
           attachmentPayload,

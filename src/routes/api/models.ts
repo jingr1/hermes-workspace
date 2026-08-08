@@ -20,6 +20,11 @@ import { readHermesEnv } from '../../server/stt-transcription'
 const CLAUDE_HOME = process.env.HERMES_HOME ?? process.env.CLAUDE_HOME ?? path.join(os.homedir(), '.hermes')
 const MODELS_PATH = path.join(CLAUDE_HOME, 'models.json')
 const CONFIG_PATH = path.join(CLAUDE_HOME, 'config.yaml')
+const AUTH_PATH = path.join(CLAUDE_HOME, 'auth.json')
+const PROVIDER_MODELS_CACHE_PATH = path.join(
+  CLAUDE_HOME,
+  'provider_models_cache.json',
+)
 
 type ModelEntry = {
   provider?: string
@@ -215,6 +220,132 @@ export function resolveProviderApiKey(block: Record<string, unknown>): string {
   return process.env[envName] ?? hermesEnv[envName] ?? ''
 }
 
+/**
+ * Resolve a provider API key from auth.json credential_pool source/label
+ * (e.g. deepseek → env:DEEPSEEK_API_KEY). Used when fallback_providers /
+ * live endpoints omit key_env.
+ */
+export function resolveApiKeyFromAuthPool(providerId: string): string {
+  const wanted = providerId.trim()
+  if (!wanted) return ''
+  try {
+    if (!fs.existsSync(AUTH_PATH)) return ''
+    const auth = asRecord(JSON.parse(fs.readFileSync(AUTH_PATH, 'utf-8')))
+    const pool = asRecord(auth.credential_pool)
+    const poolKey =
+      Object.keys(pool).find(
+        (key) => key.toLowerCase() === wanted.toLowerCase(),
+      ) ?? ''
+    if (!poolKey) return ''
+    const entries = pool[poolKey]
+    if (!Array.isArray(entries) || entries.length === 0) return ''
+    const hermesEnv = readHermesEnv(CLAUDE_HOME)
+    for (const entry of entries) {
+      const block = asRecord(entry)
+      const source = readString(block.source)
+      const envMatch = source.match(/^env:([A-Z0-9_]+)$/i)
+      const candidates = [
+        envMatch?.[1] ?? '',
+        readString(block.label),
+        readString(block.key_env),
+      ].filter(Boolean)
+      for (const envName of candidates) {
+        const value = process.env[envName] ?? hermesEnv[envName] ?? ''
+        if (value) return value
+      }
+    }
+  } catch {
+    // ignore malformed auth.json
+  }
+  return ''
+}
+
+/** Providers referenced by config.yaml (default / providers / custom / fallback). */
+export function listConfigReferencedProviders(
+  config: Record<string, unknown>,
+): Array<string> {
+  const out = new Set<string>()
+  const modelBlock = asRecord(config.model)
+  const defaultProvider =
+    readString(modelBlock.provider) || readString(config.provider)
+  if (defaultProvider) out.add(defaultProvider)
+
+  for (const providerId of Object.keys(asRecord(config.providers))) {
+    if (providerId.trim()) out.add(providerId.trim())
+  }
+
+  if (Array.isArray(config.custom_providers)) {
+    for (const entry of config.custom_providers) {
+      const block = asRecord(entry)
+      const providerId =
+        readString(block.name) ||
+        readString(block.id) ||
+        readString(block.provider)
+      if (providerId) out.add(providerId)
+    }
+  }
+
+  if (Array.isArray(config.fallback_providers)) {
+    for (const entry of config.fallback_providers) {
+      const block = asRecord(entry)
+      const providerId = readString(block.provider) || readString(block.name)
+      if (providerId) out.add(providerId)
+    }
+  }
+
+  return Array.from(out)
+}
+
+/**
+ * Expand configured providers using Hermes' provider_models_cache.json.
+ * Only providers referenced in config are included (keeps picker curated;
+ * e.g. fallback deepseek → deepseek-v4-pro + deepseek-v4-flash).
+ */
+export function modelsFromProviderCache(
+  cache: Record<string, unknown>,
+  providerIds: Array<string>,
+): Array<ModelEntry> {
+  const out: Array<ModelEntry> = []
+  for (const providerId of providerIds) {
+    const cacheKey =
+      Object.keys(cache).find(
+        (key) => key.toLowerCase() === providerId.toLowerCase(),
+      ) ?? providerId
+    const entry = cache[cacheKey]
+    const models = Array.isArray(entry)
+      ? entry
+      : Array.isArray(asRecord(entry).models)
+        ? (asRecord(entry).models as unknown[])
+        : []
+    for (const model of models) {
+      if (typeof model !== 'string') continue
+      const id = model.trim()
+      if (!id) continue
+      out.push({
+        id,
+        name: id,
+        provider: providerId,
+        source: 'provider-cache',
+      })
+    }
+  }
+  return out
+}
+
+function readCachedModelsForConfigProviders(): Array<ModelEntry> {
+  try {
+    if (!fs.existsSync(CONFIG_PATH) || !fs.existsSync(PROVIDER_MODELS_CACHE_PATH))
+      return []
+    const config = asRecord(YAML.parse(fs.readFileSync(CONFIG_PATH, 'utf-8')))
+    const cache = asRecord(
+      JSON.parse(fs.readFileSync(PROVIDER_MODELS_CACHE_PATH, 'utf-8')),
+    )
+    return modelsFromProviderCache(cache, listConfigReferencedProviders(config))
+  } catch {
+    return []
+  }
+}
+
 function normalizeConfiguredBaseUrl(value: unknown): string {
   const raw = readString(value)
   if (!raw) return ''
@@ -251,7 +382,8 @@ function readConfiguredLiveModelEndpoints(): Array<LiveModelEndpoint> {
         normalizeConfiguredBaseUrl(block.api_base) ||
         normalizeConfiguredBaseUrl(block.apiBase)
       if (!baseUrl) return
-      const apiKey = resolveProviderApiKey(block)
+      const apiKey =
+        resolveProviderApiKey(block) || resolveApiKeyFromAuthPool(provider)
       const key = `${provider}\u0000${baseUrl}`
       if (seen.has(key)) return
       seen.add(key)
@@ -264,6 +396,28 @@ function readConfiguredLiveModelEndpoints(): Array<LiveModelEndpoint> {
     const providers = asRecord(config.providers)
     for (const [providerId, value] of Object.entries(providers)) {
       pushEndpoint(providerId, asRecord(value))
+    }
+
+    // custom_providers + fallback_providers often hold the only base_url
+    // for OpenAI-compatible proxies; include them so live /v1/models works.
+    const customProviders = config.custom_providers
+    if (Array.isArray(customProviders)) {
+      for (const entry of customProviders) {
+        const block = asRecord(entry)
+        const providerId = readString(block.name) || readString(block.id) || readString(block.provider)
+        if (!providerId) continue
+        pushEndpoint(providerId, block)
+      }
+    }
+
+    const fallbackProviders = config.fallback_providers
+    if (Array.isArray(fallbackProviders)) {
+      for (const entry of fallbackProviders) {
+        const block = asRecord(entry)
+        const providerId = readString(block.provider) || readString(block.name)
+        if (!providerId) continue
+        pushEndpoint(providerId, block)
+      }
     }
 
     return endpoints
@@ -326,95 +480,149 @@ async function fetchConfiguredLiveModels(): Promise<Array<ModelEntry>> {
   return all
 }
 
+/**
+ * Collect models from a Hermes provider / custom_providers block.
+ * Supports both list form (`models: [id, ...]`) and map form
+ * (`models: { id: { context_length: ... } }`) used by custom_providers.
+ */
+function collectModelsFromProviderBlock(
+  providerId: string,
+  block: Record<string, unknown>,
+  pushEntry: (entry: ModelEntry) => void,
+): void {
+  const providerModels = block.models
+  if (Array.isArray(providerModels)) {
+    for (const modelEntry of providerModels) {
+      if (typeof modelEntry === 'string') {
+        const id = modelEntry.trim()
+        if (!id) continue
+        pushEntry({ id, name: id, provider: providerId })
+      } else {
+        const record = asRecord(modelEntry)
+        const id =
+          readString(record.id) ||
+          readString(record.model) ||
+          readString(record.name)
+        if (!id) continue
+        pushEntry({
+          id,
+          name: readString(record.name) || id,
+          provider: readString(record.provider) || providerId,
+        })
+      }
+    }
+  } else if (providerModels && typeof providerModels === 'object') {
+    for (const [modelId, meta] of Object.entries(asRecord(providerModels))) {
+      const id = modelId.trim()
+      if (!id) continue
+      const record = asRecord(meta)
+      pushEntry({
+        id,
+        name: readString(record.name) || readString(record.display_name) || id,
+        provider: readString(record.provider) || providerId,
+        ...(typeof record.context_length === 'number'
+          ? { context_length: record.context_length }
+          : {}),
+      })
+    }
+  }
+
+  const providerDefault =
+    readString(block.model) ||
+    readString(block.default) ||
+    readString(block.default_model) ||
+    readString(block.defaultModel)
+  if (providerDefault) {
+    pushEntry({
+      id: providerDefault,
+      name: providerDefault,
+      provider: providerId,
+    })
+  }
+}
+
+/**
+ * Build the configured model catalog from a parsed Hermes config object.
+ * Exported for unit tests.
+ */
+export function catalogFromConfig(config: Record<string, unknown>): Array<ModelEntry> {
+  const out: Array<ModelEntry> = []
+  const seen = new Set<string>()
+
+  const pushEntry = (entry: ModelEntry) => {
+    if (!entry.id || seen.has(entry.id)) return
+    out.push(entry)
+    seen.add(entry.id)
+  }
+
+  const providers = asRecord(config.providers)
+  for (const [providerId, value] of Object.entries(providers)) {
+    collectModelsFromProviderBlock(providerId, asRecord(value), pushEntry)
+  }
+
+  // Hermes custom OpenAI/Anthropic-compatible endpoints. These are the
+  // primary place users declare named models (often as a map keyed by id).
+  const customProviders = config.custom_providers
+  if (Array.isArray(customProviders)) {
+    for (const entry of customProviders) {
+      const block = asRecord(entry)
+      const providerId =
+        readString(block.name) ||
+        readString(block.id) ||
+        readString(block.provider)
+      if (!providerId) continue
+      collectModelsFromProviderBlock(providerId, block, pushEntry)
+    }
+  }
+
+  const fallbackProviders = config.fallback_providers
+  if (Array.isArray(fallbackProviders)) {
+    for (const entry of fallbackProviders) {
+      const block = asRecord(entry)
+      const providerId = readString(block.provider) || readString(block.name)
+      const modelId = readString(block.model) || readString(block.default)
+      if (!providerId || !modelId) continue
+      pushEntry({
+        id: modelId,
+        name: modelId,
+        provider: providerId,
+      })
+    }
+  }
+
+  const aliases = asRecord(config.model_aliases)
+  for (const [alias, target] of Object.entries(aliases)) {
+    const aliasId = alias.trim()
+    if (!aliasId) continue
+    const targetStr = typeof target === 'string' ? target.trim() : ''
+    const provider =
+      targetStr && targetStr.includes('/')
+        ? targetStr.split('/')[0]
+        : 'alias'
+    pushEntry({
+      id: aliasId,
+      name: targetStr ? `${aliasId} → ${targetStr}` : aliasId,
+      provider,
+      alias: true,
+      target: targetStr || undefined,
+    })
+  }
+
+  return out
+}
+
+/**
+ * Read providers.*.models, custom_providers, fallback_providers, and
+ * model_aliases from ~/.hermes/config.yaml so the picker reflects the user's
+ * configured Hermes catalog. Fix for #569 (+ custom_providers).
+ */
 function readClaudeConfigCatalog(): Array<ModelEntry> {
   try {
     if (!fs.existsSync(CONFIG_PATH)) return []
     const raw = fs.readFileSync(CONFIG_PATH, 'utf-8')
     const parsed = YAML.parse(raw)
     if (!parsed || typeof parsed !== 'object') return []
-    const config = parsed as Record<string, unknown>
-    const out: Array<ModelEntry> = []
-    const seen = new Set<string>()
-
-    const pushEntry = (entry: ModelEntry) => {
-      if (!entry.id || seen.has(entry.id)) return
-      out.push(entry)
-      seen.add(entry.id)
-    }
-
-    const providers = asRecord(config.providers)
-    for (const [providerId, value] of Object.entries(providers)) {
-      const providerBlock = asRecord(value)
-      const providerModels = providerBlock.models
-      if (Array.isArray(providerModels)) {
-        for (const modelEntry of providerModels) {
-          if (typeof modelEntry === 'string') {
-            const id = modelEntry.trim()
-            if (!id) continue
-            pushEntry({ id, name: id, provider: providerId })
-          } else {
-            const record = asRecord(modelEntry)
-            const id =
-              readString(record.id) ||
-              readString(record.model) ||
-              readString(record.name)
-            if (!id) continue
-            pushEntry({
-              id,
-              name: readString(record.name) || id,
-              provider: readString(record.provider) || providerId,
-            })
-          }
-        }
-      }
-      const providerDefault =
-        readString(providerBlock.model) ||
-        readString(providerBlock.default) ||
-        readString(providerBlock.default_model) ||
-        readString(providerBlock.defaultModel)
-      if (providerDefault) {
-        pushEntry({
-          id: providerDefault,
-          name: providerDefault,
-          provider: providerId,
-        })
-      }
-    }
-
-    const fallbackProviders = config.fallback_providers
-    if (Array.isArray(fallbackProviders)) {
-      for (const entry of fallbackProviders) {
-        const block = asRecord(entry)
-        const providerId = readString(block.provider)
-        const modelId = readString(block.model) || readString(block.default)
-        if (!providerId || !modelId) continue
-        pushEntry({
-          id: modelId,
-          name: modelId,
-          provider: providerId,
-        })
-      }
-    }
-
-    const aliases = asRecord(config.model_aliases)
-    for (const [alias, target] of Object.entries(aliases)) {
-      const aliasId = alias.trim()
-      if (!aliasId) continue
-      const targetStr = typeof target === 'string' ? target.trim() : ''
-      const provider =
-        targetStr && targetStr.includes('/')
-          ? targetStr.split('/')[0]
-          : 'alias'
-      pushEntry({
-        id: aliasId,
-        name: targetStr ? `${aliasId} → ${targetStr}` : aliasId,
-        provider,
-        alias: true,
-        target: targetStr || undefined,
-      })
-    }
-
-    return out
+    return catalogFromConfig(parsed as Record<string, unknown>)
   } catch {
     return []
   }
@@ -461,9 +669,9 @@ export const Route = createFileRoute('/api/models')({
             models.unshift(defaultModel)
           }
 
-          // Merge providers.*.models + provider defaults + model_aliases
-          // from ~/.hermes/config.yaml so the picker reflects the user's full
-          // Hermes catalog, not just /v1/models + models.json + local discovery.
+          // Merge providers.*.models + custom_providers + fallback_providers +
+          // model_aliases from ~/.hermes/config.yaml so the picker reflects the
+          // user's configured Hermes catalog (not the full upstream universe).
           // Fix for #569.
           const configModels = readClaudeConfigCatalog()
           if (configModels.length > 0) {
@@ -472,6 +680,15 @@ export const Route = createFileRoute('/api/models')({
               source === 'models.json'
                 ? 'models.json+config.yaml'
                 : `${source}+config.yaml`
+          }
+
+          // Expand config-referenced providers (e.g. fallback deepseek) using
+          // Hermes provider_models_cache.json — same source WebUI uses for the
+          // authenticated provider catalog, but scoped to configured providers.
+          const cachedProviderModels = readCachedModelsForConfigProviders()
+          if (cachedProviderModels.length > 0) {
+            models = mergeModelEntries(models, cachedProviderModels)
+            source = `${source}+provider-cache`
           }
 
           // Merge the authoritative Hermes model catalog whenever it is

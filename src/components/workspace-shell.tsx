@@ -13,6 +13,7 @@
  */
 import {
   Suspense,
+  lazy,
   useCallback,
   useEffect,
   useMemo,
