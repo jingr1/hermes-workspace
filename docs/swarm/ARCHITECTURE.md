@@ -1,46 +1,41 @@
 # Swarm Architecture
 
-Swarm Mode is built around a durable loop: intent enters through Aurora, dispatch flows through the orchestrator, workers execute in persistent sessions, checkpoints return to the control plane, and only judgment-worthy decisions reach Eric.
+> **现行真源**：语义 roster 与 pipeline 以 [`AGENTS.md`](../../AGENTS.md) / [`swarm.yaml`](../../swarm.yaml) 为准（`orchestrator → researcher → architect → (developer | writer) → learning`）。下文若仍出现 `swarmN` / Builder / Reviewer 编号车道，仅作历史 UI 概念参考。
+
+Swarm Mode is built around a durable loop: intent enters through the control plane, dispatch flows through the orchestrator, workers execute in persistent sessions, checkpoints return, and only judgment-worthy decisions reach the human.
 
 ## The loop
 
 ```text
 ┌────────┐
-│ Eric   │
+│ Human  │
 └───┬────┘
     │ intent, judgment, approval
-    ▼
-┌────────────┐
-│ Aurora     │
-│ main agent │
-└───┬────────┘
-    │ translates intent into SwarmBrief
     ▼
 ┌────────────────────────────┐
 │ Orchestrator                │
 │ routing, drift, escalation │
 └───┬────────────────────────┘
-    │ dispatches by role + standing mission
+    │ dispatches by semantic worker id
     ▼
 ┌────────────────────────────────────────────────────┐
-│ Hermes Agents                                      │
-│ swarm4 research  swarm5 build  swarm6 review        │
-│ swarm7 docs      swarm8 ops    swarm9 lab           │
-│ swarm10 patches  swarm11 QA    swarm12 triage       │
+│ Hermes Agents (profiles)                           │
+│ researcher · architect · developer | writer        │
+│ learning · (ops-watch sidecar if enabled)          │
 └───┬────────────────────────────────────────────────┘
     │ proof-bearing checkpoint
     ▼
 ┌────────────────────────────┐
 │ Reports / Inbox / runtime  │
 └───┬────────────────────────┘
-    │ orchestrator decides next route
+    │ LangGraph / orchestrator routes next
     ▼
 ┌─────────────────────────────────────┐
 │ continue / repair / review / input  │
 └─────────────────────────────────────┘
 ```
 
-The key rule: workers do not free-style message Eric. They checkpoint. The orchestrator routes. Aurora handles judgment. Eric approves the few things that matter.
+The key rule: workers do not free-style chat the human. They checkpoint. The orchestrator routes. Only judgment-worthy decisions escalate.
 
 ## Canonical flow
 

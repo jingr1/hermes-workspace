@@ -6,12 +6,25 @@ description: |
   architect reviews (up to 3 rounds), then terminates on approval.
 
 transitions:
+  # Initial design with no build yet may approve without harden (no executor work).
   - from: architect
     "on":
       verdict: DONE
       review_outcome: approved
+      metadata:
+        harden_outcome: pass
     to: null
-    reason: "设计已批准且无实现需求，直接结束"
+    reason: "Gate H pass / 设计通过且无需实现"
+
+  - from: architect
+    "on":
+      verdict: DONE
+      review_outcome: approved
+      metadata:
+        harden_outcome: fail
+    to: developer
+    max_iterations: 2
+    reason: "Gate H: harden failed → developer revise (≤2)"
 
   # Gate C: review failed → developer revise ≤3, then Human Gate
   - from: architect
@@ -32,14 +45,7 @@ transitions:
     "on":
       verdict: DONE
     to: architect
-    reason: "实现完成，交 architect 审查"
-
-  - from: architect
-    "on":
-      verdict: DONE
-      review_outcome: approved
-    to: null
-    reason: "实现审查通过，任务完成"
+    reason: "实现完成，交 architect 审查 + Harden"
 
 blockers:
   escalate:

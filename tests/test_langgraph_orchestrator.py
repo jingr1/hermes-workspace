@@ -1,5 +1,5 @@
 """
-CDC end-to-end tests for the LangGraph Swarm orchestrator.
+LangGraph Swarm orchestrator tests (default workflow: radw).
 
 These tests use mock services (no real Workspace API) so they can run in CI.
 """
@@ -50,14 +50,14 @@ from hermes_langgraph_orchestrator.mock_services import (
 # ============================================================
 def test_load_default_workflow() -> None:
     wf = load_default_workflow()
-    assert wf.name == "cdc_research_design_implement"
+    assert wf.name == "research_architect_developer_writer"
     assert wf.entry == "researcher"
     assert "developer" in {t.from_worker for t in wf.transitions}
 
 
 def test_validate_workflow_against_roster() -> None:
     wf = load_default_workflow()
-    errors = validate_workflow_against_roster(wf, {"orchestrator", "researcher", "architect", "developer", "learning"})
+    errors = validate_workflow_against_roster(wf, {"orchestrator", "researcher", "architect", "developer", "writer", "learning"})
     assert errors == []
 
     errors = validate_workflow_against_roster(wf, {"orchestrator", "researcher"})
@@ -94,23 +94,23 @@ def test_route_by_workflow_blocked_escalates() -> None:
 
 
 @pytest.mark.asyncio
-async def test_phase2_cdc_end_to_end() -> None:
-    """Full CDC loop: researcher -> architect -> developer(blocked) -> human -> done."""
-    mission_id = "test-cdc-e2e"
+async def test_phase2_blocked_once_end_to_end() -> None:
+    """RADW + blocked_once: researcher -> architect -> developer(blocked) -> human -> done."""
+    mission_id = "test-blocked-once-e2e"
     with tempfile.TemporaryDirectory() as tmpdir:
         checkpoint_path = os.path.join(tmpdir, "checkpoints.db")
         async with AsyncSqliteSaver.from_conn_string(checkpoint_path) as saver:
             graph = build_phase2_graph(
-                init_fn=make_mock_init_mission("auto"),
+                init_fn=make_mock_init_mission("blocked_once"),
                 ensure_fn=make_mock_ensure_sessions(),
-                dispatch_fn=make_mock_dispatch("auto"),
+                dispatch_fn=make_mock_dispatch("blocked_once"),
                 classify_fn=make_mock_classify(),
                 checkpointer=saver,
             )
             config = {"configurable": {"thread_id": mission_id}}
             initial: OrchestratorState = {
                 "mission_id": mission_id,
-                "mission_goal": "Design and implement CDC + airspring model",
+                "mission_goal": "Design and implement a small verifiable feature",
                 "swarm_api_url": "http://localhost:3000/api",
                 "checkpoints": [],
                 "classifications": [],
@@ -140,21 +140,21 @@ async def test_phase2_cdc_end_to_end() -> None:
 @pytest.mark.asyncio
 async def test_phase2_resume_abort() -> None:
     """Aborting from the human gate finalizes the mission immediately."""
-    mission_id = "test-cdc-abort"
+    mission_id = "test-blocked-once-abort"
     with tempfile.TemporaryDirectory() as tmpdir:
         checkpoint_path = os.path.join(tmpdir, "checkpoints.db")
         async with AsyncSqliteSaver.from_conn_string(checkpoint_path) as saver:
             graph = build_phase2_graph(
-                init_fn=make_mock_init_mission("auto"),
+                init_fn=make_mock_init_mission("blocked_once"),
                 ensure_fn=make_mock_ensure_sessions(),
-                dispatch_fn=make_mock_dispatch("auto"),
+                dispatch_fn=make_mock_dispatch("blocked_once"),
                 classify_fn=make_mock_classify(),
                 checkpointer=saver,
             )
             config = {"configurable": {"thread_id": mission_id}}
             initial: OrchestratorState = {
                 "mission_id": mission_id,
-                "mission_goal": "CDC model",
+                "mission_goal": "sample mission",
                 "swarm_api_url": "http://localhost:3000/api",
                 "checkpoints": [],
                 "classifications": [],
@@ -182,16 +182,16 @@ async def test_read_mission_state() -> None:
         checkpoint_path = os.path.join(tmpdir, "checkpoints.db")
         async with AsyncSqliteSaver.from_conn_string(checkpoint_path) as saver:
             graph = build_phase2_graph(
-                init_fn=make_mock_init_mission("auto"),
+                init_fn=make_mock_init_mission("blocked_once"),
                 ensure_fn=make_mock_ensure_sessions(),
-                dispatch_fn=make_mock_dispatch("auto"),
+                dispatch_fn=make_mock_dispatch("blocked_once"),
                 classify_fn=make_mock_classify(),
                 checkpointer=saver,
             )
             config = {"configurable": {"thread_id": mission_id}}
             initial: OrchestratorState = {
                 "mission_id": mission_id,
-                "mission_goal": "CDC model",
+                "mission_goal": "sample mission",
                 "swarm_api_url": "http://localhost:3000/api",
                 "checkpoints": [],
                 "classifications": [],
@@ -268,7 +268,7 @@ async def test_classify_workers_rule_fast_path_skips_llm(monkeypatch):
 
     monkeypatch.setattr(nodes, "_get_llm", _fail_llm)
     result = await nodes.classify_workers({
-        "mission_goal": "CDC",
+        "mission_goal": "sample mission",
         "checkpoints": [
             {
                 "worker_id": "researcher",
@@ -286,7 +286,7 @@ async def test_classify_workers_rule_fast_path_skips_llm(monkeypatch):
     assert result["classifications"][0].verdict == "DONE"
 
 
-def test_swarm_roster_has_cdc_worker_wrappers():
+def test_swarm_roster_has_worker_wrappers():
     import yaml
     from pathlib import Path
 
@@ -294,7 +294,7 @@ def test_swarm_roster_has_cdc_worker_wrappers():
     with open(swarm_path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
     workers = {w["id"]: w for w in data.get("workers", [])}
-    for wid in ("architect", "developer", "learning", "researcher"):
+    for wid in ("architect", "developer", "writer", "learning", "researcher", "orchestrator"):
         assert wid in workers, f"missing worker {wid}"
         assert workers[wid].get("wrapper"), f"{wid} missing wrapper"
         assert workers[wid].get("tools"), f"{wid} missing tools"
@@ -495,10 +495,11 @@ def test_route_research_architect_approved_terminates() -> None:
 
 
 def test_resolve_mock_profile_auto() -> None:
-    cdc = load_default_workflow()
+    default = load_default_workflow()
     research = load_workflow("hermes_langgraph_orchestrator/workflows/research_only.yaml")
-    assert resolve_mock_profile(cdc, "auto") == "cdc"
+    assert resolve_mock_profile(default, "auto") == "generic"
     assert resolve_mock_profile(research, "auto") == "generic"
+    assert resolve_mock_profile(research, "cdc") == "blocked_once"
     assert resolve_mock_profile(research, "human_gate") == "human_gate"
 
 
@@ -514,11 +515,11 @@ def test_build_mock_checkpoint_research_review_cycle() -> None:
     assert approved["review_outcome"] == "approved"
 
 
-def test_build_mock_checkpoint_cdc_developer_blocked() -> None:
+def test_build_mock_checkpoint_blocked_once_developer() -> None:
     wf = load_default_workflow()
-    blocked = build_mock_checkpoint("developer", 1, workflow=wf, profile="cdc")
+    blocked = build_mock_checkpoint("developer", 1, workflow=wf, profile="blocked_once")
     assert blocked["state"] == "BLOCKED"
-    done = build_mock_checkpoint("developer", 2, workflow=wf, profile="cdc")
+    done = build_mock_checkpoint("developer", 2, workflow=wf, profile="blocked_once")
     assert done["state"] == "DONE"
 
 
@@ -589,8 +590,8 @@ async def test_mock_human_gate_research_workflow() -> None:
 
 def test_build_human_gate_assignments_architect_to_developer():
     state: OrchestratorState = {
-        "mission_id": "cdc-gate",
-        "mission_goal": "CDC model",
+        "mission_id": "human-gate",
+        "mission_goal": "sample mission",
         "classifications": [
             {
                 "worker_id": "architect",
@@ -718,7 +719,7 @@ async def test_route_skips_stale_architect_to_developer_redispatch():
     from hermes_langgraph_orchestrator.state import WorkerClassification
 
     state: OrchestratorState = {
-        "mission_goal": "CDC",
+        "mission_goal": "sample mission",
         "workflow_spec": load_default_workflow(),
         "roster_snapshot": ["researcher", "architect", "developer", "learning"],
         "classifications": [

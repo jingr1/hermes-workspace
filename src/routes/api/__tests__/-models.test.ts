@@ -168,8 +168,8 @@ describe('models route', () => {
 
     const configYaml = [
       'providers:',
-      '  custom:nioint-gateway:',
-      '    base_url: https://modelgateway.nioint.com/v1',
+      '  custom:example-gateway:',
+      '    base_url: https://example-gateway.test/v1',
       '    key_env: DEEPSEEK_API_KEY',
       '    default_model: DeepSeek-V4-Pro-Seed',
     ].join('\n')
@@ -199,10 +199,10 @@ describe('models route', () => {
     const json = await res.json()
     expect(json.ok).toBe(true)
 
-    const niointModels = json.models.filter(
-      (m: { provider?: string }) => m.provider === 'custom:nioint-gateway',
+    const gatewayModels = json.models.filter(
+      (m: { provider?: string }) => m.provider === 'custom:example-gateway',
     )
-    expect(niointModels.map((m: { id: string }) => m.id).sort()).toEqual([
+    expect(gatewayModels.map((m: { id: string }) => m.id).sort()).toEqual([
       'DeepSeek-V4-Flash',
       'DeepSeek-V4-Pro-Seed',
       'Kimi-K2.7-Code-Tencent',

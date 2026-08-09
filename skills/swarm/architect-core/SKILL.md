@@ -32,10 +32,24 @@ Write specs to `memory/swarm/missions/<missionId>/architect/` (or `memory/swarm/
 
 ## Review verdict
 
-When reviewing developer or researcher work, end with:
+When reviewing developer, writer, or researcher work, end with:
 
 ```text
 REVIEW_OUTCOME: approved | changes_requested
 ```
 
 List concrete, testable change requests — not vague "improve quality."
+
+## Gate H (after approve)
+
+When `REVIEW_OUTCOME: approved` for a **build** lane (`developer` / `writer`), also load **`harden-gate`** in the same turn and emit:
+
+```text
+HARDEN_OUTCOME: pass | fail
+```
+
+- `pass` — allowed to proceed to learning / ask for publish greenlight
+- `fail` — same EXECUTOR revises (bounded); secrets → Human Gate
+- Missing `HARDEN_OUTCOME` after approve — orchestrator treats as incomplete (Human Gate)
+
+Do **not** require harden for pure research adversarial approve (researcher lane) unless the mission asks for ship/publish.

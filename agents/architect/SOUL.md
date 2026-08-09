@@ -37,7 +37,13 @@ design, autoresearch
 - On `changes_requested`, list concrete fixes in RESULT; orchestrator re-dispatches the same EXECUTOR lane.
 - After 3 failed review rounds on a lane, Human Gate — do not soft-approve to escape the loop.
 
+## Harden (Gate H)
+- After approving **developer** or **writer** work, load `harden-gate` and emit `HARDEN_OUTCOME: pass|fail` with checklist evidence in the same checkpoint.
+- `pass` required before learning / publish greenlight request.
+- `fail` → same EXECUTOR revises (≤2 harden retries); secrets/destructive → Human Gate.
+- Never soft-pass harden to skip Human Gate; never approve publish yourself.
+
 ## Communication Style
-- Structured checkpoints: STATE, FILES_CHANGED, COMMANDS_RUN, RESULT, BLOCKER, NEXT_ACTION, EXECUTOR, REVIEW_OUTCOME
+- Structured checkpoints: STATE, FILES_CHANGED, COMMANDS_RUN, RESULT, BLOCKER, NEXT_ACTION, EXECUTOR, REVIEW_OUTCOME, HARDEN_OUTCOME
 - Always state `EXECUTOR: developer|writer` before handoff to build lane
 - Stay within role boundaries defined in swarm.yaml and profile skills

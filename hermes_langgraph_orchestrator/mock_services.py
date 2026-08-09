@@ -13,7 +13,8 @@ from typing import Literal
 from .state import OrchestratorState, WorkerCheckpoint, WorkerClassification
 from .workflow import WorkflowSpec, load_default_workflow, load_workflow, resolve_workflow_path
 
-MockProfile = Literal["auto", "generic", "cdc", "human_gate"]
+# ``cdc`` is a deprecated alias for ``blocked_once`` (kept for CLI/scripts).
+MockProfile = Literal["auto", "generic", "blocked_once", "cdc", "human_gate"]
 
 DEFAULT_ROSTER = ["orchestrator", "researcher", "architect", "developer", "writer", "learning"]
 
@@ -68,6 +69,13 @@ def _is_review_gate(workflow: WorkflowSpec, worker_id: str) -> bool:
     )
 
 
+def _workflow_requires_harden(workflow: WorkflowSpec) -> bool:
+    return any(
+        t.on.review_outcome == "approved" and "harden_outcome" in t.on.metadata
+        for t in workflow.transitions
+    )
+
+
 def _review_loop_max(workflow: WorkflowSpec, worker_id: str) -> int | None:
     """Return the max_iterations for the review loop targeting this worker."""
     for transition in workflow.transitions:
@@ -104,11 +112,12 @@ def _get_first_delivery_target(workflow: WorkflowSpec, worker_id: str) -> str:
 
 
 def resolve_mock_profile(workflow: WorkflowSpec, profile: str = "auto") -> MockProfile:
+    del workflow  # auto no longer keys off deleted CDC workflow names
     normalized = (profile or "auto").strip().lower()
-    if normalized in ("generic", "cdc", "human_gate"):
+    if normalized == "cdc":
+        return "blocked_once"
+    if normalized in ("generic", "blocked_once", "human_gate"):
         return normalized  # type: ignore[return-value]
-    if workflow.name == "cdc_research_design_implement":
-        return "cdc"
     return "generic"
 
 
@@ -123,11 +132,12 @@ def build_mock_checkpoint(
 ) -> dict[str, str]:
     counts = transition_counts or {}
     goal_hint = (mission_goal or workflow.name)[:80]
+    resolved = resolve_mock_profile(workflow, profile)
 
-    if profile == "cdc":
-        return _build_cdc_checkpoint(worker_id, call)
+    if resolved == "blocked_once":
+        return _build_blocked_once_checkpoint(worker_id, call, workflow)
 
-    if profile == "human_gate" and worker_id == "architect" and _is_review_gate(workflow, worker_id):
+    if resolved == "human_gate" and worker_id == "architect" and _is_review_gate(workflow, worker_id):
         return _checkpoint(
             worker_id,
             result=f"[mock human_gate] adversarial review round {call} — still disputed",
@@ -158,11 +168,20 @@ def build_mock_checkpoint(
                 raw="\n".join(raw_lines),
             )
         if delivery_rounds >= loop_max - 1 or call >= 2:
+            raw_lines = [
+                "STATE: DONE",
+                "RESULT: [mock] review approved",
+                "REVIEW_OUTCOME: approved",
+                "NEXT_ACTION: terminal",
+            ]
+            if _workflow_requires_harden(workflow):
+                raw_lines.insert(3, "HARDEN_OUTCOME: pass")
             return _checkpoint(
                 worker_id,
                 result="[mock] review approved",
                 review_outcome="approved",
                 next_action="terminal",
+                raw="\n".join(raw_lines),
             )
         return _checkpoint(
             worker_id,
@@ -188,25 +207,37 @@ def build_mock_checkpoint(
     return _checkpoint(worker_id, result=f"[mock] {worker_id} step {call} done")
 
 
-def _build_cdc_checkpoint(worker_id: str, call: int) -> dict[str, str]:
+def _build_blocked_once_checkpoint(
+    worker_id: str, call: int, workflow: WorkflowSpec
+) -> dict[str, str]:
+    """Developer first call BLOCKED → human gate; second call DONE (Gate C/H friendly)."""
     if worker_id == "researcher":
         return _checkpoint(
             worker_id,
-            result="CDC+空簧调研完成",
-            next_action="交给 architect 设计接口",
+            result="[mock] research complete",
+            next_action="交给 architect 设计",
         )
     if worker_id == "architect":
         if call >= 2:
+            raw_lines = [
+                "STATE: DONE",
+                "RESULT: [approved] final review passed",
+                "REVIEW_OUTCOME: approved",
+                "NEXT_ACTION: 任务完成",
+            ]
+            if _workflow_requires_harden(workflow):
+                raw_lines.insert(3, "HARDEN_OUTCOME: pass")
             return _checkpoint(
                 worker_id,
-                result="[approved] 最终审查通过",
+                result="[approved] final review passed",
                 review_outcome="approved",
                 next_action="任务完成",
+                raw="\n".join(raw_lines),
             )
         return _checkpoint(
             worker_id,
             result="设计完成",
-            files_changed="docs/design/cdc_airspring_architecture.md",
+            files_changed="docs/design/architecture.md",
             next_action="developer 实现",
         )
     if worker_id == "developer":
@@ -219,8 +250,8 @@ def _build_cdc_checkpoint(worker_id: str, call: int) -> dict[str, str]:
         return _checkpoint(
             worker_id,
             state="BLOCKED",
-            result="耦合 ODE 数值不稳定",
-            blocker="耦合 ODE 数值不稳定，需要架构决策",
+            result="实现阻塞：需要架构决策",
+            blocker="实现阻塞：需要架构决策",
             next_action="需要 architect 决定",
         )
     return _checkpoint(worker_id)

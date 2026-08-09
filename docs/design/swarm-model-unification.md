@@ -1,6 +1,6 @@
 # Swarm Model 配置统一化
 
-> **状态：已基本落地**（2026-06）。核心链路已打通；`swarm.yaml` 仍有少量 legacy 条目待迁移。
+> **状态：已落地**。模型以 `swarm.yaml` + Hermes `config.yaml` 为准；文档勿再硬编码具体 model id。
 
 ## 背景问题（已解决）
 
@@ -31,26 +31,18 @@
 | `PATCH /api/swarm-roster` | ✅ | `src/routes/api/swarm-roster.ts`；dev 模式另有 `vite.config.ts` 中间件绕过 SSR hang |
 | `operational-worker-card.tsx` 动态下拉 | ✅ | 从 `availableModels` prop 渲染；保存时 PATCH `swarm.yaml` |
 | `swarm2-screen.tsx` 传递模型列表 | ✅ | `fetchAvailableModels()` → `availableModels` prop |
-| `swarm.yaml` 全量迁移 | ⚠️ 部分 | 多数 worker 已是 `provider/model-id`；3 个仍为裸 model id（见下方） |
+| `swarm.yaml` 全量迁移 | ✅ | worker `model` 均为 `provider/model-id`（见 `swarm.yaml`） |
 | 测试更新 | ✅ | `swarm-model-resolver.test.ts` 覆盖解析与 key 构建 |
 | PATCH 时同步 profile config | ⚠️ 部分 | dev 中间件会同步；`patchSwarmRosterWorker` 服务端函数仅写 `swarm.yaml` |
 
-### `swarm.yaml` 待迁移条目
+### `swarm.yaml` 模型格式
 
-以下 worker 的 `model` 仍为裸 upstream id，不含 provider 前缀，`parseSwarmModelLabel` 将返回 `null`：
-
-```yaml
-# builder / developer / learning
-model: DeepSeek-V4-Pro-Seed   # 应改为 custom:nioint-gateway/DeepSeek-V4-Pro-Seed 或等价 key
-```
-
-其余 worker 已使用标准格式，例如：
+Worker `model` 必须是 `provider/model-id`（勿在 `AGENTS.md` 等文档中再抄一份）。当前示例：
 
 ```yaml
-model: custom:nioint-gateway/DeepSeek-V4-Pro-Seed
-model: custom:nioint-gateway/deepseek-ai/deepseek-v4-pro
+model: deepseek/deepseek-v4-pro
 model: minimaxai/minimax-m2.7
-model: deepseek-ai/deepseek-v4-flash
+model: custom:my-gateway/some-model-id   # provider 可含冒号
 ```
 
 ## 核心模块
@@ -59,7 +51,7 @@ model: deepseek-ai/deepseek-v4-flash
 
 文件：`src/server/swarm-model-resolver.ts`
 
-按**第一个 `/`** 拆分，provider 可含 `:`（如 `custom:nioint-gateway`），model id 可含额外 `/`（如 `deepseek-ai/deepseek-v4-pro`）：
+按**第一个 `/`** 拆分，provider 可含 `:`（如 `custom:my-gateway`），model id 可含额外 `/`（如 `deepseek-ai/deepseek-v4-pro`）：
 
 ```typescript
 export function parseSwarmModelLabel(label: string | null | undefined): ResolvedSwarmModel | null {
@@ -129,9 +121,9 @@ if (resolved) syncSwarmProfileModel(profilePath, resolved)
 config.yaml                     swarm.yaml                    UI
 ─────────────                   ──────────                    ──
 providers:                      workers:                      下拉框
-  custom:nioint-gateway:          - id: builder                 custom:nioint-gateway/DeepSeek-V4-Pro-Seed
-    api_key: sk-xxx                 model: custom:nioint-      custom:nioint-gateway/deepseek-ai/...
-    base_url: ...                         gateway/...           minimaxai/minimax-m2.7
+  deepseek:                       - id: developer               deepseek/deepseek-v4-pro
+    api_key: sk-xxx                 model: deepseek/...         minimaxai/minimax-m2.7
+    base_url: ...                                               custom:my-gateway/...
   openai-codex:                                                    ↑
     ...                         parseSwarmModelLabel()    从 /api/models 动态读取
                                      ↓                    swarmModelKeyFromOption()
@@ -141,8 +133,8 @@ providers:                      workers:                      下拉框
                                      ↓                         swarm.yaml
                           profile config.yaml
                             model:
-                              provider: custom:nioint-gateway
-                              default: DeepSeek-V4-Pro-Seed
+                              provider: deepseek
+                              default: deepseek-v4-pro
 ```
 
 ## 新增模型流程
@@ -166,10 +158,10 @@ providers:                      workers:                      下拉框
 
 ## 遗留改进（可选）
 
-1. **完成 `swarm.yaml` 迁移**：将 `builder` / `developer` / `learning` 的裸 `DeepSeek-V4-Pro-Seed` 改为完整 `provider/model-id`
-2. **统一 PATCH profile 同步**：将 `vite.config.ts` 中的 profile 同步逻辑提取到 `patchSwarmRosterWorker` 或共享 helper，使生产路径与 dev 行为一致
-3. **合并 `formatAssignedModel`**：`swarm2-screen.tsx` 仍有简化版（直接显示 `model` 字符串）；可统一使用 `resolveSwarmModelKey` 获得一致显示
-4. **Electron bundle 重建**：`electron/server-bundle.cjs` 可能仍含旧版 `resolveSwarmModelLabel` / `MODEL_OPTIONS`，需重新打包
+1. **统一 PATCH profile 同步**：将 `vite.config.ts` 中的 profile 同步逻辑提取到 `patchSwarmRosterWorker` 或共享 helper，使生产路径与 dev 行为一致
+2. **合并 `formatAssignedModel`**：`swarm2-screen.tsx` 仍有简化版（直接显示 `model` 字符串）；可统一使用 `resolveSwarmModelKey` 获得一致显示
+3. **Electron bundle 重建**：`electron/server-bundle.cjs` 可能仍含旧版 `resolveSwarmModelLabel` / `MODEL_OPTIONS`，需重新打包
+4. **文档**：勿在 `AGENTS.md` / README 硬编码具体 model id；只指向 `swarm.yaml`
 
 ## 相关文件
 

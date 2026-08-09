@@ -23,7 +23,7 @@ LangGraph 作为 Hermes Swarm 的**确定性编排大脑**：加载 workflow.yam
 ## 环境准备
 
 ```bash
-cd /home/ramon.jing/hermes-workspace/hermes_langgraph_orchestrator
+cd ~/hermes-workspace/hermes_langgraph_orchestrator
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
@@ -80,7 +80,7 @@ PYTHONPATH=~/hermes-workspace \
 ```text
 swarm.yaml                    ~/.hermes/profiles/<id>/           ~/.local/bin/
 (roster 真源)            →    config.yaml / SOUL.md / skills   →   orchestrator:plan 等 wrapper
-  model: nioint/...            model.provider + model.default       hermes -p <profile>
+  model: provider/model-id     model.provider + model.default       hermes -p <profile>
   tools: [...]                 toolsets: [...]
   skills: [...]                skills/<skill>/SKILL.md
   mission / role               SOUL.md + memory/IDENTITY.md
@@ -93,7 +93,7 @@ swarm.yaml                    ~/.hermes/profiles/<id>/           ~/.local/bin/
 在仓库根目录执行：
 
 ```bash
-cd /home/ramon.jing/hermes-workspace
+cd ~/hermes-workspace
 
 # 1. 同步 config.yaml（model + toolsets）、SOUL.md、memory/IDENTITY.md、skills/swarm/ 下的角色技能
 node scripts/sync-swarm-profiles.mjs
@@ -106,7 +106,7 @@ bash scripts/sync-autoresearch-skills.sh
 
 | 文件 | 来源字段 | 备注 |
 |------|----------|------|
-| `config.yaml` → `model.provider` / `model.default` | `model`（`provider/model-id`，如 `nioint/DeepSeek-V4-Flash-Seed`） | |
+| `config.yaml` → `model.provider` / `model.default` | `model`（`provider/model-id`，见根目录 `swarm.yaml`） | |
 | `config.yaml` → `toolsets` | `tools` | **learning** 为合并（union），保留原有 `hermes-cli` 等 |
 | `config.yaml` → `kanban.orchestrator_profile` | orchestrator 固定为 `orchestrator` | |
 | `SOUL.md` | `name`, `role`, `mission`, … | **learning** 保留 `agents/learning/SOUL.md` 教学人格，仅追加 swarm 扩展段 |
@@ -117,15 +117,16 @@ Hub / bundled 技能（`gstack-for-hermes`、`llm-wiki`、`obsidian` 等）不�
 
 ### 当前 roster 与 profile 映射
 
-| Worker | Wrapper | Model | Modes |
-|--------|---------|-------|-------|
-| `orchestrator` | `orchestrator:plan` | `nioint/DeepSeek-V4-Flash-Seed` | plan, autoresearch-dispatch |
-| `researcher` | `researcher:quick` | `nioint/DeepSeek-V4-Pro-Seed` | quick |
-| `architect` | `architect:design` | `nioint/DeepSeek-V4-Flash-Seed` | design, autoresearch |
-| `developer` | `developer:implement` | `nioint/Kimi-K2.7-Code-Tencent` | implement, autoresearch |
-| `learning` | `learning` | `nioint/DeepSeek-V4-Pro-Seed` | tutor + swarm retrospective（SOUL 合并，不覆盖） |
+| Worker | Wrapper | Modes |
+|--------|---------|-------|
+| `orchestrator` | `orchestrator:plan` | plan, autoresearch-dispatch |
+| `researcher` | `researcher:quick` | quick |
+| `architect` | `architect:design` | design, autoresearch |
+| `developer` | `developer:implement` | implement, autoresearch |
+| `writer` | `writer:author` | author, autoresearch |
+| `learning` | `learning` | tutor + swarm retrospective（SOUL 合并，不覆盖） |
 
-完整字段见仓库根目录 `swarm.yaml` 与 `AGENTS.md`。
+**Model：** 以根目录 [`swarm.yaml`](../swarm.yaml) 的 `model` 字段为准（勿在文档中硬编码）。改完后跑 `node scripts/sync-swarm-profiles.mjs`。角色/技能合同见 [`AGENTS.md`](../AGENTS.md)。
 
 ### 何时需要同步
 
@@ -169,7 +170,7 @@ node    1990100 ramon.jing   37u  IPv4 ...    0t0      TCP *:3000 (LISTEN)
 找到你之前运行 `pnpm dev` 的窗口，按 `Ctrl + C`，然后：
 
 ```bash
-cd /home/ramon.jing/hermes-workspace
+cd ~/hermes-workspace
 TMUX_BIN=/usr/bin/tmux pnpm dev
 ```
 
@@ -181,7 +182,7 @@ kill 1990100          # 把 PID 换成 lsof 看到的
 lsof -i :3000
 
 # 重新启动
-cd /home/ramon.jing/hermes-workspace
+cd ~/hermes-workspace
 TMUX_BIN=/usr/bin/tmux pnpm dev
 ```
 
@@ -200,13 +201,13 @@ curl -s -X POST http://localhost:3000/api/swarm-tmux-start \
 
 ## 创建自定义编排任务
 
-LangGraph **图结构是固定的**（init → dispatch → wait → classify → route → human gate）；**编排逻辑由 workflow YAML 声明**。要跑 CDC 以外的任务，需要：
+LangGraph **图结构是固定的**（init → dispatch → wait → classify → route → human gate）；**编排逻辑由 workflow YAML 声明**。换任务类型时：
 
 1. 在 `hermes_langgraph_orchestrator/workflows/` 新建或复制一份 YAML
 2. 确保 `entry` / `transitions` 里引用的 worker 都在 `swarm.yaml` roster 中
-3. 启动 mission 时用 `--workflow <path>`（或 API 的 `workflowId`）指向该文件
+3. 启动 mission 时用 `--workflow <path|id>`（或 API 的 `workflowId`）指向该文件
 
-> 未传 `--workflow` 时默认 `workflows/cdc.yaml`。编排逻辑完全由 workflow YAML 决定。
+> 未传 `--workflow` 时默认 `workflows/radw.yaml`（Research → Architect → Developer|Writer + Gate C/H）。编排逻辑完全由 workflow YAML 决定。
 
 ### 架构关系
 
@@ -215,18 +216,19 @@ swarm.yaml          workflow.yaml              LangGraph 图
 (roster 真源)   →   (状态机 / 路由规则)   →   (固定节点，读 YAML 做 route)
   researcher          entry: researcher          init_mission 校验 roster
   architect           transitions[]              route_workflow 匹配 verdict
-  developer           blockers.retry/escalate    human_approval 人工门控
+  developer|writer    blockers.retry/escalate    human_approval 人工门控
   learning            settings.max_iterations
   orchestrator
 ```
 
-当前 roster（`swarm.yaml`）：`orchestrator`、`researcher`、`architect`、`developer`、`learning`。workflow 里出现的每个 worker id 必须在此列表中。
+当前 roster（`swarm.yaml`）：`orchestrator`、`researcher`、`architect`、`developer`、`writer`、`learning`。workflow 里出现的每个 worker id 必须在此列表中。
 
 ### 内置 workflow 示例
 
 | 文件 | 入口 | 路径 | 适用场景 |
 |---|---|---|---|
-| `cdc.yaml` | `researcher` | 调研 → 设计 → 实现 → 审查 | CDC / 空簧等全流程（**默认**） |
+| `radw.yaml` | `researcher` | 调研 → 设计 → (developer\|writer) → 审查 + Harden | 默认全流程（Gate C/H） |
+| `rdi.yaml` | `researcher` | 调研 → 设计 → developer → 审查 + Harden | 纯代码交付（无 writer 车道） |
 | `research_only.yaml` | `researcher` | 调研 → architect 对抗审查（3 轮未达成一致 → Human Gate） | 纯调研、文献综述、选项备忘录 |
 | `design_implement.yaml` | `architect` | 设计 → 实现 → 审查（跳过调研） | 需求已明确、直接设计与开发 |
 
@@ -261,7 +263,7 @@ blockers:
 
 settings:
   max_iterations: 5        # 全局路由轮数上限
-  terminal_docs: false     # true 时启用 cdc.yaml 里的 terminal_docs 边
+  terminal_docs: false     # true 时启用 workflow 里声明的 terminal_docs 边
 ```
 
 **路由匹配规则**（`workflow.py` → `route_by_workflow`）：
@@ -279,12 +281,12 @@ settings:
 ### 第二步：校验 workflow
 
 ```bash
-cd /home/ramon.jing/hermes-workspace
+cd ~/hermes-workspace
 
 hermes_langgraph_orchestrator/.venv/bin/python -c "
 from hermes_langgraph_orchestrator.workflow import load_workflow, validate_workflow_against_roster
 wf = load_workflow('hermes_langgraph_orchestrator/workflows/research_only.yaml')
-roster = {'orchestrator','researcher','architect','developer','learning'}
+roster = {'orchestrator','researcher','architect','developer','writer','learning'}
 print('OK' if not validate_workflow_against_roster(wf, roster) else validate_workflow_against_roster(wf, roster))
 "
 ```
@@ -296,7 +298,7 @@ hermes_langgraph_orchestrator/.venv/bin/python -m pytest \
   tests/test_langgraph_orchestrator.py::test_load_default_workflow -v
 ```
 
-### 第三步：启动 mission（非 CDC）
+### 第三步：启动 mission（非默认 RADW）
 
 **纯调研任务**（`research_only.yaml`）：researcher 完成调研后由 architect 做对抗审查；双方通过 `REVIEW_OUTCOME: approved|changes_requested` 协商。`architect→researcher` 修订环最多 3 次，仍不一致则 Human Gate 梳理分歧点由人工裁决。
 
@@ -304,7 +306,7 @@ hermes_langgraph_orchestrator/.venv/bin/python -m pytest \
 hermes-langgraph \
   --execute \
   --mission-id research-memo-001 \
-  --goal "调研 CDC 空簧建模的业界方案与 JAX 生态" \
+  --goal "调研某领域方案现状与关键技术取舍" \
   --workflow research_only
 ```
 
@@ -331,7 +333,7 @@ curl -s -X POST http://127.0.0.1:3000/api/swarm-langgraph/run \
   }' | python3 -m json.tool
 ```
 
-**Dashboard**：`/swarm2` → **LangGraph** 面板可填可选 **Workflow 路径**；留空则仍用默认 `cdc.yaml`。
+**Dashboard**：`/swarm2` → **LangGraph** 面板可填可选 **Workflow**（如 `radw` / `research_only`）；留空则用默认 `radw.yaml`。
 
 ### `mission-id` 规则
 
@@ -365,7 +367,7 @@ curl -s "http://127.0.0.1:3000/api/orchestrator-state?missionId=<id>" | python3 
 所有命令都从仓库根目录执行，且需要 **`--execute`**（查询状态用 `--get-state` / `--list-active-gates`）。
 
 ```bash
-cd /home/ramon.jing/hermes-workspace
+cd ~/hermes-workspace
 ```
 
 ### 真实编排
@@ -382,14 +384,14 @@ TMUX_BIN=/usr/bin/tmux
 
 ```bash
 hermes_langgraph_orchestrator/.venv/bin/python -m hermes_langgraph_orchestrator \
-  --execute --mission-id cdc-real-001 \
-  --goal "设计并开发 CDC+空簧 的物理模型，用 JAX 构建"
+  --execute --mission-id radw-real-001 \
+  --goal "调研并交付可验证的实现"
 ```
 
-流程示例：
+流程示例（默认 RADW）：
 
 ```text
-researcher DONE → architect DONE → developer BLOCKED → human gate
+researcher → architect → (developer | writer) → architect(review+harden) → done
 ```
 
 ### Mock 模式（CI / 无 Workspace）
@@ -397,11 +399,15 @@ researcher DONE → architect DONE → developer BLOCKED → human gate
 适合 CI 或没有启动 Workspace 时验证编排流程（`--mock-services`，按 workflow 合成 checkpoint，不调用真实 tmux/dispatch API）。
 
 ```bash
-# 默认 CDC workflow + auto profile
+# 默认 RADW + generic（happy path，含 Gate H pass）
 hermes_langgraph_orchestrator/.venv/bin/python -m hermes_langgraph_orchestrator \
-  --execute --mock-services --mission-id cdc-mock-001
+  --execute --mock-services --mission-id radw-mock-001
 
-# 指定 workflow（generic profile：一轮审查后通过）
+# developer 首次 BLOCKED → Human Gate（测 resume）
+hermes-langgraph --execute --mock-services --mock-profile blocked_once \
+  --mission-id blocked-mock-001
+
+# 指定 workflow（generic：一轮审查后通过）
 hermes-langgraph --execute --mock-services --workflow research_only \
   --mission-id research-mock-001 --goal "调研 mock"
 
@@ -414,16 +420,17 @@ hermes-langgraph --execute --mock-services --workflow research_only \
 
 | Profile | 用途 |
 |---------|------|
-| `auto` | 按 workflow 名推断（CDC → `cdc`，其余 → `generic`） |
-| `generic` | 通用：worker DONE；有审查环时 architect 先 `changes_requested` 再 `approved` |
-| `cdc` | CDC 脚本：developer 首次 BLOCKED，二次 DONE |
+| `auto` | 等同 `generic` |
+| `generic` | 通用：worker DONE；有审查环时 architect 先 `changes_requested` 再 `approved`（Gate H workflow 会带 `HARDEN_OUTCOME: pass`） |
+| `blocked_once` | developer 首次 BLOCKED，二次 DONE（测 Human Gate / resume） |
+| `cdc` | `blocked_once` 的废弃别名 |
 | `human_gate` | architect 审查始终 `changes_requested`，用于测审查环触顶 → Human Gate |
 
-Mock 会自动跑完：
+`blocked_once` Mock 路径：
 
 ```text
 researcher → architect → developer(BLOCKED) → human gate
-resume approved → developer DONE → architect approved → finalize
+resume approved → developer DONE → architect approved(+harden) → finalize
 ```
 
 ### 从 human gate 恢复
@@ -434,11 +441,11 @@ resume approved → developer DONE → architect approved → finalize
 
 ```bash
 hermes_langgraph_orchestrator/.venv/bin/python -m hermes_langgraph_orchestrator \
-  --execute --mission-id cdc-real-001 --resume approved
+  --execute --mission-id radw-real-001 --resume approved
 
 # 或放弃当前 mission
 hermes_langgraph_orchestrator/.venv/bin/python -m hermes_langgraph_orchestrator \
-  --execute --mission-id cdc-real-001 --resume abort
+  --execute --mission-id radw-real-001 --resume abort
 ```
 
 **HTTP API：**
@@ -448,7 +455,7 @@ hermes_langgraph_orchestrator/.venv/bin/python -m hermes_langgraph_orchestrator 
 curl -s -X POST http://127.0.0.1:3000/api/swarm-langgraph/resume \
   -H 'Content-Type: application/json' \
   -d '{
-    "missionId": "cdc-real-001",
+    "missionId": "radw-real-001",
     "action": "approved",
     "choice": "primary",
     "targetWorkerId": "developer",
@@ -466,12 +473,12 @@ curl -s -X POST http://127.0.0.1:3000/api/swarm-langgraph/resume \
 |---|---|
 | `--execute` | 运行 LangGraph 编排（必须，除非 `--get-state` / `--list-active-gates`） |
 | `--mock-services` | mock init/ensure/dispatch/classify，不依赖 Workspace |
-| `--mock-profile auto\|generic\|cdc\|human_gate` | mock checkpoint 策略（需配合 `--mock-services`） |
+| `--mock-profile auto\|generic\|blocked_once\|cdc\|human_gate` | mock checkpoint 策略（需配合 `--mock-services`） |
 | `--mission-id <id>` | mission 标识，也是 LangGraph thread_id |
 | `--goal "..."` | 自定义 mission goal |
 | `--initial-workers researcher,architect` | 跳过 workflow entry，直接派发指定 worker |
 | `--max-iterations 5` | 最大路由轮数 |
-| `--workflow path/to.yaml` | 自定义 workflow YAML（默认 `workflows/cdc.yaml`） |
+| `--workflow path/to.yaml` | 自定义 workflow YAML（默认 `workflows/radw.yaml`） |
 | `--checkpoint-path path.db` | 自定义 SQLite checkpointer |
 | `--resume approved\|abort` | 从 human gate 恢复 |
 | `--get-state` | 读取 mission 状态（JSON） |
@@ -558,7 +565,7 @@ sqlite3 ~/.hermes/langgraph-checkpoints.db "SELECT thread_id, checkpoint_id FROM
 ### Mission 状态
 
 ```bash
-curl -s "http://localhost:3000/api/swarm-missions?id=cdc-real-001" | python3 -m json.tool
+curl -s "http://localhost:3000/api/swarm-missions?id=radw-real-001" | python3 -m json.tool
 ```
 
 ---

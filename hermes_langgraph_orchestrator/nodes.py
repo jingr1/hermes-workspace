@@ -41,7 +41,8 @@ from .workflow import (
 
 
 # ============================================================
-# LLM 配置 — DeepSeek V4 Pro Seed via nioint gateway
+# LLM 配置 — classify 用；默认对齐官方 DeepSeek，可用环境变量覆盖
+# HERMES_ORCHESTRATOR_MODEL / HERMES_ORCHESTRATOR_BASE_URL / DEEPSEEK_API_KEY
 # ============================================================
 def _get_llm() -> ChatOpenAI:
     api_key = os.environ.get("DEEPSEEK_API_KEY", "")
@@ -54,9 +55,14 @@ def _get_llm() -> ChatOpenAI:
                         api_key = line.strip().split("=", 1)[1].strip().strip('"').strip("'")
                         break
 
+    model = os.environ.get("HERMES_ORCHESTRATOR_MODEL", "deepseek-v4-pro")
+    base_url = os.environ.get(
+        "HERMES_ORCHESTRATOR_BASE_URL", "https://api.deepseek.com/v1"
+    )
+
     return ChatOpenAI(
-        model="DeepSeek-V4-Pro-Seed",
-        base_url="https://modelgateway.nioint.com/v1",
+        model=model,
+        base_url=base_url,
         api_key=api_key,
         temperature=0.1,
     )
@@ -437,7 +443,9 @@ def _transition_instructions(
             "or\n"
             "REVIEW_OUTCOME: changes_requested\n"
             "Use approved only if the implementation matches the design and tests pass; "
-            "otherwise use changes_requested and list concrete fixes in RESULT."
+            "otherwise use changes_requested and list concrete fixes in RESULT.\n"
+            "If approved, load harden-gate and also emit HARDEN_OUTCOME: pass|fail "
+            "(Gate H — required before mission complete)."
         )
 
     if target_id == "architect" and source_id == "writer":
@@ -450,7 +458,9 @@ def _transition_instructions(
             "or\n"
             "REVIEW_OUTCOME: changes_requested\n"
             "Use approved only if the deliverable matches the design intent and is ready for use; "
-            "otherwise use changes_requested and list concrete fixes in RESULT."
+            "otherwise use changes_requested and list concrete fixes in RESULT.\n"
+            "If approved, load harden-gate and also emit HARDEN_OUTCOME: pass|fail "
+            "(Gate H — required before mission complete)."
         )
 
     if target_id == "developer" and source_id == "architect":
@@ -479,7 +489,9 @@ def _transition_instructions(
             "or\n"
             "REVIEW_OUTCOME: changes_requested\n"
             "Use approved only if the deliverable matches the design intent and is ready for use; "
-            "otherwise use changes_requested and list concrete fixes in RESULT."
+            "otherwise use changes_requested and list concrete fixes in RESULT.\n"
+            "If approved, load harden-gate and also emit HARDEN_OUTCOME: pass|fail "
+            "(Gate H — required before mission complete)."
         )
 
     if target_id == "architect" and source_id == "researcher":
@@ -540,8 +552,8 @@ def _infer_architect_review_outcome(
     Used for developer→architect code review and researcher→architect adversarial
     research review. If the architect returned DONE without an explicit outcome,
     inspect checkpoint text. Approval signals default to approved; change signals
-    to changes_requested. For initial CDC design (non-review), leave empty so the
-    workflow can route to developer.
+    to changes_requested. For initial design (non-review), leave empty so the
+    workflow can route to the chosen executor.
     """
     if classification.worker_id != "architect":
         return classification
@@ -794,7 +806,7 @@ review_outcome 判断规则（architect 审查 developer 实现，或 architect 
 - 如果 checkpoint 原文中包含 REVIEW_OUTCOME: approved|changes_requested，直接使用该值
 - approved: 实现/调研结论符合要求，无需修改
 - changes_requested: 存在问题或分歧，需要修改后重新提交
-- 空字符串: 非审查场景（例如 CDC 中 architect 产出初始设计、尚未进入审查）
+- 空字符串: 非审查场景（例如 architect 产出初始设计、尚未进入审查）
 
 verdict 判断规则:
 - DONE: 任务完成
@@ -867,6 +879,14 @@ def _try_rule_classify(cp: WorkerCheckpoint) -> WorkerClassification | None:
         metadata["deliverable_type"] = "document"
     elif metadata.get("executor") == "developer" and "deliverable_type" not in metadata:
         metadata["deliverable_type"] = "code"
+    # Gate H
+    for line in raw.splitlines():
+        compact = line.lower().replace("_", "").replace(" ", "")
+        if compact.startswith("hardenoutcome:") or "harden_outcome:" in line.lower():
+            value = line.split(":", 1)[1].strip().lower()
+            if value in {"pass", "fail"}:
+                metadata["harden_outcome"] = value
+                break
 
     blocker_type = ""
     if state_label == "BLOCKED":
@@ -1068,13 +1088,41 @@ async def route_workflow(state: OrchestratorState) -> dict:
                 f"Human gate cleared. Retry previous task. "
                 f"Blocker: {c.blocker_summary or decision.reason}"
             )
+            if "Gate H:" in (decision.reason or "") and "HARDEN_OUTCOME" in (decision.reason or ""):
+                arch_cp = cp_map.get("architect", {})
+                arch_result = (arch_cp.get("result") or "").strip()
+                gate_task = (
+                    "Gate H incomplete: REVIEW_OUTCOME=approved but HARDEN_OUTCOME missing.\n"
+                    "Architect must reload harden-gate and re-emit checkpoint with "
+                    "HARDEN_OUTCOME: pass|fail before the mission can complete.\n\n"
+                    f"Architect last result:\n{arch_result or '(none)'}"
+                )
+                pending_human.append(
+                    {
+                        "worker_id": c.worker_id,
+                        "task": gate_task,
+                        "reason": f"human approved retry: {decision.reason}",
+                    }
+                )
+                continue
+
             if "review loop limit" in (decision.reason or ""):
                 arch_cp = cp_map.get("architect", {})
                 res_cp = cp_map.get("researcher", {})
                 arch_result = (arch_cp.get("result") or "").strip()
                 res_result = (res_cp.get("result") or "").strip()
                 reason_l = (decision.reason or "").lower()
-                if "writer" in reason_l:
+                if "harden" in reason_l:
+                    exec_id = "writer" if "writer" in reason_l else "developer"
+                    exec_cp = cp_map.get(exec_id, {})
+                    exec_result = (exec_cp.get("result") or "").strip()
+                    gate_task = (
+                        f"Gate H: harden retry limit reached on {exec_id} lane.\n"
+                        "Human must adjudicate remaining harden failures or waive with evidence.\n\n"
+                        f"Architect last result:\n{arch_result or '(none)'}\n\n"
+                        f"{exec_id.title()} last result:\n{exec_result or '(none)'}"
+                    )
+                elif "writer" in reason_l:
                     writer_cp = cp_map.get("writer", {})
                     writer_result = (writer_cp.get("result") or "").strip()
                     gate_task = (

@@ -353,7 +353,7 @@ export function RouterChat({
       }
     } else if (mode === 'manual') {
       if (!selectedId || !isSwarmDispatchWorkerId(selectedId)) {
-        setDispatchError('Workspace is the UI shell — pick a swarm worker (researcher, builder, …).')
+        setDispatchError('Workspace is the UI shell — pick a swarm worker (researcher, architect, developer, writer, …).')
         return
       }
       plan = [

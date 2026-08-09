@@ -1,8 +1,13 @@
 # Hermes Workspace Swarm 软件架构详解
 
 > **版本**: 基于 Hermes Workspace v2.3.0  
-> **最后更新**: 2026-06-08  
+> **最后更新**: 2026-08-09  
 > **涵盖范围**: 整体架构、多 Agent 协同机制、Swarm Board 与 Hermes Kanban 关系
+>
+> **现行真源（勿以文中旧 builder/reviewer 示例为准）**：
+> - Roster / pipeline：[`AGENTS.md`](../../AGENTS.md) + [`swarm.yaml`](../../swarm.yaml)
+> - LangGraph 默认 workflow：`hermes_langgraph_orchestrator/workflows/radw.yaml`
+> - 派发与交接：[`DISPATCH-GUIDE.md`](./DISPATCH-GUIDE.md) · [`HANDOFF-PROTOCOL.md`](./HANDOFF-PROTOCOL.md)
 
 ---
 
@@ -92,7 +97,7 @@ Hermes Workspace Swarm 是一个**持久化多 Agent 协同系统**，构建在 
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │  tmux sessions: swarm-orchestrator, swarm-builder, ...   │   │
 │  │  runtime.json: ~/.hermes/profiles/<worker>/runtime.json  │   │
-│  │  swarm.yaml: /home/ramon.jing/hermes-workspace/swarm.yaml│   │
+│  │  swarm.yaml: <repo>/swarm.yaml                           │   │
 │  │  kanban.db: ~/.hermes/kanban.db (SQLite)                 │   │
 │  └──────────────────────────────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────────┘
@@ -103,31 +108,20 @@ Hermes Workspace Swarm 是一个**持久化多 Agent 协同系统**，构建在 
 `swarm.yaml` 是 Swarm 系统的配置中心，定义了所有 Worker 的身份和能力：
 
 ```yaml
+# 完整字段以仓库根目录 swarm.yaml 为准；示意：
 workers:
-  orchestrator:
-    role: orchestrator
-    displayName: Orchestrator
-    profile: orchestrator
+  - id: orchestrator
     wrapper: orchestrator:plan
-    tools: [todo, kanban, delegation, terminal, file, gbrain, ...]
-    skills: [orchestrator-core, kanban-orchestrator, subagent-driven-development, ...]
-
-  builder:
-    role: builder
-    displayName: Builder
-    profile: builder
-    wrapper: builder:task
-    tools: [terminal, file, browser, web, gbrain, ...]
-    skills: [builder-core, test-driven-development, systematic-debugging, ...]
-
-  reviewer:
-    role: reviewer
-    displayName: Reviewer
-    profile: reviewer
-    wrapper: reviewer:gate
-    skills: [reviewer-core, requesting-code-review, github-code-review, ...]
-
-  # ... 共 10 个语义化 Worker
+  - id: researcher
+    wrapper: researcher:quick
+  - id: architect
+    wrapper: architect:design
+  - id: developer
+    wrapper: developer:implement
+  - id: writer
+    wrapper: writer:author
+  - id: learning
+    wrapper: learning
 ```
 
 每个 Worker 对应：

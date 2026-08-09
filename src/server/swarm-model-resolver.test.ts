@@ -29,12 +29,12 @@ describe('parseSwarmModelLabel', () => {
   })
 
   it('parses custom: providers and upstream model ids with slashes', () => {
-    expect(parseSwarmModelLabel('custom:nioint-gateway/DeepSeek-V4-Pro-Seed')).toEqual({
-      provider: 'custom:nioint-gateway',
+    expect(parseSwarmModelLabel('custom:example-gateway/DeepSeek-V4-Pro-Seed')).toEqual({
+      provider: 'custom:example-gateway',
       default: 'DeepSeek-V4-Pro-Seed',
     })
-    expect(parseSwarmModelLabel('custom:nioint-gateway/deepseek-ai/deepseek-v4-pro')).toEqual({
-      provider: 'custom:nioint-gateway',
+    expect(parseSwarmModelLabel('custom:example-gateway/deepseek-ai/deepseek-v4-pro')).toEqual({
+      provider: 'custom:example-gateway',
       default: 'deepseek-ai/deepseek-v4-pro',
     })
   })
@@ -52,13 +52,13 @@ describe('parseSwarmModelLabel', () => {
     const option = {
       id: 'deepseek-ai/deepseek-v4-pro',
       name: 'deepseek-v4-pro',
-      provider: 'custom:nioint-gateway',
+      provider: 'custom:example-gateway',
     }
     expect(swarmModelKeyFromOption(option)).toBe(
-      'custom:nioint-gateway/deepseek-ai/deepseek-v4-pro',
+      'custom:example-gateway/deepseek-ai/deepseek-v4-pro',
     )
     expect(resolveSwarmModelKey('deepseek-ai/deepseek-v4-pro', 'deepseek-ai', [option])).toBe(
-      'custom:nioint-gateway/deepseek-ai/deepseek-v4-pro',
+      'custom:example-gateway/deepseek-ai/deepseek-v4-pro',
     )
   })
 

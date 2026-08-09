@@ -34,7 +34,7 @@ Swarm Board **读** Kanban 数据，但点「Run」派发 worker 时走的是 **
 ## 3. 架构图（只记两条链）
 
 ```text
-Swarm 派发链（researcher → architect → developer|writer）
+Swarm 派发链（orchestrator → researcher → architect → (developer | writer) → learning）
 ────────────────────────────────────────────────────────
   Orchestrator / UI / curl / LangGraph
            │
@@ -42,13 +42,13 @@ Swarm 派发链（researcher → architect → developer|writer）
   POST /api/swarm-dispatch
            │
            ▼
-  tmux send-keys → swarm-researcher / swarm-architect / …
+  tmux send-keys → swarm-researcher / swarm-architect / swarm-developer 或 swarm-writer / …
            │
            ▼
   worker 写 checkpoint (runtime.json / 会话)
            │
            ▼
-  通知 orchestrator 继续下一轮
+  通知 orchestrator 继续下一轮（交接见 HANDOFF-PROTOCOL.md；executor 互斥）
 
 
 Hermes Kanban 链（规划用，和上面不是同一条路）

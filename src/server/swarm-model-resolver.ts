@@ -3,7 +3,8 @@
  * model id pair that Hermes Agent's `config.yaml` expects.
  *
  * The roster YAML carries a `provider/model-id` string (e.g.
- * "openai-codex/gpt-5.5", "custom/deepseek/DeepSeek-V4-Pro-Seed").
+ * "openai-codex/gpt-5.5", "deepseek/deepseek-v4-pro",
+ * "custom:my-gateway/org/model-id").
  * This parser extracts the provider and model-id components.
  *
  * Returns `null` when the label is empty, blank, or does not match the

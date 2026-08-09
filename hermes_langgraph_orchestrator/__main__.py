@@ -5,7 +5,7 @@ LangGraph Orchestrator — workflow-driven swarm execution.
 用法:
     python -m hermes_langgraph_orchestrator --execute --mission-id <id> --goal "..."
 
-    python -m hermes_langgraph_orchestrator --execute --mock-services --mission-id cdc-mock-001
+    python -m hermes_langgraph_orchestrator --execute --mock-services --mission-id radw-mock-001
     python -m hermes_langgraph_orchestrator --execute --mock-services --workflow research_only --mock-profile human_gate
 
     python -m hermes_langgraph_orchestrator --execute --resume approved --mission-id <id>
@@ -79,13 +79,13 @@ async def main():
         "--mock-profile",
         type=str,
         default="auto",
-        choices=["auto", "generic", "cdc", "human_gate"],
-        help="mock checkpoint 策略：auto=按 workflow 推断，generic=通用 DONE/审查，cdc=CDC 阻塞场景，human_gate=审查环触顶",
+        choices=["auto", "generic", "blocked_once", "cdc", "human_gate"],
+        help="mock checkpoint 策略：auto→generic；generic=DONE/审查+Harden；blocked_once=developer 首次 BLOCKED；cdc=blocked_once 别名；human_gate=审查环触顶",
     )
     parser.add_argument("--mission-id", type=str, default="", help="mission ID，默认自动生成唯一 ID")
     parser.add_argument("--goal", type=str, default="")
     parser.add_argument("--swarm-url", type=str, default="", help="Workspace API base URL (default: HERMES_WORKSPACE_URL or http://127.0.0.1:3000/api)")
-    parser.add_argument("--workflow", type=str, default="", help="workflow YAML 路径，默认 cdc.yaml")
+    parser.add_argument("--workflow", type=str, default="", help="workflow YAML 路径，默认 radw.yaml")
     parser.add_argument(
         "--initial-workers",
         type=str,
@@ -128,7 +128,7 @@ async def main():
     load_workspace_dotenv()
 
     mission_id = args.mission_id or f"mission-{int(time.time())}"
-    goal = args.goal or "设计并开发 CDC+空簧 的物理模型，用 JAX 构建"
+    goal = args.goal or "调研并交付可验证的实现（默认 RADW：research → architect → developer|writer）"
 
     swarm_url = (
         args.swarm_url.strip()

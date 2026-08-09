@@ -15,12 +15,13 @@ This is not a chat wrapper with tabs. It is the operating surface for a local ag
 ## Start here
 
 - [DISPATCH-GUIDE.md](./DISPATCH-GUIDE.md) — **派发机制总览**（Swarm API / wrapper / kanban / delegate 怎么选）.
-- [HANDOFF-PROTOCOL.md](./HANDOFF-PROTOCOL.md) — **主链路交接**（orchestrator → researcher → architect → developer|writer → learning）.
+- [HANDOFF-PROTOCOL.md](./HANDOFF-PROTOCOL.md) — **主链路交接**（orchestrator → researcher → architect → (developer | writer) → learning；lane 互斥）.
 - [ESCALATION-GUIDE.md](./ESCALATION-GUIDE.md) — **3 轮质疑未决后的升级与人工决策**.
 - [QUICKSTART.md](./QUICKSTART.md) — clone, run, detect profiles, spawn workers, dispatch the first task.
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — loop, SwarmBrief shape, notification routing, lanes, review, repair.
 - [AUTORESEARCH-GUIDE.md](./AUTORESEARCH-GUIDE.md) — **使用指导**（流程、命令、demo 走读、排错）。
 - [AUTORESEARCH.md](./AUTORESEARCH.md) — bounded optimization-loop 契约与示例；orchestrator 派发 `architect:autoresearch` / `developer:autoresearch`。
+- [LEARNING-WIKI-INGEST.md](./LEARNING-WIKI-INGEST.md) — learning 收口与 wiki 摄入.
 - [SKILLS.md](./SKILLS.md) — bundled swarm skills, auto-loading, and custom skill conventions.
 - [ROLES.md](./ROLES.md) — role presets used by the Add Swarm dialog and the canonical project specs.
 

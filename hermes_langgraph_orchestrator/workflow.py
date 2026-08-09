@@ -143,7 +143,7 @@ def load_workflow(path: str | os.PathLike[str]) -> WorkflowSpec:
 
 def default_workflow_path() -> Path:
     pkg = Path(__file__).parent
-    return pkg / "workflows" / "cdc.yaml"
+    return pkg / "workflows" / "radw.yaml"
 
 
 def resolve_workflow_path(path: str | os.PathLike[str]) -> Path:
@@ -217,6 +217,14 @@ def _transition_matches(
     return True
 
 
+def _workflow_uses_gate_h(wf: WorkflowSpec) -> bool:
+    """True when any approved transition requires harden_outcome metadata (Gate H)."""
+    for transition in wf.transitions:
+        if transition.on.review_outcome == "approved" and "harden_outcome" in transition.on.metadata:
+            return True
+    return False
+
+
 def route_by_workflow(
     classification: WorkerClassification,
     state: OrchestratorState,
@@ -232,6 +240,23 @@ def route_by_workflow(
     max_iter = state.get("max_iterations", wf.settings.max_iterations)
     roster_ids = set(state.get("roster_snapshot", []))
     counts = transition_counts if transition_counts is not None else dict(state.get("transition_counts") or {})
+
+    # Gate H: workflows that declare harden_outcome on approved transitions require
+    # HARDEN_OUTCOME after REVIEW_OUTCOME=approved (missing → human, not silent ship).
+    if (
+        classification.verdict == "DONE"
+        and classification.review_outcome == "approved"
+        and _workflow_uses_gate_h(wf)
+    ):
+        harden = str((classification.metadata or {}).get("harden_outcome", "")).strip().lower()
+        if harden not in ("pass", "fail"):
+            return RouteDecision(
+                action="human",
+                reason=(
+                    "Gate H: HARDEN_OUTCOME pass|fail required after "
+                    "REVIEW_OUTCOME=approved (load harden-gate skill)"
+                ),
+            )
 
     # BLOCKED / NEEDS_INPUT / HANDOFF handling
     if classification.verdict == "BLOCKED":

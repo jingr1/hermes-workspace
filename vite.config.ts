@@ -765,7 +765,7 @@ const config = defineConfig(({ mode, command }) => {
               workers[idx] = { ...workers[idx], ...patch }
 
               // When model changes, sync to the worker's profile config.yaml.
-              // swarm.yaml model format: "provider/model-id" (e.g. "custom:nioint-gateway/DeepSeek-V4-Pro-Seed")
+              // swarm.yaml model format: "provider/model-id" (e.g. "deepseek/deepseek-v4-pro")
               // profile config format: { model: { provider, default, base_url? } }
               if (patch.model && typeof patch.model === 'string') {
                 const profileDir = resolve(
