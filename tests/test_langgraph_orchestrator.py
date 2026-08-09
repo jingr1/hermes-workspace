@@ -415,6 +415,55 @@ def test_route_research_review_loop_limit_triggers_human() -> None:
     assert "review loop limit" in (decision.reason or "")
 
 
+def test_gate_c_code_review_retry_then_human() -> None:
+    from hermes_langgraph_orchestrator.state import WorkerClassification
+
+    wf = load_workflow("hermes_langgraph_orchestrator/workflows/radw.yaml")
+    roster = ["orchestrator", "researcher", "architect", "developer", "writer", "learning"]
+    c = WorkerClassification(
+        "architect", "DONE", "", "", "需要改测试", "changes_requested",
+        metadata={"executor": "developer"},
+    )
+    first = route_by_workflow(
+        c,
+        {"roster_snapshot": roster, "workflow_spec": wf, "transition_counts": {}},
+        wf,
+    )
+    assert first.action == "dispatch"
+    assert first.worker_id == "developer"
+    assert "Gate C" in (first.reason or "")
+
+    limited = route_by_workflow(
+        c,
+        {
+            "roster_snapshot": roster,
+            "workflow_spec": wf,
+            "transition_counts": {"architect→developer": 3},
+        },
+        wf,
+    )
+    assert limited.action == "human"
+    assert "review loop limit" in (limited.reason or "")
+
+
+def test_gate_c_writer_review_retry() -> None:
+    from hermes_langgraph_orchestrator.state import WorkerClassification
+
+    wf = load_workflow("hermes_langgraph_orchestrator/workflows/radw.yaml")
+    roster = ["orchestrator", "researcher", "architect", "developer", "writer", "learning"]
+    c = WorkerClassification(
+        "architect", "DONE", "", "", "文案需改", "changes_requested",
+        metadata={"executor": "writer"},
+    )
+    decision = route_by_workflow(
+        c,
+        {"roster_snapshot": roster, "workflow_spec": wf, "transition_counts": {}},
+        wf,
+    )
+    assert decision.action == "dispatch"
+    assert decision.worker_id == "writer"
+
+
 def test_route_research_done_to_architect() -> None:
     from hermes_langgraph_orchestrator.state import WorkerClassification
 

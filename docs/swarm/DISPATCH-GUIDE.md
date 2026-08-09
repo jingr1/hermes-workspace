@@ -2,13 +2,15 @@
 
 一句话：**Hermes Swarm 的「真派发」是 `POST /api/swarm-dispatch`（tmux 注入 + checkpoint）**。其它名字（`workspace-dispatch`、`kanban_create`、`delegate_task`、wrapper）是不同层的东西，不要混用。
 
+角色交接与升级：[`HANDOFF-PROTOCOL.md`](./HANDOFF-PROTOCOL.md) · [`ESCALATION-GUIDE.md`](./ESCALATION-GUIDE.md)。
+
 ---
 
 ## 1. 先分清两件事
 
 | 概念 | 是什么 |
 |------|--------|
-| **Swarm** | `swarm.yaml` 里定义的 worker：`orchestrator`、`researcher`、`architect`、`developer`、`learning`。各有 profile、模型、tmux 会话。 |
+| **Swarm** | `swarm.yaml` 里定义的 worker：`orchestrator`、`researcher`、`architect`、`developer`、`writer`、`learning`。各有 profile、模型、tmux 会话。architect 在规格阶段选定 `executor: developer \| writer`（互斥，不双轨并行）。 |
 | **Hermes Kanban** | 通用任务看板（`kanban.db`）。`kanban_create` 等工具属于这一层。 |
 
 Swarm Board **读** Kanban 数据，但点「Run」派发 worker 时走的是 **Swarm 自己的** `/api/swarm-dispatch`，不是 Kanban Dispatcher。
@@ -32,7 +34,7 @@ Swarm Board **读** Kanban 数据，但点「Run」派发 worker 时走的是 **
 ## 3. 架构图（只记两条链）
 
 ```text
-Swarm 派发链（你要的 researcher → architect → developer）
+Swarm 派发链（researcher → architect → developer|writer）
 ────────────────────────────────────────────────────────
   Orchestrator / UI / curl / LangGraph
            │

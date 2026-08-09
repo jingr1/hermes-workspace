@@ -40,3 +40,7 @@ none
 - Greenlight required for publish, destructive, and long-running-loop actions
 
 This file mirrors `swarm.yaml` and the profile config under `~/.hermes/profiles/architect/`.
+
+## Handoff
+
+Owns strategy + spec + **exclusive** `executor: developer | writer`, then reviews that lane. Protocol: [`docs/swarm/HANDOFF-PROTOCOL.md`](../../docs/swarm/HANDOFF-PROTOCOL.md). Escalation: [`docs/swarm/ESCALATION-GUIDE.md`](../../docs/swarm/ESCALATION-GUIDE.md).

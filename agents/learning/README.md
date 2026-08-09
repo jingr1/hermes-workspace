@@ -29,3 +29,7 @@ none
 - **Swarm 复盘**：`node scripts/sync-swarm-profiles.mjs` 在 SOUL 末尾追加 `<!-- SWARM_ROLE_EXTENSION -->` 段，不覆盖教学内容；`toolsets` 为 `hermes-cli` 与 swarm `tools` 的并集。
 
 This file mirrors `swarm.yaml` and the profile config under `~/.hermes/profiles/learning/`.
+
+## Handoff
+
+Closes the pipeline after architect review. Protocol: [`docs/swarm/HANDOFF-PROTOCOL.md`](../../docs/swarm/HANDOFF-PROTOCOL.md). Wiki ingest: [`docs/swarm/LEARNING-WIKI-INGEST.md`](../../docs/swarm/LEARNING-WIKI-INGEST.md).

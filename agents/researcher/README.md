@@ -35,3 +35,7 @@ none (brain-first via `llm-wiki` skill + `WIKI_PATH`)
 - `researcher:quick`: default. Wiki-first lookup, external source collection, cited fact sheets — no recommendations. May draft autoresearch contract fields for orchestrator; does not execute the loop.
 
 This file mirrors `swarm.yaml` and the profile config under `~/.hermes/profiles/researcher/`.
+
+## Handoff
+
+Facts-only deliverables and challenge rules: [`docs/swarm/HANDOFF-PROTOCOL.md`](../../docs/swarm/HANDOFF-PROTOCOL.md). Escalation: [`docs/swarm/ESCALATION-GUIDE.md`](../../docs/swarm/ESCALATION-GUIDE.md).

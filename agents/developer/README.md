@@ -37,3 +37,7 @@ none
 - Greenlight required for merge, destructive, and long-running-loop actions
 
 This file mirrors `swarm.yaml` and the profile config under `~/.hermes/profiles/developer/`.
+
+## Handoff
+
+Run only when architect sets `executor: developer`. Protocol: [`docs/swarm/HANDOFF-PROTOCOL.md`](../../docs/swarm/HANDOFF-PROTOCOL.md).

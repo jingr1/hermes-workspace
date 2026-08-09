@@ -20,6 +20,15 @@ transitions:
     to: null
     reason: "设计审查通过，任务完成"
 
+  # Gate C: review failed → developer revise ≤3, then Human Gate
+  - from: architect
+    "on":
+      verdict: DONE
+      review_outcome: changes_requested
+    to: developer
+    max_iterations: 3
+    reason: "Gate C: code review failed → developer revise (≤3)"
+
   - from: architect
     "on":
       verdict: DONE
@@ -30,7 +39,6 @@ transitions:
     "on":
       verdict: DONE
     to: architect
-    max_iterations: 3
     reason: "实现完成，交回 architect 审查"
 
   # 可选：审查通过后由 learning 做文档归档（terminal_docs: true 时启用）

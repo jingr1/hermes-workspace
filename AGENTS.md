@@ -12,17 +12,27 @@ LangGraph workflows (`cdc.yaml`, `research_only.yaml`, `design_implement.yaml`) 
 | `researcher` | `researcher:quick` | `custom:nioint-gateway/DeepSeek-V4-Pro-Seed` | quick | web, browser, terminal, file, vision, session_search, skills, todo | researcher-core, llm-wiki, browser-harness, gstack-for-hermes, researcher-quick, arxiv, youtube-content, polymarket | none | none |
 | `architect` | `architect:design` | `nioint/DeepSeek-V4-Flash-Seed` | design, autoresearch | terminal, file, web, session_search, skills, todo | architect-core, gstack-for-hermes, llm-wiki, writing-plans, requesting-code-review, codebase-inspection, autoresearch, autoresearch-execute | none | none |
 | `developer` | `developer:implement` | `custom:nioint-gateway/DeepSeek-V4-Pro-Seed` | implement, autoresearch | terminal, file, browser, web, session_search, skills, todo | gstack-for-hermes, llm-wiki, test-driven-development, systematic-debugging, codebase-inspection, github-pr-workflow, autoresearch, autoresearch-execute | none | none |
+| `writer` | `writer:author` | `deepseek/deepseek-v4-pro` | author, autoresearch | terminal, file, web, browser, session_search, skills, todo, vision | gstack-for-hermes, llm-wiki, powerpoint, docx, pdf, writing-plans, autoresearch, autoresearch-execute | none | none |
 | `learning` | `learning` | `custom:nioint-gateway/DeepSeek-V4-Pro-Seed` | — | file, session_search, skills, todo, web | gstack-for-hermes, llm-wiki, obsidian, writing-plans | none | none |
 
 ### Default mission pipeline
+
+```text
+orchestrator → researcher → architect → (developer | writer) → architect(review) → learning
+```
 
 | Stage | Worker | Role |
 |---|---|---|
 | Route / greenlight / autoresearch dispatch | `orchestrator` | Decompose missions, draft autoresearch contracts, dispatch executors, enforce human approval gates |
 | Research | `researcher` | Establish facts (competitive analysis, data validation, source tracing); no strategy or recommendations; respond to architect challenges with evidence |
-| Design / review | `architect` | Technical translation, tech-direction decisions, implementation review; no fact-gathering or coding |
-| Implement | `developer` | Code per spec, tests, build verification; no architecture or design decisions |
+| Design / lane / review | `architect` | Specs + tech direction; **choose exactly one build executor** (`developer` or `writer`); review that executor's output. No fact-gathering or coding/authoring |
+| Build (dev lane) | `developer` | Code per spec, tests, build verification — only when architect sets `executor: developer` |
+| Build (write lane) | `writer` | Docs/slides/narrative/visual deliverables — only when architect sets `executor: writer` |
 | Retrospective | `learning` | Mission docs, lessons learned, durable knowledge capture |
+
+**Executor lane rule:** Architect owns `executor: developer | writer`. Lanes are mutually exclusive for the same mission step — do not parallel-dispatch both. If code and content are both required, sequence them (usually developer then writer) under a fresh architect decision.
+
+**Gate C (review retry ≤3):** When architect returns `REVIEW_OUTCOME: changes_requested`, LangGraph re-dispatches the same executor (`developer` or `writer`) with review feedback. After **3** failed review rounds on that lane, routing raises `needs_human` (Human Gate) instead of looping forever. Configured via `max_iterations: 3` on the `changes_requested` transitions in `hermes_langgraph_orchestrator/workflows/` (`radw.yaml`, `rdi.yaml`, `design_implement.yaml`).
 
 ## Operating rules
 
@@ -30,7 +40,7 @@ LangGraph workflows (`cdc.yaml`, `research_only.yaml`, `design_implement.yaml`) 
 - **GBrain ≡ llm-wiki** in this workspace: the `gbrain` skill/MCP is not deployed locally. Brain-first lookup uses the Hermes builtin `llm-wiki` skill against `WIKI_PATH` (default `~/wiki`), plus swarm mission memory under `memory/swarm/`.
 - **Brain-first order** (before web search): ① read `$WIKI_PATH/SCHEMA.md` + `index.md` + recent `log.md`; ② grep `memory/swarm/` and dispatch handoffs; ③ `session_search` for prior sessions; ④ external `web` / `arxiv` only when local context is insufficient.
 - **Knowledge layering:** `~/wiki` holds durable domain knowledge; `memory/swarm/missions/<missionId>/` holds archived mission artifacts; `memory/swarm/<worker>/` holds in-progress drafts; `memory/handoffs/swarm/` holds latest checkpoints; `learning` ingests reusable conclusions into the wiki after missions complete (see `docs/swarm/LEARNING-WIKI-INGEST.md`).
-- **Researcher** establishes facts only (competitive analysis, validation, source trails); no strategy or recommendations. **Architect** may challenge findings; researcher responds with evidence. **Architect** owns technical translation, tech-direction decisions, and implementation review — not primary fact-gathering or code. **Developer** implements and tests per architect specs only — no architecture or design changes, no skipping tests; escalate spec gaps to architect. **Learning** documents; **Orchestrator** routes and enforces greenlight.
+- **Researcher** establishes facts only (competitive analysis, validation, source trails); no strategy or recommendations. **Architect** may challenge findings; researcher responds with evidence. **Architect** owns technical translation, tech-direction decisions, **executor lane selection** (`developer` for build work, `writer` for content work), and review of the chosen executor — not primary fact-gathering, coding, or audience authoring. **Developer** / **Writer** execute only their lane per architect specs; no architecture or design changes; escalate gaps to architect. **Learning** documents; **Orchestrator** routes and enforces greenlight.
 - Do not enable optional Hermes plugins globally unless the task explicitly needs them; record plugin/toolset alignment in `swarm.yaml` first.
 - For local Workspace pairing/debugging, treat **one gateway + one dashboard** as canonical: `hermes gateway run` on `:8642` and `hermes dashboard` on `:9119`. Before starting another gateway, verify `curl http://127.0.0.1:3000/api/sessions` (or the active workspace port) first. If Sessions already returns data, refresh/reprobe the UI instead of spawning a duplicate gateway.
 - If the default model is `gpt-5.4` / `openai-codex`, remember that chat depends on a live local Codex CLI login (`codex login`).

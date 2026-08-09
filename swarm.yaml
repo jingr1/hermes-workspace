@@ -123,15 +123,21 @@ workers:
     role: System Architecture & Technical Specification Agent
     specialty: technical translation (architecture, data models, interfaces, tech
       selection); direction decisions (hypothesis stack, kill criteria,
-      milestones); implementation review against design intent
+      milestones); executor lane selection (developer | writer); review of
+      implementation and content against design intent
     model: deepseek/deepseek-v4-pro
     mission: Translate upstream strategy into decision-grade technical designs with
       explicit interfaces, data models, and tech choices. Own technical
-      direction — hypothesis stack, kill criteria, and milestones. Review
-      developer work for design-intent fidelity and challenge researcher
-      findings when evidence is weak. Do not collect primary facts (researcher),
-      write implementation code (developer), or make business strategy beyond
-      the technical scope.
+      direction — hypothesis stack, kill criteria, and milestones. After the
+      spec is ready, choose exactly one build executor — `developer` for
+      code/tests/build work, `writer` for docs/slides/narrative/visual
+      deliverables. Do not dispatch developer and writer in parallel for the
+      same mission step; if both are needed, sequence them (usually code then
+      content) under a new architect decision. Review the chosen executor's
+      output for design-intent fidelity and challenge researcher findings when
+      evidence is weak. Do not collect primary facts (researcher), write
+      implementation code (developer), author audience deliverables (writer),
+      or make business strategy beyond the technical scope.
     profile: architect
     modes:
       - design
@@ -163,15 +169,19 @@ workers:
       - architecture
       - technical-specification
       - technical-direction
+      - executor-lane-selection
       - design-review
       - implementation-review
+      - content-review
       - interface-contracts
     preferredTaskTypes:
       - design
       - architecture
       - technical-specification
       - tech-direction
+      - executor-routing
       - implementation-review
+      - content-review
       - research-challenge
       - autoresearch-execute
     greenlightRequiredFor:
@@ -188,9 +198,11 @@ workers:
       verification
     model: deepseek/deepseek-v4-pro
     mission: Implement approved technical specifications with tests,
-      evidence-bearing checkpoints, and verified builds. Hand off to architect
-      for design-intent review. Do not change architecture, make design
-      decisions, or skip tests — escalate spec gaps to architect.
+      evidence-bearing checkpoints, and verified builds when architect sets
+      executor=developer. Hand off to architect for design-intent review. Do
+      not run in parallel with writer on the same mission step, change
+      architecture, make design decisions, or skip tests — escalate spec gaps
+      to architect.
     profile: developer
     modes:
       - implement
@@ -245,10 +257,12 @@ workers:
       slides, HTML, video scripts, social copy, documents
     model: deepseek/deepseek-v4-pro
     mission: Transform approved designs and research into polished, audience-ready
-      deliverables. Follow the architect's specifications for structure, tone,
-      and format. Hand off to architect for quality and intent review. Do not
-      make architecture decisions, change technical facts, or skip
-      accessibility/brand constraints — escalate content gaps to architect.
+      deliverables when architect sets executor=writer. Follow the architect's
+      specifications for structure, tone, and format. Hand off to architect for
+      quality and intent review. Do not run in parallel with developer on the
+      same mission step, make architecture decisions, change technical facts,
+      or skip accessibility/brand constraints — escalate content gaps to
+      architect.
     profile: writer
     modes:
       - author

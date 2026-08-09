@@ -856,6 +856,17 @@ def _try_rule_classify(cp: WorkerCheckpoint) -> WorkerClassification | None:
                         break
             if metadata.get("deliverable_type"):
                 break
+    # Gate C / lane routing: EXECUTOR: developer|writer (preferred over deliverable_type)
+    for line in raw.splitlines():
+        if "executor" in line.lower().replace("_", "") and ":" in line:
+            value = line.split(":", 1)[1].strip().lower()
+            if value in {"developer", "writer"}:
+                metadata["executor"] = value
+                break
+    if metadata.get("executor") == "writer" and "deliverable_type" not in metadata:
+        metadata["deliverable_type"] = "document"
+    elif metadata.get("executor") == "developer" and "deliverable_type" not in metadata:
+        metadata["deliverable_type"] = "code"
 
     blocker_type = ""
     if state_label == "BLOCKED":
@@ -1062,12 +1073,32 @@ async def route_workflow(state: OrchestratorState) -> dict:
                 res_cp = cp_map.get("researcher", {})
                 arch_result = (arch_cp.get("result") or "").strip()
                 res_result = (res_cp.get("result") or "").strip()
-                gate_task = (
-                    "3 rounds of adversarial research review completed without agreement.\n"
-                    "Human must adjudicate the disputed points and choose the next step.\n\n"
-                    f"Architect last result:\n{arch_result or '(none)'}\n\n"
-                    f"Researcher last result:\n{res_result or '(none)'}"
-                )
+                reason_l = (decision.reason or "").lower()
+                if "writer" in reason_l:
+                    writer_cp = cp_map.get("writer", {})
+                    writer_result = (writer_cp.get("result") or "").strip()
+                    gate_task = (
+                        "Gate C: 3 rounds of content review completed without approval.\n"
+                        "Human must adjudicate remaining issues or approve a path forward.\n\n"
+                        f"Architect last result:\n{arch_result or '(none)'}\n\n"
+                        f"Writer last result:\n{writer_result or '(none)'}"
+                    )
+                elif "developer" in reason_l or "code review" in reason_l:
+                    dev_cp = cp_map.get("developer", {})
+                    dev_result = (dev_cp.get("result") or "").strip()
+                    gate_task = (
+                        "Gate C: 3 rounds of implementation review completed without approval.\n"
+                        "Human must adjudicate remaining issues or approve a path forward.\n\n"
+                        f"Architect last result:\n{arch_result or '(none)'}\n\n"
+                        f"Developer last result:\n{dev_result or '(none)'}"
+                    )
+                else:
+                    gate_task = (
+                        "3 rounds of adversarial research review completed without agreement.\n"
+                        "Human must adjudicate the disputed points and choose the next step.\n\n"
+                        f"Architect last result:\n{arch_result or '(none)'}\n\n"
+                        f"Researcher last result:\n{res_result or '(none)'}"
+                    )
             pending_human.append(
                 {
                     "worker_id": c.worker_id,

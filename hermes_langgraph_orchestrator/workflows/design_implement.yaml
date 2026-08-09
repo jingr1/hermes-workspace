@@ -13,6 +13,15 @@ transitions:
     to: null
     reason: "设计已批准且无实现需求，直接结束"
 
+  # Gate C: review failed → developer revise ≤3, then Human Gate
+  - from: architect
+    "on":
+      verdict: DONE
+      review_outcome: changes_requested
+    to: developer
+    max_iterations: 3
+    reason: "Gate C: code review failed → developer revise (≤3)"
+
   - from: architect
     "on":
       verdict: DONE
@@ -23,7 +32,6 @@ transitions:
     "on":
       verdict: DONE
     to: architect
-    max_iterations: 3
     reason: "实现完成，交 architect 审查"
 
   - from: architect

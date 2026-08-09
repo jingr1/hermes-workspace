@@ -3,10 +3,10 @@ version: 1
 entry: researcher
 description: |
   Research → Architect → Developer or Writer → Architect review.
-  Architect decides the deliverable type (code / visual / document) via
-  DELIVERABLE_TYPE in the checkpoint. Code goes to developer; visual or
-  document goes to writer. After implementation/authoring, architect reviews
-  and either approves or requests changes.
+  Architect chooses exactly one build executor via EXECUTOR or DELIVERABLE_TYPE
+  in the checkpoint (developer for code; writer for visual/document).
+  Gate C: architect REVIEW_OUTCOME=changes_requested sends work back to the
+  same executor lane up to 3 times, then Human Gate.
 
 transitions:
   - from: researcher
@@ -15,8 +15,7 @@ transitions:
     to: architect
     reason: "调研完成，进入架构设计"
 
-  # Terminal review approval MUST come before non-review architect transitions,
-  # because an approved architect also matches the generic DONE rule below.
+  # Terminal approval before any other architect DONE rule.
   - from: architect
     "on":
       verdict: DONE
@@ -24,8 +23,44 @@ transitions:
     to: null
     reason: "审查通过，任务完成"
 
-  # Typed routes come before the default fallback so the more specific metadata
-  # conditions are evaluated first.
+  # Gate C — review failed, retry same lane (≤3), then human.
+  - from: architect
+    "on":
+      verdict: DONE
+      review_outcome: changes_requested
+      metadata:
+        executor: "writer"
+    to: writer
+    max_iterations: 3
+    reason: "Gate C: content review failed → writer revise (≤3)"
+
+  - from: architect
+    "on":
+      verdict: DONE
+      review_outcome: changes_requested
+      metadata:
+        deliverable_type: "visual,document"
+    to: writer
+    max_iterations: 3
+    reason: "Gate C: content review failed → writer revise (≤3)"
+
+  - from: architect
+    "on":
+      verdict: DONE
+      review_outcome: changes_requested
+    to: developer
+    max_iterations: 3
+    reason: "Gate C: code review failed → developer revise (≤3)"
+
+  # Initial design → build (executor lane). Specific metadata before fallback.
+  - from: architect
+    "on":
+      verdict: DONE
+      metadata:
+        executor: "writer"
+    to: writer
+    reason: "设计完成且 EXECUTOR=writer，进入内容创作"
+
   - from: architect
     "on":
       verdict: DONE
@@ -38,30 +73,34 @@ transitions:
     "on":
       verdict: DONE
       metadata:
+        executor: "developer"
+    to: developer
+    reason: "设计完成且 EXECUTOR=developer，进入开发"
+
+  - from: architect
+    "on":
+      verdict: DONE
+      metadata:
         deliverable_type: "code"
     to: developer
     reason: "设计完成且交付物类型为 code，进入开发"
 
-  # Default fallback: if architect did not emit a deliverable type, treat as code.
   - from: architect
     "on":
       verdict: DONE
     to: developer
     reason: "设计完成，进入代码实现（默认）"
 
-  # Review loops: developer/writer hand back to architect for review.
   - from: developer
     "on":
       verdict: DONE
     to: architect
-    max_iterations: 3
     reason: "实现完成，交回 architect 审查"
 
   - from: writer
     "on":
       verdict: DONE
     to: architect
-    max_iterations: 3
     reason: "内容创作完成，交回 architect 审查"
 
 blockers:
