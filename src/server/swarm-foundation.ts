@@ -128,6 +128,7 @@ export const SwarmRuntimeSchema = z.object({
   artifacts: z.array(RuntimeArtifactMetadataSchema).default([]),
   previews: z.array(RuntimePreviewMetadataSchema).default([]),
   boundary: RuntimeBoundarySchema,
+  missionId: z.string().nullable(),
 })
 
 export const SwarmPluginManifestSchema = z.object({
@@ -363,6 +364,7 @@ export function normalizeSwarmRuntime(
     artifacts: parseArtifactMetadata(workerId, raw.artifacts),
     previews: parsePreviewMetadata(workerId, raw.previews),
     boundary: deriveSwarmBoundary(cwd, options?.workspaceRoot),
+    missionId: readString(raw.missionId),
   }
 
   return SwarmRuntimeSchema.parse(runtime)

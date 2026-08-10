@@ -36,6 +36,7 @@ type RuntimeEntry = {
   role: string
   specialty: string | null
   mission: string | null
+  missionId: string | null
   skills: Array<string>
   capabilities: Array<string>
   source: SwarmRuntimeSource
@@ -233,6 +234,7 @@ async function buildEntry(
     role: roster?.role || runtime.role,
     specialty: roster?.specialty || null,
     mission: roster?.mission || null,
+    missionId: runtime.missionId || null,
     skills: roster?.skills?.length ? roster.skills : [],
     capabilities: roster?.capabilities?.length ? roster.capabilities : [],
     source,

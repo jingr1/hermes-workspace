@@ -38,6 +38,7 @@ type RuntimeReportEntry = {
   lastRealResult?: string | null
   blockedReason?: string | null
   checkpointStatus?: string | null
+  missionId?: string | null
   needsHuman?: boolean | null
   recentLogTail?: string | null
   artifacts?: Array<RuntimeArtifact>
@@ -273,7 +274,7 @@ export function buildSwarm2ReportRows({
       id: `runtime:${runtime.workerId}:${runtime.lastOutputAt ?? runtime.lastSessionStartedAt ?? 'latest'}`,
       kind: (runtime.artifacts?.length ?? 0) > 0 || (runtime.previews?.length ?? 0) > 0 ? 'artifact' : 'runtime',
       title: clean(runtime.currentTask ?? runtime.lastRealSummary ?? runtime.lastSummary ?? runtime.lastRealResult ?? runtime.lastResult, 'Runtime output'),
-      missionId: null,
+      missionId: runtime.missionId ?? null,
       missionTitle: null,
       assignmentId: null,
       workerId: runtime.workerId,
@@ -315,7 +316,9 @@ export function buildSwarm2InboxLanes({
 }): Swarm2InboxLanes {
   const rows = buildSwarm2ReportRows({ missions, runtimes })
   const actionable = rows.filter((row): row is Swarm2InboxItem => {
-    if (row.kind !== 'checkpoint' || !row.missionId) return false
+    // Allow both checkpoint (from mission assignments) and runtime (from worker runtime.json)
+    // Runtime entries require missionId from Orchestrator sync
+    if ((row.kind !== 'checkpoint' && row.kind !== 'runtime') || !row.missionId) return false
     return row.state === 'needs_review' || row.state === 'blocked' || row.state === 'ready'
   }).map((row) => ({ ...row, lane: row.state as Swarm2InboxLaneId }))
 

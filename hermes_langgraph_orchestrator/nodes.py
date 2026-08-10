@@ -374,6 +374,7 @@ async def _harvest_worker_checkpoints(
                     rt["lastCheckpointRoute"] = "orchestrator"
                     rt["phase"] = state_label.lower()
                     rt["lastOutputAt"] = int(datetime.now(timezone.utc).timestamp() * 1000)
+                    rt["missionId"] = mission_id
                     if state_label == "DONE":
                         rt["state"] = "idle"
                         rt["needsHuman"] = False
