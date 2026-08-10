@@ -182,7 +182,10 @@ function startSession(
           })
           return
         }
-        await sleep(1_500)
+        // Wait briefly for tmux to register the session, then poll readiness
+        // with a generous budget. TUI startup can take several seconds on the
+        // first run while dependencies are resolved and the prompt renders.
+        await sleep(1_000)
         if (!(await tmuxHasSession(tmuxBin, sessionName))) {
           resolve({
             ok: false,
@@ -190,20 +193,20 @@ function startSession(
           })
           return
         }
-        // Wait up to ~20s for Hermes TUI markers (single 1.5s check races startup).
-        const deadline = Date.now() + 20_000
+        const isReady = transport === 'cli'
+          ? () => sessionHasShellReady(tmuxBin, sessionName)
+          : () => sessionHasHermesTui(tmuxBin, sessionName)
+        const maxRetries = 10
         let ready = false
-        while (Date.now() < deadline) {
-          ready = transport === 'cli'
-            ? await sessionHasShellReady(tmuxBin, sessionName)
-            : await sessionHasHermesTui(tmuxBin, sessionName)
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+          ready = await isReady()
           if (ready) break
-          await sleep(500)
+          await sleep(1_000)
         }
         if (!ready) {
           resolve({
             ok: false,
-            error: `Worker session ${sessionName} started but ${transport === 'cli' ? 'shell' : 'TUI'} is not ready`,
+            error: `Worker session ${sessionName} started but ${transport === 'cli' ? 'shell' : 'TUI'} is not ready after ${maxRetries}s`,
           })
           return
         }

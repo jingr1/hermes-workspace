@@ -340,7 +340,7 @@ async def _harvest_worker_checkpoints(
         return
     try:
         async with _workspace_http_client(swarm_url, read_timeout_s=60.0) as client:
-            await client.post(
+            resp = await client.post(
                 f"{swarm_url}/swarm-orchestrator-loop",
                 json={
                     "workerIds": sorted(set(worker_ids)),
@@ -352,6 +352,35 @@ async def _harvest_worker_checkpoints(
                 },
                 headers=_swarm_http_headers(),
             )
+            resp.raise_for_status()
+            data = resp.json()
+            # 同步 checkpoint 到 worker 的 runtime.json
+            results = data.get("results", [])
+            for r in results:
+                worker_id = r.get("workerId")
+                checkpoint = r.get("checkpoint")
+                if not worker_id or not checkpoint:
+                    continue
+                state_label = checkpoint.get("stateLabel", "").upper()
+                if not state_label:
+                    continue
+                runtime_path = _worker_runtime_path(worker_id)
+                try:
+                    rt = {}
+                    if runtime_path.exists():
+                        rt = json.loads(runtime_path.read_text(encoding="utf-8"))
+                    rt["checkpointStatus"] = state_label.lower()
+                    rt["orchestratorProcessedRaw"] = checkpoint.get("raw", "")
+                    rt["lastCheckpointRoute"] = "orchestrator"
+                    rt["phase"] = state_label.lower()
+                    rt["lastOutputAt"] = int(datetime.now(timezone.utc).timestamp() * 1000)
+                    if state_label == "DONE":
+                        rt["state"] = "idle"
+                        rt["needsHuman"] = False
+                    runtime_path.write_text(json.dumps(rt, ensure_ascii=False), encoding="utf-8")
+                    log(f"[harvest] synced checkpoint for {worker_id}: {state_label}")
+                except Exception as sync_err:
+                    log(f"[harvest] failed to sync checkpoint for {worker_id}: {sync_err}")
     except Exception as e:
         log(f"[harvest] failed for {worker_ids}: {e}")
 

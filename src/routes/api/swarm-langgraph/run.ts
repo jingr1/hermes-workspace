@@ -18,6 +18,7 @@ type RunBody = {
   workflowId?: unknown
   maxIterations?: unknown
   mock?: unknown
+  initialWorkers?: unknown
 }
 
 function cleanString(value: unknown): string | null {
@@ -45,6 +46,7 @@ export const Route = createFileRoute('/api/swarm-langgraph/run')({
 
         const missionId = cleanString(body.missionId) ?? `lg-${Date.now().toString(36)}`
         const workflowId = cleanString(body.workflowId)
+        const initialWorkers = cleanString(body.initialWorkers)
         const maxIterations = typeof body.maxIterations === 'number'
           ? Math.max(1, Math.min(20, Math.floor(body.maxIterations)))
           : 5
@@ -63,6 +65,9 @@ export const Route = createFileRoute('/api/swarm-langgraph/run')({
         if (workflowId) {
           args.push('--workflow', resolveWorkflowArg(workflowId))
         }
+        if (initialWorkers) {
+          args.push('--initial-workers', initialWorkers)
+        }
 
         const { pid, logFile } = spawnLanggraphDetached(args)
         return json({
@@ -74,6 +79,7 @@ export const Route = createFileRoute('/api/swarm-langgraph/run')({
           logFile,
           mock: useMock,
           workflowId: workflowId ?? null,
+          initialWorkers: initialWorkers ?? null,
         })
       },
     },

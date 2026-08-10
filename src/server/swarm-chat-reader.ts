@@ -48,17 +48,20 @@ if "sessions" in table_names:
         select_cols.append(title_col)
     if started_col:
         select_cols.append(started_col)
-    # Only consider sessions that started AFTER the last dispatch so we never
-    # reuse a terminal checkpoint from a previous mission.
-    # dispatched_after_ms is in milliseconds; started_at in state.db is in seconds.
+    # Prefer a session that started AFTER the last dispatch, but fall back to
+    # the latest session overall. Long-lived reused sessions (e.g. tmux TUI)
+    # start before the mission is dispatched; we filter by message timestamp
+    # below so we don't reuse old checkpoints.
+    row = None
     if started_col and dispatched_after_ms > 0:
         dispatched_after_s = dispatched_after_ms / 1000.0
-        where_clause = "WHERE CAST(" + started_col + " AS REAL) >= " + str(dispatched_after_s)
-    else:
-        where_clause = ""
-    row = cur.execute(
-        "SELECT " + ", ".join(select_cols) + " FROM sessions " + where_clause + " " + order_clause + " LIMIT 1"
-    ).fetchone()
+        row = cur.execute(
+            "SELECT " + ", ".join(select_cols) + " FROM sessions WHERE CAST(" + started_col + " AS REAL) >= " + str(dispatched_after_s) + " " + order_clause + " LIMIT 1"
+        ).fetchone()
+    if row is None:
+        row = cur.execute(
+            "SELECT " + ", ".join(select_cols) + " FROM sessions " + order_clause + " LIMIT 1"
+        ).fetchone()
     if row is not None:
         session_id = row["id"]
         if title_col:
@@ -79,11 +82,19 @@ if session_id and "messages" in table_names:
     if role_col and content_col:
         order_by = ts_col if ts_col else "id"
         ts_select = ", " + ts_col + " as ts" if ts_col else ""
+        # Filter messages by their own timestamp so we can read from a reused
+        # long-lived session that started before this mission was dispatched.
+        msg_where = "session_id = ?"
+        msg_params: list = [session_id]
+        if ts_col and dispatched_after_ms > 0:
+            msg_where += " AND CAST(" + ts_col + " AS REAL) >= ?"
+            msg_params.append(dispatched_after_ms / 1000.0)
+        msg_params.append(limit)
         rows = cur.execute(
             "SELECT id, " + role_col + " as role, " + content_col + " as content"
             + ts_select
-            + " FROM messages WHERE session_id = ? ORDER BY " + order_by + " DESC LIMIT ?",
-            (session_id, limit),
+            + " FROM messages WHERE " + msg_where + " ORDER BY " + order_by + " DESC LIMIT ?",
+            tuple(msg_params),
         ).fetchall()
         for r in reversed(rows):
             content = r["content"]
@@ -110,9 +121,9 @@ if session_id and "messages" in table_names:
                                         for v in val:
                                             if isinstance(v, dict) and v.get("type") == "text":
                                                 sub.append(v.get("text", ""))
-                                        val = "\\n".join(sub)
+                                        val = "\\\\n".join(sub)
                                     parts.append(str(val)[:400])
-                            text = "\\n".join(p for p in parts if p)
+                            text = "\\\\n".join(p for p in parts if p)
                         elif isinstance(parsed, dict):
                             text = parsed.get("text") or parsed.get("content") or content
                         else:

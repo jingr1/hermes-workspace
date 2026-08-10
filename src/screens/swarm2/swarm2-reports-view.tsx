@@ -168,7 +168,15 @@ function stateForAssignment(assignment: MissionAssignment): Exclude<ReportState,
     return 'blocked'
   }
   if (assignment.reviewRequired && ['checkpointed', 'reviewing'].includes(assignment.state ?? '')) return 'needs_review'
-  if (['done', 'complete'].includes(assignment.state ?? '') || statusText.includes('handoff') || statusText.includes('done')) return 'ready'
+  // Worker is ready when: 1) task is done (checkpointStatus=done), OR 2) worker is idle with no pending checkpoint (checkpointStatus=none)
+  if (
+    ['done', 'complete'].includes(assignment.state ?? '') ||
+    statusText.includes('handoff') ||
+    statusText.includes('done') ||
+    (assignment.state === 'idle' && checkpoint?.checkpointStatus === 'none')
+  ) {
+    return 'ready'
+  }
   return 'in_progress'
 }
 
