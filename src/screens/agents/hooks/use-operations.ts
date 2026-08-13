@@ -19,6 +19,7 @@ type ClaudeProfileSummary = {
   description?: string
   systemPrompt?: string
   skillCount: number
+  mcpCount: number
   sessionCount: number
   hasEnv: boolean
   updatedAt?: string
@@ -28,10 +29,13 @@ export type GatewayConfigAgent = {
   id: string
   name: string
   model: string
+  provider?: string
   workspace?: string
   agentDir?: string
   description?: string
   systemPrompt?: string
+  skillCount?: number
+  mcpCount?: number
 }
 
 export type OperationsAgentMeta = {
@@ -58,6 +62,61 @@ export type OperationsOutputItem = {
   source: 'session' | 'cron'
 }
 
+export type AgentSkillItem = {
+  name: string
+  description?: string
+  category?: string | null
+  enabled: boolean
+  path?: string
+}
+
+export type AgentMcpItem = {
+  name: string
+  enabled: boolean
+  status?: 'ok' | 'error' | 'disabled'
+  error?: string
+}
+
+export type OperationsAgentHealth = {
+  hasModel: boolean
+  hasProvider: boolean
+  hasEnv: boolean
+  missingSkills: string[]
+  disabledMcp: string[]
+  issues: string[]
+}
+
+export type OperationsAgentResources = {
+  workspace?: string
+  memoryPaths: string[]
+  envExists: boolean
+}
+
+export type OperationsAgentCapabilities = {
+  skills: AgentSkillItem[]
+  mcpServers: AgentMcpItem[]
+  toolsets: string[]
+}
+
+/** Shape returned by /api/profiles/capabilities */
+type CapabilitiesResponse = {
+  profile: string
+  skills: AgentSkillItem[]
+  mcpServers: Array<{
+    name: string
+    enabled: boolean
+    status?: string
+    transportType?: string
+    url?: string
+    command?: string
+    error?: string
+  }>
+  toolsets: string[]
+  workspace?: string
+  envExists: boolean
+  envPath?: string
+}
+
 export type OperationsAgent = GatewayConfigAgent & {
   meta: OperationsAgentMeta
   shortModel: string
@@ -79,6 +138,12 @@ export type OperationsAgent = GatewayConfigAgent & {
    * See #270.
    */
   needsSetup: boolean
+  capabilities: OperationsAgentCapabilities
+  resources: OperationsAgentResources
+  health: OperationsAgentHealth
+  blockedReason: string | null
+  needsHuman: boolean
+  runtimeState: string | null
 }
 
 type ConfigPayload = {
@@ -208,10 +273,13 @@ function normalizeAgentList(input: unknown): GatewayConfigAgent[] {
       id,
       name: readString(row.name) || id,
       model: readString(row.model),
+      provider: readString(row.provider),
       workspace: readString(row.workspace) || undefined,
       agentDir: readString(row.agentDir) || undefined,
       description: readString(row.description) || undefined,
       systemPrompt: readString(row.systemPrompt) || undefined,
+      skillCount: typeof row.skillCount === 'number' ? row.skillCount : undefined,
+      mcpCount: typeof row.mcpCount === 'number' ? row.mcpCount : undefined,
     })
   }
 
@@ -249,10 +317,13 @@ async function fetchOperationsConfig(): Promise<ConfigPayload> {
     id: profile.name,
     name: profile.name === 'default' ? 'Workspace' : profile.name,
     model: profile.model || '',
+    provider: profile.provider || '',
     workspace: profile.path,
     agentDir: profile.path,
     description: profile.description || '',
     systemPrompt: profile.systemPrompt || '',
+    skillCount: profile.skillCount ?? 0,
+    mcpCount: profile.mcpCount ?? 0,
   }))
   // Default-profile model becomes the operations defaultModel suggestion
   const defaultModel = profiles.find((p) => p.name === 'default')?.model || ''
@@ -428,7 +499,25 @@ function getAgentSessions(agentId: string, sessions: GatewaySession[]): GatewayS
     })
 }
 
-function getAgentStatus(latestSession: GatewaySession | null): OperationsAgentStatus {
+function getAgentStatus(
+  latestSession: GatewaySession | null,
+  runtimeState?: string | null,
+  runtimeLastOutputAt?: number | null,
+): OperationsAgentStatus {
+  // Prefer the live Swarm runtime signal when available.
+  const busyStates = new Set(['executing', 'thinking', 'writing', 'reviewing', 'syncing'])
+  if (runtimeState && busyStates.has(runtimeState.toLowerCase())) {
+    return 'active'
+  }
+  // If runtime explicitly says idle/blocked, trust that — don't override
+  // with the 2-min lastOutputAt window (ping tasks finish in seconds but
+  // lastOutputAt is still fresh, causing a false "active" reading).
+  const idleStates = new Set(['idle', 'blocked', 'stopped', 'waiting'])
+  if (runtimeState && idleStates.has(runtimeState.toLowerCase())) {
+    if (runtimeState.toLowerCase() === 'blocked') return 'error'
+    return 'idle'
+  }
+
   if (!latestSession) return 'idle'
 
   const status = readString(latestSession.status).toLowerCase()
@@ -538,13 +627,112 @@ export function useOperations() {
     refetchInterval: 30_000,
   })
 
+  // Fetch real capabilities (skills, MCP, toolsets) for each agent.
+  // Single aggregated query that the useMemo below splits per-agent.
+  const capabilitiesQuery = useQuery({
+    queryKey: ['operations', 'capabilities'],
+    queryFn: async () => {
+      const profiles = await fetchClaudeProfiles()
+      const results: Record<string, CapabilitiesResponse> = {}
+      await Promise.all(
+        profiles.map(async (profile) => {
+          if (profile.name === 'default') return // skip default
+          try {
+              const res = await fetch(
+                `/api/profiles/capabilities?name=${encodeURIComponent(profile.name)}`,
+              )
+              if (!res.ok) return
+              const data = (await res.json()) as CapabilitiesResponse
+              results[profile.name] = data
+            } catch {
+              // ignore — capabilities stay as fallback stubs
+            }
+          }),
+      )
+      return results
+    },
+    refetchInterval: 60_000,
+  })
+
   const sessionsQuery = useQuery({
     queryKey: ['operations', 'sessions'],
     queryFn: async () => {
       const response = await fetchSessions()
       return Array.isArray(response.sessions) ? response.sessions : []
     },
-    refetchInterval: 15_000,
+    refetchInterval: 30_000,
+  })
+
+  const swarmRuntimeQuery = useQuery({
+    queryKey: ['operations', 'swarm-runtime'],
+    queryFn: async () => {
+      const response = await fetch('/api/swarm-runtime')
+      if (!response.ok) throw new Error(`Swarm runtime HTTP ${response.status}`)
+      const payload = (await response.json()) as {
+        checkedAt?: number
+        entries?: Array<{
+          workerId: string
+          state: string
+          lastOutputAt: number | null
+          needsHuman: boolean
+          currentTask: string | null
+          blockedReason: string | null
+        }>
+      }
+      return payload
+    },
+    refetchInterval: 30_000,
+  })
+
+  const swarmHealthQuery = useQuery({
+    queryKey: ['operations', 'swarm-health'],
+    queryFn: async () => {
+      const response = await fetch('/api/swarm-health')
+      if (!response.ok) throw new Error(`Swarm health HTTP ${response.status}`)
+      return response.json() as Promise<{
+        checkedAt?: number
+        workers?: Array<{
+          workerId: string
+          displayName: string
+          modelAuthStatus: string
+          recentAuthErrors: number
+          fallbackActive: boolean
+          primaryAuthOk: boolean | null
+        }>
+        summary?: {
+          totalWorkers?: number
+          totalAuthErrors24h?: number
+          totalFallbacks24h?: number
+          workersUsingFallback?: number
+          workersPrimaryAuthFailed?: number
+          degraded?: boolean
+          warnings?: Array<string>
+        }
+      }>
+    },
+    refetchInterval: 30_000,
+  })
+
+  const crewStatusQuery = useQuery({
+    queryKey: ['operations', 'crew-status'],
+    queryFn: async () => {
+      const response = await fetch('/api/crew-status')
+      if (!response.ok) throw new Error(`Crew status HTTP ${response.status}`)
+      return response.json() as Promise<{
+        crew?: Array<{
+          id: string
+          displayName: string
+          role: string
+          profileFound: boolean
+          gatewayState: string
+          processAlive: boolean
+          model: string
+          provider: string
+        }>
+        fetchedAt?: number
+      }>
+    },
+    refetchInterval: 30_000,
   })
 
   const cronJobsQuery = useQuery({
@@ -561,6 +749,10 @@ export function useOperations() {
     const configAgents = allAgents.filter((a) => !HIDDEN_AGENTS.has(a.id))
     const sessions = sessionsQuery.data ?? []
     const cronJobs = cronJobsQuery.data ?? []
+    const runtimeEntries = new Map(
+      (swarmRuntimeQuery.data?.entries ?? []).map((entry) => [entry.workerId, entry]),
+    )
+    const capsMap = capabilitiesQuery.data ?? {}
 
     return configAgents.map((agent) => {
       const meta = loadAgentMeta(agent.id, {
@@ -569,6 +761,7 @@ export function useOperations() {
       })
       const agentSessions = getAgentSessions(agent.id, sessions)
       const latestSession = agentSessions[0] ?? null
+      const runtime = runtimeEntries.get(agent.id)
       const jobs = getAgentJobs(agent.id, cronJobs)
       const nextRunAt = jobs
         .filter((job) => job.enabled)
@@ -577,12 +770,13 @@ export function useOperations() {
         .sort((left, right) => left - right)[0] ?? null
       const lastActivityAt =
         readTimestamp(latestSession?.updatedAt) ??
+        runtime?.lastOutputAt ??
         jobs
           .map((job) => readTimestamp(job.lastRun?.startedAt))
           .filter((value): value is number => value !== null)
           .sort((left, right) => right - left)[0] ??
         null
-      const status = getAgentStatus(latestSession)
+      const status = getAgentStatus(latestSession, runtime?.state, runtime?.lastOutputAt)
       const recentOutputs = [
         ...agentSessions.map((session) => buildSessionOutput(session, agent.id)),
         ...jobs.map((job) => buildCronOutput(job, agent.id)),
@@ -592,6 +786,51 @@ export function useOperations() {
         .slice(0, 5)
 
       const needsSetup = !agent.model || agent.model.trim().length === 0
+
+      // Use real capabilities data when available, fall back to counts
+      const caps = capsMap[agent.id]
+      const capabilities: OperationsAgentCapabilities = {
+        skills: caps?.skills ?? (agent.skillCount
+          ? Array.from({ length: agent.skillCount }, (_, i) => ({
+              name: `skill-${i + 1}`,
+              enabled: true,
+            }))
+          : []),
+        mcpServers: caps?.mcpServers
+          ? caps.mcpServers.map((m) => ({
+              name: m.name,
+              enabled: m.enabled,
+              status: (m.status === 'connected' ? 'ok' : m.status === 'failed' ? 'error' : m.enabled ? 'ok' : 'disabled') as 'ok' | 'error' | 'disabled',
+            }))
+          : (agent.mcpCount
+            ? Array.from({ length: agent.mcpCount }, (_, i) => ({
+                name: `mcp-${i + 1}`,
+                enabled: true,
+                status: 'ok' as const,
+              }))
+            : []),
+        toolsets: caps?.toolsets ?? [],
+      }
+
+      const resources: OperationsAgentResources = {
+        workspace: caps?.workspace ?? agent.workspace,
+        memoryPaths: [],
+        envExists: caps?.envExists ?? false,
+      }
+
+      const health: OperationsAgentHealth = {
+        hasModel: Boolean(agent.model?.trim()),
+        hasProvider: Boolean(agent.provider?.trim()),
+        hasEnv: resources.envExists,
+        missingSkills: [],
+        disabledMcp: capabilities.mcpServers
+          .filter((m) => !m.enabled)
+          .map((m) => m.name),
+        issues: [],
+      }
+
+      if (!health.hasModel) health.issues.push('No model configured')
+      if (!health.hasProvider) health.issues.push('No provider configured')
 
       return {
         ...agent,
@@ -613,12 +852,20 @@ export function useOperations() {
         progressStatus: getProgressStatus(status, latestSession),
         recentOutputs,
         needsSetup,
+        capabilities,
+        resources,
+        health,
+        blockedReason: runtime?.blockedReason ?? null,
+        needsHuman: runtime?.needsHuman ?? false,
+        runtimeState: runtime?.state ?? null,
       } satisfies OperationsAgent
     })
   }, [
     configQuery.data,
     sessionsQuery.data,
     cronJobsQuery.data,
+    swarmRuntimeQuery.data,
+    capabilitiesQuery.data,
     metaVersion,
   ])
 
@@ -689,12 +936,14 @@ export function useOperations() {
       model: string
       emoji: string
       systemPrompt: string
+      description?: string
     }) => {
-      // Persist model + system prompt to the profile's config.yaml so they
-      // survive across machines / clients.
+      // Persist model + system prompt + display_name to the profile's config.yaml
+      // so they survive across machines / clients.
       const patch: Record<string, unknown> = {}
       if (input.model.trim()) patch.model = input.model.trim()
       if (input.systemPrompt.trim()) patch.system_prompt = input.systemPrompt.trim()
+      if (input.name.trim()) patch.display_name = input.name.trim()
       if (Object.keys(patch).length > 0) {
         await updateClaudeProfile(input.agentId, patch)
       }
@@ -703,6 +952,7 @@ export function useOperations() {
         ...currentMeta,
         emoji: input.emoji.trim() || currentMeta.emoji,
         systemPrompt: input.systemPrompt.trim(),
+        description: input.description?.trim() ?? currentMeta.description,
       })
       setMetaVersion((value) => value + 1)
     },
@@ -745,6 +995,95 @@ export function useOperations() {
     setMetaVersion((value) => value + 1)
   }
 
+  const toggleSkillMutation = useMutation({
+    mutationFn: async (input: { profile: string; name: string; enabled: boolean }) => {
+      const response = await fetch('/api/profiles/toggle-skill', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(input),
+      })
+      const payload = (await response.json().catch(() => ({}))) as {
+        ok?: boolean
+        error?: string
+      }
+      if (!response.ok || payload.ok === false) {
+        throw new Error(payload.error || `Failed to toggle skill (${response.status})`)
+      }
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['operations', 'capabilities'] })
+    },
+    onError: (error) => {
+      toast(error instanceof Error ? error.message : 'Failed to toggle skill', {
+        type: 'error',
+      })
+    },
+  })
+
+  const toggleMcpMutation = useMutation({
+    mutationFn: async (input: {
+      profile: string
+      server: string
+      enabled: boolean
+    }) => {
+      const response = await fetch('/api/profiles/mcp', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: input.profile,
+          action: 'toggle',
+          server: input.server,
+          enabled: input.enabled,
+        }),
+      })
+      const payload = (await response.json().catch(() => ({}))) as {
+        ok?: boolean
+        error?: string
+      }
+      if (!response.ok || payload.ok === false) {
+        throw new Error(payload.error || `Failed to toggle MCP (${response.status})`)
+      }
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['operations', 'capabilities'] })
+    },
+    onError: (error) => {
+      toast(error instanceof Error ? error.message : 'Failed to toggle MCP', {
+        type: 'error',
+      })
+    },
+  })
+
+  const removeMcpMutation = useMutation({
+    mutationFn: async (input: { profile: string; server: string }) => {
+      const response = await fetch('/api/profiles/mcp', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: input.profile,
+          action: 'remove',
+          server: input.server,
+        }),
+      })
+      const payload = (await response.json().catch(() => ({}))) as {
+        ok?: boolean
+        error?: string
+      }
+      if (!response.ok || payload.ok === false) {
+        throw new Error(payload.error || `Failed to remove MCP (${response.status})`)
+      }
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['operations', 'capabilities'] })
+      toast('MCP server removed', { type: 'success' })
+    },
+    onError: (error) => {
+      toast(error instanceof Error ? error.message : 'Failed to remove MCP', {
+        type: 'error',
+      })
+    },
+  })
+
   function saveSettings(nextSettings: OperationsSettings) {
     setSettings(nextSettings)
     persistSettings(nextSettings)
@@ -759,6 +1098,10 @@ export function useOperations() {
     configQuery,
     sessionsQuery,
     cronJobsQuery,
+    capabilitiesQuery,
+    swarmRuntimeQuery,
+    swarmHealthQuery,
+    crewStatusQuery,
     recentActivity,
     settings,
     saveSettings,
@@ -771,11 +1114,21 @@ export function useOperations() {
     deleteAgent: deleteAgentMutation.mutateAsync,
     isDeletingAgent: deleteAgentMutation.isPending,
     saveAgentMeta,
+    toggleSkill: toggleSkillMutation.mutateAsync,
+    isTogglingSkill: toggleSkillMutation.isPending,
+    toggleMcp: toggleMcpMutation.mutateAsync,
+    isTogglingMcp: toggleMcpMutation.isPending,
+    removeMcp: removeMcpMutation.mutateAsync,
+    isRemovingMcp: removeMcpMutation.isPending,
     refreshAll: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['operations', 'config'] }),
         queryClient.invalidateQueries({ queryKey: ['operations', 'sessions'] }),
         queryClient.invalidateQueries({ queryKey: ['operations', 'cron'] }),
+        queryClient.invalidateQueries({ queryKey: ['operations', 'capabilities'] }),
+        queryClient.invalidateQueries({ queryKey: ['operations', 'swarm-runtime'] }),
+        queryClient.invalidateQueries({ queryKey: ['operations', 'swarm-health'] }),
+        queryClient.invalidateQueries({ queryKey: ['operations', 'crew-status'] }),
       ])
     },
     slugifyJobLabel,

@@ -1,49 +1,45 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useState } from 'react'
 import { cn } from '@/lib/utils'
+import { toast } from '@/components/ui/toast'
 
-type AgentBusSummary = {
-  total?: number
-  up?: number
-  down?: number
-  no_endpoint?: number
-  non_operational?: number
-  events?: number
+type CrewMember = {
+  id: string
+  displayName: string
+  gatewayState: string
+  processAlive: boolean
+  profileFound: boolean
 }
 
-type AgentBusAgent = {
-  id?: string
-  name?: string
-  status_config?: string
-  health?: string
-  listener?: string
-  port?: number | null
-  error?: string | null
+type WorkerHealth = {
+  workerId: string
+  displayName: string
+  modelAuthStatus: string
+  recentAuthErrors: number
+  fallbackActive: boolean
 }
 
-type AgentBusMission = {
-  mission_type?: string
-  target?: string
-  source_agent?: string
-  brief?: string
-  reason?: string
-  safe_mode?: boolean
-  created_at?: string
-  mission_record_path?: string
-  path?: string
+type RuntimeEntry = {
+  workerId: string
+  displayName: string
+  state: string
+  needsHuman: boolean
+  blockedReason: string | null
+  currentTask: string | null
+  lastOutputAt: number | null
 }
 
-type AgentBusPayload = {
-  ok: boolean
-  status?: {
-    checked_at?: string
-    registry_last_updated?: string
-    summary?: AgentBusSummary
-    agents?: Array<AgentBusAgent>
+export type AgentBusData = {
+  crew: Array<CrewMember>
+  workers: Array<WorkerHealth>
+  entries: Array<RuntimeEntry>
+  healthSummary: {
+    totalAuthErrors24h?: number
+    totalFallbacks24h?: number
+    workersUsingFallback?: number
+    workersPrimaryAuthFailed?: number
+    degraded?: boolean
   }
-  events?: Array<Record<string, unknown>>
-  missions?: Array<AgentBusMission>
-  issues?: Array<AgentBusAgent>
-  reportPreview?: string
+  lastCheck: number
 }
 
 type ActionState =
@@ -54,13 +50,13 @@ type ActionState =
 
 const initialActionState: ActionState = {
   status: 'idle',
-  message: 'Safe actions are logged in the Agent Bus.',
+  message: 'Safe actions target the live Swarm worker pool.',
 }
 
-function formatDate(value?: string): string {
+function formatDate(value?: number | string): string {
   if (!value) return 'no readings'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
+  const date = typeof value === 'number' ? new Date(value) : new Date(value)
+  if (Number.isNaN(date.getTime())) return 'no readings'
   return new Intl.DateTimeFormat('en-US', {
     day: '2-digit',
     month: '2-digit',
@@ -69,18 +65,13 @@ function formatDate(value?: string): string {
   }).format(date)
 }
 
-function firstLine(value?: string): string {
-  return String(value || '').split('\\n').find(Boolean) || 'no details'
-}
-
-function missionTitle(mission: AgentBusMission): string {
-  if (mission.mission_type === 'handoff') {
-    return `${mission.source_agent || 'agent'} -> ${mission.target || 'agent'}`
-  }
-  if (mission.mission_type === 'thumbnail') {
-    return `Thumbnail ${mission.target || ''}`.trim()
-  }
-  return mission.mission_type || 'Mission'
+function relativeTime(value?: number | null): string {
+  if (!value) return 'never'
+  const diff = Date.now() - value
+  if (diff < 60_000) return 'just now'
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`
+  return `${Math.floor(diff / 86_400_000)}d ago`
 }
 
 function StatTile({
@@ -110,53 +101,71 @@ function StatTile({
   )
 }
 
-export function AgentBusPanel() {
-  const [data, setData] = useState<AgentBusPayload | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+export function AgentBusPanel({ data }: { data: AgentBusData }) {
   const [action, setAction] = useState<ActionState>(initialActionState)
 
-  async function load() {
-    setError(null)
-    try {
-      const response = await fetch('/api/agent-bus', {
-        headers: { Accept: 'application/json' },
-      })
-      if (!response.ok) throw new Error(`Agent Bus responded HTTP ${response.status}`)
-      setData((await response.json()) as AgentBusPayload)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load Agent Bus')
-    } finally {
-      setLoading(false)
-    }
-  }
+  const { crew, workers, entries, healthSummary, lastCheck } = data
 
-  useEffect(() => {
-    void load()
-    const timer = window.setInterval(() => void load(), 30_000)
-    return () => window.clearInterval(timer)
-  }, [])
+  const summary = (() => {
+    const swarmCrew = crew.filter((member) => member.id !== 'workspace')
+    const total = swarmCrew.length || workers.length
+    const online = swarmCrew.filter((member) => member.gatewayState === 'running' && member.processAlive).length
+    const down = swarmCrew.filter((member) => member.profileFound && member.gatewayState !== 'running' && !member.processAlive).length
+    const noEndpoint = swarmCrew.filter((member) => member.profileFound && member.gatewayState === 'unknown').length
+    const nonOperational = workers.filter((worker) => worker.modelAuthStatus !== 'ready').length
+    const events = (healthSummary.totalAuthErrors24h ?? 0) + (healthSummary.totalFallbacks24h ?? 0)
+    const needsHuman = entries.filter((entry) => entry.needsHuman).length
+    return { total, online, down, noEndpoint, nonOperational, events, needsHuman }
+  })()
 
-  const summary = data?.status?.summary ?? {}
-  const missions = data?.missions ?? []
-  const issues = data?.issues ?? []
-  const events = data?.events ?? []
-  const visibleIssues = useMemo(() => issues.slice(0, 5), [issues])
+  const issues = workers
+    .filter((worker) => worker.modelAuthStatus !== 'ready' || worker.recentAuthErrors > 0 || worker.fallbackActive)
+    .map((worker) => ({
+      id: worker.workerId,
+      name: worker.displayName,
+      status: worker.modelAuthStatus,
+      authErrors: worker.recentAuthErrors,
+      fallback: worker.fallbackActive,
+    }))
+
+  const missions = entries
+    .filter((entry) => entry.currentTask || entry.state === 'executing' || entry.needsHuman)
+    .map((entry) => ({
+      id: entry.workerId,
+      displayName: entry.displayName,
+      state: entry.needsHuman ? 'needs-human' : entry.state,
+      currentTask: entry.currentTask,
+      lastOutputAt: entry.lastOutputAt,
+      needsHuman: entry.needsHuman,
+    }))
+    .sort((left, right) => (right.lastOutputAt ?? 0) - (left.lastOutputAt ?? 0))
 
   async function runAction(body: Record<string, unknown>, successMessage: string) {
     setAction({ status: 'running', message: 'Executing safe action...' })
     try {
-      const response = await fetch('/api/agent-bus', {
+      const res = await fetch('/api/swarm-dispatch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      const payload = (await response.json()) as { ok?: boolean; error?: string }
-      if (!response.ok || !payload.ok) {
-        throw new Error(payload.error || `HTTP ${response.status}`)
+      const payload = (await res.json()) as { ok?: boolean; error?: string; results?: Array<{ ok: boolean; workerId: string; error?: string | null }> }
+      if (!res.ok) {
+        const detail = payload.error || `HTTP ${res.status}`
+        throw new Error(detail)
       }
-      setAction({ status: 'ok', message: successMessage })
-      await load()
+      const workerResults = payload.results ?? []
+      const succeeded = workerResults.filter((r) => r.ok).length
+      const failed = workerResults.length - succeeded
+      if (failed > 0) {
+        const failedWorkers = workerResults.filter((r) => !r.ok)
+        const errorLines = failedWorkers.map((r) => `${r.workerId}: ${r.error || 'unknown error'}`)
+        setAction({
+          status: 'error',
+          message: `${succeeded}/${workerResults.length} succeeded, ${failed} failed — ${errorLines.join('; ')}`,
+        })
+      } else {
+        setAction({ status: 'ok', message: successMessage })
+      }
     } catch (err) {
       setAction({
         status: 'error',
@@ -176,156 +185,151 @@ export function AgentBusPanel() {
             Troop Status
           </h2>
           <p className="mt-1 text-sm text-[var(--theme-muted-2)]">
-            Scumbag telemetry, missions, and pending operational tasks of Hermes.
+            Live Swarm worker telemetry, health, and pending operational tasks.
           </p>
         </div>
         <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-muted)]">
-          Last check: {formatDate(data?.status?.checked_at)}
+          Last check: {formatDate(lastCheck || undefined)}
         </div>
       </div>
 
-      {loading ? (
-        <div className="mt-5 rounded-2xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-8 text-center text-sm text-[var(--theme-muted)]">
-          Loading Agent Bus...
-        </div>
-      ) : error ? (
-        <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-900">
-          {error}
-        </div>
-      ) : (
-        <>
-          <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-6">
-            <StatTile label="total" value={summary.total ?? 0} />
-            <StatTile label="online" value={summary.up ?? 0} tone="good" />
-            <StatTile label="down" value={summary.down ?? 0} tone={(summary.down ?? 0) > 0 ? 'bad' : 'good'} />
-            <StatTile label="no endpoint" value={summary.no_endpoint ?? 0} tone={(summary.no_endpoint ?? 0) > 0 ? 'warn' : 'good'} />
-            <StatTile label="non op." value={summary.non_operational ?? 0} tone={(summary.non_operational ?? 0) > 0 ? 'warn' : 'good'} />
-            <StatTile label="events" value={events.length || summary.events || 0} tone={events.length > 0 ? 'bad' : 'good'} />
+      <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7">
+        <StatTile label="total" value={summary.total} />
+        <StatTile label="online" value={summary.online} tone={(summary.online ?? 0) > 0 ? 'good' : 'neutral'} />
+        <StatTile label="down" value={summary.down} tone={(summary.down ?? 0) > 0 ? 'bad' : 'good'} />
+        <StatTile label="no endpoint" value={summary.noEndpoint} tone={(summary.noEndpoint ?? 0) > 0 ? 'warn' : 'good'} />
+        <StatTile label="non op." value={summary.nonOperational} tone={(summary.nonOperational ?? 0) > 0 ? 'warn' : 'good'} />
+        <StatTile label="needs human" value={summary.needsHuman} tone={(summary.needsHuman ?? 0) > 0 ? 'warn' : 'good'} />
+        <StatTile label="events" value={summary.events} tone={(summary.events ?? 0) > 0 ? 'bad' : 'good'} />
+      </div>
+
+      <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-4">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-[var(--theme-text)]">Active Issues</h3>
+            <span className="text-xs text-[var(--theme-muted)]">{issues.length} items</span>
           </div>
-
-          <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-            <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-4">
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="text-sm font-semibold text-[var(--theme-text)]">Active Issues</h3>
-                <span className="text-xs text-[var(--theme-muted)]">{issues.length} items</span>
-              </div>
-              <div className="mt-3 space-y-2">
-                {visibleIssues.length ? (
-                  visibleIssues.map((agent) => (
-                    <div
-                      key={`${agent.id}-${agent.port ?? 'no-port'}`}
-                      className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-sm font-medium text-[var(--theme-text)]">
-                          {agent.name || agent.id}
-                        </span>
-                        <span className="text-xs text-[var(--theme-muted)]">
-                          {agent.status_config || 'no status'} / {agent.health || 'no health'}
-                        </span>
-                      </div>
-                      {agent.error ? (
-                        <p className="mt-1 text-xs text-[var(--theme-muted)]">{firstLine(agent.error)}</p>
-                      ) : null}
-                    </div>
-                  ))
-                ) : (
-                  <div className="rounded-xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-5 text-sm text-[var(--theme-muted)]">
-                    No operational agents are down right now.
+          <div className="mt-3 space-y-2">
+            {issues.length ? (
+              issues.map((issue) => (
+                <div
+                  key={issue.id}
+                  className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium text-[var(--theme-text)]">
+                      {issue.name || issue.id}
+                    </span>
+                    <span className="text-xs text-[var(--theme-muted)]">
+                      {issue.fallback ? 'fallback active' : issue.status}
+                    </span>
                   </div>
-                )}
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-4">
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="text-sm font-semibold text-[var(--theme-text)]">Recent Missions</h3>
-                <span className="text-xs text-[var(--theme-muted)]">{missions.length} logs</span>
-              </div>
-              <div className="mt-3 space-y-2">
-                {missions.slice(0, 5).map((mission, index) => (
-                  <div
-                    key={`${mission.path || mission.mission_record_path || index}`}
-                    className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm font-medium text-[var(--theme-text)]">
-                        {missionTitle(mission)}
-                      </span>
-                      <span className="text-xs text-[var(--theme-muted)]">
-                        {mission.safe_mode ? 'safe' : 'exec'}
-                      </span>
-                    </div>
-                    <p className="mt-1 line-clamp-2 text-xs text-[var(--theme-muted)]">
-                      {mission.brief || mission.reason || 'mission registered'}
+                  {issue.authErrors > 0 ? (
+                    <p className="mt-1 text-xs text-[var(--theme-muted)]">
+                      {issue.authErrors} auth error{issue.authErrors === 1 ? '' : 's'} in the last 24h
                     </p>
-                  </div>
-                ))}
-                {!missions.length ? (
-                  <div className="rounded-xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-5 text-sm text-[var(--theme-muted)]">
-                    No missions registered yet.
-                  </div>
+                  ) : null}
+                </div>
+              ))
+            ) : (
+              <div className="rounded-xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-5 text-sm text-[var(--theme-muted)]">
+                All Swarm workers are healthy.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-4">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-[var(--theme-text)]">Recent Missions</h3>
+            <span className="text-xs text-[var(--theme-muted)]">{missions.length} active</span>
+          </div>
+          <div className="mt-3 space-y-2">
+            {missions.map((mission) => (
+              <div
+                key={mission.id}
+                className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-medium text-[var(--theme-text)]">
+                    {mission.displayName}
+                  </span>
+                  <span className="text-xs text-[var(--theme-muted)]">
+                    {mission.needsHuman ? 'needs human' : mission.state}
+                  </span>
+                </div>
+                <p className="mt-1 line-clamp-2 text-xs text-[var(--theme-muted)]">
+                  {mission.currentTask || 'No active task'}
+                </p>
+                {mission.lastOutputAt ? (
+                  <p className="mt-1 text-[10px] text-[var(--theme-muted)]">
+                    Last output {relativeTime(mission.lastOutputAt)}
+                  </p>
                 ) : null}
               </div>
-            </div>
+            ))}
+            {!missions.length ? (
+              <div className="rounded-xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-5 text-sm text-[var(--theme-muted)]">
+                No active missions.
+              </div>
+            ) : null}
           </div>
+        </div>
+      </div>
 
-          <div className="mt-5 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <h3 className="text-sm font-semibold text-[var(--theme-text)]">Safe Actions</h3>
-                <p className="mt-1 text-xs text-[var(--theme-muted)]">
-                  No restart, no WhatsApp, and no automated token consumption.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => runAction({ action: 'sync-roadmap' }, 'Roadmap synced with current events.')}
-                  className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2 text-sm font-medium text-[var(--theme-text)] transition-colors hover:bg-[var(--theme-card2)]"
-                >
-                  Sync Roadmap
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    runAction(
-                      { action: 'thumbnail-mission', target: 'vini' },
-                      'Vini thumbnail mission registered.',
-                    )
-                  }
-                  className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2 text-sm font-medium text-[var(--theme-text)] transition-colors hover:bg-[var(--theme-card2)]"
-                >
-                  Vini Thumbnail Mission
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    runAction(
-                      { action: 'handoff-mission', source: 'dona-helena', target: 'larissinha' },
-                      'Dona Helena -> Larissinha handoff registered.',
-                    )
-                  }
-                  className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2 text-sm font-medium text-[var(--theme-text)] transition-colors hover:bg-[var(--theme-card2)]"
-                >
-                  Handoff Helena to Larissinha
-                </button>
-              </div>
-            </div>
-            <p
-              className={cn(
-                'mt-3 text-sm',
-                action.status === 'ok' && 'text-emerald-700',
-                action.status === 'error' && 'text-red-700',
-                action.status === 'running' && 'text-[var(--theme-accent-strong)]',
-                action.status === 'idle' && 'text-[var(--theme-muted)]',
-              )}
-            >
-              {action.message}
+      <div className="mt-5 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-[var(--theme-text)]">Safe Actions</h3>
+            <p className="mt-1 text-xs text-[var(--theme-muted)]">
+              Non-destructive diagnostics against the live Swarm pool.
             </p>
           </div>
-        </>
-      )}
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                runAction(
+                  { workerIds: workers.map((w) => w.workerId), prompt: 'Reply with exactly: PING_OK', timeoutSeconds: 60 },
+                  `Pinged ${workers.length} worker${workers.length === 1 ? '' : 's'}.`,
+                )
+              }
+              className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2 text-sm font-medium text-[var(--theme-text)] transition-colors hover:bg-[var(--theme-card2)]"
+            >
+              Ping all workers
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                toast('Use Swarm page to restart workers', { type: 'info' })
+              }}
+              className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2 text-sm font-medium text-[var(--theme-text)] transition-colors hover:bg-[var(--theme-card2)]"
+            >
+              Restart offline workers
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                window.location.href = '/swarm'
+              }}
+              className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2 text-sm font-medium text-[var(--theme-text)] transition-colors hover:bg-[var(--theme-card2)]"
+            >
+              Open Swarm
+            </button>
+          </div>
+        </div>
+        <p
+          className={cn(
+            'mt-3 text-sm font-medium',
+            action.status === 'ok' && 'text-emerald-600 dark:text-emerald-400',
+            action.status === 'error' && 'text-red-600 dark:text-red-400',
+            action.status === 'running' && 'text-[var(--theme-accent-strong)]',
+            action.status === 'idle' && 'text-[var(--theme-muted)]',
+          )}
+        >
+          {action.message}
+        </p>
+      </div>
     </section>
   )
 }

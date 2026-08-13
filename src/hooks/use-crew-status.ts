@@ -46,7 +46,7 @@ export function getOnlineStatus(member: CrewMember): CrewOnlineStatus {
   return 'offline'
 }
 
-const QUERY_KEY = ['crew', 'status'] as const
+const QUERY_KEY = ['operations', 'crew-status'] as const
 const POLL_INTERVAL_MS = 30_000
 
 async function fetchCrewStatus(): Promise<CrewStatus> {

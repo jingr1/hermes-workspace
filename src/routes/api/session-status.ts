@@ -29,7 +29,41 @@ export const Route = createFileRoute('/api/session-status')({
         if (!isAuthenticated(request)) {
           return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
         }
-        await ensureGatewayProbed()
+
+        // Probe the gateway with a hard timeout so the session-status response
+        // is never blocked by a slow/unreachable gateway. ensureGatewayProbed()
+        // itself can take up to 3 × PROBE_TIMEOUT_MS (9 s) when sequential probes
+        // (probeMcp, probeConductor, probeKanban) all hit their individual timeouts
+        // — that causes HTTP 000 on the workspace side and "Failed to fetch usage
+        // data" toasts every 10 s.
+        const GATEWAY_PROBE_DEADLINE_MS = 4_000
+        try {
+          await Promise.race([
+            ensureGatewayProbed(),
+            new Promise<never>((_, reject) =>
+              setTimeout(
+                () => reject(new Error('Gateway probe deadline exceeded')),
+                GATEWAY_PROBE_DEADLINE_MS,
+              ),
+            ),
+          ])
+        } catch {
+          return json({
+            ok: true,
+            payload: {
+              status: 'idle',
+              sessionKey: 'new',
+              sessionLabel: '',
+              model: '',
+              modelProvider: '',
+              inputTokens: 0,
+              outputTokens: 0,
+              totalTokens: 0,
+              sessions: [],
+            },
+          })
+        }
+
         try {
           const capabilities = getGatewayCapabilities()
           if (!capabilities.sessions) {

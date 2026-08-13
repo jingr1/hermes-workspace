@@ -402,7 +402,64 @@ HERMES_DASHBOARD_URL=http://127.0.0.1:9119
 | Workspace + gateway on the same machine | `HERMES_API_URL=http://127.0.0.1:8642`, `HERMES_DASHBOARD_URL=http://127.0.0.1:9119` |
 | Gateway on a remote server (Tailscale / VPN) | Set both URLs to the reachable IP (e.g. `http://100.x.y.z:8642`) and add `API_SERVER_HOST=0.0.0.0` to the gateway's `~/.hermes/.env` |
 | Already-running `hermes-agent` from upstream installer | Just set `HERMES_API_URL` + `HERMES_DASHBOARD_URL` and skip the one-liner installer |
-| Multiple agent profiles | Profiles live under `~/.hermes/profiles/<name>` — the dashboard switches between them at runtime; workspace follows automatically |
+| Multiple agent profiles | Profiles live under `~/.hermes/profiles/<name>` — see [API server & multi-profile gateways](#api-server--multi-profile-gateways) below |
+
+### API server & multi-profile gateways
+
+`API_SERVER_ENABLED` controls the OpenAI-compatible HTTP surface (`/health`, `/v1/models`, `/v1/chat/completions`, …) that **Workspace** pairs with. It is **not** required for every Hermes usage.
+
+| Usage | Need `API_SERVER_ENABLED=true`? |
+|---|---|
+| `hermes chat --tui` / classic CLI | No — uses `tui_gateway`, not `api_server` |
+| Cron / kanban dispatcher only | No |
+| Telegram / Discord / other messaging platforms | No — those are separate platform adapters |
+| Workspace, Open WebUI, or any client calling `:8642` HTTP APIs | **Yes** |
+
+**Workspace pairing rule of thumb:** keep **one** API-server gateway as the Workspace backend (default `:8642`). Point `HERMES_API_URL` at that instance. Extra profile gateways are optional and only needed when you want each profile as its own HTTP model backend.
+
+#### Multi-profile port conflicts
+
+Every profile that sets `API_SERVER_ENABLED=true` defaults to port **8642**. Starting several `hermes -p <name> gateway run` processes without unique ports fails with `api_server_port_in_use`.
+
+Pick one strategy:
+
+1. **Recommended for Workspace** — enable API server only on the profile (or default home) that Workspace should use; leave `API_SERVER_ENABLED` unset/`false` on the others. TUI/cron profiles keep working without an HTTP port.
+2. **One process per profile, each with its own port** — set a unique port per profile (env wins over YAML):
+
+```env
+# e.g. ~/.hermes/profiles/writer/.env  (do NOT share one .env symlink across profiles if ports differ)
+API_SERVER_ENABLED=true
+API_SERVER_PORT=8649
+API_SERVER_KEY=***
+```
+
+```yaml
+# or in that profile's config.yaml
+gateway:
+  api_server:
+    enabled: true
+    port: 8649
+    host: 127.0.0.1
+```
+
+Example port map (adjust as needed):
+
+| Profile | Port |
+|---|---|
+| default (`~/.hermes`) | `8642` |
+| architect | `8643` |
+| developer | `8644` |
+| gpuserver | `8645` |
+| learning | `8646` |
+| orchestrator | `8647` |
+| researcher | `8648` |
+| writer | `8649` |
+
+Then point Workspace at the one you care about, e.g. `HERMES_API_URL=http://127.0.0.1:8649` for writer.
+
+3. **Multiplex (shared listener)** — on the default profile set `gateway.multiplex_profiles: true` and run a single default gateway. Secondary profiles must **not** enable port-binding platforms (`api_server`, webhooks, …); reach them via `/p/<profile>/` on the shared listener. See Hermes Agent docs: *Running Many Gateways at Once*.
+
+> **Symlinked `.env` pitfall:** if `~/.hermes/profiles/<name>/.env` → `~/.hermes/.env`, every profile shares the same `API_SERVER_PORT`. Put per-profile ports in that profile's `config.yaml`, or break the symlink and give each profile its own `.env`.
 
 ### Live re-pairing (no restart)
 
@@ -411,6 +468,7 @@ If you've already started the workspace, change either URL from **Settings → C
 ### Troubleshooting
 
 - **`Could not reach Hermes gateway on 8645, 8642, or 8643`** — gateway isn't running, or `HERMES_API_URL` points somewhere unreachable. Run `hermes gateway run` and re-check.
+- **`api_server_port_in_use` / Port 8642 already in use** — more than one profile has `API_SERVER_ENABLED=true` without unique `API_SERVER_PORT`s. Disable API server on unused profiles, or assign distinct ports / use multiplex. See [API server & multi-profile gateways](#api-server--multi-profile-gateways).
 - **Workspace shows "portable mode" / extended APIs missing** — dashboard isn't running. Start `hermes dashboard` in another terminal and refresh.
 - **Sessions probe says unavailable / UI claims Offline but pairing should be live** — verify `curl http://localhost:3000/api/sessions` before starting another gateway. If it returns sessions (or an empty array), the backend pairing is alive and the UI needs a refresh/reprobe.
 - **Chat send fails on `gpt-5.4` / Codex** — Codex CLI auth is stale. Run `codex login`, then retry the chat without starting another gateway.

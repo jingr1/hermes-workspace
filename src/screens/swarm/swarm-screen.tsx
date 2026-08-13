@@ -6,12 +6,14 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import {
   Activity01Icon,
   ChartLineData02Icon,
+  CpuIcon,
   ComputerTerminal01Icon,
   FlashIcon,
   RefreshIcon,
   ViewIcon,
 } from '@hugeicons/core-free-icons'
 import { buildTmuxAttachCommand } from '@/lib/tmux-attach'
+import { cn } from '@/lib/utils'
 import { WorkflowHelpModal } from '@/components/workflow-help-modal'
 import {
   getOnlineStatus,
@@ -118,8 +120,8 @@ export function SwarmScreen() {
     return params.get('view') === 'terminals' ? 'terminals' : 'cards'
   })
 
-  const healthQuery = useQuery({ queryKey: ['swarm', 'health'], queryFn: fetchHealth, refetchInterval: 60_000 })
-  const runtimeQuery = useQuery({ queryKey: ['swarm', 'runtime'], queryFn: fetchRuntime, refetchInterval: 30_000 })
+  const healthQuery = useQuery({ queryKey: ['operations', 'swarm-health'], queryFn: fetchHealth, refetchInterval: 30_000 })
+  const runtimeQuery = useQuery({ queryKey: ['operations', 'swarm-runtime'], queryFn: fetchRuntime, refetchInterval: 30_000 })
 
   const swarmMembers = useMemo(() => {
     return [...crew]

@@ -13,6 +13,7 @@ export type ProfileSummary = {
   description?: string
   systemPrompt?: string
   skillCount: number
+  mcpCount: number
   sessionCount: number
   hasEnv: boolean
   updatedAt?: string
@@ -114,6 +115,15 @@ function readYamlConfig(configPath: string): Record<string, unknown> {
   } catch {
     return {}
   }
+}
+
+function countMcpServers(config: Record<string, unknown>): number {
+  const servers = config.mcp_servers
+  if (!servers || typeof servers !== 'object' || Array.isArray(servers)) return 0
+  return Object.keys(servers).filter((key) => {
+    const entry = (servers as Record<string, unknown>)[key]
+    return entry !== null && entry !== undefined
+  }).length
 }
 
 function countFilesRecursive(
@@ -255,6 +265,7 @@ async function fetchDashboardProfiles(): Promise<{
       provider: p.provider,
       description: p.description,
       skillCount: p.skill_count ?? 0,
+      mcpCount: 0,
       sessionCount: p.session_count ?? 0,
       hasEnv: p.has_env ?? false,
       updatedAt: p.updated_at,
@@ -406,6 +417,7 @@ export function listProfiles(): Array<ProfileSummary> {
         skillsDir,
         (full) => path.basename(full) === 'SKILL.md',
       )
+      const mcpCount = countMcpServers(config)
       const sessionCount = countFilesRecursive(sessionsDir, (full) =>
         /\.(jsonl|json|sqlite|db)$/i.test(full),
       )
@@ -436,6 +448,7 @@ export function listProfiles(): Array<ProfileSummary> {
         description: extractDescription(config) || undefined,
         systemPrompt: extractSystemPrompt(config, profilePath) || undefined,
         skillCount,
+        mcpCount,
         sessionCount,
         hasEnv: fs.existsSync(envPath),
         updatedAt: latestMtime([
@@ -481,6 +494,7 @@ export function listProfiles(): Array<ProfileSummary> {
       path.join(root, 'skills'),
       (full) => path.basename(full) === 'SKILL.md',
     ),
+    mcpCount: countMcpServers(config),
     sessionCount: countFilesRecursive(path.join(root, 'sessions'), (full) =>
       /\.(jsonl|json|sqlite|db)$/i.test(full),
     ),

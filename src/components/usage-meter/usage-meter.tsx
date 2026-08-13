@@ -495,8 +495,17 @@ export function UsageMeter({ visible = true }: { visible?: boolean }) {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err)
       setError(errorMessage)
+      // Suppress toast for known non-actionable errors: unauthorized, not found,
+      // gateway timeout/unavailable, fetch failures. These are expected when the
+      // gateway isn't running and would spam the user on every 10s poll.
       const silent =
-        /unauthorized/i.test(errorMessage) || /not found/i.test(errorMessage)
+        /unauthorized/i.test(errorMessage) ||
+        /not found/i.test(errorMessage) ||
+        /gateway/i.test(errorMessage) ||
+        /timeout/i.test(errorMessage) ||
+        /failed to fetch/i.test(errorMessage) ||
+        /network/i.test(errorMessage) ||
+        /econnrefused/i.test(errorMessage)
       if (!silent) {
         toast('Failed to fetch usage data', { type: 'error' })
       }

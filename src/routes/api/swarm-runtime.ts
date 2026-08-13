@@ -123,6 +123,18 @@ function tmuxPaneCommand(sessionName: string): Promise<string | null> {
   })
 }
 
+/** Capture the last N lines of tmux pane content to check for TUI readiness. */
+function tmuxCapturePane(sessionName: string, lines = 6): Promise<string> {
+  return new Promise((resolve) => {
+    const child = execFile(
+      resolveTmuxBin(),
+      ['capture-pane', '-p', '-t', `${sessionName}:0`, '-S', `-${lines}`],
+      (error, stdout) => resolve(error ? '' : stdout.toString().trim()),
+    )
+    setTimeout(() => { resolve(''); try { child.kill() } catch {} }, 2000)
+  })
+}
+
 function tmuxIsInstalled(): Promise<boolean> {
   return new Promise((resolve) => {
     const child = execFile(resolveTmuxBin(), ['-V'], (error) => resolve(!error))
@@ -185,6 +197,15 @@ async function buildEntry(
       effectiveState = 'blocked'
       effectiveCheckpointStatus = 'blocked'
       effectiveBlockedReason = `Process exited without checkpoint (pane returned to ${paneCmd})`
+    } else {
+      // TUI process is still alive — check if it's actually at a ready
+      // prompt (finished the task but never wrote a DONE checkpoint).
+      // This happens with simple tasks like ping that return immediately.
+      const paneText = await tmuxCapturePane(matched, 8)
+      if (paneText.includes('❯') && paneText.includes('ready')) {
+        effectiveState = 'idle'
+        effectiveCheckpointStatus = 'done'
+      }
     }
   }
   let terminalKind: SwarmTerminalKind = 'none'

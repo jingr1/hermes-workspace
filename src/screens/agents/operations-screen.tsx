@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { motion } from 'motion/react'
 import { seedAgentPresets } from './agent-presets'
 import {
@@ -16,7 +16,8 @@ import { OperationsAgentDetail } from './components/operations-agent-detail'
 import { OperationsNewAgentModal } from './components/operations-new-agent-modal'
 import { OperationsSettingsModal } from './components/operations-settings-modal'
 import { FullOutputsView } from './components/full-outputs-view'
-import { AgentBusPanel } from './components/agent-bus-panel'
+import { AgentBusPanel, type AgentBusData } from './components/agent-bus-panel'
+import { TeamOverview, type TeamOverviewFilter } from './components/team-overview'
 import { useOperations } from './hooks/use-operations'
 
 export const THEME_STYLE: CSSProperties = {
@@ -49,12 +50,16 @@ export function OperationsScreen() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsAgentId, setSettingsAgentId] = useState<string | null>(null)
   const [view, setView] = useState<'overview' | 'outputs'>('overview')
+  const [filter, setFilter] = useState<TeamOverviewFilter>('all')
   const {
     agents,
     recentActivity,
     configQuery,
     sessionsQuery,
     cronJobsQuery,
+    swarmRuntimeQuery,
+    swarmHealthQuery,
+    crewStatusQuery,
     settings,
     saveSettings,
     defaultModel,
@@ -64,7 +69,40 @@ export function OperationsScreen() {
     isSavingAgent,
     deleteAgent,
     isDeletingAgent,
+    toggleSkill,
+    isTogglingSkill,
+    toggleMcp,
+    isTogglingMcp,
+    removeMcp,
+    isRemovingMcp,
   } = useOperations()
+
+  const agentBusData: AgentBusData = useMemo(() => {
+    const crew = crewStatusQuery.data?.crew ?? []
+    const workers = swarmHealthQuery.data?.workers ?? []
+    const entries = (swarmRuntimeQuery.data?.entries ?? []).map((entry) => ({
+      ...entry,
+      displayName: entry.workerId,
+      blockedReason: entry.blockedReason ?? null,
+    }))
+    return {
+      crew,
+      workers,
+      entries,
+      healthSummary: swarmHealthQuery.data?.summary ?? {},
+      lastCheck: Math.max(
+        crewStatusQuery.data?.fetchedAt ?? 0,
+        swarmHealthQuery.data?.checkedAt ?? 0,
+        swarmRuntimeQuery.data?.checkedAt ?? 0,
+      ),
+    }
+  }, [crewStatusQuery.data, swarmHealthQuery.data, swarmRuntimeQuery.data])
+
+  const filteredAgents = useMemo(() => {
+    if (filter === 'all') return agents
+    if (filter === 'needsSetup') return agents.filter((agent) => agent.needsSetup)
+    return agents.filter((agent) => agent.status === filter)
+  }, [agents, filter])
 
   const isLoading =
     configQuery.isPending || sessionsQuery.isPending || cronJobsQuery.isPending
@@ -165,11 +203,19 @@ export function OperationsScreen() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.05, duration: 0.25 }}
             >
-              <AgentBusPanel />
+              <TeamOverview agents={agents} filter={filter} onFilterChange={setFilter} />
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.08, duration: 0.25 }}
+            >
+              <AgentBusPanel data={agentBusData} />
             </motion.div>
 
             <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {agents.map((agent, index) => (
+              {filteredAgents.map((agent, index) => (
                 <motion.div
                   key={agent.id}
                   initial={{ opacity: 0, y: 12 }}
@@ -186,7 +232,7 @@ export function OperationsScreen() {
                 type="button"
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: agents.length * 0.04, duration: 0.22 }}
+                transition={{ delay: filteredAgents.length * 0.04, duration: 0.22 }}
                 onClick={() => setNewAgentOpen(true)}
                 className="flex min-h-[19rem] flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-[var(--theme-border)] bg-[var(--theme-card)] p-4 text-center shadow-[0_20px_60px_color-mix(in_srgb,var(--theme-shadow)_10%,transparent)] transition-colors hover:border-[var(--theme-accent)] hover:bg-[var(--theme-accent-soft)]"
               >
@@ -268,6 +314,12 @@ export function OperationsScreen() {
         }}
         isSaving={isSavingAgent}
         isDeleting={isDeletingAgent}
+        onToggleSkill={toggleSkill}
+        isTogglingSkill={isTogglingSkill}
+        onToggleMcp={toggleMcp}
+        isTogglingMcp={isTogglingMcp}
+        onRemoveMcp={removeMcp}
+        isRemovingMcp={isRemovingMcp}
       />
     </main>
   )

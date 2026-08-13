@@ -1,13 +1,28 @@
 /**
  * Pre-configured agent metadata for Operations screen.
  * Called on first load to populate localStorage if agents have no metadata yet.
+ *
+ * Stage 3: presets now include capability recommendations —
+ * skills, toolsets, and MCP server hints — not just system prompt text.
+ * When a user selects a template, the New Agent modal can pre-fill
+ * these recommendations for the user to confirm.
  */
+
+export type AgentPresetCapabilities = {
+  /** Skill names (matching ~/.hermes/skills/ dirs) to enable for this role. */
+  skills: string[]
+  /** Toolset names from config.yaml `toolsets` array. */
+  toolsets: string[]
+  /** MCP server names (matching config.yaml `mcp_servers` keys) to recommend. */
+  mcpServers: string[]
+}
 
 export type AgentPreset = {
   emoji: string
   description: string
   systemPrompt: string
   color: string
+  capabilities: AgentPresetCapabilities
 }
 
 export const AGENT_PRESETS: Record<string, AgentPreset> = {
@@ -29,6 +44,11 @@ Context: You're managing X for an AI startup (OpenClaw/ClawSuite/Hermes). Curren
 
 Output format: Always provide ready-to-post copy. Include suggested posting time. Flag anything that needs approval before posting.`,
     color: '#3b82f6',
+    capabilities: {
+      skills: ['xurl', 'youtube-content', 'gif-search'],
+      toolsets: ['web', 'terminal', 'file'],
+      mcpServers: [],
+    },
   },
   builder: {
     emoji: '🔨',
@@ -48,6 +68,11 @@ Style: Ship fast, iterate. Prefer small focused PRs over big bangs. Always run t
 
 Output format: Code first, explanation second. Show diffs when modifying existing code. Flag breaking changes and migration needs.`,
     color: '#10b981',
+    capabilities: {
+      skills: ['github-pr-workflow', 'github-code-review', 'github-issues', 'github-repo-management', 'test-driven-development', 'systematic-debugging', 'codebase-inspection'],
+      toolsets: ['terminal', 'file', 'web'],
+      mcpServers: [],
+    },
   },
   scribe: {
     emoji: '✍️',
@@ -65,6 +90,11 @@ Voice: Clear, direct, developer-friendly. No jargon without explanation. Show do
 
 Output format: Markdown formatted. Include frontmatter suggestions for blog posts. Flag sections that need screenshots or demos.`,
     color: '#8b5cf6',
+    capabilities: {
+      skills: ['docx', 'pdf', 'powerpoint', 'markdown-viewer', 'ocr-and-documents'],
+      toolsets: ['terminal', 'file', 'web'],
+      mcpServers: [],
+    },
   },
   ops: {
     emoji: '📊',
@@ -82,6 +112,11 @@ Style: Data-driven, concise, actionable. Every report should end with "recommend
 
 Output format: Structured reports with sections: Summary, Metrics, Insights, Risks, Recommended Actions. Use bullet points, not paragraphs.`,
     color: '#f59e0b',
+    capabilities: {
+      skills: ['google-workspace', 'airtable', 'notion', 'xlsx'],
+      toolsets: ['web', 'terminal', 'file'],
+      mcpServers: [],
+    },
   },
   trader: {
     emoji: '🎰',
@@ -101,24 +136,66 @@ Risk rules: DRY RUN mode by default. Never recommend live trades without explici
 
 Output format: Signal cards with: Market, Direction (YES/NO), Materiality (0-1), Edge %, Suggested size, Reasoning (2-3 sentences). Daily P&L summary.`,
     color: '#ef4444',
+    capabilities: {
+      skills: ['polymarket'],
+      toolsets: ['web', 'terminal'],
+      mcpServers: [],
+    },
+  },
+  researcher: {
+    emoji: '🔬',
+    description: 'Research agent for facts, papers, and competitive analysis',
+    systemPrompt: `You are Researcher, a fact-finding and analysis agent.
+
+Your role:
+- Establish facts through web search, academic papers, and source tracing
+- Perform competitive analysis with evidence-backed findings
+- Validate claims and data points from other agents
+- Summarize findings without strategy or recommendations
+- Respond to challenges with additional evidence
+
+Style: Fact-first, no opinions. Cite sources for every claim. Distinguish between "confirmed" and "unverified" findings. Use tables for comparison data.
+
+Output format: Structured findings with: Claim, Source, Confidence (high/medium/low), Notes. Never include recommendations — that's the architect's job.`,
+    color: '#06b6d4',
+    capabilities: {
+      skills: ['arxiv', 'youtube-content', 'blogwatcher', 'llm-wiki'],
+      toolsets: ['web', 'browser', 'terminal', 'file'],
+      mcpServers: [],
+    },
   },
   'pc1-coder': {
     emoji: '💻',
     description: 'Local coding model (Qwen3-Coder 30B)',
     systemPrompt: 'You are a coding assistant running on local hardware. Focus on code generation, refactoring, and debugging. Be concise.',
     color: '#06b6d4',
+    capabilities: {
+      skills: ['codebase-inspection'],
+      toolsets: ['terminal', 'file'],
+      mcpServers: [],
+    },
   },
   'pc1-planner': {
     emoji: '📋',
     description: 'Local planning model (Qwen3-30B Sonnet distill)',
     systemPrompt: 'You are a planning assistant. Break down complex tasks into actionable steps. Create clear task lists with dependencies and priorities.',
     color: '#14b8a6',
+    capabilities: {
+      skills: ['writing-plans'],
+      toolsets: ['terminal', 'file'],
+      mcpServers: [],
+    },
   },
   'pc1-critic': {
     emoji: '🔍',
     description: 'Local critic model (Qwen3-14B Opus distill)',
     systemPrompt: 'You are a code and content reviewer. Find bugs, logical errors, and improvements. Be thorough but constructive.',
     color: '#f97316',
+    capabilities: {
+      skills: ['github-code-review', 'receiving-code-review'],
+      toolsets: ['terminal', 'file'],
+      mcpServers: [],
+    },
   },
 }
 
@@ -135,7 +212,10 @@ export function seedAgentPresets(): void {
       localStorage.setItem(
         key,
         JSON.stringify({
-          ...preset,
+          emoji: preset.emoji,
+          description: preset.description,
+          systemPrompt: preset.systemPrompt,
+          color: preset.color,
           createdAt: new Date().toISOString(),
         }),
       )

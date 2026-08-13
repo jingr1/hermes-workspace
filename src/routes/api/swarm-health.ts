@@ -116,9 +116,15 @@ export function parseModelAuthEventsFromText(text: string): {
     /no .*oauth token found/i,
     /copilot token validation failed/i,
     /classic pat|classic personal access token/i,
-    /\b401\b/i,
-    /\bunauthorized\b/i,
-    /\bauthentication\b/i,
+    /\bapi[_ ]?key.*invalid\b/i,
+    /\bauth(entication)? (failed|error)\b/i,
+  ]
+  // Lines that look like auth errors but are actually auxiliary client
+  // warnings (vision/compression/skills_hub/etc.) — not the primary model.
+  const auxiliaryNoisePatterns = [
+    /auxiliary_client/i,
+    /resolve_provider_client/i,
+    /will 401 on auth-required/i,
   ]
   const fallbackPatterns = [
     /falling through to fallback:\s*([^/\s]+)\/([^\s]+)/i,
@@ -136,6 +142,9 @@ export function parseModelAuthEventsFromText(text: string): {
     if (!line.trim()) continue
     const tsMatch = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:,\d{3})?/)
     const ts = tsMatch?.[1] ?? null
+    // Skip auxiliary client warnings — they reference secondary providers
+    // (vision, compression, etc.) not the primary model.
+    if (auxiliaryNoisePatterns.some((pattern) => pattern.test(line))) continue
     if (authPatterns.some((pattern) => pattern.test(line))) {
       authErrorCount += 1
       lastAuthErrorAt = ts

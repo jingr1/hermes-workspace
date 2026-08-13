@@ -3,9 +3,14 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowRight01Icon,
   Clock01Icon,
-  PauseIcon,
   PlayIcon,
   Settings01Icon,
+  Chatting01Icon,
+  Folder01Icon,
+  PuzzleIcon,
+  Link01Icon,
+  RefreshIcon,
+  AlertCircleIcon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { AnimatePresence, motion } from 'motion/react'
@@ -19,12 +24,22 @@ import { cn } from '@/lib/utils'
 import { useAgentChat, type OperationsChatMessage } from '../hooks/use-agent-chat'
 import type { OperationsAgent } from '../hooks/use-operations'
 
-function getStatusStyles(status: OperationsAgent['status']) {
+function getStatusStyles(status: OperationsAgent['status'], needsSetup: boolean) {
+  if (needsSetup) {
+    return {
+      dot: 'bg-amber-400',
+      ring: 'text-amber-400',
+      label: 'Needs setup',
+      border: 'border-amber-300/40',
+    }
+  }
+
   if (status === 'error') {
     return {
       dot: 'bg-red-500',
       ring: 'text-red-500',
       label: 'Error',
+      border: 'border-red-300/30',
     }
   }
 
@@ -33,6 +48,7 @@ function getStatusStyles(status: OperationsAgent['status']) {
       dot: 'bg-emerald-500',
       ring: 'text-emerald-500',
       label: 'Active',
+      border: 'border-emerald-300/30',
     }
   }
 
@@ -40,6 +56,7 @@ function getStatusStyles(status: OperationsAgent['status']) {
     dot: 'bg-primary-300',
     ring: 'text-primary-300',
     label: 'Idle',
+    border: 'border-[var(--theme-border)]',
   }
 }
 
@@ -62,6 +79,24 @@ function displayJobName(jobName: string, agentId: string) {
 
 function describeJob(job: OperationsAgent['jobs'][number]) {
   return job.description?.trim() || job.schedule
+}
+
+function formatShortPath(path?: string): string {
+  if (!path) return 'No workspace'
+  const trimmed = path.replace(/\\/g, '/')
+  const parts = trimmed.split('/').filter(Boolean)
+  if (parts.length === 0) return 'No workspace'
+  if (parts.length <= 2) return `/${parts.join('/')}`
+  return `.../${parts.slice(-2).join('/')}`
+}
+
+function formatModelLabel(agent: OperationsAgent): string {
+  if (!agent.model) return 'No model'
+  const provider = agent.provider || agent.model.split('/')[0] || 'model'
+  const modelName = agent.model.includes('/')
+    ? agent.model.slice(agent.model.indexOf('/') + 1)
+    : agent.model
+  return `${provider} / ${modelName}`
 }
 
 export function OperationsInlineChat({
@@ -174,13 +209,12 @@ export function OperationsAgentCard({
   onOpenSettings: (agentId: string) => void
 }) {
   const queryClient = useQueryClient()
-  const status = getStatusStyles(agent.status)
+  const status = getStatusStyles(agent.status, agent.needsSetup)
   const displayName = stripEmojiPrefix(agent.name)
   const [showCronPanel, setShowCronPanel] = useState(false)
-  const [isPaused, setIsPaused] = useState(false)
+  const [showChat, setShowChat] = useState(false)
   const { messages, sendMessage, isSending, error } = useAgentChat(agent.sessionKey)
   const cronJobCount = agent.jobs.length
-  const isActive = agent.status === 'active' && !isPaused
 
   const toggleMutation = useMutation({
     mutationFn: async (payload: { jobId: string; enabled: boolean }) =>
@@ -212,18 +246,66 @@ export function OperationsAgentCard({
     },
   })
 
-  async function handlePlayPause() {
-    if (isActive) {
-      setIsPaused(true)
+  async function handleRunTask() {
+    if (agent.needsSetup) {
+      onOpenSettings(agent.id)
       return
     }
-
-    setIsPaused(false)
     await sendMessage('Run your primary task now')
+    setShowChat(true)
+    toast('Task started', { type: 'success' })
   }
 
+  const isBlocked = agent.runtimeState === 'blocked' || agent.needsHuman
+
+  const [recovering, setRecovering] = useState(false)
+
+  async function handleRecover() {
+    setRecovering(true)
+    try {
+      // Step 1: Stop the tmux session (kills old TUI + clears runtime.json)
+      const stopRes = await fetch('/api/swarm-tmux-stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workerId: agent.id }),
+      })
+      const stopPayload = (await stopRes.json()) as { error?: string }
+      if (!stopRes.ok) {
+        throw new Error(stopPayload.error || `Stop failed: HTTP ${stopRes.status}`)
+      }
+
+      // Step 2: Start a fresh tmux session (loads latest config.yaml)
+      const startRes = await fetch('/api/swarm-tmux-start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workerId: agent.id }),
+      })
+      const startPayload = (await startRes.json()) as { error?: string; started?: boolean; alreadyRunning?: boolean }
+      if (!startRes.ok) {
+        throw new Error(startPayload.error || `Start failed: HTTP ${startRes.status}`)
+      }
+
+      toast(`${agent.id} restarted successfully`, { type: 'success' })
+      await queryClient.invalidateQueries({ queryKey: ['operations', 'swarm-runtime'] })
+      await queryClient.invalidateQueries({ queryKey: ['operations', 'sessions'] })
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to recover', { type: 'error' })
+    } finally {
+      setRecovering(false)
+    }
+  }
+
+  const latestOutput = agent.recentOutputs[0]
+
   return (
-    <article className="flex min-h-[19rem] flex-col rounded-[1.5rem] border border-[var(--theme-border)] bg-[var(--theme-card)] p-3 shadow-[0_20px_60px_color-mix(in_srgb,var(--theme-shadow)_14%,transparent)]">
+    <article
+      className={cn(
+        'group flex min-h-[20rem] flex-col rounded-[1.5rem] border bg-[var(--theme-card)] p-3 shadow-[0_20px_60px_color-mix(in_srgb,var(--theme-shadow)_14%,transparent)] transition-all',
+        status.border,
+        agent.needsSetup && 'bg-amber-300/5',
+      )}
+    >
+      {/* Header toolbar */}
       <div className="relative flex min-h-8 items-center">
         <div className="absolute left-0 flex items-center">
           <button
@@ -249,20 +331,24 @@ export function OperationsAgentCard({
         </div>
 
         <div className="flex w-full justify-center px-20">
-          <h3 className="min-w-0 text-center text-sm font-semibold text-[var(--theme-text)]">
-          <span className="inline-flex max-w-full items-center justify-center gap-2">
-            <span className="truncate">{displayName}</span>
-            <span
-              className={cn(
-                'h-2 w-2 shrink-0 rounded-full',
-                agent.status === 'active' && !isPaused && 'animate-pulse',
-                status.dot,
-              )}
-              aria-label={status.label}
-              title={status.label}
-            />
-          </span>
-          </h3>
+          <button
+            type="button"
+            onClick={() => onOpenSettings(agent.id)}
+            className="min-w-0 text-center text-sm font-semibold text-[var(--theme-text)] hover:text-[var(--theme-accent-strong)]"
+          >
+            <span className="inline-flex max-w-full items-center justify-center gap-2">
+              <span className="truncate">{displayName}</span>
+              <span
+                className={cn(
+                  'h-2 w-2 shrink-0 rounded-full',
+                  agent.status === 'active' && !agent.needsSetup && 'animate-pulse',
+                  status.dot,
+                )}
+                aria-label={status.label}
+                title={status.label}
+              />
+            </span>
+          </button>
         </div>
 
         <div className="absolute right-0 flex items-center gap-1">
@@ -271,20 +357,14 @@ export function OperationsAgentCard({
             aria-label={
               agent.needsSetup
                 ? `Configure ${displayName} before running`
-                : isActive ? `Pause ${displayName}` : `Run ${displayName} now`
+                : `Run ${displayName} now`
             }
-            onClick={() => {
-              if (agent.needsSetup) {
-                onOpenSettings(agent.id)
-                return
-              }
-              void handlePlayPause()
-            }}
-            disabled={(isSending && !isActive)}
+            onClick={() => void handleRunTask()}
+            disabled={isSending}
             title={
               agent.needsSetup
                 ? 'No model configured — open settings to set one up'
-                : undefined
+                : 'Run primary task'
             }
             className={cn(
               'inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-[var(--theme-bg)] disabled:cursor-not-allowed disabled:opacity-60',
@@ -293,11 +373,7 @@ export function OperationsAgentCard({
                 : 'text-[var(--theme-muted)] hover:text-[var(--theme-text)]',
             )}
           >
-            <HugeiconsIcon
-              icon={isActive ? PauseIcon : PlayIcon}
-              size={16}
-              strokeWidth={1.8}
-            />
+            <HugeiconsIcon icon={PlayIcon} size={16} strokeWidth={1.8} />
           </button>
 
           <button
@@ -311,7 +387,12 @@ export function OperationsAgentCard({
         </div>
       </div>
 
-      <div className="flex flex-col items-center gap-1 px-2 py-2 text-center">
+      {/* Identity section */}
+      <button
+        type="button"
+        onClick={() => onOpenSettings(agent.id)}
+        className="flex flex-col items-center gap-1 px-2 py-2 text-center"
+      >
         <div className="relative flex size-12 shrink-0 items-center justify-center">
           <AgentProgress
             value={agent.progressValue}
@@ -337,24 +418,79 @@ export function OperationsAgentCard({
         </div>
 
         <p className="w-full truncate text-[11px] text-[var(--theme-muted)]">
-          {agent.meta.description || 'No description'}
+          {agent.meta.description || agent.description || 'No description'}
         </p>
-        <p className="w-full truncate text-[10px] text-[var(--theme-muted)]/80">
-          {agent.jobs.length > 0 ? `${agent.jobs.length} scheduled job${agent.jobs.length === 1 ? '' : 's'}` : 'Manual only'}
-        </p>
-        {agent.needsSetup ? (
-          <button
-            type="button"
-            onClick={() => onOpenSettings(agent.id)}
-            className="mt-1 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-amber-300/40 bg-amber-300/10 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-amber-200 transition-colors hover:bg-amber-300/20"
-            title="This agent has no model configured. Click to set one up."
-          >
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-300" />
-            Needs setup — click to configure
-          </button>
-        ) : null}
+      </button>
+
+      {/* Capabilities & resources */}
+      <div className="mx-2 grid grid-cols-2 gap-1.5 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2.5 py-2 text-[10px] text-[var(--theme-muted)]">
+        <div className="flex items-center gap-1.5">
+          <HugeiconsIcon icon={PuzzleIcon} size={11} strokeWidth={2} />
+          <span className="truncate">
+            {agent.capabilities.skills.length} skill
+            {agent.capabilities.skills.length === 1 ? '' : 's'}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <HugeiconsIcon icon={Link01Icon} size={11} strokeWidth={2} />
+          <span className="truncate">
+            {agent.capabilities.mcpServers.length} MCP
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <HugeiconsIcon icon={Folder01Icon} size={11} strokeWidth={2} />
+          <span className="truncate" title={agent.resources.workspace}>
+            {formatShortPath(agent.resources.workspace)}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="font-medium text-[var(--theme-text)]">
+            {formatModelLabel(agent)}
+          </span>
+        </div>
       </div>
 
+      {/* Needs setup banner */}
+      {agent.needsSetup ? (
+        <button
+          type="button"
+          onClick={() => onOpenSettings(agent.id)}
+          className="mx-2 mt-2 inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-300/40 bg-amber-300/10 px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-amber-200 transition-colors hover:bg-amber-300/20"
+        >
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-300" />
+          {agent.health.issues.length > 0
+            ? agent.health.issues.join(' · ')
+            : 'Needs setup'}
+        </button>
+      ) : null}
+
+      {/* Blocked / needs human banner */}
+      {isBlocked ? (
+        <div className="mx-2 mt-2 rounded-lg border border-red-300/40 bg-red-300/10 px-2.5 py-2">
+          <div className="flex items-start gap-2">
+            <HugeiconsIcon icon={AlertCircleIcon} size={14} strokeWidth={2} className="mt-0.5 shrink-0 text-red-400" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-red-300">
+                {agent.needsHuman ? 'Needs human' : 'Blocked'}
+              </p>
+              <p className="mt-0.5 line-clamp-2 text-[11px] text-red-200/80">
+                {agent.blockedReason || 'Worker is blocked. Check runtime state.'}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleRecover()}
+            disabled={recovering}
+            className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-red-300/30 bg-red-300/10 px-2 py-1.5 text-[11px] font-medium text-red-200 transition-colors hover:bg-red-300/20 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <HugeiconsIcon icon={RefreshIcon} size={12} strokeWidth={2} className={recovering ? 'animate-spin' : ''} />
+            {recovering ? 'Restarting…' : 'Restart session'}
+          </button>
+        </div>
+      ) : null}
+
+      {/* Cron mini panel */}
       <AnimatePresence initial={false}>
         {showCronPanel ? (
           <motion.section
@@ -365,10 +501,10 @@ export function OperationsAgentCard({
             transition={{ duration: 0.18, ease: 'easeOut' }}
             className="overflow-hidden"
           >
-            <div className="mb-4 rounded-[1.25rem] border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-3">
+            <div className="mx-2 mb-3 mt-2 rounded-[1.25rem] border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-3">
               {agent.jobs.length > 0 ? (
                 <>
-                  <div className="max-h-[200px] space-y-2 overflow-y-auto pr-1">
+                  <div className="max-h-[180px] space-y-2 overflow-y-auto pr-1">
                     {agent.jobs.map((job) => (
                       <div
                         key={job.id}
@@ -439,15 +575,75 @@ export function OperationsAgentCard({
         ) : null}
       </AnimatePresence>
 
-      <div className="min-h-0 flex-1">
-        <OperationsInlineChat
-          agentName={agent.name}
-          messages={messages}
-          sendMessage={sendMessage}
-          isSending={isSending}
-          error={error}
-        />
+      {/* Activity summary */}
+      <div className="mx-2 mt-auto rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2">
+        <p className="flex items-center gap-1.5 text-[10px] font-medium text-[var(--theme-muted)]">
+          <span className={cn('h-1.5 w-1.5 rounded-full', status.dot)} />
+          {agent.status === 'active'
+            ? 'Active'
+            : agent.status === 'error'
+              ? 'Error'
+              : 'Idle'}
+          <span className="text-[var(--theme-muted)]/70">·</span>
+          <span className="truncate">{agent.activityLabel}</span>
+        </p>
+        {latestOutput ? (
+          <p className="mt-1 line-clamp-2 text-[11px] text-[var(--theme-text)]">
+            {latestOutput.summary}
+          </p>
+        ) : (
+          <p className="mt-1 text-[11px] text-[var(--theme-muted)]">
+            No recent output
+          </p>
+        )}
       </div>
+
+      {/* Quick actions */}
+      <div className="mt-2 flex gap-2 px-2 pb-1">
+        <Button
+          size="sm"
+          className="h-8 flex-1 rounded-xl bg-[var(--theme-accent)] text-xs font-medium text-primary-950 hover:bg-[var(--theme-accent-strong)] disabled:opacity-60"
+          onClick={() => void handleRunTask()}
+          disabled={isSending}
+        >
+          <HugeiconsIcon icon={PlayIcon} size={14} strokeWidth={1.9} />
+          Run task
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          className={cn(
+            'h-8 flex-1 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] text-xs font-medium text-[var(--theme-text)] hover:bg-[var(--theme-card2)]',
+            showChat && 'border-[var(--theme-accent)] bg-[var(--theme-accent-soft)]',
+          )}
+          onClick={() => setShowChat((value) => !value)}
+        >
+          <HugeiconsIcon icon={Chatting01Icon} size={14} strokeWidth={1.9} />
+          {showChat ? 'Hide chat' : 'Chat'}
+        </Button>
+      </div>
+
+      {/* Inline chat */}
+      <AnimatePresence initial={false}>
+        {showChat ? (
+          <motion.div
+            key="inline-chat"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="mt-2 overflow-hidden px-2"
+          >
+            <OperationsInlineChat
+              agentName={agent.name}
+              messages={messages}
+              sendMessage={sendMessage}
+              isSending={isSending}
+              error={error}
+            />
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </article>
   )
 }

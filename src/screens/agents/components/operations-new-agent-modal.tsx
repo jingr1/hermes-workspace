@@ -5,7 +5,7 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { Button } from '@/components/ui/button'
 import { fetchModels, type GatewayModelCatalogEntry } from '@/lib/gateway-api'
 import { cn } from '@/lib/utils'
-import { AGENT_PRESETS } from '../agent-presets'
+import { AGENT_PRESETS, type AgentPresetCapabilities } from '../agent-presets'
 
 type PresetOption = {
   id: string
@@ -13,6 +13,7 @@ type PresetOption = {
   emoji: string
   description: string
   systemPrompt: string
+  capabilities?: AgentPresetCapabilities
 }
 
 const PRESET_OPTIONS: PresetOption[] = [
@@ -31,6 +32,7 @@ const PRESET_OPTIONS: PresetOption[] = [
       emoji: preset.emoji,
       description: preset.description,
       systemPrompt: preset.systemPrompt,
+      capabilities: preset.capabilities,
     })),
 ]
 
@@ -150,6 +152,7 @@ export function OperationsNewAgentModal({
   isSaving: boolean
 }) {
   const [presetId, setPresetId] = useState<string>('blank')
+  const [presetCapabilities, setPresetCapabilities] = useState<AgentPresetCapabilities | null>(null)
   const [name, setName] = useState('')
   const [emoji, setEmoji] = useState('🤖')
   const [model, setModel] = useState(defaultModel)
@@ -159,6 +162,7 @@ export function OperationsNewAgentModal({
   useEffect(() => {
     if (!open) return
     setPresetId('blank')
+    setPresetCapabilities(null)
     setName('')
     setEmoji('🤖')
     setModel(defaultModel)
@@ -169,11 +173,15 @@ export function OperationsNewAgentModal({
   function applyPreset(next: string) {
     setPresetId(next)
     const preset = PRESET_OPTIONS.find((entry) => entry.id === next)
-    if (!preset || preset.id === 'blank') return
+    if (!preset || preset.id === 'blank') {
+      setPresetCapabilities(null)
+      return
+    }
     setName((current) => current.trim() || preset.name)
     setEmoji(preset.emoji)
     setDescription(preset.description)
     setSystemPrompt(preset.systemPrompt)
+    setPresetCapabilities(preset.capabilities ?? null)
   }
 
   const modelsQuery = useQuery({
@@ -247,9 +255,45 @@ export function OperationsNewAgentModal({
             ))}
           </div>
           <p className="text-xs text-[var(--theme-muted)]">
-            Templates fill in emoji, description, and system prompt. You can edit
-            everything before creating.
+            Templates fill in emoji, description, system prompt, and recommended
+            capabilities. You can edit everything before creating.
           </p>
+          {presetCapabilities ? (
+            <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2.5">
+              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--theme-muted)]">
+                Recommended capabilities
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {presetCapabilities.skills.map((skill) => (
+                  <span
+                    key={skill}
+                    className="inline-flex items-center gap-1 rounded-md bg-[var(--theme-accent-soft)] px-2 py-1 text-[11px] text-[var(--theme-text)]"
+                  >
+                    🧩 {skill}
+                  </span>
+                ))}
+                {presetCapabilities.toolsets.map((toolset) => (
+                  <span
+                    key={toolset}
+                    className="inline-flex items-center gap-1 rounded-md bg-[var(--theme-card2)] px-2 py-1 text-[11px] text-[var(--theme-text)]"
+                  >
+                    🔧 {toolset}
+                  </span>
+                ))}
+                {presetCapabilities.mcpServers.map((mcp) => (
+                  <span
+                    key={mcp}
+                    className="inline-flex items-center gap-1 rounded-md bg-[var(--theme-card2)] px-2 py-1 text-[11px] text-[var(--theme-text)]"
+                  >
+                    🔗 {mcp}
+                  </span>
+                ))}
+              </div>
+              <p className="mt-1.5 text-[10px] text-[var(--theme-muted)]">
+                After creating, use the Capabilities tab to install and toggle these.
+              </p>
+            </div>
+          ) : null}
         </div>
 
         <div className="mt-4 grid gap-4 md:grid-cols-[1.2fr_0.6fr]">

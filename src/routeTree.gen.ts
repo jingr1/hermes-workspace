@@ -84,6 +84,7 @@ import { Route as ApiPathsRouteImport } from './routes/api/paths'
 import { Route as ApiOrchestratorStateRouteImport } from './routes/api/orchestrator-state'
 import { Route as ApiOrchestratorResumeRouteImport } from './routes/api/orchestrator-resume'
 import { Route as ApiOrchestratorActiveGatesRouteImport } from './routes/api/orchestrator-active-gates'
+import { Route as ApiModelsLocalRouteImport } from './routes/api/models-local'
 import { Route as ApiModelsRouteImport } from './routes/api/models'
 import { Route as ApiMemoryRouteImport } from './routes/api/memory'
 import { Route as ApiMediaRouteImport } from './routes/api/media'
@@ -137,9 +138,11 @@ import { Route as ApiProfilesToggleSkillRouteImport } from './routes/api/profile
 import { Route as ApiProfilesSkillsRouteImport } from './routes/api/profiles/skills'
 import { Route as ApiProfilesRenameRouteImport } from './routes/api/profiles/rename'
 import { Route as ApiProfilesReadRouteImport } from './routes/api/profiles/read'
+import { Route as ApiProfilesMcpRouteImport } from './routes/api/profiles/mcp'
 import { Route as ApiProfilesListRouteImport } from './routes/api/profiles/list'
 import { Route as ApiProfilesDeleteRouteImport } from './routes/api/profiles/delete'
 import { Route as ApiProfilesCreateRouteImport } from './routes/api/profiles/create'
+import { Route as ApiProfilesCapabilitiesRouteImport } from './routes/api/profiles/capabilities'
 import { Route as ApiProfilesActivateRouteImport } from './routes/api/profiles/activate'
 import { Route as ApiOauthPollTokenRouteImport } from './routes/api/oauth.poll-token'
 import { Route as ApiOauthDeviceCodeRouteImport } from './routes/api/oauth.device-code'
@@ -555,6 +558,11 @@ const ApiOrchestratorActiveGatesRoute =
     path: '/api/orchestrator-active-gates',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiModelsLocalRoute = ApiModelsLocalRouteImport.update({
+  id: '/api/models-local',
+  path: '/api/models-local',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiModelsRoute = ApiModelsRouteImport.update({
   id: '/api/models',
   path: '/api/models',
@@ -821,6 +829,11 @@ const ApiProfilesReadRoute = ApiProfilesReadRouteImport.update({
   path: '/api/profiles/read',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiProfilesMcpRoute = ApiProfilesMcpRouteImport.update({
+  id: '/api/profiles/mcp',
+  path: '/api/profiles/mcp',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiProfilesListRoute = ApiProfilesListRouteImport.update({
   id: '/api/profiles/list',
   path: '/api/profiles/list',
@@ -834,6 +847,11 @@ const ApiProfilesDeleteRoute = ApiProfilesDeleteRouteImport.update({
 const ApiProfilesCreateRoute = ApiProfilesCreateRouteImport.update({
   id: '/api/profiles/create',
   path: '/api/profiles/create',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiProfilesCapabilitiesRoute = ApiProfilesCapabilitiesRouteImport.update({
+  id: '/api/profiles/capabilities',
+  path: '/api/profiles/capabilities',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiProfilesActivateRoute = ApiProfilesActivateRouteImport.update({
@@ -1085,6 +1103,7 @@ export interface FileRoutesByFullPath {
   '/api/media': typeof ApiMediaRoute
   '/api/memory': typeof ApiMemoryRouteWithChildren
   '/api/models': typeof ApiModelsRoute
+  '/api/models-local': typeof ApiModelsLocalRoute
   '/api/orchestrator-active-gates': typeof ApiOrchestratorActiveGatesRoute
   '/api/orchestrator-resume': typeof ApiOrchestratorResumeRoute
   '/api/orchestrator-state': typeof ApiOrchestratorStateRoute
@@ -1167,9 +1186,11 @@ export interface FileRoutesByFullPath {
   '/api/oauth/device-code': typeof ApiOauthDeviceCodeRoute
   '/api/oauth/poll-token': typeof ApiOauthPollTokenRoute
   '/api/profiles/activate': typeof ApiProfilesActivateRoute
+  '/api/profiles/capabilities': typeof ApiProfilesCapabilitiesRoute
   '/api/profiles/create': typeof ApiProfilesCreateRoute
   '/api/profiles/delete': typeof ApiProfilesDeleteRoute
   '/api/profiles/list': typeof ApiProfilesListRoute
+  '/api/profiles/mcp': typeof ApiProfilesMcpRoute
   '/api/profiles/read': typeof ApiProfilesReadRoute
   '/api/profiles/rename': typeof ApiProfilesRenameRoute
   '/api/profiles/skills': typeof ApiProfilesSkillsRoute
@@ -1254,6 +1275,7 @@ export interface FileRoutesByTo {
   '/api/media': typeof ApiMediaRoute
   '/api/memory': typeof ApiMemoryRouteWithChildren
   '/api/models': typeof ApiModelsRoute
+  '/api/models-local': typeof ApiModelsLocalRoute
   '/api/orchestrator-active-gates': typeof ApiOrchestratorActiveGatesRoute
   '/api/orchestrator-resume': typeof ApiOrchestratorResumeRoute
   '/api/orchestrator-state': typeof ApiOrchestratorStateRoute
@@ -1336,9 +1358,11 @@ export interface FileRoutesByTo {
   '/api/oauth/device-code': typeof ApiOauthDeviceCodeRoute
   '/api/oauth/poll-token': typeof ApiOauthPollTokenRoute
   '/api/profiles/activate': typeof ApiProfilesActivateRoute
+  '/api/profiles/capabilities': typeof ApiProfilesCapabilitiesRoute
   '/api/profiles/create': typeof ApiProfilesCreateRoute
   '/api/profiles/delete': typeof ApiProfilesDeleteRoute
   '/api/profiles/list': typeof ApiProfilesListRoute
+  '/api/profiles/mcp': typeof ApiProfilesMcpRoute
   '/api/profiles/read': typeof ApiProfilesReadRoute
   '/api/profiles/rename': typeof ApiProfilesRenameRoute
   '/api/profiles/skills': typeof ApiProfilesSkillsRoute
@@ -1425,6 +1449,7 @@ export interface FileRoutesById {
   '/api/media': typeof ApiMediaRoute
   '/api/memory': typeof ApiMemoryRouteWithChildren
   '/api/models': typeof ApiModelsRoute
+  '/api/models-local': typeof ApiModelsLocalRoute
   '/api/orchestrator-active-gates': typeof ApiOrchestratorActiveGatesRoute
   '/api/orchestrator-resume': typeof ApiOrchestratorResumeRoute
   '/api/orchestrator-state': typeof ApiOrchestratorStateRoute
@@ -1507,9 +1532,11 @@ export interface FileRoutesById {
   '/api/oauth/device-code': typeof ApiOauthDeviceCodeRoute
   '/api/oauth/poll-token': typeof ApiOauthPollTokenRoute
   '/api/profiles/activate': typeof ApiProfilesActivateRoute
+  '/api/profiles/capabilities': typeof ApiProfilesCapabilitiesRoute
   '/api/profiles/create': typeof ApiProfilesCreateRoute
   '/api/profiles/delete': typeof ApiProfilesDeleteRoute
   '/api/profiles/list': typeof ApiProfilesListRoute
+  '/api/profiles/mcp': typeof ApiProfilesMcpRoute
   '/api/profiles/read': typeof ApiProfilesReadRoute
   '/api/profiles/rename': typeof ApiProfilesRenameRoute
   '/api/profiles/skills': typeof ApiProfilesSkillsRoute
@@ -1597,6 +1624,7 @@ export interface FileRouteTypes {
     | '/api/media'
     | '/api/memory'
     | '/api/models'
+    | '/api/models-local'
     | '/api/orchestrator-active-gates'
     | '/api/orchestrator-resume'
     | '/api/orchestrator-state'
@@ -1679,9 +1707,11 @@ export interface FileRouteTypes {
     | '/api/oauth/device-code'
     | '/api/oauth/poll-token'
     | '/api/profiles/activate'
+    | '/api/profiles/capabilities'
     | '/api/profiles/create'
     | '/api/profiles/delete'
     | '/api/profiles/list'
+    | '/api/profiles/mcp'
     | '/api/profiles/read'
     | '/api/profiles/rename'
     | '/api/profiles/skills'
@@ -1766,6 +1796,7 @@ export interface FileRouteTypes {
     | '/api/media'
     | '/api/memory'
     | '/api/models'
+    | '/api/models-local'
     | '/api/orchestrator-active-gates'
     | '/api/orchestrator-resume'
     | '/api/orchestrator-state'
@@ -1848,9 +1879,11 @@ export interface FileRouteTypes {
     | '/api/oauth/device-code'
     | '/api/oauth/poll-token'
     | '/api/profiles/activate'
+    | '/api/profiles/capabilities'
     | '/api/profiles/create'
     | '/api/profiles/delete'
     | '/api/profiles/list'
+    | '/api/profiles/mcp'
     | '/api/profiles/read'
     | '/api/profiles/rename'
     | '/api/profiles/skills'
@@ -1936,6 +1969,7 @@ export interface FileRouteTypes {
     | '/api/media'
     | '/api/memory'
     | '/api/models'
+    | '/api/models-local'
     | '/api/orchestrator-active-gates'
     | '/api/orchestrator-resume'
     | '/api/orchestrator-state'
@@ -2018,9 +2052,11 @@ export interface FileRouteTypes {
     | '/api/oauth/device-code'
     | '/api/oauth/poll-token'
     | '/api/profiles/activate'
+    | '/api/profiles/capabilities'
     | '/api/profiles/create'
     | '/api/profiles/delete'
     | '/api/profiles/list'
+    | '/api/profiles/mcp'
     | '/api/profiles/read'
     | '/api/profiles/rename'
     | '/api/profiles/skills'
@@ -2107,6 +2143,7 @@ export interface RootRouteChildren {
   ApiMediaRoute: typeof ApiMediaRoute
   ApiMemoryRoute: typeof ApiMemoryRouteWithChildren
   ApiModelsRoute: typeof ApiModelsRoute
+  ApiModelsLocalRoute: typeof ApiModelsLocalRoute
   ApiOrchestratorActiveGatesRoute: typeof ApiOrchestratorActiveGatesRoute
   ApiOrchestratorResumeRoute: typeof ApiOrchestratorResumeRoute
   ApiOrchestratorStateRoute: typeof ApiOrchestratorStateRoute
@@ -2171,9 +2208,11 @@ export interface RootRouteChildren {
   ApiOauthDeviceCodeRoute: typeof ApiOauthDeviceCodeRoute
   ApiOauthPollTokenRoute: typeof ApiOauthPollTokenRoute
   ApiProfilesActivateRoute: typeof ApiProfilesActivateRoute
+  ApiProfilesCapabilitiesRoute: typeof ApiProfilesCapabilitiesRoute
   ApiProfilesCreateRoute: typeof ApiProfilesCreateRoute
   ApiProfilesDeleteRoute: typeof ApiProfilesDeleteRoute
   ApiProfilesListRoute: typeof ApiProfilesListRoute
+  ApiProfilesMcpRoute: typeof ApiProfilesMcpRoute
   ApiProfilesReadRoute: typeof ApiProfilesReadRoute
   ApiProfilesRenameRoute: typeof ApiProfilesRenameRoute
   ApiProfilesSkillsRoute: typeof ApiProfilesSkillsRoute
@@ -2718,6 +2757,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiOrchestratorActiveGatesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/models-local': {
+      id: '/api/models-local'
+      path: '/api/models-local'
+      fullPath: '/api/models-local'
+      preLoaderRoute: typeof ApiModelsLocalRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/models': {
       id: '/api/models'
       path: '/api/models'
@@ -3089,6 +3135,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiProfilesReadRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/profiles/mcp': {
+      id: '/api/profiles/mcp'
+      path: '/api/profiles/mcp'
+      fullPath: '/api/profiles/mcp'
+      preLoaderRoute: typeof ApiProfilesMcpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/profiles/list': {
       id: '/api/profiles/list'
       path: '/api/profiles/list'
@@ -3108,6 +3161,13 @@ declare module '@tanstack/react-router' {
       path: '/api/profiles/create'
       fullPath: '/api/profiles/create'
       preLoaderRoute: typeof ApiProfilesCreateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/profiles/capabilities': {
+      id: '/api/profiles/capabilities'
+      path: '/api/profiles/capabilities'
+      fullPath: '/api/profiles/capabilities'
+      preLoaderRoute: typeof ApiProfilesCapabilitiesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/profiles/activate': {
@@ -3640,6 +3700,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMediaRoute: ApiMediaRoute,
   ApiMemoryRoute: ApiMemoryRouteWithChildren,
   ApiModelsRoute: ApiModelsRoute,
+  ApiModelsLocalRoute: ApiModelsLocalRoute,
   ApiOrchestratorActiveGatesRoute: ApiOrchestratorActiveGatesRoute,
   ApiOrchestratorResumeRoute: ApiOrchestratorResumeRoute,
   ApiOrchestratorStateRoute: ApiOrchestratorStateRoute,
@@ -3704,9 +3765,11 @@ const rootRouteChildren: RootRouteChildren = {
   ApiOauthDeviceCodeRoute: ApiOauthDeviceCodeRoute,
   ApiOauthPollTokenRoute: ApiOauthPollTokenRoute,
   ApiProfilesActivateRoute: ApiProfilesActivateRoute,
+  ApiProfilesCapabilitiesRoute: ApiProfilesCapabilitiesRoute,
   ApiProfilesCreateRoute: ApiProfilesCreateRoute,
   ApiProfilesDeleteRoute: ApiProfilesDeleteRoute,
   ApiProfilesListRoute: ApiProfilesListRoute,
+  ApiProfilesMcpRoute: ApiProfilesMcpRoute,
   ApiProfilesReadRoute: ApiProfilesReadRoute,
   ApiProfilesRenameRoute: ApiProfilesRenameRoute,
   ApiProfilesSkillsRoute: ApiProfilesSkillsRoute,
