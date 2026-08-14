@@ -30,7 +30,7 @@ async function fetchModelsLocal(): Promise<{
   ok?: boolean
   models?: Array<GatewayModelCatalogEntry>
 }> {
-  const response = await fetch('/api/models-local')
+  const response = await fetch('/api/models')
   if (!response.ok) throw new Error(`Failed to load models (${response.status})`)
   return (await response.json()) as { ok?: boolean; models?: Array<GatewayModelCatalogEntry> }
 }

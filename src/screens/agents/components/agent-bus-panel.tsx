@@ -301,15 +301,6 @@ export function AgentBusPanel({ data }: { data: AgentBusData }) {
             <button
               type="button"
               onClick={() => {
-                toast('Use Swarm page to restart workers', { type: 'info' })
-              }}
-              className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2 text-sm font-medium text-[var(--theme-text)] transition-colors hover:bg-[var(--theme-card2)]"
-            >
-              Restart offline workers
-            </button>
-            <button
-              type="button"
-              onClick={() => {
                 window.location.href = '/swarm'
               }}
               className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2 text-sm font-medium text-[var(--theme-text)] transition-colors hover:bg-[var(--theme-card2)]"
