@@ -3,6 +3,12 @@ import os from 'node:os'
 import path from 'node:path'
 import YAML from 'yaml'
 
+// createRequire is the canonical ESM→CJS bridge. We need it because
+// node:sqlite is a native module and Vite dev server runs in ESM mode.
+// @ts-ignore -- LSP/tsconfig doesn't include node types but runtime has it
+import { createRequire as _createRequire } from 'node:module'
+const nodeRequire = _createRequire(import.meta.url)
+
 export type ProfileSummary = {
   name: string
   path: string
@@ -370,6 +376,55 @@ export async function readProfileWithFallback(
   }
 
   throw new Error('Profile not found')
+}
+
+export function listSessionsForProfile(
+  name: string,
+): Array<{ key: string; friendlyId: string; updatedAt: number; source: string; title?: string | null; messageCount?: number; model?: string | null }> {
+  const normalized = name.trim() || 'default'
+  const dbPath =
+    normalized === 'default'
+      ? path.join(getClaudeRoot(), 'state.db')
+      : path.join(getProfilesRoot(), normalized, 'state.db')
+
+  if (!fs.existsSync(dbPath)) return []
+
+  try {
+    // Open read-only to avoid any contention with the running gateway.
+    let Database: new (
+      path: string,
+      opts?: Record<string, unknown>,
+    ) => { prepare: (sql: string) => { all: () => Array<Record<string, unknown>> }; close: () => void }
+    try {
+      Database = nodeRequire('better-sqlite3')
+    } catch {
+      Database = nodeRequire('node:sqlite').DatabaseSync
+    }
+    const db = new Database(dbPath, { readOnly: true })
+    const stmt = db.prepare(
+      `SELECT id, title, model, started_at, message_count
+       FROM sessions
+       WHERE archived = 0 OR archived IS NULL
+       ORDER BY started_at DESC
+       LIMIT 100`,
+    )
+    const results = stmt.all()
+    db.close()
+
+    return results.map((r: Record<string, unknown>) => ({
+      key: String(r.id ?? ''),
+      friendlyId: String(r.id ?? ''),
+      updatedAt: typeof r.started_at === 'number' ? r.started_at * 1000 : 0,
+      source: `profile:${normalized}`,
+      title: (r.title as string) || null,
+      messageCount: typeof r.message_count === 'number' ? r.message_count : 0,
+      model: (r.model as string) || null,
+    }))
+  } catch {
+    // Fallback: if SQLite fails (corrupted DB, missing table, etc.),
+    // return empty array rather than crashing the API.
+    return []
+  }
 }
 
 export function getActiveProfileName(): string {

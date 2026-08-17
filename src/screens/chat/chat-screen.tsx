@@ -38,6 +38,7 @@ import { ChatHeader } from './components/chat-header'
 import { ChatMessageList } from './components/chat-message-list'
 import { ChatEmptyState } from './components/chat-empty-state'
 import { ChatComposer } from './components/chat-composer'
+import { ChatSessionSidebar } from './components/chat-session-sidebar'
 import { ConnectionStatusMessage } from './components/connection-status-message'
 import {
   clearPendingSendForSession,
@@ -59,6 +60,7 @@ import { useChatMobile } from './hooks/use-chat-mobile'
 import { useChatSessions } from './hooks/use-chat-sessions'
 import { useAutoSessionTitle } from './hooks/use-auto-session-title'
 import { useRenameSession } from './hooks/use-rename-session'
+import { useProfiles } from './hooks/use-profiles'
 import { useContextAlert } from './hooks/use-context-alert'
 import { ContextBar } from './components/context-bar'
 import {
@@ -519,6 +521,14 @@ export function ChatScreen({
   // Tracks whether the user has explicitly picked a thinking level for this session.
   // A missing/absent sessionStorage key means we should fall back to the Hermes config default.
   const thinkingInitializedByUserRef = useRef(false)
+  const handleNewChat = useCallback(() => {
+    navigate({ to: '/chat/$sessionKey', params: { sessionKey: 'new' } })
+  }, [navigate])
+
+  const handleActiveSessionDelete = useCallback(() => {
+    navigate({ to: '/chat/$sessionKey', params: { sessionKey: 'main' } })
+  }, [navigate])
+
   useEffect(() => {
     if (typeof window === 'undefined') return
     const key = `claude-thinking-${activeFriendlyId || 'new'}`
@@ -558,6 +568,8 @@ export function ChatScreen({
   const { renameSession, renaming: renamingSessionTitle } = useRenameSession()
   const sseConnectionState = useChatStore((s) => s.connectionState)
 
+  const { activeProfileName } = useProfiles()
+
   const {
     sessionsQuery,
     sessions,
@@ -566,9 +578,9 @@ export function ChatScreen({
     activeSessionKey,
     activeTitle,
     sessionsError,
-    sessionsLoading: _sessionsLoading,
-    sessionsFetching: _sessionsFetching,
-    refetchSessions: _refetchSessions,
+    sessionsLoading,
+    sessionsFetching,
+    refetchSessions,
   } = useChatSessions({ activeFriendlyId, isNewChat, forcedSessionKey })
   const {
     historyQuery,
@@ -1987,6 +1999,7 @@ export function ChatScreen({
         )
         updateSessionLastMessage(
           queryClient,
+          activeProfileName,
           sessionKey,
           friendlyId,
           optimisticMessage,
@@ -2325,7 +2338,7 @@ export function ChatScreen({
     (friendlyId: string, lastMessage: ChatMessage) => {
       if (!friendlyId) return
       queryClient.setQueryData(
-        chatQueryKeys.sessions,
+        chatQueryKeys.sessionsForProfile(activeProfileName),
         function upsert(existing: unknown) {
           const sessions = Array.isArray(existing)
             ? (existing as Array<SessionMeta>)
@@ -2361,7 +2374,7 @@ export function ChatScreen({
         },
       )
     },
-    [queryClient],
+    [queryClient, activeProfileName],
   )
 
   const scrollChatToBottom = useCallback(
@@ -2760,14 +2773,21 @@ export function ChatScreen({
             ? 'flex min-h-0 w-full flex-col'
             : isMobile
               ? 'flex flex-col'
-              : 'grid grid-cols-[auto_minmax(0,1fr)_auto] grid-rows-[minmax(0,1fr)]',
+              : hideUi || isFocusMode
+                ? 'grid grid-cols-[auto_minmax(0,1fr)_auto] grid-rows-[minmax(0,1fr)]'
+                : 'grid grid-cols-[260px_minmax(0,1fr)_auto_auto] grid-rows-[minmax(0,1fr)]',
         )}
       >
-        {hideUi || compact || isFocusMode ? null : isMobile ? null : (
-          <FileExplorerSidebar
-            collapsed={fileExplorerCollapsed}
-            onToggle={handleToggleFileExplorer}
-            onInsertReference={handleInsertFileReference}
+        {hideUi || compact || isFocusMode || isMobile ? null : (
+          <ChatSessionSidebar
+            sessions={sessions}
+            sessionsLoading={sessionsLoading}
+            sessionsFetching={sessionsFetching}
+            sessionsError={sessionsError}
+            onRetrySessions={refetchSessions}
+            activeFriendlyId={activeFriendlyId}
+            onNewChat={handleNewChat}
+            onActiveSessionDelete={handleActiveSessionDelete}
           />
         )}
 
@@ -2948,6 +2968,16 @@ export function ChatScreen({
             />
           ) : null}
         </main>
+
+        {hideUi || compact || isFocusMode || isMobile ? null : (
+          <FileExplorerSidebar
+            collapsed={fileExplorerCollapsed}
+            onToggle={handleToggleFileExplorer}
+            onInsertReference={handleInsertFileReference}
+            side="right"
+          />
+        )}
+
         {!compact && !isFocusMode && <AgentViewPanel />}
       </div>
       {!compact && !hideUi && !isMobile && !isFocusMode && <TerminalPanel />}

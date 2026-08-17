@@ -103,7 +103,7 @@ const INITIAL_COMPONENTS: Partial<Components> = {
 
     if (isInline) {
       return (
-        <code className="rounded bg-primary-100 px-1.5 py-0.5 text-[0.9em] font-mono text-primary-900 border border-primary-200">
+        <code className="inline-code rounded-[4px] px-[5px] py-px text-[0.9em]">
           {children}
         </code>
       )
@@ -123,7 +123,7 @@ const INITIAL_COMPONENTS: Partial<Components> = {
   },
   h1: function H1Component({ children }) {
     return (
-      <h1 className="mt-5 mb-2 text-2xl leading-tight font-medium text-primary-950 text-balance first:mt-0">
+      <h1 className="mt-5 mb-2 text-2xl leading-tight font-bold text-[var(--md-strong)] text-balance first:mt-0">
         {children}
       </h1>
     )
@@ -133,7 +133,7 @@ const INITIAL_COMPONENTS: Partial<Components> = {
     return (
       <h2
         id={id}
-        className="mt-5 mb-2 text-xl leading-tight font-medium text-primary-950 text-balance first:mt-0"
+        className="mt-5 mb-2 text-xl leading-tight font-bold text-[var(--md-strong)] text-balance first:mt-0"
       >
         <a
           href={`#${id}`}
@@ -155,7 +155,7 @@ const INITIAL_COMPONENTS: Partial<Components> = {
     return (
       <h3
         id={id}
-        className="mt-4 mb-1.5 text-lg leading-tight font-medium text-primary-950 text-balance first:mt-0"
+        className="mt-4 mb-1.5 text-lg leading-tight font-bold text-[var(--md-strong)] text-balance first:mt-0"
       >
         <a
           href={`#${id}`}
@@ -174,21 +174,21 @@ const INITIAL_COMPONENTS: Partial<Components> = {
   },
   h4: function H4Component({ children }) {
     return (
-      <h4 className="mt-4 mb-1.5 text-base leading-tight font-medium text-primary-950 text-balance first:mt-0">
+      <h4 className="mt-4 mb-1.5 text-base leading-tight font-bold text-[var(--md-strong)] text-balance first:mt-0">
         {children}
       </h4>
     )
   },
   h5: function H5Component({ children }) {
     return (
-      <h5 className="mt-3.5 mb-1 text-sm leading-tight font-medium text-primary-950 text-balance first:mt-0">
+      <h5 className="mt-3.5 mb-1 text-sm leading-tight font-bold text-[var(--md-strong)] text-balance first:mt-0">
         {children}
       </h5>
     )
   },
   h6: function H6Component({ children }) {
     return (
-      <h6 className="mt-3.5 mb-1 text-sm leading-tight font-medium text-primary-900 text-balance first:mt-0">
+      <h6 className="mt-3.5 mb-1 text-sm leading-tight font-semibold text-[var(--md-em)] text-balance first:mt-0">
         {children}
       </h6>
     )
@@ -222,7 +222,7 @@ const INITIAL_COMPONENTS: Partial<Components> = {
     return (
       <a
         href={href}
-        className="text-primary-950 underline decoration-primary-300 underline-offset-4 transition-colors hover:text-primary-950 hover:decoration-primary-500"
+        className="text-[var(--md-link)] underline decoration-[color-mix(in_srgb,var(--md-link)_40%,transparent)] underline-offset-4 transition-colors hover:decoration-[var(--md-link)]"
         target="_blank"
         rel="noopener noreferrer"
       >
@@ -244,10 +244,13 @@ const INITIAL_COMPONENTS: Partial<Components> = {
     )
   },
   strong: function StrongComponent({ children }) {
-    return <strong className="font-medium text-primary-950">{children}</strong>
+    return <strong className="font-semibold text-[var(--md-strong)]">{children}</strong>
+  },
+  b: function BComponent({ children }) {
+    return <b className="font-semibold text-[var(--md-strong)]">{children}</b>
   },
   em: function EmComponent({ children }) {
-    return <em className="italic text-primary-950">{children}</em>
+    return <em className="italic text-[var(--md-em)]">{children}</em>
   },
   hr: function HrComponent() {
     return <hr className="my-3 border-primary-200" />

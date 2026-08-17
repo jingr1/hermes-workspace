@@ -6,6 +6,7 @@ const LIGHT_THEMES = new Set([
   'claude-official-light',
   'claude-classic-light',
   'claude-slate-light',
+  'webui-light',
 ])
 
 function useIsLightTheme(): boolean {

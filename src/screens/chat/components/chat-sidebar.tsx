@@ -34,7 +34,6 @@ import { useRenameSession } from '../hooks/use-rename-session'
 import { ProvidersDialog } from './providers-dialog'
 import { SessionRenameDialog } from './sidebar/session-rename-dialog'
 import { SessionDeleteDialog } from './sidebar/session-delete-dialog'
-import { SidebarSessions } from './sidebar/sidebar-sessions'
 import type { ChatOpenSettingsDetail } from '../chat-events'
 import type { SessionMeta } from '../types'
 import { t } from '@/lib/i18n'
@@ -87,6 +86,8 @@ function ThemeToggleMini() {
     'claude-classic-light': 'claude-classic',
     'claude-slate': 'claude-slate-light',
     'claude-slate-light': 'claude-slate',
+    webui: 'webui-light',
+    'webui-light': 'webui',
   }
 
   return (
@@ -122,7 +123,6 @@ function ThemeToggleMini() {
 }
 
 type ChatSidebarProps = {
-  sessions: Array<SessionMeta>
   activeFriendlyId: string
   creatingSession: boolean
   onCreateSession: () => void
@@ -130,10 +130,6 @@ type ChatSidebarProps = {
   onToggleCollapse: () => void
   onSelectSession?: () => void
   onActiveSessionDelete?: () => void
-  sessionsLoading: boolean
-  sessionsFetching: boolean
-  sessionsError: string | null
-  onRetrySessions: () => void
 }
 
 // ── Reusable nav item ───────────────────────────────────────────────────
@@ -254,7 +250,7 @@ function NavItem({
               render={
                 <Link
                   to={item.to}
-                  search={item.search}
+                  search={item.search as any}
                   hash={item.hash}
                   onClick={handleSelect}
                   className={cls}
@@ -272,7 +268,7 @@ function NavItem({
     return (
       <Link
         to={item.to}
-        search={item.search}
+        search={item.search as any}
         hash={item.hash}
         onClick={handleSelect}
         className={cls}
@@ -517,16 +513,11 @@ function usePersistedBool(key: string, defaultValue: boolean) {
 // ── Main component ──────────────────────────────────────────────────────
 
 function ChatSidebarComponent({
-  sessions,
   activeFriendlyId,
   isCollapsed,
   onToggleCollapse,
   onSelectSession,
   onActiveSessionDelete,
-  sessionsLoading,
-  sessionsFetching,
-  sessionsError,
-  onRetrySessions,
 }: ChatSidebarProps) {
   const { settingsOpen, settingsSection, setSettingsOpen, handleOpenSettings } =
     useSidebarSettings()
@@ -623,15 +614,6 @@ function ChatSidebarComponent({
     false,
   )
 
-  const [renameDialogOpen, setRenameDialogOpen] = useState(false)
-  const [renameSessionKey, setRenameSessionKey] = useState<string | null>(null)
-  const [renameFriendlyId, setRenameFriendlyId] = useState<string | null>(null)
-  const [renameSessionTitle, setRenameSessionTitle] = useState('')
-
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [deleteSessionKey, setDeleteSessionKey] = useState<string | null>(null)
-  const [deleteFriendlyId, setDeleteFriendlyId] = useState<string | null>(null)
-  const [deleteSessionTitle, setDeleteSessionTitle] = useState('')
   const [providersOpen, setProvidersOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [isHoverExpanded, setIsHoverExpanded] = useState(false)
@@ -639,47 +621,20 @@ function ChatSidebarComponent({
   const sidebarRef = useRef<HTMLElement | null>(null)
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null)
 
-  function handleOpenRename(session: SessionMeta) {
-    setRenameSessionKey(session.key)
-    setRenameFriendlyId(session.friendlyId)
-    setRenameSessionTitle(
-      session.label || session.title || session.derivedTitle || '',
-    )
-    setRenameDialogOpen(true)
+  function handleOpenRename(_session: SessionMeta) {
+    // Session rename handled by ChatSessionSidebar
   }
 
-  function handleSaveRename(newTitle: string) {
-    if (renameSessionKey) {
-      void renameSession(renameSessionKey, renameFriendlyId, newTitle)
-    }
-    setRenameDialogOpen(false)
-    setRenameSessionKey(null)
-    setRenameFriendlyId(null)
+  function handleSaveRename(_newTitle: string) {
+    // Session rename handled by ChatSessionSidebar
   }
 
-  function handleOpenDelete(session: SessionMeta) {
-    setDeleteSessionKey(session.key)
-    setDeleteFriendlyId(session.friendlyId)
-    setDeleteSessionTitle(
-      session.label ||
-        session.title ||
-        session.derivedTitle ||
-        session.friendlyId,
-    )
-    setDeleteDialogOpen(true)
+  function handleOpenDelete(_session: SessionMeta) {
+    // Session delete handled by ChatSessionSidebar
   }
 
   function handleConfirmDelete() {
-    if (deleteSessionKey && deleteFriendlyId) {
-      const isActive = deleteFriendlyId === activeFriendlyId
-      if (isActive && onActiveSessionDelete) {
-        onActiveSessionDelete()
-      }
-      void deleteSession(deleteSessionKey, deleteFriendlyId, isActive)
-    }
-    setDeleteDialogOpen(false)
-    setDeleteSessionKey(null)
-    setDeleteFriendlyId(null)
+    // Session delete handled by ChatSessionSidebar
   }
 
   useEffect(() => {
@@ -1134,35 +1089,8 @@ function ChatSidebarComponent({
           />
         </div>
 
-        {/* Sessions list */}
-        <div className={cn('shrink-0 mt-1', isMobile && 'order-1')}>
-          <AnimatePresence initial={false}>
-            {!isVisuallyCollapsed && (
-              <motion.div
-                key="content"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={transition}
-                className="flex flex-col w-full min-h-0 h-full"
-              >
-                <div className="flex-1 min-h-0">
-                  <SidebarSessions
-                    sessions={sessions}
-                    activeFriendlyId={activeFriendlyId}
-                    onSelect={onSelectSession}
-                    onRename={handleOpenRename}
-                    onDelete={handleOpenDelete}
-                    loading={sessionsLoading}
-                    fetching={sessionsFetching}
-                    error={sessionsError}
-                    onRetry={onRetrySessions}
-                  />
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+        {/* Sessions list removed — managed by ChatSessionSidebar in chat route */}
+
       </div>
       {/* end scrollable body */}
 
@@ -1209,7 +1137,7 @@ function ChatSidebarComponent({
             <MenuContent side="top" align="start" className="min-w-[200px]">
               <MenuItem
                 onClick={function onOpenSettings() {
-                  handleOpenSettings('claude')
+                  handleOpenSettings('profile')
                 }}
                 className="justify-between"
               >
@@ -1255,57 +1183,8 @@ function ChatSidebarComponent({
 
       <ProvidersDialog open={providersOpen} onOpenChange={setProvidersOpen} />
 
-      <SessionRenameDialog
-        open={renameDialogOpen}
-        onOpenChange={(open) => {
-          setRenameDialogOpen(open)
-          if (!open) {
-            setRenameSessionKey(null)
-            setRenameFriendlyId(null)
-            setRenameSessionTitle('')
-          }
-        }}
-        sessionTitle={renameSessionTitle}
-        onSave={handleSaveRename}
-        onCancel={() => {
-          setRenameDialogOpen(false)
-          setRenameSessionKey(null)
-          setRenameFriendlyId(null)
-          setRenameSessionTitle('')
-        }}
-      />
-
-      <SessionDeleteDialog
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
-        sessionTitle={deleteSessionTitle}
-        onConfirm={handleConfirmDelete}
-        onCancel={() => setDeleteDialogOpen(false)}
-      />
     </motion.aside>
   )
-}
-
-function areSessionsEqual(
-  prevSessions: Array<SessionMeta>,
-  nextSessions: Array<SessionMeta>,
-): boolean {
-  if (prevSessions === nextSessions) return true
-  if (prevSessions.length !== nextSessions.length) return false
-  for (let i = 0; i < prevSessions.length; i += 1) {
-    const prev = prevSessions[i]
-    const next = nextSessions[i]
-    if (prev.key !== next.key) return false
-    if (prev.friendlyId !== next.friendlyId) return false
-    if (prev.label !== next.label) return false
-    if (prev.title !== next.title) return false
-    if (prev.derivedTitle !== next.derivedTitle) return false
-    if (prev.updatedAt !== next.updatedAt) return false
-    if (prev.titleStatus !== next.titleStatus) return false
-    if (prev.titleSource !== next.titleSource) return false
-    if (prev.titleError !== next.titleError) return false
-  }
-  return true
 }
 
 function areSidebarPropsEqual(
@@ -1315,11 +1194,6 @@ function areSidebarPropsEqual(
   if (prevProps.activeFriendlyId !== nextProps.activeFriendlyId) return false
   if (prevProps.creatingSession !== nextProps.creatingSession) return false
   if (prevProps.isCollapsed !== nextProps.isCollapsed) return false
-  if (prevProps.sessionsLoading !== nextProps.sessionsLoading) return false
-  if (prevProps.sessionsFetching !== nextProps.sessionsFetching) return false
-  if (prevProps.sessionsError !== nextProps.sessionsError) return false
-  if (prevProps.onRetrySessions !== nextProps.onRetrySessions) return false
-  if (!areSessionsEqual(prevProps.sessions, nextProps.sessions)) return false
   return true
 }
 

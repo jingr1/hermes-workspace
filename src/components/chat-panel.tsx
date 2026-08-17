@@ -16,6 +16,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import type { SessionMeta } from '@/screens/chat/types'
 import { ChatScreen } from '@/screens/chat/chat-screen'
 import { chatQueryKeys, moveHistoryMessages } from '@/screens/chat/chat-queries'
+import { useProfiles } from '@/screens/chat/hooks/use-profiles'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { Button } from '@/components/ui/button'
 import {
@@ -28,6 +29,7 @@ import {
 export function ChatPanel() {
   const isOpen = useWorkspaceStore((s) => s.chatPanelOpen)
   const sessionKey = useWorkspaceStore((s) => s.chatPanelSessionKey)
+  const { activeProfileName } = useProfiles()
   const setChatPanelOpen = useWorkspaceStore((s) => s.setChatPanelOpen)
   const setChatPanelSessionKey = useWorkspaceStore(
     (s) => s.setChatPanelSessionKey,
@@ -49,9 +51,9 @@ export function ChatPanel() {
 
   // Session list for the dropdown
   const sessionsQuery = useQuery({
-    queryKey: chatQueryKeys.sessions,
+    queryKey: chatQueryKeys.sessionsForProfile(activeProfileName),
     queryFn: async () => {
-      const res = await fetch('/api/sessions')
+      const res = await fetch(`/api/sessions?profile=${encodeURIComponent(activeProfileName)}`)
       if (!res.ok) return []
       const data = await res.json()
       return Array.isArray(data?.sessions)

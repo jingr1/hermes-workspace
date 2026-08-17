@@ -1648,7 +1648,7 @@ function InlineToolSectionItem({
   index: number
   forceOpen?: boolean
 }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true)
   const [showRawJson, setShowRawJson] = useState(false)
   const [showFullOutput, setShowFullOutput] = useState(false)
   useEffect(() => {
@@ -1983,7 +1983,7 @@ function ToolCallGroup({
     isStreaming: Boolean(isStreaming),
     toolCount: toolSections.length,
   })
-  const [open, setOpen] = useState(Boolean(expandAll) || shouldAutoOpen)
+  const [open, setOpen] = useState(true)
   useEffect(() => {
     if (expandAll || shouldAutoOpen) setOpen(true)
   }, [expandAll, shouldAutoOpen])

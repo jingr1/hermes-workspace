@@ -28,7 +28,7 @@ describe('mergeModelEntries', () => {
   })
 
   it('normalizes string model ids from Hermes-compatible /v1/models responses', () => {
-    expect(mergeModelEntries(['openrouter/qwen/qwen3-coder'])).toEqual([
+    expect(mergeModelEntries(['openrouter/qwen/qwen3-coder'] as any)).toEqual([
       {
         id: 'openrouter/qwen/qwen3-coder',
         name: 'openrouter/qwen/qwen3-coder',

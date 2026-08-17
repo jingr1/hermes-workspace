@@ -857,6 +857,8 @@ export function DashboardScreen() {
               'claude-classic-light': 'claude-classic',
               'claude-slate': 'claude-slate-light',
               'claude-slate-light': 'claude-slate',
+              webui: 'webui-light',
+              'webui-light': 'webui',
             }
             const cur = document.documentElement.getAttribute('data-theme') || 'claude-official'
             const nextDataTheme = LIGHT_DARK_PAIRS[cur] || (isDark ? 'claude-official-light' : 'claude-official')

@@ -423,7 +423,7 @@ export function useRealtimeChatHistory({
                     queryClient,
                     effectiveFriendlyId,
                     effectiveSessionKey,
-                    completedAssistant as unknown as import('@/types/chat').ChatMessage,
+                    completedAssistant as unknown as import('../types').ChatMessage,
                   )
                 }
               }

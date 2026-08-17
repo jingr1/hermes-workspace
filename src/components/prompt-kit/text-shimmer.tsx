@@ -18,7 +18,8 @@ export function TextShimmer({
   ...props
 }: TextShimmerProps) {
   const dynamicSpread = Math.min(Math.max(spread, 5), 45)
-  const Component = as as React.ElementType
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const Component = as as any
 
   return (
     <Component

@@ -49,14 +49,19 @@ function isMatchingClientMessage(
 }
 
 export const chatQueryKeys = {
+  /** Prefix for all session queries (use for invalidation). */
   sessions: ['chat', 'sessions'] as const,
+  /** Full query key for a specific profile's sessions (use for get/setQueryData). */
+  sessionsForProfile: (profileName: string) =>
+    [...chatQueryKeys.sessions, profileName] as const,
   history: function history(friendlyId: string, sessionKey: string) {
     return ['chat', 'history', friendlyId, sessionKey] as const
   },
 } as const
 
-export async function fetchSessions(): Promise<Array<SessionMeta>> {
-  const res = await fetch('/api/sessions')
+export async function fetchSessions(profile?: string): Promise<Array<SessionMeta>> {
+  const url = profile ? `/api/sessions?profile=${encodeURIComponent(profile)}` : '/api/sessions'
+  const res = await fetch(url)
   if (!res.ok) throw new Error(await readError(res))
   const data = (await res.json()) as SessionListResponse
   return normalizeSessions(data.sessions)
@@ -483,13 +488,14 @@ export function moveHistoryMessages(
 
 export function reconcileSessionDraft(
   queryClient: QueryClient,
+  activeProfileName: string,
   fromFriendlyId: string,
   fromSessionKey: string,
   toFriendlyId: string,
   toSessionKey: string,
 ) {
   queryClient.setQueryData(
-    chatQueryKeys.sessions,
+    chatQueryKeys.sessionsForProfile(activeProfileName),
     function reconcile(existing: unknown) {
       if (!Array.isArray(existing)) return existing
       const sessions = existing as Array<SessionMeta>
@@ -554,12 +560,13 @@ export function reconcileSessionDraft(
 
 export function updateSessionLastMessage(
   queryClient: QueryClient,
+  activeProfileName: string,
   sessionKey: string,
   friendlyId: string,
   message: ChatMessage,
 ) {
   queryClient.setQueryData(
-    chatQueryKeys.sessions,
+    chatQueryKeys.sessionsForProfile(activeProfileName),
     function update(messages: unknown) {
       if (!Array.isArray(messages)) return messages
       return (messages as Array<SessionMeta>).map((session) => {
@@ -577,11 +584,12 @@ export function updateSessionLastMessage(
 
 export function removeSessionFromCache(
   queryClient: QueryClient,
+  activeProfileName: string,
   sessionKey: string,
   friendlyId: string,
 ) {
   queryClient.setQueryData(
-    chatQueryKeys.sessions,
+    chatQueryKeys.sessionsForProfile(activeProfileName),
     function update(messages: unknown) {
       if (!Array.isArray(messages)) return messages
       return (messages as Array<SessionMeta>).filter((session) => {

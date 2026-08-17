@@ -3,6 +3,10 @@ import path from 'node:path'
 import fs from 'node:fs/promises'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { loadWorkspaceCatalog, saveWorkspaceSelection } from './workspace'
+import {
+  WorkspaceFolderAccessError,
+  listWorkspaceFolders,
+} from '../../server/workspace-path-policy'
 
 const originalEnv = { ...process.env }
 let tempRoot = ''
@@ -149,5 +153,64 @@ describe('workspace API catalog semantics', () => {
         'utf-8',
       ),
     ).resolves.toBe(`${selectedProject}\n`)
+  })
+})
+
+describe('workspace folder listing', () => {
+  beforeEach(() => {
+    process.env.WORKSPACE_BASE = tempRoot
+  })
+
+  afterEach(() => {
+    delete process.env.WORKSPACE_BASE
+  })
+
+  it('lists directories under the browse base, including dot folders', async () => {
+    await makeDir(tempRoot, 'project', 'src')
+    await makeDir(tempRoot, '.cache')
+    await fs.writeFile(path.join(tempRoot, 'readme.txt'), 'x')
+
+    const root = await listWorkspaceFolders('')
+
+    expect(root.base).toBe(path.resolve(tempRoot))
+    expect(root.current).toBe('')
+    expect(root.folders.map((folder) => folder.name).sort()).toEqual([
+      '.cache',
+      'project',
+    ])
+    expect(root.folders.find((folder) => folder.name === '.hermes')).toBeUndefined()
+  })
+
+  it('expands a subdirectory with a relative path', async () => {
+    await makeDir(tempRoot, 'project', 'src')
+    await makeDir(tempRoot, 'project', 'docs')
+
+    const child = await listWorkspaceFolders('project')
+
+    expect(child.current).toBe('project')
+    expect(child.folders.map((folder) => folder.name).sort()).toEqual([
+      'docs',
+      'src',
+    ])
+    expect(child.folders[0]?.path).toMatch(/^project\//)
+    expect(child.folders[0]?.fullPath).toContain(path.join('project'))
+  })
+
+  it('rejects path traversal outside the browse base', async () => {
+    await expect(listWorkspaceFolders('..')).rejects.toMatchObject({
+      status: 403,
+    })
+    await expect(listWorkspaceFolders('../')).rejects.toBeInstanceOf(
+      WorkspaceFolderAccessError,
+    )
+  })
+
+  it('rejects Hermes state directories and missing paths', async () => {
+    await expect(
+      listWorkspaceFolders(process.env.HERMES_HOME!),
+    ).rejects.toMatchObject({ status: 403 })
+    await expect(listWorkspaceFolders('missing-dir')).rejects.toMatchObject({
+      status: 404,
+    })
   })
 })

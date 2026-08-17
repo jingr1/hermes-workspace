@@ -18,6 +18,12 @@ import {
   getActiveProfileName,
   readProfile,
 } from '../../server/profiles-browser'
+import {
+  assertWorkspaceAllowed,
+  isBlockedSystemPath,
+  isHermesStatePath,
+  normalizeCandidate,
+} from '../../server/workspace-path-policy'
 
 type WorkspaceEntry = {
   name: string
@@ -41,101 +47,6 @@ type WorkspaceState = {
 function extractFolderName(fullPath: string): string {
   const parts = fullPath.replace(/\\/g, '/').split('/').filter(Boolean)
   return parts.at(-1) || 'workspace'
-}
-
-function expandHome(input: string): string {
-  if (input === '~') return os.homedir()
-  if (input.startsWith('~/')) return path.join(os.homedir(), input.slice(2))
-  return input
-}
-
-function normalizeCandidate(input: string): string {
-  return path.resolve(expandHome(input.trim()))
-}
-
-function pathContains(parent: string, candidate: string): boolean {
-  const relative = path.relative(parent, candidate)
-  return (
-    Boolean(relative) &&
-    !relative.startsWith('..') &&
-    !path.isAbsolute(relative)
-  )
-}
-
-function isPathOrChild(parent: string, candidate: string): boolean {
-  const normalizedParent = normalizeCandidate(parent)
-  const normalizedCandidate = normalizeCandidate(candidate)
-  return (
-    normalizedCandidate === normalizedParent ||
-    pathContains(normalizedParent, normalizedCandidate)
-  )
-}
-
-function exactBlockedSystemRoots(): Array<string> {
-  return ['/', 'C:/']
-}
-
-function blockedSystemSubtrees(): Array<string> {
-  return [
-    '/bin',
-    '/sbin',
-    '/etc',
-    '/usr',
-    '/boot',
-    '/proc',
-    '/sys',
-    '/dev',
-    '/root',
-    '/private/etc',
-    '/private/var/db',
-    '/private/var/log',
-    'C:/Windows',
-    'C:/Program Files',
-    'C:/Program Files (x86)',
-  ]
-}
-
-function isBlockedSystemPath(candidatePath: string): boolean {
-  const normalized = normalizeCandidate(candidatePath)
-  return (
-    exactBlockedSystemRoots().some(
-      (root) => normalizeCandidate(root) === normalized,
-    ) || blockedSystemSubtrees().some((root) => isPathOrChild(root, normalized))
-  )
-}
-
-function isHermesStatePath(candidatePath: string): boolean {
-  const normalized = normalizeCandidate(candidatePath)
-  const stateRoots = Array.from(
-    new Set(
-      [
-        process.env.HERMES_HOME,
-        process.env.CLAUDE_HOME,
-        path.join(os.homedir(), '.hermes'),
-        activeProfileHome(),
-      ]
-        .map((value) => readString(value))
-        .filter(Boolean)
-        .map(normalizeCandidate),
-    ),
-  )
-
-  return stateRoots.some(
-    (root) => normalized === root || pathContains(root, normalized),
-  )
-}
-
-function assertWorkspaceAllowed(candidatePath: string): void {
-  if (isHermesStatePath(candidatePath)) {
-    throw new Error(
-      'Hermes profile/state directories cannot be used as workspaces',
-    )
-  }
-  if (isBlockedSystemPath(candidatePath)) {
-    throw new Error(
-      `System directories cannot be used as workspaces: ${candidatePath}`,
-    )
-  }
 }
 
 async function isValidDirectory(dirPath: string): Promise<boolean> {

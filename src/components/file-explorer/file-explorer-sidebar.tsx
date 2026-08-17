@@ -14,6 +14,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import FilePreviewDialog from './file-preview-dialog'
 import { cn } from '@/lib/utils'
+import { useActiveWorkspace } from '@/hooks/use-active-workspace'
 import {
   ScrollAreaCorner,
   ScrollAreaRoot,
@@ -47,6 +48,8 @@ type FileExplorerSidebarProps = {
   onOpenFile?: (entry: FileEntry) => void
   // Path of the currently-open file, used to highlight the row.
   activePath?: string | null
+  /** Dock on the left or right edge of the content area. Default: right. */
+  side?: 'left' | 'right'
   hidden?: boolean
   className?: string
 }
@@ -64,6 +67,12 @@ type PromptState = {
 }
 
 const ROOT_LABEL = 'Workspace'
+
+function shortWorkspaceLabel(pathValue: string, folderName: string) {
+  if (folderName.trim()) return folderName.trim()
+  const parts = pathValue.replace(/\\/g, '/').split('/').filter(Boolean)
+  return parts.at(-1) || ROOT_LABEL
+}
 
 function isImageFile(fileName: string) {
   const ext = fileName.split('.').pop()?.toLowerCase() || ''
@@ -126,6 +135,7 @@ export function FileExplorerSidebar({
   onInsertReference,
   onOpenFile,
   activePath = null,
+  side = 'right',
   hidden = false,
   className,
 }: FileExplorerSidebarProps) {
@@ -140,6 +150,12 @@ export function FileExplorerSidebar({
   const [previewPath, setPreviewPath] = useState<string | null>(null)
   const uploadTargetRef = useRef<string>('')
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
+  const workspaceQuery = useActiveWorkspace()
+  const workspacePath = workspaceQuery.data?.path ?? ''
+  const workspaceLabel = shortWorkspaceLabel(
+    workspacePath,
+    workspaceQuery.data?.folderName ?? '',
+  )
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -155,8 +171,12 @@ export function FileExplorerSidebar({
   }, [])
 
   useEffect(() => {
+    if (!workspaceQuery.isFetched) return
+    setExpanded(new Set())
+    setPreviewPath(null)
+    setContextMenu(null)
     void refresh()
-  }, [refresh])
+  }, [workspacePath, workspaceQuery.isFetched, refresh])
 
   useEffect(() => {
     if (!contextMenu) return
@@ -386,7 +406,8 @@ export function FileExplorerSidebar({
   return (
     <aside
       className={cn(
-        'border-r border-primary-200 bg-primary-100 h-full flex flex-col transition-all duration-200 ease-out',
+        'bg-primary-100 h-full flex flex-col transition-all duration-200 ease-out',
+        side === 'right' ? 'border-l border-primary-200' : 'border-r border-primary-200',
         collapsed
           ? 'w-0 opacity-0 pointer-events-none'
           : 'w-[260px] opacity-100',
@@ -394,8 +415,11 @@ export function FileExplorerSidebar({
       )}
     >
       <div className="flex items-center justify-between h-12 px-3 border-b border-primary-200">
-        <div className="text-sm font-semibold text-primary-900">
-          {ROOT_LABEL}
+        <div
+          className="min-w-0 truncate text-sm font-semibold text-primary-900"
+          title={workspacePath || undefined}
+        >
+          {workspaceLabel}
         </div>
         <div className="flex items-center gap-1">
           <Button

@@ -5,6 +5,7 @@ import { chatQueryKeys, fetchSessions } from '../chat-queries'
 import { isRecentSession } from '../pending-send'
 import { filterSessionsWithTombstones } from '../session-tombstones'
 import { useSessionTitles } from '../session-title-store'
+import { useProfiles } from './use-profiles'
 import type { SessionTitleInfo } from '../session-title-store'
 import type { SessionMeta } from '../types'
 
@@ -68,9 +69,10 @@ export function useChatSessions({
   isNewChat,
   forcedSessionKey,
 }: UseChatSessionsInput) {
+  const { activeProfileName } = useProfiles()
   const sessionsQuery = useQuery({
-    queryKey: chatQueryKeys.sessions,
-    queryFn: fetchSessions,
+    queryKey: chatQueryKeys.sessionsForProfile(activeProfileName),
+    queryFn: () => fetchSessions(activeProfileName),
     refetchInterval: 5000,
   })
   const storedTitles = useSessionTitles()

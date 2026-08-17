@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { chatQueryKeys } from '../chat-queries'
 import { readError } from '../utils'
 import { updateSessionTitleState } from '../session-title-store'
+import { useProfiles } from './use-profiles'
 
 export type RenameSessionResult = {
   renameSession: (
@@ -22,8 +23,10 @@ type RenameSessionPayload = {
 
 export function useRenameSession(): RenameSessionResult {
   const queryClient = useQueryClient()
+  const { activeProfileName } = useProfiles()
   const [renaming, setRenaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const sessionsKey = chatQueryKeys.sessionsForProfile(activeProfileName)
 
   const mutation = useMutation({
     mutationFn: async function renameSessionRequest(
@@ -43,13 +46,13 @@ export function useRenameSession(): RenameSessionResult {
     },
     onMutate: async function onMutate(payload) {
       setError(null)
-      await queryClient.cancelQueries({ queryKey: chatQueryKeys.sessions })
-      const previousSessions = queryClient.getQueryData(chatQueryKeys.sessions)
+      await queryClient.cancelQueries({ queryKey: sessionsKey })
+      const previousSessions = queryClient.getQueryData(sessionsKey)
 
       const targetId = payload.friendlyId || payload.sessionKey
       // Optimistically update the session title in cache
       queryClient.setQueryData(
-        chatQueryKeys.sessions,
+        sessionsKey,
         function update(sessions: unknown) {
           if (!Array.isArray(sessions)) return sessions
           return (sessions as Array<Record<string, unknown>>).map((session) => {
@@ -76,7 +79,7 @@ export function useRenameSession(): RenameSessionResult {
     onError: function onError(err, _payload, context) {
       if (context?.previousSessions) {
         queryClient.setQueryData(
-          chatQueryKeys.sessions,
+          sessionsKey,
           context.previousSessions,
         )
       }
@@ -91,7 +94,7 @@ export function useRenameSession(): RenameSessionResult {
         error: null,
       })
       // Invalidate to ensure we have the latest data
-      queryClient.invalidateQueries({ queryKey: chatQueryKeys.sessions })
+      queryClient.invalidateQueries({ queryKey: sessionsKey })
     },
     onSettled: function onSettled() {
       setRenaming(false)

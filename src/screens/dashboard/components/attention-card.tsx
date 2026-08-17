@@ -18,6 +18,7 @@ const SOURCE_ICON: Record<DashboardIncident['source'], typeof AlertCircleIcon> =
   log: ConsoleIcon,
   config: Settings02Icon,
   gateway: AlertCircleIcon,
+  kanban: AlertCircleIcon,
 }
 
 /**

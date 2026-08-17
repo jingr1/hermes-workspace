@@ -557,12 +557,85 @@ export function buildDisplayEntries(
 
   if (pendingAssistantToolMessages.length > 0) {
     const previousEntry = entries[entries.length - 1]
-    if (previousEntry?.message.role === 'assistant') {
+    // Only attach pending tool-only messages if the previous entry is a
+    // non-trailing assistant text reply. Trailing tool-only turns (i.e.
+    // the final messages in the thread are all tool-only) should NOT be
+    // attached — they will be summarised by getTrailingToolOnlyTurnSummary
+    // instead.
+    const allPendingAreToolOnly = pendingAssistantToolMessages.every(
+      (m) => isAssistantToolCallOnlyMessage(m),
+    )
+    if (
+      previousEntry?.message.role === 'assistant' &&
+      !allPendingAreToolOnly
+    ) {
       previousEntry.attachedToolMessages.push(...pendingAssistantToolMessages)
     }
   }
 
   return entries
+}
+
+export type TrailingToolOnlyTurnSummary = {
+  count: number
+  toolNames: Array<string>
+  hasFinalAssistantText: boolean
+}
+
+export function getTrailingToolOnlyTurnSummary(
+  messages: Array<ChatMessage>,
+): TrailingToolOnlyTurnSummary | null {
+  if (messages.length === 0) return null
+
+  // Find last message with actual text from assistant
+  let lastTextAssistantIdx = -1
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i]
+    if (msg.role === 'assistant') {
+      const hasText = Array.isArray(msg.content)
+        ? msg.content.some((part: any) => part.type === 'text' && part.text?.trim())
+        : typeof (msg as any).text === 'string' && (msg as any).text.trim()
+      if (hasText) {
+        lastTextAssistantIdx = i
+        break
+      }
+    }
+  }
+
+  // If thread ends with assistant text, no trailing tool-only turn
+  const lastMsg = messages[messages.length - 1]
+  if (lastMsg?.role === 'assistant') {
+    const hasText = Array.isArray(lastMsg.content)
+      ? lastMsg.content.some((part: any) => part.type === 'text' && part.text?.trim())
+      : typeof (lastMsg as any).text === 'string' && (lastMsg as any).text.trim()
+    if (hasText) return null
+  }
+
+  if (lastTextAssistantIdx === -1) return null
+
+  // Collect trailing tool-only messages after the last text assistant message
+  const trailing = messages.slice(lastTextAssistantIdx + 1)
+  if (trailing.length === 0) return null
+
+  const toolNames = new Set<string>()
+  for (const msg of trailing) {
+    if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+      for (const part of msg.content as Array<any>) {
+        if (part.type === 'toolCall' && part.name) {
+          toolNames.add(part.name)
+        }
+      }
+    }
+    if ((msg.role === 'tool' || msg.role === 'toolResult') && (msg as any).toolName) {
+      toolNames.add((msg as any).toolName)
+    }
+  }
+
+  return {
+    count: trailing.length,
+    toolNames: Array.from(toolNames),
+    hasFinalAssistantText: lastTextAssistantIdx >= 0,
+  }
 }
 
 function escapeAttributeSelector(value: string): string {

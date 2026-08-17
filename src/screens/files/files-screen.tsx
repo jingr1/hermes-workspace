@@ -1,6 +1,7 @@
 import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { usePageTitle } from '@/hooks/use-page-title'
+import { useActiveWorkspace } from '@/hooks/use-active-workspace'
 import {
   ScrollAreaCorner,
   ScrollAreaRoot,
@@ -1035,6 +1036,9 @@ function FilePanel({ selectedEntry }: FilePanelProps) {
 export function FilesScreen() {
   usePageTitle('Files')
 
+  const workspaceQuery = useActiveWorkspace()
+  const workspacePath = workspaceQuery.data?.path ?? ''
+
   const [entries, setEntries] = useState<Array<FileEntry>>([])
   const [treeLoading, setTreeLoading] = useState(false)
   const [treeError, setTreeError] = useState<string | null>(null)
@@ -1077,8 +1081,11 @@ export function FilesScreen() {
   }, [])
 
   useEffect(() => {
+    if (!workspaceQuery.isFetched) return
+    setExpanded(new Set())
+    setSelectedEntry(null)
     void loadTree()
-  }, [loadTree])
+  }, [workspacePath, workspaceQuery.isFetched, loadTree])
 
   // Close context menu on outside click / escape
   useEffect(() => {
@@ -1200,13 +1207,25 @@ export function FilesScreen() {
 
   return (
     <div className="flex h-full min-h-0 overflow-hidden bg-primary-50/95 dark:bg-neutral-950">
-      {/* ── Left panel — directory tree ─────────────────────────────────── */}
+      {/* ── Left panel — file viewer / editor ─────────────────────────── */}
+      <main
+        className={cn(
+          'flex h-full flex-1 min-w-0 flex-col overflow-hidden',
+          'rounded-xl border border-primary-200 bg-primary-50/95 shadow-sm',
+          'dark:border-neutral-800 dark:bg-neutral-900/80',
+          'm-2',
+        )}
+      >
+        <FilePanel selectedEntry={selectedEntry} />
+      </main>
+
+      {/* ── Right panel — directory tree ─────────────────────────────────── */}
       <aside
         className={cn(
           'flex h-full w-[260px] shrink-0 flex-col overflow-hidden',
           'rounded-xl border border-primary-200 bg-primary-50/95 shadow-sm',
           'dark:border-neutral-800 dark:bg-neutral-900/80',
-          'm-2 mr-0',
+          'm-2 ml-0',
         )}
       >
         {/* Tree header */}
@@ -1279,18 +1298,6 @@ export function FilesScreen() {
           <ScrollAreaCorner />
         </ScrollAreaRoot>
       </aside>
-
-      {/* ── Right panel — file viewer / editor ─────────────────────────── */}
-      <main
-        className={cn(
-          'flex h-full flex-1 min-w-0 flex-col overflow-hidden',
-          'rounded-xl border border-primary-200 bg-primary-50/95 shadow-sm',
-          'dark:border-neutral-800 dark:bg-neutral-900/80',
-          'm-2',
-        )}
-      >
-        <FilePanel selectedEntry={selectedEntry} />
-      </main>
 
       {/* ── Context menu ──────────────────────────────────────────────────── */}
       {contextMenu ? (

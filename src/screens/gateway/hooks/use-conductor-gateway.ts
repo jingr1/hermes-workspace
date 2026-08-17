@@ -1663,7 +1663,7 @@ export function useConductorGateway() {
                 setOrchestratorSessionKey(match.key)
                 setMissionWorkerKeys((current) => {
                   const next = new Set(current)
-                  next.delete(orchestratorKey)
+                  if (orchestratorKey !== null) next.delete(orchestratorKey)
                   next.add(match.key as string)
                   return next
                 })

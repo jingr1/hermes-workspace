@@ -2,10 +2,12 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
+  chatQueryKeys,
   moveHistoryMessages,
   reconcileSessionDraft,
 } from '../../screens/chat/chat-queries'
 import { ErrorBoundary } from '@/components/error-boundary'
+import { useProfiles } from '../../screens/chat/hooks/use-profiles'
 
 const ChatScreen = lazy(async () => {
   const module = await import('../../screens/chat/chat-screen')
@@ -53,7 +55,6 @@ export const Route = createFileRoute('/chat/$sessionKey')({
 })
 
 function ChatRoute() {
-  // Client-only rendering to prevent hydration mismatches
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
     setMounted(true)
@@ -61,6 +62,7 @@ function ChatRoute() {
 
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const { activeProfileName } = useProfiles()
   const [forcedSession, setForcedSession] = useState<{
     friendlyId: string
     sessionKey: string
@@ -97,12 +99,13 @@ function ChatRoute() {
       )
       reconcileSessionDraft(
         queryClient,
+        activeProfileName,
         sourceFriendlyId,
         sourceSessionKey,
         payload.friendlyId,
         payload.sessionKey,
       )
-      queryClient.invalidateQueries({ queryKey: ['chat', 'sessions'] })
+      queryClient.invalidateQueries({ queryKey: chatQueryKeys.sessions })
       setForcedSession({
         friendlyId: payload.friendlyId,
         sessionKey: payload.sessionKey,
@@ -117,7 +120,7 @@ function ChatRoute() {
         replace: true,
       })
     },
-    [activeFriendlyId, forcedSessionKey, navigate, queryClient],
+    [activeFriendlyId, activeProfileName, forcedSessionKey, navigate, queryClient],
   )
 
   if (!mounted) {

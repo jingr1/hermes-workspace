@@ -51,6 +51,8 @@ const VALID_THEMES = [
   'claude-classic-light',
   'claude-slate',
   'claude-slate-light',
+  'webui',
+  'webui-light',
 ]
 
 const themeScript = `
@@ -61,7 +63,7 @@ const themeScript = `
     const root = document.documentElement
     const storedTheme = localStorage.getItem('${THEME_STORAGE_KEY}')
     const theme = ${JSON.stringify(VALID_THEMES)}.includes(storedTheme) ? storedTheme : '${DEFAULT_THEME}'
-    const lightThemes = ['claude-nous-light', 'claude-official-light', 'claude-classic-light', 'claude-slate-light']
+    const lightThemes = ['claude-nous-light', 'claude-official-light', 'claude-classic-light', 'claude-slate-light', 'webui-light']
     const isDark = !lightThemes.includes(theme)
     root.classList.remove('light', 'dark', 'system')
     root.classList.add(isDark ? 'dark' : 'light')
@@ -92,9 +94,11 @@ const themeColorScript = `
       'claude-classic-light': '#F5F2ED',
       'claude-slate': '#0d1117',
       'claude-slate-light': '#F6F8FA',
+      'webui': '#0D0D1A',
+      'webui-light': '#FEFCF7',
     }
     const nextColor = colors[theme] || colors['${DEFAULT_THEME}']
-    const isDark = !['claude-nous-light', 'claude-official-light', 'claude-classic-light', 'claude-slate-light'].includes(String(theme))
+    const isDark = !['claude-nous-light', 'claude-official-light', 'claude-classic-light', 'claude-slate-light', 'webui-light'].includes(String(theme))
 
     let meta = document.querySelector('meta[name="theme-color"]')
     if (!meta) {
@@ -564,10 +568,20 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                 txt = '#24292f';
                 muted = '#57606A';
                 accent = '#3b82f6';
+              } else if (theme === 'webui') {
+                bg = '#0D0D1A';
+                txt = '#FFF8DC';
+                muted = '#C0C0C0';
+                accent = '#FFD700';
+              } else if (theme === 'webui-light') {
+                bg = '#FEFCF7';
+                txt = '#1A1610';
+                muted = '#5C5344';
+                accent = '#B8860B';
               }
             } catch(e){}
 
-            var isDark = !['claude-nous-light','claude-official-light','claude-classic-light','claude-slate-light'].includes(theme);
+            var isDark = !['claude-nous-light','claude-official-light','claude-classic-light','claude-slate-light','webui-light'].includes(theme);
             var quips = ["Consulting the oracle...","Loading ancient knowledge...","Warming up the messenger...","Calibrating tool chain...","Summoning your agent...","Preparing the workspace...","Bridging realms...","Initializing agent runtime..."];
             var quip = quips[Math.floor(Math.random() * quips.length)];
 

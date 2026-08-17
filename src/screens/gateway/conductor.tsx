@@ -9,6 +9,7 @@ import { OfficeView } from './components/office-view'
 import type { AgentWorkingRow } from './components/agents-working-panel'
 import { type GatewaySession } from '@/lib/gateway-api'
 import { cn } from '@/lib/utils'
+import { WorkspaceFolderPicker } from '@/components/workspace-folder-picker'
 import { type MissionHistoryEntry, type MissionHistoryWorkerDetail, useConductorGateway } from './hooks/use-conductor-gateway'
 
 type ConductorPhase = 'home' | 'preview' | 'active' | 'complete'
@@ -31,13 +32,6 @@ type AvailableModel = {
   id?: string
   provider?: string
   name?: string
-}
-
-type FileBrowserEntry = {
-  name: string
-  path: string
-  type: 'file' | 'folder'
-  children?: Array<FileBrowserEntry>
 }
 
 const THEME_STYLE: CSSProperties = {
@@ -485,37 +479,6 @@ function groupModelsByProvider(models: AvailableModel[]) {
     }))
 }
 
-function getDirectoryPathSegments(pathValue: string): string[] {
-  const normalized = pathValue.trim()
-  if (!normalized) return ['~']
-  if (normalized === '~') return ['~']
-  if (normalized.startsWith('~/')) {
-    return ['~', ...normalized.slice(2).split('/').filter(Boolean)]
-  }
-  if (normalized === '/') return ['/']
-  if (normalized.startsWith('/')) {
-    return ['/', ...normalized.slice(1).split('/').filter(Boolean)]
-  }
-  return normalized.split('/').filter(Boolean)
-}
-
-function buildDirectoryPathFromSegments(segments: string[]): string {
-  if (segments.length === 0) return '~'
-  if (segments[0] === '~') {
-    return segments.length === 1 ? '~' : `~/${segments.slice(1).join('/')}`
-  }
-  if (segments[0] === '/') {
-    return segments.length === 1 ? '/' : `/${segments.slice(1).join('/')}`
-  }
-  return segments.join('/')
-}
-
-function getParentDirectory(pathValue: string): string {
-  const segments = getDirectoryPathSegments(pathValue)
-  if (segments.length <= 1) return pathValue.startsWith('/') ? '/' : '~'
-  return buildDirectoryPathFromSegments(segments.slice(0, -1))
-}
-
 function getDirectorySuggestions() {
   return ['~/conductor-projects', '~/Projects', '/tmp', '~/Desktop']
 }
@@ -726,9 +689,6 @@ export function Conductor() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [directoryBrowserOpen, setDirectoryBrowserOpen] = useState(false)
   const [directoryBrowserPath, setDirectoryBrowserPath] = useState('~')
-  const [directoryBrowserEntries, setDirectoryBrowserEntries] = useState<FileBrowserEntry[]>([])
-  const [directoryBrowserLoading, setDirectoryBrowserLoading] = useState(false)
-  const [directoryBrowserError, setDirectoryBrowserError] = useState<string | null>(null)
   const modelsQuery = useQuery({
     queryKey: ['conductor', 'models'],
     queryFn: async () => {
@@ -743,48 +703,6 @@ export function Conductor() {
     staleTime: 60_000,
   })
   const availableModels = modelsQuery.data ?? []
-
-  useEffect(() => {
-    if (!directoryBrowserOpen) return
-
-    let cancelled = false
-
-    const loadDirectory = async () => {
-      setDirectoryBrowserLoading(true)
-      setDirectoryBrowserError(null)
-
-      try {
-        const res = await fetch(`/api/files?path=${encodeURIComponent(directoryBrowserPath)}`)
-        const data = (await res.json().catch(() => ({}))) as {
-          error?: string
-          root?: string
-          entries?: Array<FileBrowserEntry>
-        }
-
-        if (!res.ok) {
-          throw new Error(data.error || 'Failed to load directory')
-        }
-
-        if (cancelled) return
-        setDirectoryBrowserPath(typeof data.root === 'string' && data.root.trim() ? data.root : directoryBrowserPath)
-        setDirectoryBrowserEntries(Array.isArray(data.entries) ? data.entries.filter((entry) => entry?.type === 'folder') : [])
-      } catch (error) {
-        if (cancelled) return
-        setDirectoryBrowserEntries([])
-        setDirectoryBrowserError(error instanceof Error ? error.message : 'Failed to load directory')
-      } finally {
-        if (!cancelled) {
-          setDirectoryBrowserLoading(false)
-        }
-      }
-    }
-
-    void loadDirectory()
-
-    return () => {
-      cancelled = true
-    }
-  }, [directoryBrowserOpen, directoryBrowserPath])
 
   useEffect(() => {
     if (conductor.phase === 'idle' || conductor.phase === 'complete' || conductor.isPaused) return
@@ -877,24 +795,12 @@ export function Conductor() {
 
   const openDirectoryBrowser = () => {
     setDirectoryBrowserPath(conductor.conductorSettings.projectsDir.trim() || '~')
-    setDirectoryBrowserEntries([])
-    setDirectoryBrowserError(null)
     setDirectoryBrowserOpen(true)
   }
 
   const closeDirectoryBrowser = () => {
     setDirectoryBrowserOpen(false)
-    setDirectoryBrowserLoading(false)
-    setDirectoryBrowserError(null)
   }
-
-  const directoryBreadcrumbs = useMemo(() => {
-    const segments = getDirectoryPathSegments(directoryBrowserPath)
-    return segments.map((segment, index) => ({
-      label: segment === '/' ? 'Root' : segment,
-      path: buildDirectoryPathFromSegments(segments.slice(0, index + 1)),
-    }))
-  }, [directoryBrowserPath])
 
   const totalWorkers = conductor.workers.length
   const completedWorkers = conductor.workers.filter((worker) => worker.status === 'complete').length
@@ -1684,14 +1590,14 @@ export function Conductor() {
           {directoryBrowserOpen ? (
             <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[color-mix(in_srgb,var(--theme-bg)_55%,transparent)] px-4 py-6 backdrop-blur-md" onClick={closeDirectoryBrowser}>
               <div
-                className="w-full max-w-2xl rounded-3xl border border-[var(--theme-border2)] bg-[var(--theme-card)] p-5 shadow-[0_24px_80px_var(--theme-shadow)] sm:p-6"
+                className="w-full max-w-xl rounded-3xl border border-[var(--theme-border2)] bg-[var(--theme-card)] p-5 shadow-[0_24px_80px_var(--theme-shadow)] sm:p-6"
                 onClick={(event) => event.stopPropagation()}
               >
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--theme-muted)]">Directory Browser</p>
                     <h3 className="mt-2 text-xl font-semibold tracking-tight text-[var(--theme-text)]">Choose project directory</h3>
-                    <p className="mt-2 text-sm text-[var(--theme-muted-2)]">Select the folder where Conductor should create project output.</p>
+                    <p className="mt-2 text-sm text-[var(--theme-muted-2)]">Enter a path or pick a folder from your home directory.</p>
                   </div>
                   <button
                     type="button"
@@ -1704,91 +1610,9 @@ export function Conductor() {
                 </div>
 
                 <div className="mt-5 space-y-4">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setDirectoryBrowserPath(getParentDirectory(directoryBrowserPath))}
-                      disabled={directoryBrowserLoading || getParentDirectory(directoryBrowserPath) === directoryBrowserPath}
-                      className={cn(
-                        'rounded-xl border px-3 py-2 text-sm font-medium transition-colors',
-                        directoryBrowserLoading || getParentDirectory(directoryBrowserPath) === directoryBrowserPath
-                          ? 'cursor-not-allowed border-[var(--theme-border)] bg-[var(--theme-card2)] text-[var(--theme-muted)] opacity-60'
-                          : 'border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)] hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent-strong)]',
-                      )}
-                    >
-                      Up
-                    </button>
-                    <div className="min-w-0 flex-1 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2">
-                      <div className="flex flex-wrap items-center gap-1 text-sm">
-                        {directoryBreadcrumbs.map((crumb, index) => (
-                          <div key={crumb.path} className="flex items-center gap-1">
-                            {index > 0 ? <span className="text-[var(--theme-muted-2)]">/</span> : null}
-                            <button
-                              type="button"
-                              onClick={() => setDirectoryBrowserPath(crumb.path)}
-                              className={cn(
-                                'rounded-md px-1.5 py-0.5 transition-colors',
-                                crumb.path === directoryBrowserPath ? 'bg-[var(--theme-accent-soft)] text-[var(--theme-accent-strong)]' : 'text-[var(--theme-text)] hover:bg-[var(--theme-card2)]',
-                              )}
-                            >
-                              {crumb.label}
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--theme-muted)]">Current path</span>
-                      <span className="truncate text-sm text-[var(--theme-text)]">{directoryBrowserPath}</span>
-                    </div>
-                  </div>
-
-                  {directoryBrowserError ? (
-                    <div className="rounded-2xl border border-[var(--theme-warning-border)] bg-[var(--theme-warning-soft)] px-4 py-3 text-sm text-[var(--theme-warning)]">{directoryBrowserError}</div>
-                  ) : null}
-
-                  <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)]">
-                    <div className="flex items-center justify-between border-b border-[var(--theme-border)] px-4 py-3">
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--theme-muted)]">Folders</span>
-                      {directoryBrowserLoading ? (
-                        <span className="text-xs text-[var(--theme-muted-2)]">Loading…</span>
-                      ) : (
-                        <span className="text-xs text-[var(--theme-muted-2)]">{directoryBrowserEntries.length} visible</span>
-                      )}
-                    </div>
-                    <div className="max-h-[22rem] overflow-y-auto p-2">
-                      {directoryBrowserLoading ? (
-                        <div className="flex items-center justify-center gap-3 px-4 py-10 text-sm text-[var(--theme-muted)]">
-                          <div className="size-4 animate-spin rounded-full border-2 border-[var(--theme-border)] border-t-[var(--theme-accent)]" />
-                          <span>Loading folders…</span>
-                        </div>
-                      ) : directoryBrowserEntries.length > 0 ? (
-                        <div className="space-y-1">
-                          {directoryBrowserEntries.map((entry) => (
-                            <button
-                              key={entry.path}
-                              type="button"
-                              onClick={() => setDirectoryBrowserPath(entry.path)}
-                              className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-[var(--theme-text)] transition-colors hover:bg-[var(--theme-card2)]"
-                            >
-                              <span className="inline-flex size-2 rounded-full bg-[var(--theme-accent)]" />
-                              <span className="min-w-0 flex-1 truncate">{entry.name}</span>
-                              <span className="text-xs text-[var(--theme-muted)]">Open</span>
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="px-4 py-10 text-center text-sm text-[var(--theme-muted)]">No folders found in this location.</div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--theme-muted)]">Quick paths</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
+                  <div>
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--theme-muted)]">Quick paths</p>
+                    <div className="flex flex-wrap gap-2">
                       {getDirectorySuggestions().map((pathOption) => (
                         <button
                           key={pathOption}
@@ -1801,6 +1625,11 @@ export function Conductor() {
                       ))}
                     </div>
                   </div>
+
+                  <WorkspaceFolderPicker
+                    value={directoryBrowserPath}
+                    onChange={setDirectoryBrowserPath}
+                  />
 
                   <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                     <button

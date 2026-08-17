@@ -121,6 +121,7 @@ type WorkerReportCard = {
   readyCount: number
   blockedCount: number
   artifactCount: number
+  prUrl?: string
 }
 
 const STATE_FILTERS: Array<{ id: ReportState; label: string }> = [
@@ -828,7 +829,7 @@ export function Swarm2ReportsView({
                     <div className="relative flex size-12 shrink-0 items-center justify-center">
                       <AgentProgress
                         value={card.state === 'blocked' ? 30 : card.state === 'needs_review' ? 74 : card.state === 'ready' ? 100 : 58}
-                        status={card.state === 'blocked' ? 'failed' : card.state === 'ready' ? 'done' : card.state === 'needs_review' ? 'thinking' : 'running'}
+                        status={card.state === 'blocked' ? 'failed' : card.state === 'ready' ? 'complete' : card.state === 'needs_review' ? 'thinking' : 'running'}
                         size={48}
                         strokeWidth={2.5}
                         className={card.state === 'blocked' ? 'text-red-500' : card.state === 'needs_review' ? 'text-amber-500' : card.state === 'ready' ? 'text-emerald-500' : 'text-sky-500'}
@@ -868,7 +869,7 @@ export function Swarm2ReportsView({
                     {(card.state === 'needs_review' || card.state === 'blocked' || card.state === 'ready') ? (
                       <button
                         type="button"
-                        onClick={() => onRouteToReviewer?.(card)}
+                        onClick={() => onRouteToReviewer?.(card as any)}
                         className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card)] px-2.5 py-1.5 text-[11px] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
                       >
                         Steer

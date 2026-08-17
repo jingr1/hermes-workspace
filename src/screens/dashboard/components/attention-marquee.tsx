@@ -10,6 +10,7 @@ const SOURCE_GLYPH: Record<DashboardIncident['source'], string> = {
   log: '📜',
   config: '⚙️',
   gateway: '🛰️',
+  kanban: '📋',
 }
 
 const SEVERITY_COLOR: Record<DashboardIncident['severity'], string> = {

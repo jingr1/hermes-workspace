@@ -14,6 +14,7 @@ import {
   PaintBoardIcon,
   Settings02Icon,
   Sun01Icon,
+  UserIcon,
   VolumeHighIcon,
 } from '@hugeicons/core-free-icons'
 import { Component, useCallback, useEffect, useRef, useState } from 'react'
@@ -64,6 +65,7 @@ import { LOCALE_LABELS,  getLocale, setLocale } from '@/lib/i18n'
 // ── Types ───────────────────────────────────────────────────────────────
 
 type SectionId =
+  | 'profile'
   | 'claude'
   | 'agent'
   | 'voice'
@@ -74,6 +76,7 @@ type SectionId =
   | 'language'
 
 const SECTIONS: Array<{ id: SectionId; label: string; icon: any }> = [
+  { id: 'profile', label: 'Profile', icon: UserIcon },
   { id: 'claude', label: 'Model & Provider', icon: CloudIcon },
   { id: 'agent', label: 'Agent', icon: Settings02Icon },
   { id: 'voice', label: 'Voice', icon: VolumeHighIcon },
@@ -1280,7 +1283,7 @@ function HermesContent() {
   )
 }
 
-function _ProfileContent() {
+function ProfileContent() {
   const { settings: cs, updateSettings: updateCS } = useChatSettingsStore()
   const [profileError, setProfileError] = useState<string | null>(null)
   const [processing, setProcessing] = useState(false)
@@ -1512,6 +1515,7 @@ const ENTERPRISE_THEME_FAMILIES: Array<ThemeId> = [
   'claude-official',
   'claude-classic',
   'claude-slate',
+  'webui',
 ]
 
 const ENTERPRISE_THEMES = THEMES.map((theme) => ({
@@ -1590,13 +1594,29 @@ const ENTERPRISE_THEMES = THEMES.map((theme) => ({
                       accent: '#7eb8f6',
                       text: '#c9d1d9',
                     }
-                  : {
-                      bg: '#F6F8FA',
-                      panel: '#FFFFFF',
-                      border: '#D0D7DE',
-                      accent: '#3b82f6',
-                      text: '#24292f',
-                    },
+                  : theme.id === 'webui'
+                    ? {
+                        bg: '#0D0D1A',
+                        panel: '#1A1A2E',
+                        border: '#2A2A45',
+                        accent: '#FFD700',
+                        text: '#FFF8DC',
+                      }
+                    : theme.id === 'webui-light'
+                      ? {
+                          bg: '#FEFCF7',
+                          panel: '#FAF7F0',
+                          border: '#E0D8C8',
+                          accent: '#B8860B',
+                          text: '#1A1610',
+                        }
+                      : {
+                          bg: '#F6F8FA',
+                          panel: '#FFFFFF',
+                          border: '#D0D7DE',
+                          accent: '#3b82f6',
+                          text: '#24292f',
+                        },
 }))
 
 function ThemeSwatch({
@@ -2474,6 +2494,7 @@ function LanguageContent() {
 // ── Main Dialog ─────────────────────────────────────────────────────────
 
 const CONTENT_MAP: Record<SectionId, () => React.JSX.Element> = {
+  profile: ProfileContent,
   claude: HermesContent,
   agent: AgentBehaviorContent,
   voice: VoiceContent,

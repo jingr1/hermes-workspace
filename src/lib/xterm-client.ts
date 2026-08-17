@@ -4,7 +4,7 @@ import type { FitAddon } from 'xterm-addon-fit'
 import type { WebLinksAddon } from 'xterm-addon-web-links'
 import type { Terminal } from 'xterm'
 
-type Ctor<T> = new (...args: ConstructorParameters<new () => T>) => T
+type Ctor<T> = new (options?: any) => T
 
 function pickConstructor<T>(mod: Record<string, unknown>, exportName: string): Ctor<T> {
   const direct = mod[exportName]

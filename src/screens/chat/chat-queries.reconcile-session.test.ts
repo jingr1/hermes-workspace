@@ -21,17 +21,18 @@ function makeSession(overrides: Partial<SessionMeta> = {}): SessionMeta {
 describe('reconcileSessionDraft', () => {
   it('promotes an optimistic draft session to the resolved ids', () => {
     const queryClient = new QueryClient()
-    queryClient.setQueryData(['chat', 'sessions'], [makeSession()])
+    queryClient.setQueryData(['chat', 'sessions', 'current'], [makeSession()])
 
     reconcileSessionDraft(
       queryClient,
+      'current',
       'draft-friendly',
       'draft-key',
       'real-friendly',
       'real-key',
     )
 
-    const sessions = queryClient.getQueryData(['chat', 'sessions']) as Array<SessionMeta>
+    const sessions = queryClient.getQueryData(['chat', 'sessions', 'current']) as Array<SessionMeta>
     expect(sessions).toHaveLength(1)
     expect(sessions[0]).toMatchObject({
       key: 'real-key',
@@ -42,7 +43,7 @@ describe('reconcileSessionDraft', () => {
 
   it('merges the optimistic draft into an existing resolved session entry', () => {
     const queryClient = new QueryClient()
-    queryClient.setQueryData(['chat', 'sessions'], [
+    queryClient.setQueryData(['chat', 'sessions', 'current'], [
       makeSession({
         key: 'draft-key',
         friendlyId: 'draft-friendly',
@@ -70,13 +71,14 @@ describe('reconcileSessionDraft', () => {
 
     reconcileSessionDraft(
       queryClient,
+      'current',
       'draft-friendly',
       'draft-key',
       'real-friendly',
       'real-key',
     )
 
-    const sessions = queryClient.getQueryData(['chat', 'sessions']) as Array<SessionMeta>
+    const sessions = queryClient.getQueryData(['chat', 'sessions', 'current']) as Array<SessionMeta>
     expect(sessions).toHaveLength(1)
     expect(sessions[0]).toMatchObject({
       key: 'real-key',

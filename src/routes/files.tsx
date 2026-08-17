@@ -16,6 +16,7 @@ import {
   ScrollAreaViewport,
 } from '@/components/ui/scroll-area'
 import { usePageTitle } from '@/hooks/use-page-title'
+import { useActiveWorkspace } from '@/hooks/use-active-workspace'
 import { FileExplorerSidebar } from '@/components/file-explorer'
 import type { FileEntry } from '@/components/file-explorer/file-explorer-sidebar'
 import { resolveTheme, useSettings } from '@/hooks/use-settings'
@@ -123,6 +124,8 @@ export const Route = createFileRoute('/files')({
 function FilesRoute() {
   usePageTitle('Files')
   const { settings } = useSettings()
+  const workspaceQuery = useActiveWorkspace()
+  const workspacePath = workspaceQuery.data?.path ?? ''
   const [isMobile, setIsMobile] = useState(false)
   const [fileExplorerCollapsed, setFileExplorerCollapsed] = useState(false)
   const [loaded, setLoaded] = useState<LoadedFile | null>(null)
@@ -143,6 +146,11 @@ function FilesRoute() {
     if (!isMobile) return
     setFileExplorerCollapsed(true)
   }, [isMobile])
+
+  useEffect(() => {
+    if (!workspaceQuery.isFetched) return
+    setLoaded(null)
+  }, [workspacePath, workspaceQuery.isFetched])
 
   const handleInsertReference = useCallback(() => {
     // Reference insertion is only useful when there's a composer; on this
@@ -252,13 +260,6 @@ function FilesRoute() {
   return (
     <div className="h-full min-h-0 overflow-hidden bg-surface text-primary-900">
       <div className="flex h-full min-h-0 overflow-hidden">
-        <FileExplorerSidebar
-          collapsed={fileExplorerCollapsed}
-          onToggle={() => setFileExplorerCollapsed((prev) => !prev)}
-          onInsertReference={handleInsertReference}
-          onOpenFile={handleOpenFile}
-          activePath={loaded?.path ?? null}
-        />
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <header className="flex items-center gap-3 border-b border-primary-200 px-3 py-2 md:px-4 md:py-3">
             <button
@@ -293,7 +294,9 @@ function FilesRoute() {
                 </>
               ) : (
                 <>
-                  <h1 className="hidden text-base font-medium md:block md:text-lg">Files</h1>
+                  <h1 className="hidden text-base font-medium md:block md:text-lg">
+                    Files
+                  </h1>
                   <p className="hidden text-sm text-primary-600 sm:block">
                     Click a file in the sidebar to load it into the editor.
                   </p>
@@ -404,6 +407,14 @@ function FilesRoute() {
             )}
           </div>
         </main>
+        <FileExplorerSidebar
+          collapsed={fileExplorerCollapsed}
+          onToggle={() => setFileExplorerCollapsed((prev) => !prev)}
+          onInsertReference={handleInsertReference}
+          onOpenFile={handleOpenFile}
+          activePath={loaded?.path ?? null}
+          side="right"
+        />
       </div>
     </div>
   )

@@ -235,6 +235,12 @@
 :root {
   --interface-font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --interface-density-scale: 1;
+  /* Chat markdown semantics — WebUI uses distinct colors for strong / em / inline code */
+  --md-strong: var(--color-primary-950);
+  --md-em: var(--color-primary-700);
+  --md-link: var(--color-accent-500);
+  --code-inline-bg: var(--color-primary-100);
+  --code-inline-border: var(--color-primary-200);
 }
 
 [data-interface-font='inter'] {
@@ -275,10 +281,10 @@ body {
 }
 
 .inline-code {
-  background: var(--color-primary-100);
-  border: 1px solid var(--color-primary-200);
+  background: var(--code-inline-bg);
+  border: 1px solid var(--code-inline-border);
   border-radius: 0.5rem;
-  color: var(--color-primary-900);
+  color: var(--code-foreground, var(--color-primary-900));
   font-family:
     'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
     'Liberation Mono', 'Courier New', monospace;
@@ -1600,3 +1606,4 @@ code {
    Tailwind oklch values and .system dark mode overrides.
    ═══════════════════════════════════════════════════════════════════ */
 @import './scifi-theme.css';
+@import './webui-theme.css';

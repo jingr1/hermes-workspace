@@ -913,10 +913,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
             newPlainText.length === 0 &&
             sessionMessages.length > 0
           ) {
-            const prevEmptyIdx = sessionMessages.findLastIndex(
-              (m) =>
-                m.role === 'assistant' &&
-                extractMessageText(m).length === 0,
+            const prevEmptyIdx = sessionMessages.reduce<number>(
+              (found, m, idx) =>
+                m.role === 'assistant' && extractMessageText(m).length === 0
+                  ? idx
+                  : found,
+              -1,
             )
             if (prevEmptyIdx >= 0) {
               sessionMessages[prevEmptyIdx] = incomingMessage

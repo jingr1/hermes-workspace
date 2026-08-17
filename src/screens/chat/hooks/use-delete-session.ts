@@ -9,6 +9,7 @@ import { clearPendingSendForSession, resetPendingSend } from '../pending-send'
 import { clearSessionDeleted, markSessionDeleted } from '../session-tombstones'
 import { readError } from '../utils'
 import { clearSessionTitleState } from '../session-title-store'
+import { useProfiles } from './use-profiles'
 
 export type DeleteSessionResult = {
   deleteSession: (
@@ -22,8 +23,11 @@ export type DeleteSessionResult = {
 
 export function useDeleteSession(): DeleteSessionResult {
   const queryClient = useQueryClient()
+  const { activeProfileName } = useProfiles()
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const sessionsKey = chatQueryKeys.sessionsForProfile(activeProfileName)
 
   const mutation = useMutation({
     mutationFn: async function deleteSessionRequest(payload: {
@@ -44,10 +48,11 @@ export function useDeleteSession(): DeleteSessionResult {
       setError(null)
       markSessionDeleted(payload.sessionKey || payload.friendlyId)
       clearPendingSendForSession(payload.sessionKey, payload.friendlyId)
-      await queryClient.cancelQueries({ queryKey: chatQueryKeys.sessions })
-      const previousSessions = queryClient.getQueryData(chatQueryKeys.sessions)
+      await queryClient.cancelQueries({ queryKey: sessionsKey })
+      const previousSessions = queryClient.getQueryData(sessionsKey)
       removeSessionFromCache(
         queryClient,
+        activeProfileName,
         payload.sessionKey,
         payload.friendlyId,
       )
@@ -63,7 +68,7 @@ export function useDeleteSession(): DeleteSessionResult {
     onError: function onError(err, _payload, context) {
       if (context?.previousSessions) {
         queryClient.setQueryData(
-          chatQueryKeys.sessions,
+          sessionsKey,
           context.previousSessions,
         )
       }
@@ -75,7 +80,7 @@ export function useDeleteSession(): DeleteSessionResult {
         resetPendingSend()
       }
       clearSessionTitleState(payload.friendlyId || payload.sessionKey)
-      queryClient.invalidateQueries({ queryKey: chatQueryKeys.sessions })
+      queryClient.invalidateQueries({ queryKey: sessionsKey })
     },
     onSettled: function onSettled() {
       setDeleting(false)

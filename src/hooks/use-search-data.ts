@@ -3,6 +3,7 @@
  * Fetches sessions, files, and activity from existing sources
  */
 import { useQuery } from '@tanstack/react-query'
+import { useActiveWorkspace } from '@/hooks/use-active-workspace'
 // import type { ActivityEvent } from '@/types/activity-event'
 // Activity events disabled in search — SSE connection caused freezing
 // import { useActivityEvents } from '@/screens/activity/use-activity-events'
@@ -266,6 +267,8 @@ export function useSearchData(scope: SearchQueryScope, query = '') {
   const sessionsAvailable = useFeatureAvailable('sessions')
   const skillsAvailable = useFeatureAvailable('skills')
   const trimmedQuery = query.trim()
+  const workspaceQuery = useActiveWorkspace()
+  const workspacePath = workspaceQuery.data?.path ?? ''
 
   // Sessions
   const sessionsQuery = useQuery({
@@ -295,9 +298,10 @@ export function useSearchData(scope: SearchQueryScope, query = '') {
 
   // Files
   const filesQuery = useQuery({
-    queryKey: ['search', 'files'],
+    queryKey: ['search', 'files', workspacePath],
     queryFn: ({ signal }) => fetchFiles(signal),
-    enabled: scope === 'all' || scope === 'files',
+    enabled:
+      (scope === 'all' || scope === 'files') && workspaceQuery.isFetched,
     staleTime: FILES_STALE_TIME_MS,
     gcTime: SEARCH_QUERY_GC_TIME_MS,
     retry: false,

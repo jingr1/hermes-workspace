@@ -20,6 +20,7 @@ import {
   listLocalSessions,
   updateLocalSessionTitle,
 } from '../../server/local-session-store'
+import { listSessionsForProfile } from '../../server/profiles-browser'
 
 export const Route = createFileRoute('/api/sessions')({
   server: {
@@ -29,6 +30,33 @@ export const Route = createFileRoute('/api/sessions')({
         if (!isAuthenticated(request)) {
           return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
         }
+
+        // ?profile=<name> — return sessions from that profile's filesystem directory
+        // without touching the global active profile
+        const url = new URL(request.url)
+        const profileParam = url.searchParams.get('profile')
+
+        if (profileParam) {
+          // Profile-aware listing: read directly from that profile's
+          // state.db SQLite database (not the request dump files).
+          const fsSessions = listSessionsForProfile(profileParam)
+          return json({
+            sessions: fsSessions.map((s) => ({
+              key: s.key,
+              id: s.key,
+              friendlyId: s.friendlyId,
+              title: s.title || s.friendlyId,
+              label: s.title || null,
+              derivedTitle: s.title || s.friendlyId,
+              updatedAt: s.updatedAt,
+              startedAt: s.updatedAt,
+              source: s.source,
+              model: s.model || undefined,
+              message_count: s.messageCount ?? 0,
+            })),
+          })
+        }
+
         const capabilities = await ensureGatewayProbed()
         if (!capabilities.sessions) {
           return json({

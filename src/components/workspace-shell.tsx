@@ -214,7 +214,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
   const isOnPlaygroundRoute = pathname === '/playground' || pathname.startsWith('/playground/')
   const isOnHermesWorldLandingRoute = pathname === '/hermes-world' || pathname.startsWith('/hermes-world/') || pathname === '/world' || pathname.startsWith('/world/')
   const isEmbeddedSurface =
-    search?.embed === '1' || search?.embed === 'true' || search?.mode === 'embed'
+    (search as any)?.embed === '1' || (search as any)?.embed === 'true' || (search as any)?.mode === 'embed'
   const isChromeFreeSurface = isEmbeddedSurface || isOnHermesWorldLandingRoute
   const hideChatSidebar = isOnChatRoute && chatFocusMode
   const showDesktopSidebarBackdrop =
@@ -374,7 +374,6 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
           {!isChromeFreeSurface && !isMobile && !hideChatSidebar && (
             <div className="relative z-30">
               <ChatSidebar
-                sessions={sessions}
                 activeFriendlyId={activeFriendlyId}
                 creatingSession={creatingSession}
                 onCreateSession={startNewChat}
@@ -382,10 +381,6 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
                 onToggleCollapse={toggleSidebar}
                 onSelectSession={handleSelectSession}
                 onActiveSessionDelete={handleActiveSessionDelete}
-                sessionsLoading={sessionsLoading}
-                sessionsFetching={sessionsFetching}
-                sessionsError={sessionsError}
-                onRetrySessions={refetchSessions}
               />
             </div>
           )}

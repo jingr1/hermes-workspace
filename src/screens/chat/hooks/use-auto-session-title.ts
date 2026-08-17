@@ -7,6 +7,7 @@ import {
   useSessionTitleInfo,
 } from '../session-title-store'
 import { textFromMessage } from '../utils'
+import { useProfiles } from './use-profiles'
 import type { ChatMessage, SessionMeta } from '../types'
 
 const MAX_TITLE_LENGTH = 50
@@ -70,8 +71,11 @@ export function useAutoSessionTitle({
   enabled,
 }: UseAutoSessionTitleInput) {
   const queryClient = useQueryClient()
+  const { activeProfileName } = useProfiles()
   const titleInfo = useSessionTitleInfo(friendlyId)
   const lastAttemptRef = useRef<Record<string, string>>({})
+
+  const sessionsKey = chatQueryKeys.sessionsForProfile(activeProfileName)
 
   const proposedTitle = useMemo(() => {
     const firstUserText = getFirstUserMessage(messages)
@@ -130,7 +134,7 @@ export function useAutoSessionTitle({
       error: null,
     })
     queryClient.setQueryData(
-      chatQueryKeys.sessions,
+      sessionsKey,
       function updateSessions(existing: unknown) {
         if (!Array.isArray(existing)) return existing
         return existing.map((session) => {
@@ -174,7 +178,7 @@ export function useAutoSessionTitle({
     },
     onSuccess: (payload) => {
       applyTitle(payload.friendlyId, payload.title, 'auto')
-      void queryClient.invalidateQueries({ queryKey: chatQueryKeys.sessions })
+      void queryClient.invalidateQueries({ queryKey: sessionsKey })
     },
     onError: (error, payload) => {
       updateSessionTitleState(payload.friendlyId, {

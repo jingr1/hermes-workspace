@@ -33,7 +33,7 @@ function makeRequest(url: string): Request {
 
 async function callGet(url: string): Promise<Response> {
   const request = makeRequest(url)
-  const handler = Route.options.server?.handlers?.GET
+  const handler = (Route.options as any).server?.handlers?.GET
   if (!handler) throw new Error('No GET handler')
   return handler({ request } as Parameters<typeof handler>[0])
 }

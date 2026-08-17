@@ -11,6 +11,8 @@ export type ThemeId =
   | 'claude-slate-light'
   | 'scifi'
   | 'scifi-light'
+  | 'webui'
+  | 'webui-light'
 
 export const THEMES: Array<{
   id: ThemeId
@@ -90,6 +92,18 @@ export const THEMES: Array<{
     description: 'Cold steel and teal — cyberpunk interface in daylight',
     icon: '🌌',
   },
+  {
+    id: 'webui',
+    label: 'WebUI',
+    description: 'Hermes WebUI calm console — navy-black with gold accent',
+    icon: '◎',
+  },
+  {
+    id: 'webui-light',
+    label: 'WebUI Light',
+    description: 'Hermes WebUI paper cream with dark-gold accent',
+    icon: '◎',
+  },
 ]
 
 const STORAGE_KEY = 'claude-theme'
@@ -105,6 +119,7 @@ const LIGHT_THEME_MAP: Record<
   'claude-classic': 'claude-classic-light',
   'claude-slate': 'claude-slate-light',
   'scifi': 'scifi-light',
+  webui: 'webui-light',
 }
 const DARK_THEME_MAP: Record<
   Extract<ThemeId, `${string}-light`>,
@@ -116,6 +131,7 @@ const DARK_THEME_MAP: Record<
   'claude-classic-light': 'claude-classic',
   'claude-slate-light': 'claude-slate',
   'scifi-light': 'scifi',
+  'webui-light': 'webui',
 }
 
 const LIGHT_THEMES = new Set<ThemeId>([
@@ -125,6 +141,7 @@ const LIGHT_THEMES = new Set<ThemeId>([
   'claude-classic-light',
   'claude-slate-light',
   'scifi-light',
+  'webui-light',
 ])
 
 export function isValidTheme(

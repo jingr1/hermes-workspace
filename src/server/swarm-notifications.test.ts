@@ -55,6 +55,7 @@ describe('swarm-notifications', () => {
       result: 'Runtime summary is truthful',
       blocker: null,
       nextAction: 'Route to reviewer inbox',
+      reviewOutcome: null,
       raw: 'STATE: DONE\nFILES_CHANGED: src/routes/api/swarm-dispatch.ts\nCOMMANDS_RUN: pnpm vitest run src/server/swarm-notifications.test.ts\nRESULT: Runtime summary is truthful\nBLOCKER: none\nNEXT_ACTION: Route to reviewer inbox',
     }
 
@@ -111,6 +112,7 @@ describe('swarm-notifications', () => {
         result: 'working',
         blocker: null,
         nextAction: 'continue',
+        reviewOutcome: null,
         raw: baseRaw,
       },
       notifySessionKey: 'qa-main',
@@ -129,6 +131,7 @@ describe('swarm-notifications', () => {
         result: 'done',
         blocker: null,
         nextAction: 'next thing',
+        reviewOutcome: null,
         raw: baseRaw,
       },
       notifySessionKey: 'qa-main',
@@ -149,6 +152,7 @@ describe('swarm-notifications', () => {
       blocker: 'Three valid issues, all P0, need judgment',
       nextAction: 'Aurora pick one',
       raw: 'STATE: NEEDS_INPUT\nRESULT: Need Aurora ack on which P0 issue to pick\nBLOCKER: Three valid issues, all P0, need judgment\nNEXT_ACTION: Aurora pick one',
+      reviewOutcome: null,
     }
     mkdirSync(join(tempRoot, 'swarm12'), { recursive: true })
 
@@ -191,6 +195,7 @@ describe('swarm-notifications', () => {
       blocker: 'gh auth missing on host',
       nextAction: 'Aurora repair gh auth',
       raw: 'STATE: BLOCKED\nBLOCKER: gh auth missing on host',
+      reviewOutcome: null,
     }
     mkdirSync(join(tempRoot, 'swarm12'), { recursive: true })
 
@@ -217,6 +222,7 @@ describe('swarm-notifications', () => {
       blocker: null,
       nextAction: 'Continue loop',
       raw: 'STATE: DONE\nRESULT: Orchestrator self-report\nNEXT_ACTION: Continue loop',
+      reviewOutcome: null,
     }
     mkdirSync(join(tempRoot, 'orchestrator'), { recursive: true })
 

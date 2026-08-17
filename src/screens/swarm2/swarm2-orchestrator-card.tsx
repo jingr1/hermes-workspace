@@ -14,7 +14,7 @@ import { PixelAvatar } from '@/components/agent-swarm/pixel-avatar'
 import { Button } from '@/components/ui/button'
 import { RouterChat, type DispatchResponse } from '@/components/swarm/router-chat'
 import { OfficeView } from '@/screens/gateway/components/office-view'
-import type { AgentWorkingRow } from '@/screens/gateway/components/agents-working-panel'
+import type { AgentWorkingRow, AgentWorkingStatus } from '@/screens/gateway/components/agents-working-panel'
 import type { CrewMember } from '@/hooks/use-crew-status'
 import { cn } from '@/lib/utils'
 
@@ -144,7 +144,7 @@ export function Swarm2OrchestratorCard({
     id: agent.workerId,
     name: agent.workerName,
     modelId: agent.role,
-    status: agent.state === 'blocked' ? 'error' : agent.state === 'ready' ? 'done' : 'active',
+    status: (agent.state === 'blocked' ? 'error' : agent.state === 'ready' ? 'idle' : 'active') as AgentWorkingStatus,
     lastLine: agent.task,
     lastAt: Date.now(),
     taskCount: agent.state === 'ready' ? 0 : 1,
@@ -359,6 +359,7 @@ export function Swarm2OrchestratorCard({
                   onViewOutput={() => undefined}
                   containerHeight={360}
                   hideHeader
+                  processType="hierarchical"
                 />
               </div>
             ) : visibleAgents.length ? (

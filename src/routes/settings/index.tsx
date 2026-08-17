@@ -198,6 +198,20 @@ const THEME_PREVIEWS: Record<
     accent: '#0097A7',
     text: '#0A1628',
   },
+  webui: {
+    bg: '#0D0D1A',
+    panel: '#1A1A2E',
+    border: '#2A2A45',
+    accent: '#FFD700',
+    text: '#FFF8DC',
+  },
+  'webui-light': {
+    bg: '#FEFCF7',
+    panel: '#FAF7F0',
+    border: '#E0D8C8',
+    accent: '#B8860B',
+    text: '#1A1610',
+  },
 }
 
 function WorkspaceThemePicker() {
@@ -449,6 +463,8 @@ function SettingsRoute() {
             </>
           )}
 
+          {activeSection === 'profile' && <ProfileSection />}
+
           {/* ── Chat ────────────────────────────────────────────── */}
           {activeSection === 'chat' && <ChatDisplaySection />}
 
@@ -691,7 +707,7 @@ function SettingsRoute() {
 const PROFILE_IMAGE_MAX_DIMENSION = 128
 const PROFILE_IMAGE_MAX_FILE_SIZE = 10 * 1024 * 1024
 
-function _ProfileSection() {
+function ProfileSection() {
   const { settings: chatSettings, updateSettings: updateChatSettings } =
     useChatSettingsStore()
   const [profileError, setProfileError] = useState<string | null>(null)
@@ -2243,7 +2259,7 @@ function ClaudeConfigSection({
                       style={{ color: 'var(--theme-muted)' }}
                     >
                       {customApiKeyConfigured
-                        ? customProviderCatalogEntry.maskedKeys['CUSTOM_API_KEY'] || 'Set'
+                        ? customProviderCatalogEntry?.maskedKeys['CUSTOM_API_KEY'] || 'Set'
                         : 'Not set'}
                     </span>
                     <Button
