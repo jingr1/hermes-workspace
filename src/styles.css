@@ -293,6 +293,19 @@ body {
   white-space: nowrap;
 }
 
+/* KaTeX — aligned with hermes-webui `.katex-block` / `.msg-body .katex` */
+.katex-display {
+  display: block;
+  text-align: center;
+  margin: 8px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.katex {
+  font-size: 1.1em;
+}
+
 .code-block .shiki {
   background: transparent !important;
   margin: 0;

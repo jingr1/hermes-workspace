@@ -415,16 +415,13 @@ HERMES_DASHBOARD_URL=http://127.0.0.1:9119
 | Telegram / Discord / other messaging platforms | No — those are separate platform adapters |
 | Workspace, Open WebUI, or any client calling `:8642` HTTP APIs | **Yes** |
 
-**Workspace pairing rule of thumb:** keep **one** API-server gateway as the Workspace backend (default `:8642`). Point `HERMES_API_URL` at that instance. Extra profile gateways are optional and only needed when you want each profile as its own HTTP model backend.
+**Workspace pairing:** on localhost, Workspace lazy-starts **one API gateway per profile** on a stable port (default `:8642`, then `:8643`…). Switching the profile list only changes which port chat talks to — it does not restart other gateways. Point `HERMES_API_URL` at a remote host to keep single-gateway pairing. Swarm workers still use per-profile `HERMES_HOME` + tmux and do not go through this pool.
 
 #### Multi-profile port conflicts
 
 Every profile that sets `API_SERVER_ENABLED=true` defaults to port **8642**. Starting several `hermes -p <name> gateway run` processes without unique ports fails with `api_server_port_in_use`.
 
-Pick one strategy:
-
-1. **Recommended for Workspace** — enable API server only on the profile (or default home) that Workspace should use; leave `API_SERVER_ENABLED` unset/`false` on the others. TUI/cron profiles keep working without an HTTP port.
-2. **One process per profile, each with its own port** — set a unique port per profile (env wins over YAML):
+Workspace avoids that by injecting `API_SERVER_PORT` when it lazy-starts a profile gateway. You can still pin a port yourself (env wins over YAML; a `.env` symlink to `~/.hermes/.env` is ignored so shared files cannot collide):
 
 ```env
 # e.g. ~/.hermes/profiles/writer/.env  (do NOT share one .env symlink across profiles if ports differ)
@@ -455,11 +452,9 @@ Example port map (adjust as needed):
 | researcher | `8648` |
 | writer | `8649` |
 
-Then point Workspace at the one you care about, e.g. `HERMES_API_URL=http://127.0.0.1:8649` for writer.
+Disable the pool with `HERMES_GATEWAY_POOL=0` (remote `HERMES_API_URL` already disables it). Multiplex (`gateway.multiplex_profiles: true` on a shared listener) remains an alternative; see Hermes Agent docs: *Running Many Gateways at Once*.
 
-3. **Multiplex (shared listener)** — on the default profile set `gateway.multiplex_profiles: true` and run a single default gateway. Secondary profiles must **not** enable port-binding platforms (`api_server`, webhooks, …); reach them via `/p/<profile>/` on the shared listener. See Hermes Agent docs: *Running Many Gateways at Once*.
-
-> **Symlinked `.env` pitfall:** if `~/.hermes/profiles/<name>/.env` → `~/.hermes/.env`, every profile shares the same `API_SERVER_PORT`. Put per-profile ports in that profile's `config.yaml`, or break the symlink and give each profile its own `.env`.
+> **Symlinked `.env` pitfall:** if `~/.hermes/profiles/<name>/.env` → `~/.hermes/.env`, Workspace ignores that shared `API_SERVER_PORT` and assigns a unique pool port instead. Pin a port in that profile's own `.env` or `config.yaml` if you need a fixed value.
 
 ### Live re-pairing (no restart)
 

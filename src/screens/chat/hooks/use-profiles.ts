@@ -1,6 +1,7 @@
 import { chatQueryKeys } from '../chat-queries'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from '@/components/ui/toast'
+import { sanitizeHttpErrorText } from '@/lib/http-error'
 
 export type ChatProfileSummary = {
   name: string
@@ -31,10 +32,14 @@ async function activateProfile(name: string): Promise<void> {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name }),
+    signal: AbortSignal.timeout(15_000),
   })
   if (!response.ok) {
-    const text = await response.text().catch(() => '')
-    throw new Error(text || `Failed to activate profile (${response.status})`)
+    const text = sanitizeHttpErrorText(
+      await response.text().catch(() => ''),
+      `Failed to activate profile (${response.status})`,
+    )
+    throw new Error(text)
   }
 }
 
@@ -80,7 +85,10 @@ export function useProfiles() {
         error instanceof Error ? error.message : 'Failed to activate profile',
       )
     },
-    onSettled: async (_data, _error, profileName) => {
+    onSuccess: (_data, profileName) => {
+      toast(`Activated ${profileName}`)
+    },
+    onSettled: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['profiles'] }),
         queryClient.invalidateQueries({ queryKey: chatQueryKeys.sessions }),
@@ -90,7 +98,6 @@ export function useProfiles() {
           queryKey: ['claude', 'session-status-model'],
         }),
       ])
-      toast(`Activated profile ${profileName}`)
     },
   })
 

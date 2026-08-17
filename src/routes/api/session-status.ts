@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import {
-  ensureGatewayProbed,
+  ensureGatewayCoreProbed,
   getConfig,
   getGatewayCapabilities,
   getSession,
@@ -31,15 +31,13 @@ export const Route = createFileRoute('/api/session-status')({
         }
 
         // Probe the gateway with a hard timeout so the session-status response
-        // is never blocked by a slow/unreachable gateway. ensureGatewayProbed()
-        // itself can take up to 3 × PROBE_TIMEOUT_MS (9 s) when sequential probes
-        // (probeMcp, probeConductor, probeKanban) all hit their individual timeouts
-        // — that causes HTTP 000 on the workspace side and "Failed to fetch usage
-        // data" toasts every 10 s.
+        // is never blocked by a slow/unreachable gateway. Core probes use a
+        // 400ms loopback timeout; enhanced MCP/conductor probes run in the
+        // background and must not delay this endpoint.
         const GATEWAY_PROBE_DEADLINE_MS = 4_000
         try {
           await Promise.race([
-            ensureGatewayProbed(),
+            ensureGatewayCoreProbed(),
             new Promise<never>((_, reject) =>
               setTimeout(
                 () => reject(new Error('Gateway probe deadline exceeded')),

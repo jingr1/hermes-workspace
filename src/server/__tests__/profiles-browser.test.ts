@@ -84,29 +84,30 @@ describe('profiles-browser', () => {
   })
 
   describe('setActiveProfile', () => {
-    it('emits console.warn about gateway restart when setting non-default profile', async () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-
+    it('writes sticky active_profile for a non-default profile', async () => {
       existsSync.mockImplementation((p: string) => {
-        if (p === path.join('/home/testuser', '.hermes', 'profiles', 'jarvis')) return true
+        if (p === path.join('/home/testuser', '.hermes', 'profiles', 'jarvis'))
+          return true
         return false
       })
 
       const mod = await loadMod()
       mod.setActiveProfile('jarvis')
-      expect(warnSpy).toHaveBeenCalledTimes(1)
-      expect(warnSpy.mock.calls[0][0]).toContain('Restart the Hermes Agent gateway')
-
-      warnSpy.mockRestore()
+      expect(writeFileSync).toHaveBeenCalledWith(
+        path.join('/home/testuser', '.hermes', 'active_profile'),
+        'jarvis\n',
+        'utf-8',
+      )
     })
 
     it('skips sticky active_profile writes when HERMES_WORKSPACE_STICKY_PROFILE=0', async () => {
       process.env.HERMES_WORKSPACE_STICKY_PROFILE = '0'
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
       existsSync.mockImplementation((p: string) => {
-        if (p === path.join('/home/testuser', '.hermes', 'profiles', 'jarvis')) return true
-        if (p === path.join('/home/testuser', '.hermes', 'active_profile')) return true
+        if (p === path.join('/home/testuser', '.hermes', 'profiles', 'jarvis'))
+          return true
+        if (p === path.join('/home/testuser', '.hermes', 'active_profile'))
+          return true
         return false
       })
 
@@ -119,22 +120,35 @@ describe('profiles-browser', () => {
         expect.anything(),
         'utf-8',
       )
-      expect(unlinkSync).not.toHaveBeenCalledWith(path.join('/home/testuser', '.hermes', 'active_profile'))
-      expect(warnSpy).toHaveBeenCalledTimes(1)
+      expect(unlinkSync).not.toHaveBeenCalledWith(
+        path.join('/home/testuser', '.hermes', 'active_profile'),
+      )
 
-      warnSpy.mockRestore()
       delete process.env.HERMES_WORKSPACE_STICKY_PROFILE
     })
 
     it('clears active profile file when setting default', async () => {
       existsSync.mockImplementation((p: string) => {
-        if (p === path.join('/home/testuser', '.hermes', 'active_profile')) return true
+        if (p === path.join('/home/testuser', '.hermes', 'active_profile'))
+          return true
         return false
       })
 
       const mod = await loadMod()
       mod.setActiveProfile('default')
-      expect(unlinkSync).toHaveBeenCalledWith(path.join('/home/testuser', '.hermes', 'active_profile'))
+      expect(unlinkSync).toHaveBeenCalledWith(
+        path.join('/home/testuser', '.hermes', 'active_profile'),
+      )
+    })
+
+    it('resolves profile HERMES_HOME paths', async () => {
+      const mod = await loadMod()
+      expect(mod.resolveProfileHermesHome('default')).toBe(
+        path.join('/home/testuser', '.hermes'),
+      )
+      expect(mod.resolveProfileHermesHome('writer')).toBe(
+        path.join('/home/testuser', '.hermes', 'profiles', 'writer'),
+      )
     })
   })
 

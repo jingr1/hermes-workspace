@@ -1,7 +1,13 @@
 import { spawn } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, openSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { homedir } from 'node:os'
+import {
+  getActiveProfileName,
+  resolveProfileHermesHome,
+} from './profiles-browser'
+import { ensureProfileApiServerEnv } from './gateway-ports'
+import { getStateDir } from './workspace-state-dir'
 
 const CLAUDE_HEALTH_TIMEOUT_MS = 2_000
 const CLAUDE_START_PORT = 8642
@@ -13,19 +19,33 @@ export type StartClaudeAgentResult =
       ok: true
       message: string
       pid?: number
+      profile?: string
+      hermesHome?: string
     }
   | {
       ok: false
       error: string
     }
 
+type StartGatewayOptions = {
+  profileName?: string
+  port?: number
+  /** When true, replace this profile's gateway only (`hermes gateway run --replace`). */
+  forceReplace?: boolean
+  /** When false, return as soon as the process is spawned. Default true. */
+  waitForHealthy?: boolean
+}
+
 /**
- * Read ~/.hermes/.env and return key=value pairs as an object.
+ * Read a profile's .env and return key=value pairs as an object.
  * Silently returns {} if the file doesn't exist or can't be parsed.
  */
-function readClaudeEnv(): Record<string, string> {
+export function readClaudeEnv(hermesHome?: string): Record<string, string> {
   const envPath = join(
-    process.env.HERMES_HOME ?? process.env.CLAUDE_HOME ?? join(homedir(), '.hermes'),
+    hermesHome ||
+      process.env.HERMES_HOME ||
+      process.env.CLAUDE_HOME ||
+      join(homedir(), '.hermes'),
     '.env',
   )
   try {
@@ -58,17 +78,18 @@ export function resolveClaudeAgentDir(
 ): string | null {
   const candidates: Array<string> = []
 
-  const explicitAgentPath = env.HERMES_AGENT_PATH?.trim() || env.CLAUDE_AGENT_PATH?.trim()
+  const explicitAgentPath =
+    env.HERMES_AGENT_PATH?.trim() || env.CLAUDE_AGENT_PATH?.trim()
   if (explicitAgentPath) {
     candidates.push(explicitAgentPath)
   }
 
   const workspaceRoot = dirname(resolve('.'))
   candidates.push(
-    resolve(workspaceRoot, 'hermes-agent'),          // sibling (old README)
-    resolve(workspaceRoot, '..', 'hermes-agent'),    // one level up
-    resolve(homedir(), '.hermes', 'hermes-agent'),   // Nous installer default
-    resolve(homedir(), 'hermes-agent'),              // ~/hermes-agent
+    resolve(workspaceRoot, 'hermes-agent'),
+    resolve(workspaceRoot, '..', 'hermes-agent'),
+    resolve(homedir(), '.hermes', 'hermes-agent'),
+    resolve(homedir(), 'hermes-agent'),
   )
 
   for (const candidate of candidates) {
@@ -78,7 +99,7 @@ export function resolveClaudeAgentDir(
   return null
 }
 
-/** Find the `claude` CLI binary installed by Nous's installer (or on PATH). */
+/** Find the `hermes`/`claude` CLI binary installed by Nous's installer (or on PATH). */
 export function resolveClaudeBinary(): string | null {
   const candidates = [
     resolve(homedir(), '.local', 'bin', 'hermes'),
@@ -97,7 +118,6 @@ export function resolveClaudePython(agentDir: string): string {
   if (existsSync(venvPython)) return venvPython
   const uvVenv = resolve(agentDir, 'venv', 'bin', 'python')
   if (existsSync(uvVenv)) return uvVenv
-  // Nous installer ships its own uv-managed python alongside the binary
   const nousPython = resolve(homedir(), '.claude', 'venv', 'bin', 'python')
   if (existsSync(nousPython)) return nousPython
   return 'python3'
@@ -105,10 +125,11 @@ export function resolveClaudePython(agentDir: string): string {
 
 export async function isClaudeAgentHealthy(
   port = CLAUDE_START_PORT,
+  timeoutMs = CLAUDE_HEALTH_TIMEOUT_MS,
 ): Promise<boolean> {
   try {
     const response = await fetch(`http://127.0.0.1:${port}/health`, {
-      signal: AbortSignal.timeout(CLAUDE_HEALTH_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     })
     return response.ok
   } catch {
@@ -116,9 +137,197 @@ export async function isClaudeAgentHealthy(
   }
 }
 
-export async function startClaudeAgent(): Promise<StartClaudeAgentResult> {
-  if (await isClaudeAgentHealthy()) {
-    return { ok: true, message: 'already running' }
+export function readAliveGatewayPid(hermesHome: string): number | null {
+  try {
+    const raw = readFileSync(join(hermesHome, 'gateway.pid'), 'utf-8').trim()
+    if (!raw) return null
+    let pid: number | null = null
+    if (/^\d+$/.test(raw)) {
+      pid = Number(raw)
+    } else {
+      const parsed = JSON.parse(raw) as { pid?: unknown }
+      if (typeof parsed.pid === 'number' && Number.isInteger(parsed.pid)) {
+        pid = parsed.pid
+      }
+    }
+    if (!pid || pid <= 0) return null
+    process.kill(pid, 0)
+    return pid
+  } catch {
+    return null
+  }
+}
+
+function buildGatewayRunArgs(
+  profileName: string,
+  replace: boolean,
+): Array<string> {
+  const args = ['--profile', profileName, 'gateway', 'run']
+  if (replace) args.push('--replace')
+  return args
+}
+
+/** Spawn one profile's API gateway on a dedicated port. Does not replace other profiles. */
+export async function spawnProfileGateway(
+  options: StartGatewayOptions = {},
+): Promise<StartClaudeAgentResult> {
+  const profileName =
+    (options.profileName || getActiveProfileName() || 'default').trim() ||
+    'default'
+  const hermesHome = resolveProfileHermesHome(profileName)
+  const port = options.port ?? CLAUDE_START_PORT
+  const apiEnv = ensureProfileApiServerEnv(profileName, port)
+  const claudeEnv = readClaudeEnv(hermesHome)
+  const claudeBin = resolveClaudeBinary()
+  const agentDir = resolveClaudeAgentDir()
+  const stalePid = readAliveGatewayPid(hermesHome)
+  const alreadyHealthy = await isClaudeAgentHealthy(port, 250)
+  if (alreadyHealthy && !options.forceReplace) {
+    return {
+      ok: true,
+      message: 'already running',
+      profile: profileName,
+      hermesHome,
+    }
+  }
+  if (!apiEnv.API_SERVER_KEY) {
+    return {
+      ok: false,
+      error: `profile ${profileName} is missing API_SERVER_KEY; Hermes will not bind :${port}`,
+    }
+  }
+  const replace =
+    options.forceReplace === true || (stalePid !== null && !alreadyHealthy)
+  const waitForHealthy = options.waitForHealthy !== false
+
+  let command: string
+  let commandArgs: Array<string>
+  let cwd: string | undefined
+
+  if (claudeBin) {
+    command = claudeBin
+    commandArgs = buildGatewayRunArgs(profileName, replace)
+    cwd = agentDir ?? undefined
+  } else if (agentDir) {
+    command = resolveClaudePython(agentDir)
+    commandArgs = [
+      '-m',
+      'uvicorn',
+      'webapi.app:app',
+      '--host',
+      claudeEnv.API_SERVER_HOST || '127.0.0.1',
+      '--port',
+      String(port),
+    ]
+    cwd = agentDir
+  } else {
+    return {
+      ok: false,
+      error:
+        "hermes-agent not found. Run the installer: curl -fsSL https://hermes-workspace.com/install.sh | bash",
+    }
+  }
+
+  let logFd: number | undefined
+  try {
+    const logPath = join(getStateDir(), `gateway-spawn-${profileName}.log`)
+    logFd = openSync(logPath, 'a')
+  } catch {
+    logFd = undefined
+  }
+
+  const child = spawn(command, commandArgs, {
+    cwd,
+    detached: true,
+    stdio: logFd === undefined ? 'ignore' : ['ignore', logFd, logFd],
+    env: {
+      ...process.env,
+      ...claudeEnv,
+      ...apiEnv,
+      HERMES_HOME: hermesHome,
+      API_SERVER_ENABLED: 'true',
+      API_SERVER_PORT: String(port),
+      API_SERVER_HOST:
+        apiEnv.API_SERVER_HOST || claudeEnv.API_SERVER_HOST || '127.0.0.1',
+      HERMES_ACCEPT_HOOKS: '1',
+      PATH: [
+        resolve(homedir(), '.claude', 'bin'),
+        resolve(homedir(), '.local', 'bin'),
+        agentDir ? resolve(agentDir, '.venv', 'bin') : '',
+        agentDir ? resolve(agentDir, 'venv', 'bin') : '',
+        process.env.PATH || '',
+      ]
+        .filter(Boolean)
+        .join(':'),
+    },
+  })
+
+  child.unref()
+
+  if (!waitForHealthy) {
+    return {
+      ok: true,
+      pid: child.pid,
+      message: 'starting',
+      profile: profileName,
+      hermesHome,
+    }
+  }
+
+  if (await isClaudeAgentHealthy(port, 250)) {
+    return {
+      ok: true,
+      pid: child.pid,
+      message: replace ? 'restarted' : 'started',
+      profile: profileName,
+      hermesHome,
+    }
+  }
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    await new Promise((resolveAttempt) => setTimeout(resolveAttempt, 100))
+    if (await isClaudeAgentHealthy(port, 200)) {
+      return {
+        ok: true,
+        pid: child.pid,
+        message: replace ? 'restarted' : 'started',
+        profile: profileName,
+        hermesHome,
+      }
+    }
+  }
+
+  return {
+    ok: false,
+    error: `gateway for ${profileName} did not become healthy on :${port}`,
+  }
+}
+
+export async function startClaudeAgent(
+  options: StartGatewayOptions = {},
+): Promise<StartClaudeAgentResult> {
+  const profileName =
+    (options.profileName || getActiveProfileName() || 'default').trim() ||
+    'default'
+
+  const { ensureProfileGateway, isGatewayPoolEnabled } = await import(
+    './gateway-pool'
+  )
+  if (isGatewayPoolEnabled()) {
+    return ensureProfileGateway(profileName, {
+      forceReplace: options.forceReplace,
+    })
+  }
+
+  const port = options.port ?? CLAUDE_START_PORT
+
+  if (!options.forceReplace && (await isClaudeAgentHealthy(port))) {
+    return {
+      ok: true,
+      message: 'already running',
+      profile: profileName,
+      hermesHome: resolveProfileHermesHome(profileName),
+    }
   }
 
   if (startPromise) {
@@ -127,80 +336,7 @@ export async function startClaudeAgent(): Promise<StartClaudeAgentResult> {
 
   startPromise = (async () => {
     try {
-      const claudeEnv = readClaudeEnv()
-      const claudeBin = resolveClaudeBinary()
-      const agentDir = resolveClaudeAgentDir()
-
-      // Prefer the `hermes gateway run` binary path (the Nous installer's
-      // canonical entrypoint). Fall back to launching uvicorn against the
-      // source tree if we only have a directory.
-      let command: string
-      let commandArgs: Array<string>
-      let cwd: string | undefined
-
-      if (claudeBin) {
-        command = claudeBin
-        commandArgs = ['gateway', 'run']
-        cwd = agentDir ?? undefined
-      } else if (agentDir) {
-        command = resolveClaudePython(agentDir)
-        commandArgs = [
-          '-m',
-          'uvicorn',
-          'webapi.app:app',
-          '--host',
-          '0.0.0.0',
-          '--port',
-          String(CLAUDE_START_PORT),
-        ]
-        cwd = agentDir
-      } else {
-        return {
-          ok: false,
-          error:
-            "hermes-agent not found. Run the installer: curl -fsSL https://hermes-workspace.com/install.sh | bash",
-        }
-      }
-
-      const child = spawn(
-        command,
-        commandArgs,
-        {
-          cwd,
-          detached: true,
-          stdio: 'ignore',
-          env: {
-            ...process.env,
-            ...claudeEnv,
-            PATH: [
-              resolve(homedir(), '.claude', 'bin'),
-              resolve(homedir(), '.local', 'bin'),
-              agentDir ? resolve(agentDir, '.venv', 'bin') : '',
-              agentDir ? resolve(agentDir, 'venv', 'bin') : '',
-              process.env.PATH || '',
-            ].filter(Boolean).join(':'),
-          },
-        },
-      )
-
-      child.unref()
-
-      for (let attempt = 0; attempt < 10; attempt += 1) {
-        await new Promise((resolveAttempt) => setTimeout(resolveAttempt, 1_000))
-        if (await isClaudeAgentHealthy()) {
-          return {
-            ok: true,
-            pid: child.pid,
-            message: 'started',
-          }
-        }
-      }
-
-      return {
-        ok: true,
-        pid: child.pid,
-        message: 'starting',
-      }
+      return await spawnProfileGateway({ ...options, profileName, port })
     } catch (error) {
       return {
         ok: false,

@@ -1,6 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../server/auth-middleware'
+import {
+  getGatewayPoolStatus,
+  isGatewayPoolEnabled,
+  resolveProfileGatewayPort,
+} from '../../../server/gateway-pool'
 import { listProfilesWithFallback } from '../../../server/profiles-browser'
 
 export const Route = createFileRoute('/api/profiles/list')({
@@ -13,7 +18,26 @@ export const Route = createFileRoute('/api/profiles/list')({
         try {
           const { profiles, activeProfile } =
             await listProfilesWithFallback()
-          return json({ profiles, activeProfile })
+          if (!isGatewayPoolEnabled()) {
+            return json({ profiles, activeProfile })
+          }
+          const pool = await getGatewayPoolStatus()
+          const byName = new Map(pool.map((entry) => [entry.profile, entry]))
+          return json({
+            profiles: profiles.map((profile) => {
+              const gateway = byName.get(profile.name)
+              const port =
+                gateway?.port ?? resolveProfileGatewayPort(profile.name)
+              return {
+                ...profile,
+                gatewayPort: port,
+                gatewayUrl: gateway?.url ?? `http://127.0.0.1:${port}`,
+                gatewayState: gateway?.state ?? 'stopped',
+              }
+            }),
+            activeProfile,
+            gatewayPool: pool,
+          })
         } catch (error) {
           return json(
             {

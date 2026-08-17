@@ -280,6 +280,7 @@ function RootLayout() {
   }, [settings])
 
   useEffect(() => {
+    void import('../screens/chat/chat-screen')
     setMounted(true)
     initializeSettingsAppearance()
 
@@ -609,15 +610,15 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                 setTimeout(function(){
                   el.innerHTML = '';
                   el.style.cssText = 'display:none';
-                }, 500);
-              }, 300);
+                }, 200);
+              }, 80);
             };
-            // Fallback: always dismiss after 5s
-            setTimeout(function(){ window.__dismissSplash && window.__dismissSplash(); }, 5000);
+            // Fallback: always dismiss after 2s
+            setTimeout(function(){ window.__dismissSplash && window.__dismissSplash(); }, 2000);
             // Fast dismiss: returning users skip quickly
             try {
-              if (localStorage.getItem('claude-claude-url') || localStorage.getItem('claude-url')) {
-                setTimeout(function(){ window.__dismissSplash && window.__dismissSplash(); }, 600);
+              if (localStorage.getItem('claude-claude-url') || localStorage.getItem('claude-url') || localStorage.getItem('claude-onboarding-complete') === 'true') {
+                setTimeout(function(){ window.__dismissSplash && window.__dismissSplash(); }, 200);
               }
             } catch(e) {}
           })()
@@ -634,10 +635,10 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             function check() {
               var el = document.querySelector('nav, aside, .workspace-shell, [data-testid]');
               var elapsed = Date.now() - start;
-              if (el && elapsed > 2500) { window.__dismissSplash && window.__dismissSplash(); }
-              else { setTimeout(check, 200); }
+              if (el && elapsed > 150) { window.__dismissSplash && window.__dismissSplash(); }
+              else { setTimeout(check, 50); }
             }
-            setTimeout(check, 2500);
+            setTimeout(check, 150);
           })()
         `),
           }}

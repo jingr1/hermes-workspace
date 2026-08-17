@@ -114,3 +114,31 @@ export function createOptimisticMessage(
 
   return { clientId, optimisticId, optimisticMessage }
 }
+
+/**
+ * Cancel in-flight SSE when the user actually leaves a session.
+ * Promoting `/chat/new` onto the session we just started must not abort
+ * the first-turn stream — that leaves the bubble unanswered and the
+ * optimistic session gets dropped on the next list refetch.
+ */
+export function shouldCancelStreamOnSessionNav(params: {
+  previousNavKey: string | null
+  nextNavKey: string
+  nextFriendlyId: string
+  activeSendKey?: string
+}): boolean {
+  const { previousNavKey, nextNavKey, nextFriendlyId, activeSendKey } = params
+  if (previousNavKey === null || previousNavKey === nextNavKey) return false
+
+  const previousWasNew = previousNavKey.endsWith('::new')
+  if (
+    previousWasNew &&
+    nextFriendlyId !== 'new' &&
+    Boolean(activeSendKey) &&
+    nextFriendlyId === activeSendKey
+  ) {
+    return false
+  }
+
+  return true
+}

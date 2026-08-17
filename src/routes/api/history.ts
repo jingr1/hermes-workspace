@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import {
   SESSIONS_API_UNAVAILABLE_MESSAGE,
-  ensureGatewayProbed,
+  ensureGatewayCoreProbed,
   getGatewayCapabilities,
   getMessages,
   listSessions,
@@ -23,7 +23,7 @@ export const Route = createFileRoute('/api/history')({
         if (!isAuthenticated(request)) {
           return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
         }
-        await ensureGatewayProbed()
+        await ensureGatewayCoreProbed()
         const capabilities = getGatewayCapabilities()
         if (!capabilities.sessions) {
           return json({

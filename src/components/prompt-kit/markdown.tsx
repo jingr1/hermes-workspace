@@ -1,13 +1,17 @@
 import { marked } from 'marked'
 import { createContext, memo, useContext, useId, useMemo, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
+import rehypeKatex from 'rehype-katex'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize from 'rehype-sanitize'
 import remarkBreaks from 'remark-breaks'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
 import { CodeBlock } from './code-block'
 import type { Components } from 'react-markdown'
+import { normalizeMathDelimiters } from '@/lib/markdown-math'
 import { cn } from '@/lib/utils'
+import 'katex/dist/katex.min.css'
 
 /**
  * Rewrite Workspace-local `MEDIA:<path>` tokens emitted by Hermes Agent to the
@@ -443,6 +447,28 @@ const HTML_SANITIZE_SCHEMA = {
   },
 }
 
+const REMARK_PLUGINS = [
+  remarkGfm,
+  [remarkMath, { singleDollarTextMath: true }],
+  remarkBreaks,
+]
+
+// Sanitize first so KaTeX HTML (style + MathML) is not stripped by the schema.
+// Matches webui: markdown/HTML is cleaned, then katex.render runs last with
+// throwOnError:false, trust:false, strict:'ignore'.
+const REHYPE_PLUGINS = [
+  rehypeRaw,
+  [rehypeSanitize, HTML_SANITIZE_SCHEMA],
+  [
+    rehypeKatex,
+    {
+      throwOnError: false,
+      trust: false,
+      strict: 'ignore',
+    },
+  ],
+]
+
 const MemoizedMarkdownBlock = memo(
   function MarkdownBlock({
     content,
@@ -453,8 +479,8 @@ const MemoizedMarkdownBlock = memo(
   }) {
     return (
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkBreaks]}
-        rehypePlugins={[rehypeRaw, [rehypeSanitize, HTML_SANITIZE_SCHEMA]]}
+        remarkPlugins={REMARK_PLUGINS}
+        rehypePlugins={REHYPE_PLUGINS}
         components={components}
       >
         {content}
@@ -477,7 +503,10 @@ function MarkdownComponent({
   const generatedId = useId()
   const blockId = id ?? generatedId
   const blocks = useMemo(
-    () => parseMarkdownIntoBlocks(rewriteLocalMediaSources(children)),
+    () =>
+      parseMarkdownIntoBlocks(
+        normalizeMathDelimiters(rewriteLocalMediaSources(children)),
+      ),
     [children],
   )
 

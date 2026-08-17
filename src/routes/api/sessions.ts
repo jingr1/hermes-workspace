@@ -7,6 +7,7 @@ import {
   SESSIONS_API_UNAVAILABLE_MESSAGE,
   createSession,
   deleteSession,
+  ensureGatewayCoreProbed,
   ensureGatewayProbed,
   getGatewayCapabilities,
   listSessions,
@@ -57,7 +58,7 @@ export const Route = createFileRoute('/api/sessions')({
           })
         }
 
-        const capabilities = await ensureGatewayProbed()
+        const capabilities = await ensureGatewayCoreProbed()
         if (!capabilities.sessions) {
           return json({
             ok: true,
@@ -108,6 +109,10 @@ export const Route = createFileRoute('/api/sessions')({
         }
         const csrfCheckPost = requireJsonContentType(request)
         if (csrfCheckPost) return csrfCheckPost
+        const { ensureActiveProfileGateway } = await import(
+          '../../server/gateway-pool'
+        )
+        await ensureActiveProfileGateway()
         const capabilities = await ensureGatewayProbed()
         if (!capabilities.sessions) {
           const friendlyId = randomUUID()
@@ -165,11 +170,12 @@ export const Route = createFileRoute('/api/sessions')({
             model,
           })
 
+          const createdId = session?.id || friendlyId
           return json({
             ok: true,
-            sessionKey: session.id,
-            friendlyId: session.id,
-            entry: toSessionSummary(session),
+            sessionKey: createdId,
+            friendlyId: createdId,
+            entry: toSessionSummary({ ...(session ?? { id: createdId }), id: createdId }),
             modelApplied: true,
           })
         } catch (err) {

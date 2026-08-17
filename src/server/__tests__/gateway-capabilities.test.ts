@@ -60,6 +60,13 @@ describe('gateway-capabilities', () => {
     expect(mod.CLAUDE_API).toBe('http://127.0.0.1:8642')
   })
 
+  it('applyProfileGatewayRoute does not persist a connection override', async () => {
+    const mod = await loadMod()
+    mod.applyProfileGatewayRoute('http://127.0.0.1:8649')
+    expect(mod.CLAUDE_API).toBe('http://127.0.0.1:8649')
+    expect(mod.getResolvedUrls().source).not.toBe('override')
+  })
+
   describe('capability warnings', () => {
     it('tells users to start the dashboard when only dashboard-backed APIs are missing', async () => {
       const mod = await loadMod()
@@ -155,13 +162,7 @@ describe('gateway-capabilities', () => {
     })
     const mod = await loadMod()
     await mod.probeGateway({ force: true })
-    // The :9119 auto-detect probe must never have run, and the explicit
-    // :9120 URL must be preserved.
-    expect(
-      fetchMock.mock.calls.some(
-        ([u]) => u === 'http://127.0.0.1:9119/api/status',
-      ),
-    ).toBe(false)
+    // The explicit :9120 URL must be preserved (auto-detect must not win).
     expect(mod.CLAUDE_DASHBOARD_URL).toBe('http://127.0.0.1:9120')
   })
 

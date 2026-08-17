@@ -4,8 +4,7 @@ import { isAuthenticated } from '../../server/auth-middleware'
 import {
   CLAUDE_API,
   CLAUDE_DASHBOARD_URL,
-  ensureGatewayProbed,
-  getCapabilities,
+  ensureGatewayCoreProbed,
   getGatewayMode,
 } from '../../server/gateway-capabilities'
 
@@ -17,7 +16,22 @@ export const Route = createFileRoute('/api/gateway-status')({
           return json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        const capabilities = await ensureGatewayProbed()
+        const capabilities = await ensureGatewayCoreProbed()
+        let pool: unknown = null
+        try {
+          const {
+            getGatewayPoolStatus,
+            isGatewayPoolEnabled,
+          } = await import('../../server/gateway-pool')
+          if (isGatewayPoolEnabled()) {
+            pool = {
+              enabled: true,
+              gateways: await getGatewayPoolStatus(),
+            }
+          }
+        } catch {
+          pool = { enabled: false }
+        }
         return json({
           capabilities,
           mode: getGatewayMode(),
@@ -28,6 +42,7 @@ export const Route = createFileRoute('/api/gateway-status')({
             url: CLAUDE_API,
           },
           dashboard: capabilities.dashboard,
+          pool,
         })
       },
     },

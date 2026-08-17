@@ -10,10 +10,12 @@ import {
   CLAUDE_API,
   SESSIONS_API_UNAVAILABLE_MESSAGE,
   dashboardFetch,
+  ensureGatewayCoreProbed,
   ensureGatewayProbed,
   getCapabilities,
   probeGateway,
 } from './gateway-capabilities'
+import { isGatewayPoolEnabled } from './gateway-ports'
 import {
   createSession as createDashboardSession,
   deleteSession as deleteDashboardSession,
@@ -125,11 +127,15 @@ export async function checkHealth(): Promise<{ status: string }> {
 
 // ── Sessions ─────────────────────────────────────────────────────
 
+function useDashboardSessions(): boolean {
+  return !isGatewayPoolEnabled() && getCapabilities().dashboard.available
+}
+
 export async function listSessions(
   limit = 50,
   offset = 0,
 ): Promise<Array<ClaudeSession>> {
-  if (getCapabilities().dashboard.available) {
+  if (useDashboardSessions()) {
     const resp = await listDashboardSessions(limit, offset)
     return resp.sessions as Array<ClaudeSession>
   }
@@ -145,7 +151,7 @@ export async function listSessions(
 }
 
 export async function getSession(sessionId: string): Promise<ClaudeSession> {
-  if (getCapabilities().dashboard.available) {
+  if (useDashboardSessions()) {
     return getDashboardSession(sessionId) as Promise<ClaudeSession>
   }
   const resp = await claudeGet<{ session: ClaudeSession }>(
@@ -159,22 +165,30 @@ export async function createSession(opts?: {
   title?: string
   model?: string
 }): Promise<ClaudeSession> {
-  if (getCapabilities().dashboard.available) {
+  if (useDashboardSessions()) {
     const resp = await createDashboardSession(opts || {})
     return resp.session as ClaudeSession
   }
-  const resp = await claudePost<{ session: ClaudeSession }>(
-    '/api/sessions',
-    opts || {},
-  )
-  return resp.session
+  const resp = await claudePost<{
+    session?: ClaudeSession
+    data?: ClaudeSession
+    id?: string
+  }>('/api/sessions', opts || {})
+  const session = resp.session ?? resp.data ?? (resp as ClaudeSession)
+  if (!session?.id) {
+    if (opts?.id) {
+      return { id: opts.id, title: opts.title, model: opts.model }
+    }
+    throw new Error('Invalid session response')
+  }
+  return session
 }
 
 export async function updateSession(
   sessionId: string,
   updates: { title?: string },
 ): Promise<ClaudeSession> {
-  if (getCapabilities().dashboard.available) {
+  if (useDashboardSessions()) {
     const resp = await updateDashboardSession(sessionId, updates)
     return resp.session as ClaudeSession
   }
@@ -186,7 +200,7 @@ export async function updateSession(
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {
-  if (getCapabilities().dashboard.available) {
+  if (useDashboardSessions()) {
     await deleteDashboardSession(sessionId)
     return
   }
@@ -196,7 +210,7 @@ export async function deleteSession(sessionId: string): Promise<void> {
 export async function getMessages(
   sessionId: string,
 ): Promise<Array<ClaudeMessage>> {
-  if (getCapabilities().dashboard.available) {
+  if (useDashboardSessions()) {
     const resp = await getDashboardSessionMessages(sessionId)
     return resp.messages as Array<ClaudeMessage>
   }
@@ -216,7 +230,7 @@ export async function searchSessions(
   query: string,
   limit = 20,
 ): Promise<{ query?: string; count?: number; results: Array<unknown> }> {
-  if (getCapabilities().dashboard.available) {
+  if (useDashboardSessions()) {
     return searchDashboardSessions(query)
   }
   return claudeGet(
@@ -227,7 +241,7 @@ export async function searchSessions(
 export async function forkSession(
   sessionId: string,
 ): Promise<{ session: ClaudeSession; forked_from: string }> {
-  if (getCapabilities().dashboard.available) {
+  if (useDashboardSessions()) {
     return forkDashboardSession(sessionId) as Promise<{
       session: ClaudeSession
       forked_from: string
@@ -565,6 +579,7 @@ export async function isClaudeAvailable(): Promise<boolean> {
 }
 
 export {
+  ensureGatewayCoreProbed,
   ensureGatewayProbed,
   getCapabilities as getGatewayCapabilities,
   CLAUDE_API,

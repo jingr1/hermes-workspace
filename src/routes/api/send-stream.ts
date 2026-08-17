@@ -290,6 +290,10 @@ export const Route = createFileRoute('/api/send-stream')({
         }
         const csrfCheck = requireJsonContentType(request)
         if (csrfCheck) return csrfCheck
+        const { ensureActiveProfileGateway } = await import(
+          '../../server/gateway-pool'
+        )
+        await ensureActiveProfileGateway()
         await ensureGatewayProbed()
 
         // Read body manually to handle large payloads (image attachments

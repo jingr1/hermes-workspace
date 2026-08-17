@@ -1,6 +1,8 @@
 // Module-level local model override — set by composer when user picks a local model
 // Avoids prop threading. Reset when switching back to cloud models.
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -18,18 +20,20 @@ import {
   textFromMessage,
 } from './utils'
 import {
-  
   advanceStickyStreamingText,
   createOptimisticMessage,
   createResponseWaitSnapshot,
   isTerminalActiveRunStatus,
-  shouldClearWaitingForAssistantMessage
+  shouldCancelStreamOnSessionNav,
+  shouldClearWaitingForAssistantMessage,
 } from './chat-screen-utils'
 import {
   appendHistoryMessage,
   chatQueryKeys,
   clearHistoryMessages,
   fetchStatus,
+  moveHistoryMessages,
+  reconcileSessionDraft,
   updateHistoryMessageByClientId,
   updateHistoryMessageByClientIdEverywhere,
   updateSessionLastMessage,
@@ -48,6 +52,7 @@ import {
   isRecentSession,
   resetPendingSend,
   setPendingGeneration,
+  setRecentSession,
 } from './pending-send'
 import { useChatMeasurements } from './hooks/use-chat-measurements'
 import { useChatHistory } from './hooks/use-chat-history'
@@ -94,12 +99,19 @@ import { stripQueuedWrapper } from '@/lib/strip-queued-wrapper'
 import { cn } from '@/lib/utils'
 import { toast } from '@/components/ui/toast'
 import { hapticTap } from '@/lib/haptics'
-import { FileExplorerSidebar } from '@/components/file-explorer'
 import { SEARCH_MODAL_EVENTS } from '@/hooks/use-search-modal'
 import { SIDEBAR_TOGGLE_EVENT } from '@/hooks/use-global-shortcuts'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { TerminalPanel } from '@/components/terminal-panel'
-import { AgentViewPanel } from '@/components/agent-view/agent-view-panel'
+
+const FileExplorerSidebar = lazy(async () => {
+  const module = await import('@/components/file-explorer')
+  return { default: module.FileExplorerSidebar }
+})
+const AgentViewPanel = lazy(async () => {
+  const module = await import('@/components/agent-view/agent-view-panel')
+  return { default: module.AgentViewPanel }
+})
 import { useTerminalPanelStore } from '@/stores/terminal-panel-store'
 import { useModelSuggestions } from '@/hooks/use-model-suggestions'
 import { ModelSuggestionToast } from '@/components/model-suggestion-toast'
@@ -1316,14 +1328,18 @@ export function ChatScreen({
   const navCancelKeyRef = useRef<string | null>(null)
   useEffect(() => {
     const navKey = `${activeCanonicalKey ?? ''}::${isNewChat ? 'new' : activeFriendlyId}`
-    if (navCancelKeyRef.current === null) {
-      navCancelKeyRef.current = navKey
-      return
-    }
-    if (navCancelKeyRef.current !== navKey) {
-      navCancelKeyRef.current = navKey
+    const activeSend = activeSendRef.current
+    if (
+      shouldCancelStreamOnSessionNav({
+        previousNavKey: navCancelKeyRef.current,
+        nextNavKey: navKey,
+        nextFriendlyId: isNewChat ? 'new' : activeFriendlyId,
+        activeSendKey: activeSend?.sessionKey || activeSend?.friendlyId,
+      })
+    ) {
       cancelStreaming()
     }
+    navCancelKeyRef.current = navKey
   }, [activeCanonicalKey, activeFriendlyId, isNewChat, cancelStreaming])
 
   const activeIsRealtimeStreaming = isPortableMode
@@ -1786,6 +1802,7 @@ export function ChatScreen({
     !isNewChat &&
     !forcedSessionKey &&
     !isRecentSession(activeFriendlyId) &&
+    !hasPendingGeneration() &&
     sessionsQuery.isSuccess &&
     sessions.length > 0 &&
     !sessions.some((session) => session.friendlyId === activeFriendlyId) &&
@@ -2325,6 +2342,7 @@ export function ChatScreen({
           throw new Error('Invalid session response')
         }
 
+        setRecentSession(friendlyId)
         queryClient.invalidateQueries({ queryKey: chatQueryKeys.sessions })
         return { sessionKey, friendlyId }
       } finally {
@@ -2337,6 +2355,7 @@ export function ChatScreen({
   const upsertSessionInCache = useCallback(
     (friendlyId: string, lastMessage: ChatMessage) => {
       if (!friendlyId) return
+      setRecentSession(friendlyId)
       queryClient.setQueryData(
         chatQueryKeys.sessionsForProfile(activeProfileName),
         function upsert(existing: unknown) {
@@ -2510,36 +2529,77 @@ export function ChatScreen({
         setSending(true)
         setWaitingForResponse(true)
 
-        if (!isPortableMode) {
-          void createSessionForMessage(threadId).catch((err: unknown) => {
-            if (import.meta.env.DEV) {
-              console.warn('[chat] failed to register new thread', err)
-            }
-            void queryClient.invalidateQueries({
-              queryKey: chatQueryKeys.sessions,
-            })
-          })
+        const persistLastSession = (friendlyId: string) => {
+          try {
+            localStorage.setItem('claude-last-session', friendlyId)
+          } catch {
+            // ignore
+          }
         }
-
-        sendMessage(
-          threadId,
-          threadId,
-          trimmedBody,
-          attachmentPayload,
-          fastMode,
-          true,
-          typeof optimisticMessage.clientId === 'string'
-            ? optimisticMessage.clientId
-            : '',
-        )
-        // In portable mode, navigate to /chat/main instead of UUID
-        if (!embedded) {
+        const routeToSession = (friendlyId: string) => {
+          if (embedded) return
+          persistLastSession(friendlyId)
           navigate({
             to: '/chat/$sessionKey',
-            params: { sessionKey: threadId },
+            params: { sessionKey: friendlyId },
             replace: true,
           })
         }
+        const launchSend = (sessionKey: string, friendlyId: string) => {
+          if (sessionKey !== threadId || friendlyId !== threadId) {
+            setRecentSession(friendlyId)
+            moveHistoryMessages(
+              queryClient,
+              threadId,
+              threadId,
+              friendlyId,
+              sessionKey,
+            )
+            reconcileSessionDraft(
+              queryClient,
+              activeProfileName,
+              threadId,
+              threadId,
+              friendlyId,
+              sessionKey,
+            )
+            useSessionModelStore.getState().transferModel(threadId, friendlyId)
+            routeToSession(friendlyId)
+          }
+          sendMessage(
+            sessionKey,
+            friendlyId,
+            trimmedBody,
+            attachmentPayload,
+            fastMode,
+            true,
+            typeof optimisticMessage.clientId === 'string'
+              ? optimisticMessage.clientId
+              : '',
+          )
+        }
+
+        // Route onto the new thread first so the optimistic user message is
+        // visible, then wait for the gateway session before streaming.
+        // Sending in parallel used to 404; navigating after send used to
+        // abort the in-flight SSE (#297 cancel-on-nav).
+        routeToSession(threadId)
+
+        if (isPortableMode) {
+          launchSend('main', 'main')
+          return
+        }
+
+        void createSessionForMessage(threadId)
+          .then((created) => {
+            launchSend(created.sessionKey, created.friendlyId)
+          })
+          .catch((err: unknown) => {
+            if (import.meta.env.DEV) {
+              console.warn('[chat] failed to register new thread', err)
+            }
+            launchSend(threadId, threadId)
+          })
         return
       }
 
@@ -2557,9 +2617,12 @@ export function ChatScreen({
     [
       activeFriendlyId,
       activeSessionKey,
+      activeProfileName,
       createSessionForMessage,
+      embedded,
       forcedSessionKey,
       isNewChat,
+      isPortableMode,
       navigate,
       onSessionResolved,
       scrollChatToBottom,
@@ -2970,15 +3033,21 @@ export function ChatScreen({
         </main>
 
         {hideUi || compact || isFocusMode || isMobile ? null : (
-          <FileExplorerSidebar
-            collapsed={fileExplorerCollapsed}
-            onToggle={handleToggleFileExplorer}
-            onInsertReference={handleInsertFileReference}
-            side="right"
-          />
+          <Suspense fallback={null}>
+            <FileExplorerSidebar
+              collapsed={fileExplorerCollapsed}
+              onToggle={handleToggleFileExplorer}
+              onInsertReference={handleInsertFileReference}
+              side="right"
+            />
+          </Suspense>
         )}
 
-        {!compact && !isFocusMode && <AgentViewPanel />}
+        {!compact && !isFocusMode && (
+          <Suspense fallback={null}>
+            <AgentViewPanel />
+          </Suspense>
+        )}
       </div>
       {!compact && !hideUi && !isMobile && !isFocusMode && <TerminalPanel />}
 

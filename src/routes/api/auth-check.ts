@@ -4,7 +4,7 @@ import {
   isAuthenticated,
   isPasswordProtectionEnabled,
 } from '../../server/auth-middleware'
-import { ensureGatewayProbed } from '../../server/gateway-capabilities'
+import { ensureGatewayCoreProbed } from '../../server/gateway-capabilities'
 
 export const Route = createFileRoute('/api/auth-check')({
   server: {
@@ -16,7 +16,7 @@ export const Route = createFileRoute('/api/auth-check')({
           // hardcoded URL. This was previously a standalone
           // isBackendReachable() that only tried port 8642 and never
           // benefited from the gateway-capabilities auto-detection logic.
-          const caps = await ensureGatewayProbed()
+          const caps = await ensureGatewayCoreProbed()
           const reachable = caps.health || caps.chatCompletions || caps.models
 
           if (!reachable) {

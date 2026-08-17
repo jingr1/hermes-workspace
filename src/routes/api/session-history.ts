@@ -8,7 +8,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import {
   SESSIONS_API_UNAVAILABLE_MESSAGE,
-  ensureGatewayProbed,
+  ensureGatewayCoreProbed,
   getGatewayCapabilities,
   getMessages,
   toChatMessage,
@@ -27,7 +27,7 @@ export const Route = createFileRoute('/api/session-history')({
         if (!isAuthenticated(request)) {
           return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
         }
-        await ensureGatewayProbed()
+        await ensureGatewayCoreProbed()
         const url = new URL(request.url)
         const key =
           url.searchParams.get('key')?.trim() ||

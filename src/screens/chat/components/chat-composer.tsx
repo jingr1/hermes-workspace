@@ -74,6 +74,7 @@ import {
 } from '@/hooks/use-search-modal'
 import { setLocalModelOverride } from '@/screens/chat/local-model-override'
 import { formatModelName } from '@/lib/format-model-name'
+import { sanitizeHttpErrorText } from '@/lib/http-error'
 
 type ChatComposerAttachment = {
   id: string
@@ -767,7 +768,7 @@ async function readResponseError(response: Response): Promise<string> {
     return JSON.stringify(payload)
   } catch {
     const text = await response.text().catch(() => '')
-    return text || response.statusText || 'Request failed'
+    return sanitizeHttpErrorText(text, response.statusText || 'Request failed')
   }
 }
 
@@ -835,6 +836,7 @@ async function activateProfile(name: string): Promise<void> {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name }),
+    signal: AbortSignal.timeout(15_000),
   })
   if (!response.ok) {
     throw new Error(await readResponseError(response))
@@ -1080,7 +1082,7 @@ function ChatComposerComponent({
         }),
       ])
       setIsProfileMenuOpen(false)
-      toast(`Activated profile ${profileName}`)
+      toast(`Activated ${profileName} — gateway switched`)
     },
     onError: (error) => {
       toast(

@@ -6,7 +6,7 @@ import { json } from '@tanstack/react-start'
 import { createFileRoute } from '@tanstack/react-router'
 import { isAuthenticated } from '../../server/auth-middleware'
 import {
-  ensureGatewayProbed,
+  ensureGatewayCoreProbed,
   getGatewayCapabilities,
 } from '../../server/claude-api'
 import { BEARER_TOKEN, CLAUDE_API } from '../../server/gateway-capabilities'
@@ -655,7 +655,7 @@ export const Route = createFileRoute('/api/models')({
         if (!isAuthenticated(request)) {
           return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
         }
-        await ensureGatewayProbed()
+        await ensureGatewayCoreProbed()
 
         try {
           // Primary: read user-configured models from ~/.hermes/models.json

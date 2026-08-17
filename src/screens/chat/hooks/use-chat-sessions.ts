@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import { chatQueryKeys, fetchSessions } from '../chat-queries'
-import { isRecentSession } from '../pending-send'
+import { hasPendingGeneration, isRecentSession } from '../pending-send'
 import { filterSessionsWithTombstones } from '../session-tombstones'
 import { useSessionTitles } from '../session-title-store'
 import { useProfiles } from './use-profiles'
@@ -102,7 +102,12 @@ export function useChatSessions({
       (session) => session.friendlyId === activeFriendlyId,
     )
 
-    if (!activeAlreadyPresent && (forcedSessionKey || isRecentSession(activeFriendlyId))) {
+    if (
+      !activeAlreadyPresent &&
+      (forcedSessionKey ||
+        isRecentSession(activeFriendlyId) ||
+        hasPendingGeneration())
+    ) {
       const synthetic = buildSyntheticActiveSession(
         activeFriendlyId,
         forcedSessionKey,

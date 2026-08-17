@@ -262,13 +262,18 @@ export function clearPendingSendForSession(
 }
 
 export function setRecentSession(friendlyId: string) {
-  recentSession = { friendlyId, at: Date.now() }
+  const trimmed = friendlyId.trim()
+  if (!trimmed) {
+    recentSession = null
+    return
+  }
+  recentSession = { friendlyId: trimmed, at: Date.now() }
 }
 
-export function isRecentSession(friendlyId: string, maxAgeMs = 15000) {
+export function isRecentSession(friendlyId: string, maxAgeMs = 60_000) {
   if (!recentSession) return false
   if (recentSession.friendlyId !== friendlyId) return false
-  if (Date.now() - recentSession.at > maxAgeMs) return false
+  if (Date.now() - recentSession.at >= maxAgeMs) return false
   return true
 }
 

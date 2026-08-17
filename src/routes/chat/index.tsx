@@ -1,7 +1,9 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
+import { ChatRouteLoading } from '../../screens/chat/chat-route-loading'
 
 export const Route = createFileRoute('/chat/')({
   ssr: false,
+  pendingComponent: ChatRouteLoading,
   beforeLoad: () => {
     // Try to restore last active session from localStorage
     let lastSession = 'new'
@@ -19,6 +21,6 @@ export const Route = createFileRoute('/chat/')({
     })
   },
   component: function ChatIndexRoute() {
-    return null
+    return <ChatRouteLoading />
   },
 })

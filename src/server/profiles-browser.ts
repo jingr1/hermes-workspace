@@ -56,11 +56,20 @@ const TEXT_REWRITE_EXTENSIONS = new Set([
 ])
 
 function getHermesRoot(): string {
-  return (
+  // Prefer an explicit root. If HERMES_HOME already points at a profile dir
+  // (~/.hermes/profiles/<name>), peel back to the real Hermes root so
+  // active_profile + profiles/ listing still work.
+  const raw =
     process.env.HERMES_HOME ??
     process.env.CLAUDE_HOME ??
     path.join(os.homedir(), '.hermes')
-  )
+  const normalized = path.resolve(raw)
+  const marker = `${path.sep}profiles${path.sep}`
+  const idx = normalized.lastIndexOf(marker)
+  if (idx >= 0) {
+    return normalized.slice(0, idx)
+  }
+  return normalized
 }
 
 function getClaudeRoot(): string {
@@ -69,6 +78,13 @@ function getClaudeRoot(): string {
 
 export function getProfilesRoot(): string {
   return path.join(getClaudeRoot(), 'profiles')
+}
+
+/** Absolute HERMES_HOME path for a profile (`default` → Hermes root). */
+export function resolveProfileHermesHome(name: string): string {
+  const trimmed = (name || 'default').trim() || 'default'
+  if (trimmed === 'default') return getClaudeRoot()
+  return path.join(getProfilesRoot(), trimmed)
 }
 
 function getActiveProfilePath(): string {
@@ -295,15 +311,27 @@ async function fetchDashboardProfiles(): Promise<{
  * When HERMES_DASHBOARD_URL is set and reachable, fetches from the dashboard
  * API. Falls back to filesystem reads for colocated deployments.
  */
+function isLoopbackDashboardUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase()
+    return host === '127.0.0.1' || host === 'localhost' || host === '::1' || host === '[::1]'
+  } catch {
+    return false
+  }
+}
+
 export async function listProfilesWithFallback(): Promise<{
   profiles: Array<ProfileSummary>
   activeProfile: string
 }> {
-  // Try dashboard first for split-host deployments
-  const dashboardResult = await fetchDashboardProfiles()
-  if (dashboardResult) return dashboardResult
+  // Local pool deployments already have the profiles on disk. Hitting a
+  // loopback dashboard first adds a multi-second timeout on every switch.
+  const dashboardUrl = getDashboardUrl()
+  if (dashboardUrl && !isLoopbackDashboardUrl(dashboardUrl)) {
+    const dashboardResult = await fetchDashboardProfiles()
+    if (dashboardResult) return dashboardResult
+  }
 
-  // Fall back to filesystem (colocated deployment)
   return {
     profiles: listProfiles(),
     activeProfile: getActiveProfileName(),
@@ -610,9 +638,6 @@ export function setActiveProfile(name: string): void {
     fs.mkdirSync(getClaudeRoot(), { recursive: true })
     fs.writeFileSync(getActiveProfilePath(), `${normalized}\n`, 'utf-8')
   }
-  console.warn(
-    `[profiles] Active profile set to "${normalized}". Restart the Hermes Agent gateway for this profile switch to take effect.`,
-  )
 }
 
 export function createProfile(

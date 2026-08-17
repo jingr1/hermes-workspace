@@ -6,6 +6,7 @@ import {
   moveHistoryMessages,
   reconcileSessionDraft,
 } from '../../screens/chat/chat-queries'
+import { ChatRouteLoading } from '../../screens/chat/chat-route-loading'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { useProfiles } from '../../screens/chat/hooks/use-profiles'
 
@@ -16,6 +17,7 @@ const ChatScreen = lazy(async () => {
 
 export const Route = createFileRoute('/chat/$sessionKey')({
   component: ChatRoute,
+  pendingComponent: ChatRouteLoading,
   // Disable SSR to prevent hydration mismatches from async data
   ssr: false,
   errorComponent: function ChatError({ error, reset }) {
@@ -55,11 +57,6 @@ export const Route = createFileRoute('/chat/$sessionKey')({
 })
 
 function ChatRoute() {
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const { activeProfileName } = useProfiles()
@@ -123,23 +120,9 @@ function ChatRoute() {
     [activeFriendlyId, activeProfileName, forcedSessionKey, navigate, queryClient],
   )
 
-  if (!mounted) {
-    return (
-      <div className="flex h-full items-center justify-center text-primary-400">
-        Loading chat…
-      </div>
-    )
-  }
-
   return (
     <ErrorBoundary>
-      <Suspense
-        fallback={
-          <div className="flex h-full items-center justify-center text-primary-400">
-            Loading chat…
-          </div>
-        }
-      >
+      <Suspense fallback={<ChatRouteLoading />}>
         <ChatScreen
           activeFriendlyId={activeFriendlyId}
           isNewChat={isNewChat}

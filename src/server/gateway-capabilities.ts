@@ -73,6 +73,21 @@ export let CLAUDE_DASHBOARD_URL = normalizeUrl(
 )
 
 /**
+ * Point in-memory chat/session traffic at a profile gateway without persisting
+ * Settings → Connection. Profile switch must not overwrite Tailscale/LAN pairing.
+ */
+export function applyProfileGatewayRoute(url: string): string {
+  const normalized = normalizeUrl(url)
+  if (!normalized) return CLAUDE_API
+  if (normalized === CLAUDE_API) return CLAUDE_API
+  CLAUDE_API = normalized
+  probePromise = null
+  lastProbeAt = 0
+  console.log(`[gateway] Routed active profile to ${CLAUDE_API}`)
+  return CLAUDE_API
+}
+
+/**
  * Update the gateway URL at runtime, persist it, and reset the probe cache
  * so the next call to ensureGatewayProbed() re-detects capabilities.
  * Returns the saved URL (normalized). Pass an empty string to clear the
@@ -142,6 +157,7 @@ export const DASHBOARD_REQUIRED_INSTRUCTIONS =
 export const SESSIONS_API_UNAVAILABLE_MESSAGE = `Your Hermes backend does not support the sessions API. ${CLAUDE_UPGRADE_INSTRUCTIONS}`
 
 const PROBE_TIMEOUT_MS = 3_000
+const LOCAL_PROBE_TIMEOUT_MS = 1_000
 // Probe TTL: 120s when the gateway is healthy, 15s when it isn't. The
 // shorter window during 'disconnected' state means a Docker stack where
 // the workspace boots before the agent recovers within ~15s of the agent
@@ -153,6 +169,10 @@ const PROBE_TTL_DISCONNECTED_MS = 15_000
 function effectiveProbeTtl(caps: { health: boolean; chatCompletions: boolean }): number {
   if (caps.health || caps.chatCompletions) return PROBE_TTL_MS
   return PROBE_TTL_DISCONNECTED_MS
+}
+
+function probeTimeoutMs(): number {
+  return isLocalhostDeployment() ? LOCAL_PROBE_TIMEOUT_MS : PROBE_TIMEOUT_MS
 }
 const DASHBOARD_TOKEN_REGEX =
   /window\._+(?:CLAUDE|HERMES)_+SESSION_+TOKEN__+\s*=\s*["']([^"']+)["']/
@@ -292,7 +312,7 @@ export async function fetchDashboardToken(options?: {
     // gracefully — the caller already handles 401/non-ok via safeJson.
     try {
       const res = await fetch(`${CLAUDE_DASHBOARD_URL}/`, {
-        signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+        signal: AbortSignal.timeout(probeTimeoutMs()),
       })
       if (!res.ok) {
         console.warn(
@@ -409,7 +429,7 @@ async function probe(path: string): Promise<boolean> {
   try {
     const res = await fetch(`${CLAUDE_API}${path}`, {
       headers: authHeaders(),
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+      signal: AbortSignal.timeout(probeTimeoutMs()),
     })
     if (res.status === 404 || res.status === 403) return false
     return true
@@ -442,7 +462,7 @@ async function probeEnhancedChatStream(): Promise<boolean> {
       method: 'POST',
       headers: { ...authHeaders(), 'Content-Type': 'application/json' },
       body: '{}',
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+      signal: AbortSignal.timeout(probeTimeoutMs()),
     })
     // Vanilla hermes-agent has no such endpoint — dashboard layer 404s,
     // gateway 404s, anything in between 404s. Enhanced fork accepts POST
@@ -465,7 +485,7 @@ async function probeChatCompletions(): Promise<boolean> {
     const getRes = await fetch(`${CLAUDE_API}/v1/chat/completions`, {
       method: 'GET',
       headers: authHeaders(),
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+      signal: AbortSignal.timeout(probeTimeoutMs()),
     })
     if (getRes.status === 405) return true
     if (getRes.ok) return true
@@ -481,7 +501,7 @@ async function probeChatCompletions(): Promise<boolean> {
           method: 'POST',
           headers: { ...authHeaders(), 'Content-Type': 'application/json' },
           body: '{}',
-          signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+          signal: AbortSignal.timeout(probeTimeoutMs()),
         })
         return postRes.status !== 404
       } catch {
@@ -504,8 +524,13 @@ async function probeChatCompletions(): Promise<boolean> {
  * If the dashboard is up but `/api/mcp` is absent (404) or returns a
  * malformed body, capability is `false`.
  */
-async function probeMcp(): Promise<boolean> {
-  const { normalizeMcpList } = await import('./mcp-normalize')
+async function probeMcp(dashboardAvailable: boolean): Promise<boolean> {
+  let normalizeMcpList: (body: unknown) => unknown
+  try {
+    ;({ normalizeMcpList } = await import('./mcp-normalize'))
+  } catch {
+    return false
+  }
   const validate = async (res: Response): Promise<boolean> => {
     if (!res.ok) return false
     const body = (await res.json().catch(() => null)) as unknown
@@ -516,21 +541,25 @@ async function probeMcp(): Promise<boolean> {
     void normalizeMcpList(body)
     return true
   }
-  // Use dashboardFetch so the probe goes through the same authenticated path
-  // workspace routes use at runtime — otherwise an auth-protected dashboard
-  // /api/mcp would falsely report capability=false (Codex MAJOR finding).
-  try {
-    const res = await dashboardFetch('/api/mcp', {
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-    })
-    if (await validate(res)) return true
-  } catch {
-    // fall through to gateway path
+  // Skip the dashboard hop when it already failed — otherwise a hung
+  // :9119 listener adds a full probe timeout before we try the gateway.
+  if (dashboardAvailable) {
+    // Use dashboardFetch so the probe goes through the same authenticated path
+    // workspace routes use at runtime — otherwise an auth-protected dashboard
+    // /api/mcp would falsely report capability=false (Codex MAJOR finding).
+    try {
+      const res = await dashboardFetch('/api/mcp', {
+        signal: AbortSignal.timeout(probeTimeoutMs()),
+      })
+      if (await validate(res)) return true
+    } catch {
+      // fall through to gateway path
+    }
   }
   try {
     const res = await fetch(`${CLAUDE_API}/api/mcp`, {
       headers: authHeaders(),
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+      signal: AbortSignal.timeout(probeTimeoutMs()),
     })
     return await validate(res)
   } catch {
@@ -594,12 +623,13 @@ async function probeMcpConfigKey(): Promise<boolean> {
 async function probeDashboard(): Promise<{ available: boolean; url: string }> {
   try {
     const res = await fetch(`${CLAUDE_DASHBOARD_URL}/api/status`, {
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+      signal: AbortSignal.timeout(probeTimeoutMs()),
     })
     if (!res.ok) return { available: false, url: CLAUDE_DASHBOARD_URL }
     const body = (await res.json()) as { version?: string }
     if (!body.version) return { available: false, url: CLAUDE_DASHBOARD_URL }
-    await fetchDashboardToken().catch(() => '')
+    // Token scrape is deferred to the first authenticated dashboard call.
+    // Blocking probe on HTML fetch adds another timeout when :9119 hangs.
     return { available: true, url: CLAUDE_DASHBOARD_URL }
   } catch {
     return { available: false, url: CLAUDE_DASHBOARD_URL }
@@ -616,7 +646,7 @@ async function probeConductor(dashboardAvailable: boolean): Promise<boolean> {
   try {
     const res = await dashboardFetch('/api/conductor/missions', {
       method: 'GET',
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+      signal: AbortSignal.timeout(probeTimeoutMs()),
     })
     if (res.status === 404 || res.status === 405) return false
     // 401 means the path exists but the auth token isn't accepted yet —
@@ -647,7 +677,7 @@ async function probeKanban(dashboardAvailable: boolean): Promise<boolean> {
   try {
     const res = await dashboardFetch('/api/plugins/kanban/board', {
       method: 'GET',
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+      signal: AbortSignal.timeout(probeTimeoutMs()),
     })
     if (res.status === 404 || res.status === 405) return false
     // The plugin route is unauthenticated by design (loopback-only), so
@@ -758,6 +788,20 @@ function logCapabilities(next: GatewayCapabilities): void {
 }
 
 async function autoDetectGatewayUrl(): Promise<void> {
+  try {
+    const { getActiveProfileName } = await import('./profiles-browser')
+    const { isGatewayPoolEnabled, getProfileGatewayUrl } =
+      await import('./gateway-ports')
+    if (isGatewayPoolEnabled()) {
+      applyProfileGatewayRoute(
+        getProfileGatewayUrl(getActiveProfileName() || 'default'),
+      )
+      return
+    }
+  } catch {
+    // port map unavailable — fall through to legacy detection
+  }
+
   if (process.env.HERMES_API_URL || process.env.CLAUDE_API_URL) return
 
   const candidates = [
@@ -769,7 +813,7 @@ async function autoDetectGatewayUrl(): Promise<void> {
   for (const candidate of candidates) {
     try {
       const res = await fetch(`${candidate}/health`, {
-        signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+        signal: AbortSignal.timeout(probeTimeoutMs()),
       })
       if (res.ok) {
         CLAUDE_API = candidate
@@ -804,7 +848,7 @@ async function autoDetectDashboardUrl(): Promise<void> {
   for (const candidate of candidates) {
     try {
       const res = await fetch(`${candidate}/api/status`, {
-        signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+        signal: AbortSignal.timeout(probeTimeoutMs()),
       })
       if (res.ok) {
         CLAUDE_DASHBOARD_URL = candidate
@@ -816,90 +860,129 @@ async function autoDetectDashboardUrl(): Promise<void> {
   }
 }
 
+let enhancedProbePromise: Promise<void> | null = null
+
+async function fillEnhancedCapabilities(input: {
+  dashboardAvailable: boolean
+  legacyConfig: boolean
+}): Promise<void> {
+  const [mcp, conductor, kanban] = await Promise.all([
+    probeMcp(input.dashboardAvailable),
+    probeConductor(input.dashboardAvailable),
+    probeKanban(input.dashboardAvailable),
+  ])
+
+  const dashboardConfigAvailable = input.dashboardAvailable || input.legacyConfig
+  const mcpFallback =
+    !mcp &&
+    input.dashboardAvailable &&
+    dashboardConfigAvailable &&
+    isLocalhostDeployment() &&
+    (await probeMcpConfigKey())
+
+  capabilities = {
+    ...capabilities,
+    mcp,
+    mcpFallback,
+    conductor,
+    kanban,
+  }
+  logCapabilities(capabilities)
+}
+
 export async function probeGateway(options?: {
   force?: boolean
+  waitForEnhanced?: boolean
 }): Promise<GatewayCapabilities> {
   const force = options?.force === true
+  const waitForEnhanced = options?.waitForEnhanced !== false
   if (!force && capabilities.probed) {
+    if (waitForEnhanced && enhancedProbePromise) await enhancedProbePromise
     return capabilities
   }
   if (probePromise) {
-    return probePromise
+    await probePromise
+    if (waitForEnhanced && enhancedProbePromise) await enhancedProbePromise
+    return capabilities
   }
 
   probePromise = (async () => {
-    await Promise.all([autoDetectGatewayUrl(), autoDetectDashboardUrl()])
+    try {
+      await Promise.all([autoDetectGatewayUrl(), autoDetectDashboardUrl()])
 
-    const [
-      health,
-      chatCompletions,
-      models,
-      legacySessions,
-      enhancedChat,
-      legacySkills,
-      legacyConfig,
-      legacyJobs,
-      dashboard,
-    ] = await Promise.all([
-      probe('/health'),
-      probeChatCompletions(),
-      probe('/v1/models'),
-      probe('/api/sessions'),
-      probeEnhancedChatStream(),
-      probe('/api/skills'),
-      probe('/api/config'),
-      probe('/api/jobs'),
-      probeDashboard(),
-    ])
+      const [
+        health,
+        chatCompletions,
+        models,
+        legacySessions,
+        enhancedChat,
+        legacySkills,
+        legacyConfig,
+        legacyJobs,
+        dashboard,
+      ] = await Promise.all([
+        probe('/health'),
+        probeChatCompletions(),
+        probe('/v1/models'),
+        probe('/api/sessions'),
+        probeEnhancedChatStream(),
+        probe('/api/skills'),
+        probe('/api/config'),
+        probe('/api/jobs'),
+        probeDashboard(),
+      ])
 
-    // Strict MCP probe runs after dashboard probe so dashboard token
-    // resolution (in-page HTML scrape fallback) has had a chance to populate
-    // the cache when the dashboard is up.
-    const mcp = await probeMcp()
+      capabilities = {
+        health,
+        chatCompletions,
+        models,
+        streaming: chatCompletions,
+        probed: true,
+        sessions: dashboard.available || legacySessions,
+        enhancedChat,
+        skills: dashboard.available || legacySkills,
+        // Memory is always available: workspace reads $HERMES_HOME/MEMORY.md +
+        // memory/*.md + memories/*.md directly from the local filesystem.
+        // No remote gateway endpoint is required.
+        memory: true,
+        config: dashboard.available || legacyConfig,
+        jobs: dashboard.available || legacyJobs,
+        mcp: false,
+        mcpFallback: false,
+        conductor: false,
+        kanban: false,
+        dashboard,
+      }
+      lastProbeAt = Date.now()
+      // Log after enhanced probes so a slow dashboard during Vite boot is not
+      // reported as "start the dashboard" and then immediately contradicted.
 
-    // Conductor probe runs after dashboard probe.
-    const conductor = await probeConductor(dashboard.available)
-    const kanban = await probeKanban(dashboard.available)
+      enhancedProbePromise = fillEnhancedCapabilities({
+        dashboardAvailable: dashboard.available,
+        legacyConfig,
+      }).catch((error) => {
+        console.warn(
+          `[gateway] enhanced probe failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        )
+      })
 
-    // Phase 1.5 fallback: when native /api/mcp is missing but the dashboard
-    // exposes `config.mcp_servers` AND we are loopback-only, allow a config
-    // -backed CRUD path. Test/Discover/Logs remain disabled in this mode.
-    const dashboardConfigAvailable = dashboard.available || legacyConfig
-    const mcpFallback =
-      !mcp &&
-      dashboard.available &&
-      dashboardConfigAvailable &&
-      isLocalhostDeployment() &&
-      (await probeMcpConfigKey())
-
-    capabilities = {
-      health,
-      chatCompletions,
-      models,
-      streaming: chatCompletions,
-      probed: true,
-      sessions: dashboard.available || legacySessions,
-      enhancedChat,
-      skills: dashboard.available || legacySkills,
-      // Memory is always available: workspace reads $HERMES_HOME/MEMORY.md +
-      // memory/*.md + memories/*.md directly from the local filesystem.
-      // No remote gateway endpoint is required.
-      memory: true,
-      config: dashboard.available || legacyConfig,
-      jobs: dashboard.available || legacyJobs,
-      mcp,
-      mcpFallback,
-      conductor,
-      kanban,
-      dashboard,
+      return capabilities
+    } catch (error) {
+      console.warn(
+        `[gateway] probe failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      return capabilities
     }
-    lastProbeAt = Date.now()
-    logCapabilities(capabilities)
-    return capabilities
   })()
 
   try {
-    return await probePromise
+    await probePromise
+    if (waitForEnhanced && enhancedProbePromise) await enhancedProbePromise
+    return capabilities
   } finally {
     probePromise = null
   }
@@ -910,6 +993,16 @@ export async function ensureGatewayProbed(): Promise<GatewayCapabilities> {
     Date.now() - lastProbeAt > effectiveProbeTtl(capabilities)
   if (!capabilities.probed || isStale) {
     return probeGateway({ force: isStale })
+  }
+  if (enhancedProbePromise) await enhancedProbePromise
+  return capabilities
+}
+
+export async function ensureGatewayCoreProbed(): Promise<GatewayCapabilities> {
+  const isStale =
+    Date.now() - lastProbeAt > effectiveProbeTtl(capabilities)
+  if (!capabilities.probed || isStale) {
+    return probeGateway({ force: isStale, waitForEnhanced: false })
   }
   return capabilities
 }
@@ -998,5 +1091,3 @@ export function getConnectionStatus(): ConnectionStatus {
 export function isClaudeConnected(): boolean {
   return capabilities.health || capabilities.dashboard.available
 }
-
-void ensureGatewayProbed()
