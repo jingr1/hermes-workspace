@@ -8,7 +8,7 @@ import {
   Pen01Icon,
   PinIcon,
 } from '@hugeicons/core-free-icons'
-import { memo, useMemo } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { getMessageTimestamp } from '../../utils'
 import type { SessionMeta } from '../../types'
 import { cn } from '@/lib/utils'
@@ -25,7 +25,7 @@ type SessionItemProps = {
   isPinned: boolean
   onSelect?: () => void
   onTogglePin: (session: SessionMeta) => void
-  onRename: (session: SessionMeta) => void
+  onRename: (session: SessionMeta, newTitle: string) => void
   onDelete: (session: SessionMeta) => void
 }
 
@@ -109,6 +109,11 @@ function SessionItemComponent({
   const isError = session.titleStatus === 'error'
   const baseTitle = getSessionDisplayTitle(session, isGenerating)
 
+  const [isRenaming, setIsRenaming] = useState(false)
+  const [draft, setDraft] = useState(baseTitle)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  const renamingRef = useRef(false)
+
   const updatedAt = useMemo(() => {
     if (typeof session.updatedAt === 'number') return session.updatedAt
     if (session.lastMessage) return getMessageTimestamp(session.lastMessage)
@@ -126,6 +131,80 @@ function SessionItemComponent({
     return parts.join(' • ')
   }, [isError, session.friendlyId, session.titleError, updatedAt])
 
+  useEffect(() => {
+    if (!isRenaming) return
+    const id = window.setTimeout(() => {
+      inputRef.current?.focus()
+      inputRef.current?.select()
+    }, 0)
+    return () => window.clearTimeout(id)
+  }, [isRenaming])
+
+  const startRename = () => {
+    setDraft(baseTitle)
+    renamingRef.current = true
+    setIsRenaming(true)
+  }
+
+  const cancelRename = () => {
+    renamingRef.current = false
+    setIsRenaming(false)
+    setDraft(baseTitle)
+  }
+
+  const commitRename = () => {
+    if (!renamingRef.current) return
+    renamingRef.current = false
+    // Read from the DOM so Enter/blur never saves a stale React state value.
+    const trimmed = (inputRef.current?.value ?? draft).trim()
+    setIsRenaming(false)
+    if (!trimmed || trimmed === baseTitle.trim()) return
+    onRename(session, trimmed)
+  }
+
+  const rowClassName = cn(
+    'group inline-flex items-center justify-between',
+    'w-full text-left pl-1.5 pr-0.5 h-14 rounded-lg transition-colors duration-0',
+    'select-none',
+    active
+      ? 'bg-primary-200 text-primary-950'
+      : 'bg-transparent text-primary-950 [&:hover:not(:has(button:hover))]:bg-primary-200',
+  )
+
+  if (isRenaming) {
+    return (
+      <div className={rowClassName} data-renaming="true">
+        <div className="flex-1 min-w-0 py-1.5 pr-2">
+          <input
+            ref={inputRef}
+            type="text"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={commitRename}
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              if (event.nativeEvent.isComposing) return
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                event.stopPropagation()
+                commitRename()
+              } else if (event.key === 'Escape') {
+                event.preventDefault()
+                event.stopPropagation()
+                cancelRename()
+              }
+            }}
+            className="w-full rounded-md border border-primary-300 bg-primary-50 px-1.5 py-1 text-sm font-[500] text-primary-950 outline-none focus:border-accent-500"
+            aria-label="Rename session"
+          />
+          <div className="mt-0.5 text-[11px] text-primary-500 truncate">
+            Enter to save · Esc to cancel
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <Link
       to="/chat/$sessionKey"
@@ -136,14 +215,7 @@ function SessionItemComponent({
         } catch {}
         onSelect?.()
       }}
-      className={cn(
-        'group inline-flex items-center justify-between',
-        'w-full text-left pl-1.5 pr-0.5 h-14 rounded-lg transition-colors duration-0',
-        'select-none',
-        active
-          ? 'bg-primary-200 text-primary-950'
-          : 'bg-transparent text-primary-950 [&:hover:not(:has(button:hover))]:bg-primary-200',
-      )}
+      className={rowClassName}
     >
       <div className="flex-1 min-w-0 py-1.5">
         <div
@@ -173,9 +245,10 @@ function SessionItemComponent({
             event.stopPropagation()
           }}
           className={cn(
-            'ml-2 inline-flex size-7 items-center justify-center rounded-md text-primary-700',
+            'ml-1 inline-flex size-7 items-center justify-center rounded-md text-primary-700',
             'opacity-0 transition-opacity group-hover:opacity-100 hover:bg-primary-200 dark:hover:bg-primary-800',
             'aria-expanded:opacity-100 aria-expanded:bg-primary-200',
+            active ? 'opacity-100' : undefined,
           )}
           aria-label="Session options"
         >
@@ -201,7 +274,7 @@ function SessionItemComponent({
             onClick={(event) => {
               event.preventDefault()
               event.stopPropagation()
-              onRename(session)
+              window.setTimeout(() => startRename(), 0)
             }}
             className="gap-2"
           >

@@ -50,6 +50,12 @@ export function useRenameSession(): RenameSessionResult {
       const previousSessions = queryClient.getQueryData(sessionsKey)
 
       const targetId = payload.friendlyId || payload.sessionKey
+      updateSessionTitleState(targetId, {
+        title: payload.newTitle,
+        source: 'manual',
+        status: 'ready',
+        error: null,
+      })
       // Optimistically update the session title in cache
       queryClient.setQueryData(
         sessionsKey,

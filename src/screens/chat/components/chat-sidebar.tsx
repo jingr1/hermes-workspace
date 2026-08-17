@@ -29,13 +29,8 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
 import { CHAT_OPEN_SETTINGS_EVENT } from '../chat-events'
 import { useChatSettings as useSidebarSettings } from '../hooks/use-chat-settings'
-import { useDeleteSession } from '../hooks/use-delete-session'
-import { useRenameSession } from '../hooks/use-rename-session'
 import { ProvidersDialog } from './providers-dialog'
-import { SessionRenameDialog } from './sidebar/session-rename-dialog'
-import { SessionDeleteDialog } from './sidebar/session-delete-dialog'
 import type { ChatOpenSettingsDetail } from '../chat-events'
-import type { SessionMeta } from '../types'
 import { t } from '@/lib/i18n'
 import { SettingsDialog } from '@/components/settings-dialog'
 import {
@@ -517,7 +512,7 @@ function ChatSidebarComponent({
   isCollapsed,
   onToggleCollapse,
   onSelectSession,
-  onActiveSessionDelete,
+  onActiveSessionDelete: _onActiveSessionDelete,
 }: ChatSidebarProps) {
   const { settingsOpen, settingsSection, setSettingsOpen, handleOpenSettings } =
     useSidebarSettings()
@@ -525,8 +520,6 @@ function ChatSidebarComponent({
   const profileAvatarDataUrl = useChatSettingsStore(
     selectChatProfileAvatarDataUrl,
   )
-  const { deleteSession } = useDeleteSession()
-  const { renameSession } = useRenameSession()
   const openSearchModal = useSearchModal((state) => state.openModal)
   const isSearchModalOpen = useSearchModal((state) => state.isOpen)
   const pathname = useRouterState({
@@ -620,22 +613,6 @@ function ChatSidebarComponent({
   const sidebarHoverExpand = useChatSettingsStore(selectSidebarHoverExpand)
   const sidebarRef = useRef<HTMLElement | null>(null)
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null)
-
-  function handleOpenRename(_session: SessionMeta) {
-    // Session rename handled by ChatSessionSidebar
-  }
-
-  function handleSaveRename(_newTitle: string) {
-    // Session rename handled by ChatSessionSidebar
-  }
-
-  function handleOpenDelete(_session: SessionMeta) {
-    // Session delete handled by ChatSessionSidebar
-  }
-
-  function handleConfirmDelete() {
-    // Session delete handled by ChatSessionSidebar
-  }
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 767px)')

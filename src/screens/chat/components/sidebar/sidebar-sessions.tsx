@@ -24,7 +24,7 @@ type SidebarSessionsProps = {
   activeFriendlyId: string
   defaultOpen?: boolean
   onSelect?: () => void
-  onRename: (session: SessionMeta) => void
+  onRename: (session: SessionMeta, newTitle: string) => void
   onDelete: (session: SessionMeta) => void
   loading: boolean
   fetching: boolean

@@ -10,7 +10,6 @@ import { useRenameSession } from '../hooks/use-rename-session'
 import { useDeleteSession } from '../hooks/use-delete-session'
 import { chatQueryKeys, fetchSessions } from '../chat-queries'
 import { SidebarSessions } from './sidebar/sidebar-sessions'
-import { SessionRenameDialog } from './sidebar/session-rename-dialog'
 import { SessionDeleteDialog } from './sidebar/session-delete-dialog'
 import type { SessionMeta } from '../types'
 import { cn } from '@/lib/utils'
@@ -66,33 +65,16 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
   const { renameSession } = useRenameSession()
   const { deleteSession } = useDeleteSession()
 
-  const [renameDialogOpen, setRenameDialogOpen] = useState(false)
-  const [renameSessionKey, setRenameSessionKey] = useState<string | null>(null)
-  const [renameFriendlyId, setRenameFriendlyId] = useState<string | null>(null)
-  const [renameSessionTitle, setRenameSessionTitle] = useState('')
-
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deleteSessionKey, setDeleteSessionKey] = useState<string | null>(null)
   const [deleteFriendlyId, setDeleteFriendlyId] = useState<string | null>(null)
   const [deleteSessionTitle, setDeleteSessionTitle] = useState('')
 
-  const handleOpenRename = useCallback((session: SessionMeta) => {
-    setRenameSessionKey(session.key)
-    setRenameFriendlyId(session.friendlyId)
-    setRenameSessionTitle(session.label || session.title || session.derivedTitle || '')
-    setRenameDialogOpen(true)
-  }, [])
-
-  const handleSaveRename = useCallback(
-    (newTitle: string) => {
-      if (renameSessionKey) {
-        void renameSession(renameSessionKey, renameFriendlyId, newTitle)
-      }
-      setRenameDialogOpen(false)
-      setRenameSessionKey(null)
-      setRenameFriendlyId(null)
+  const handleRename = useCallback(
+    (session: SessionMeta, newTitle: string) => {
+      void renameSession(session.key, session.friendlyId, newTitle)
     },
-    [renameFriendlyId, renameSession, renameSessionKey],
+    [renameSession],
   )
 
   const handleOpenDelete = useCallback((session: SessionMeta) => {
@@ -265,7 +247,7 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
             sessions={sessions}
             activeFriendlyId={activeFriendlyId}
             defaultOpen
-            onRename={handleOpenRename}
+            onRename={handleRename}
             onDelete={handleOpenDelete}
             loading={sessionsLoading}
             fetching={sessionsFetching}
@@ -274,26 +256,6 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
           />
         </div>
       </div>
-
-      <SessionRenameDialog
-        open={renameDialogOpen}
-        onOpenChange={(open) => {
-          setRenameDialogOpen(open)
-          if (!open) {
-            setRenameSessionKey(null)
-            setRenameFriendlyId(null)
-            setRenameSessionTitle('')
-          }
-        }}
-        sessionTitle={renameSessionTitle}
-        onSave={handleSaveRename}
-        onCancel={() => {
-          setRenameDialogOpen(false)
-          setRenameSessionKey(null)
-          setRenameFriendlyId(null)
-          setRenameSessionTitle('')
-        }}
-      />
 
       <SessionDeleteDialog
         open={deleteDialogOpen}

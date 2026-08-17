@@ -15,6 +15,21 @@ function mergeSessionTitle(
 ): SessionMeta {
   if (!stored) return session
 
+  // Manual renames live in the title store and must win over API fields that
+  // still carry the old auto/id title after a list refetch.
+  if (stored.source === 'manual' && stored.title?.trim()) {
+    const manualTitle = stored.title.trim()
+    return {
+      ...session,
+      label: manualTitle,
+      title: manualTitle,
+      derivedTitle: manualTitle,
+      titleStatus: 'ready',
+      titleSource: 'manual',
+      titleError: null,
+    }
+  }
+
   const hasManualTitle = Boolean(session.label || session.title)
   const derivedTitle = hasManualTitle
     ? session.derivedTitle
