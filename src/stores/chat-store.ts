@@ -338,8 +338,11 @@ function stripFinalTags(text: string): string {
  * displayed text. Only strips outside code blocks to avoid breaking code samples.
  * Mirrors the chat control UI's tag-stripping pipeline.
  */
-function stripInternalTags(text: string): string {
-  // Split on code blocks to avoid stripping inside them
+export function stripInternalTags(text: string): string {
+  // Split on code blocks to avoid stripping inside them.
+  // Do not trim the prose slices: trimming glues headings/paragraphs onto
+  // adjacent ``` fences (`### Heading\n``` ` → `### Heading``` `) and the
+  // markdown parser then shows literal backticks instead of code blocks.
   const parts = text.split(/(```[\s\S]*?```)/g)
   return parts
     .map((part, i) => {
@@ -350,9 +353,10 @@ function stripInternalTags(text: string): string {
         .replace(/<thought>[\s\S]*?<\/thought>/gi, '')
         .replace(/<parameter name="newText">[\s\S]*?<\/antml:parameter>/gi, '')
         .replace(/<relevant_memories>[\s\S]*?<\/relevant_memories>/gi, '')
-        .trim()
     })
     .join('')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 const LIFECYCLE_PREFIX_EMOJIS = ['⏳', '⚠️', '🔄', '🗜️', '❌'] as const

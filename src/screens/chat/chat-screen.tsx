@@ -2849,7 +2849,7 @@ export function ChatScreen({
               ? 'flex flex-col'
               : hideUi || isFocusMode
                 ? 'grid grid-cols-[auto_minmax(0,1fr)_auto] grid-rows-[minmax(0,1fr)]'
-                : 'grid grid-cols-[260px_minmax(0,1fr)_auto_auto] grid-rows-[minmax(0,1fr)]',
+                : 'grid grid-cols-[auto_minmax(0,1fr)_auto_auto] grid-rows-[minmax(0,1fr)]',
         )}
       >
         {hideUi || compact || isFocusMode || isMobile ? null : (

@@ -2672,7 +2672,7 @@ function ChatComposerComponent({
                   setMobileKeyboardInset(0)
                 }
               }}
-              className="min-h-[44px]"
+              className="min-h-[36px]"
             />
             <PromptInputActions className="justify-between px-1.5 md:px-3 gap-0.5 md:gap-2">
               <div className="flex min-w-0 flex-1 items-center gap-0 md:gap-1">

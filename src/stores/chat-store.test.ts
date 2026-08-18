@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { useChatStore } from './chat-store'
+import { stripInternalTags, useChatStore } from './chat-store'
 import type { ChatMessage } from '../screens/chat/types'
 
 function textMessage(
@@ -16,6 +16,39 @@ function textMessage(
     content: [{ type: 'text', text }],
   }
 }
+
+describe('stripInternalTags', () => {
+  it('keeps the newline between a heading and the following unlabeled fence', () => {
+    const source = [
+      '### ConductorPhase（UI 层）',
+      '```',
+      'home → preview → active → complete',
+      '```',
+      '',
+      '### MissionPhase（hook 层）',
+      '```',
+      'idle → decomposing → running → complete',
+      '```',
+      '',
+      '关键状态转换：',
+      '',
+    ].join('\n')
+
+    const result = stripInternalTags(source)
+
+    expect(result).toContain('### ConductorPhase（UI 层）\n```\n')
+    expect(result).toContain('```\n\n### MissionPhase（hook 层）\n```\n')
+    expect(result).not.toContain('### ConductorPhase（UI 层）```')
+    expect(result).not.toContain('```### MissionPhase')
+  })
+
+  it('still strips thinking tags outside fences', () => {
+    const result = stripInternalTags(
+      '<thinking>secret</thinking>\n\nhello `code`\n```\nkept <thinking>x</thinking>\n```\n',
+    )
+    expect(result).toBe('hello `code`\n```\nkept <thinking>x</thinking>\n```')
+  })
+})
 
 describe('chat-store history merge ordering', () => {
   it('preserves persisted history order when messages share a timestamp', () => {

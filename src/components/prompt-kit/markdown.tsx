@@ -1,5 +1,13 @@
 import { marked } from 'marked'
-import { createContext, memo, useContext, useId, useMemo, useRef } from 'react'
+import {
+  createContext,
+  isValidElement,
+  memo,
+  useContext,
+  useId,
+  useMemo,
+  useRef,
+} from 'react'
 import ReactMarkdown from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
 import rehypeRaw from 'rehype-raw'
@@ -66,6 +74,18 @@ function extractLanguage(className?: string): string {
   return match ? match[1] : 'text'
 }
 
+function extractFencedCode(
+  children: React.ReactNode,
+): { content: string; language: string } | null {
+  const child = Array.isArray(children) ? children[0] : children
+  if (!isValidElement(child)) return null
+  const props = child.props as { className?: string; children?: React.ReactNode }
+  return {
+    content: String(props.children ?? '').replace(/\n$/, ''),
+    language: extractLanguage(props.className),
+  }
+}
+
 type TableRenderContextValue = {
   headersRef: React.MutableRefObject<Array<string>>
   columnIndexRef: React.MutableRefObject<number>
@@ -103,27 +123,30 @@ function slugifyHeading(children: React.ReactNode): string {
 
 const INITIAL_COMPONENTS: Partial<Components> = {
   code: function CodeComponent({ className, children }) {
-    const isInline = !className?.includes('language-')
-
-    if (isInline) {
-      return (
-        <code className="inline-code rounded-[4px] px-[5px] py-px text-[0.9em]">
-          {children}
-        </code>
-      )
-    }
-
-    const language = extractLanguage(className)
     return (
-      <CodeBlock
-        content={String(children ?? '')}
-        language={language}
-        className="w-full my-2"
-      />
+      <code
+        className={cn(
+          'inline-code rounded-[4px] px-[5px] py-px text-[0.9em]',
+          className,
+        )}
+      >
+        {children}
+      </code>
     )
   },
   pre: function PreComponent({ children }) {
-    return <>{children}</>
+    // Fenced blocks always arrive as <pre><code>. Unlabeled fences have no
+    // `language-*` class, so they must be handled here — not in `code`,
+    // which also renders inline `code` spans.
+    const fenced = extractFencedCode(children)
+    if (!fenced) return <>{children}</>
+    return (
+      <CodeBlock
+        content={fenced.content}
+        language={fenced.language}
+        className="w-full my-2"
+      />
+    )
   },
   h1: function H1Component({ children }) {
     return (

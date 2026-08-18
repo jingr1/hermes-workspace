@@ -2,7 +2,7 @@
 
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Add01Icon, UserGroupIcon } from '@hugeicons/core-free-icons'
-import { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { useGatewayPoolStatus, useProfiles, setActiveProfileOptimistic } from '../hooks/use-profiles'
@@ -32,6 +32,11 @@ type ChatSessionSidebarProps = {
   onNewChat: () => void
   onActiveSessionDelete?: () => void
 }
+
+const SIDEBAR_MIN_WIDTH = 220
+const SIDEBAR_MAX_WIDTH = 420
+const PROFILE_MIN_HEIGHT = 220
+const SESSION_MIN_HEIGHT = 180
 
 function profileMeta(profile: {
   model?: string
@@ -73,6 +78,7 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
 }: ChatSessionSidebarProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const sidebarRef = useRef<HTMLElement | null>(null)
   const {
     profiles,
     activeProfileName,
@@ -99,6 +105,8 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
   const [deleteSessionKey, setDeleteSessionKey] = useState<string | null>(null)
   const [deleteFriendlyId, setDeleteFriendlyId] = useState<string | null>(null)
   const [deleteSessionTitle, setDeleteSessionTitle] = useState('')
+  const [sidebarWidth, setSidebarWidth] = useState(260)
+  const [profilesHeight, setProfilesHeight] = useState(480)
 
   const handleRename = useCallback(
     (session: SessionMeta, newTitle: string) => {
@@ -188,13 +196,76 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
     [activateProfile, activeFriendlyId, activeProfileName, queryClient, navigate],
   )
 
+  const startSidebarResize = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      event.preventDefault()
+      const startX = event.clientX
+      const startWidth = sidebarWidth
+      const previousUserSelect = document.body.style.userSelect
+      document.body.style.userSelect = 'none'
+
+      const onMove = (moveEvent: MouseEvent) => {
+        const nextWidth = Math.min(
+          SIDEBAR_MAX_WIDTH,
+          Math.max(SIDEBAR_MIN_WIDTH, startWidth + (moveEvent.clientX - startX)),
+        )
+        setSidebarWidth(nextWidth)
+      }
+
+      const onUp = () => {
+        document.body.style.userSelect = previousUserSelect
+        window.removeEventListener('mousemove', onMove)
+        window.removeEventListener('mouseup', onUp)
+      }
+
+      window.addEventListener('mousemove', onMove)
+      window.addEventListener('mouseup', onUp)
+    },
+    [sidebarWidth],
+  )
+
+  const startSectionResize = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    const startY = event.clientY
+    const startHeight = profilesHeight
+    const containerHeight = sidebarRef.current?.clientHeight ?? window.innerHeight
+    const maxHeight = Math.max(
+      PROFILE_MIN_HEIGHT,
+      containerHeight - SESSION_MIN_HEIGHT - 40,
+    )
+    const previousUserSelect = document.body.style.userSelect
+    document.body.style.userSelect = 'none'
+
+    const onMove = (moveEvent: MouseEvent) => {
+      const nextHeight = Math.min(
+        maxHeight,
+        Math.max(PROFILE_MIN_HEIGHT, startHeight + (moveEvent.clientY - startY)),
+      )
+      setProfilesHeight(nextHeight)
+    }
+
+    const onUp = () => {
+      document.body.style.userSelect = previousUserSelect
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }, [profilesHeight])
+
   return (
     <aside
-      className="flex h-full w-[260px] flex-col border-r border-primary-200 bg-[var(--theme-sidebar)] dark:border-primary-800"
+      ref={sidebarRef}
+      className="relative flex h-full flex-col border-r border-neutral-200 bg-[var(--theme-sidebar)] dark:border-neutral-800"
       data-tour="chat-session-sidebar"
+      style={{ width: `${sidebarWidth}px` }}
     >
       {/* Profile list */}
-      <div className="flex min-h-0 flex-[1.2] flex-col border-b border-primary-200 dark:border-primary-800">
+      <div
+        className="flex min-h-0 shrink-0 flex-col"
+        style={{ height: `${profilesHeight}px` }}
+      >
         <div className="flex shrink-0 items-center justify-between px-3 py-2">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-primary-500">
             Profiles
@@ -234,7 +305,7 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
                       className={cn(
                         'flex w-full flex-col rounded-lg px-2.5 py-2 text-left transition-colors',
                         isActive
-                          ? 'bg-accent-500/10 text-accent-500'
+                          ? 'bg-primary-200 text-accent-500'
                           : 'text-primary-900 hover:bg-primary-200 dark:hover:bg-primary-800',
                       )}
                       title={
@@ -253,7 +324,7 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
                         />
                         <span className="truncate">{profile.name}</span>
                         {isActive ? (
-                          <span className="shrink-0 text-[9px] text-accent-500">active</span>
+                          <span className="shrink-0 text-[9px] text-primary-700">active</span>
                         ) : null}
                       </span>
                       <span className="flex items-center gap-1.5">
@@ -273,6 +344,17 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
             </ScrollAreaScrollbar>
           </ScrollAreaRoot>
         )}
+      </div>
+
+      <div
+        className="group relative shrink-0"
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Resize sidebar sections"
+        onMouseDown={startSectionResize}
+      >
+        <div className="h-px bg-neutral-200 dark:bg-neutral-800" />
+        <div className="absolute inset-x-0 -top-1.5 -bottom-1.5 cursor-row-resize" />
       </div>
 
       {/* Session list */}
@@ -315,6 +397,14 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
         sessionTitle={deleteSessionTitle}
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeleteDialogOpen(false)}
+      />
+
+      <div
+        className="absolute inset-y-0 right-0 z-10 w-1 cursor-col-resize bg-transparent hover:bg-neutral-300/50 dark:hover:bg-neutral-700/50"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize sidebar width"
+        onMouseDown={startSidebarResize}
       />
     </aside>
   )

@@ -52,7 +52,8 @@ const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
   'o3-mini': 200_000,
   'gemini-2.5-flash': 1_000_000,
   'gemini-2.5-pro': 1_000_000,
-  'kimi-k2.6': 256_000,
+  'kimi-k2.6': 262_144,
+  'kimi-k2.7': 262_144,
 }
 
 const CHARS_PER_TOKEN = 3.5
@@ -144,16 +145,28 @@ export function estimateContextTokensFromSessionUsage(
   return Math.ceil(totalInput / calls)
 }
 
-function getContextWindow(model: string): number {
-  if (MODEL_CONTEXT_WINDOWS[model]) return MODEL_CONTEXT_WINDOWS[model]
+function lookupModelContextWindow(model: string): number {
+  const lower = model.toLowerCase()
   for (const [key, value] of Object.entries(MODEL_CONTEXT_WINDOWS)) {
-    if (
-      model.toLowerCase().includes(key.toLowerCase()) ||
-      key.toLowerCase().includes(model.toLowerCase())
-    )
+    if (lower.includes(key.toLowerCase()) || key.toLowerCase().includes(lower))
       return value
   }
-  return 200_000
+  return 0
+}
+
+function getContextWindow(model: string): number {
+  if (MODEL_CONTEXT_WINDOWS[model]) return MODEL_CONTEXT_WINDOWS[model]
+  const fuzzy = lookupModelContextWindow(model)
+  return fuzzy > 0 ? fuzzy : 200_000
+}
+
+function resolvePreferredContextWindow(
+  model: string,
+  configuredMaxTokens?: number,
+  sessionContextLength?: number,
+): number {
+  const knownWindow = model ? getContextWindow(model) : 0
+  return sessionContextLength || knownWindow || configuredMaxTokens || 0
 }
 
 function authHeaders(): Record<string, string> {
@@ -271,7 +284,12 @@ async function readConfiguredModelContext(): Promise<ResolvedModelContext | null
 
     const payload = (await response.json()) as Record<string, unknown>
     const model = typeof payload.model === 'string' ? payload.model.trim() : ''
-    const maxTokens = readConfiguredContextLength(payload)
+    const configuredLength = readConfiguredContextLength(payload)
+    // Prefer the explicit entry from MODEL_CONTEXT_WINDOWS when it exists,
+    // because the configured length from the gateway can be a generic default
+    // (e.g. provider-level 1M) that doesn't match the model's real limit.
+    const exactEntry = model ? MODEL_CONTEXT_WINDOWS[model] ?? lookupModelContextWindow(model) : 0
+    const maxTokens = exactEntry > 0 ? exactEntry : (configuredLength || 0)
 
     if (!model && maxTokens <= 0) return null
 
@@ -441,6 +459,7 @@ export async function readContextUsage(
 ): Promise<ContextUsageSnapshot> {
   try {
     let sessionData: Record<string, unknown> | null = null
+    let fallbackSnapshot: ContextUsageSnapshot | null = null
     const explicitSessionId = sessionId.trim()
     const capabilities = await ensureGatewayProbed()
     const configuredModelContext = await readConfiguredModelContext()
@@ -479,19 +498,19 @@ export async function readContextUsage(
         const usedTokens = estimateContextTokensFromMessages(pendingMessages)
         const model =
           localSession.model || configuredModelContext?.model || 'gpt-5.4'
-        const maxTokens =
-          configuredModelContext?.maxTokens || getContextWindow(model)
+        const maxTokens = resolvePreferredContextWindow(
+          model,
+          configuredModelContext?.maxTokens,
+        )
         const contextPercent =
           maxTokens > 0 ? Math.round((usedTokens / maxTokens) * 1000) / 10 : 0
-        return buildSnapshot({
+        fallbackSnapshot = buildSnapshot({
           contextPercent,
           maxTokens,
           usedTokens,
           model,
         })
-      }
-
-      if (localMessages.length > 0 || activeRun?.assistantText) {
+      } else if (localMessages.length > 0 || activeRun?.assistantText) {
         const pendingMessages = activeRun?.assistantText
           ? [
               ...localMessages,
@@ -504,10 +523,13 @@ export async function readContextUsage(
           : localMessages
         const usedTokens = estimateContextTokensFromMessages(pendingMessages)
         const model = configuredModelContext?.model || 'gpt-5.4'
-        const maxTokens = configuredModelContext?.maxTokens || getContextWindow(model)
+        const maxTokens = resolvePreferredContextWindow(
+          model,
+          configuredModelContext?.maxTokens,
+        )
         const contextPercent =
           maxTokens > 0 ? Math.round((usedTokens / maxTokens) * 1000) / 10 : 0
-        return buildSnapshot({
+        fallbackSnapshot = buildSnapshot({
           contextPercent,
           maxTokens,
           usedTokens,
@@ -544,15 +566,20 @@ export async function readContextUsage(
     // the gateway has it, return the configured context window without inheriting
     // unrelated conversation usage from another session.
     if (explicitSessionId && !sessionData) {
-      return configuredEmptySnapshot(configuredModelContext)
+      return fallbackSnapshot ?? configuredEmptySnapshot(configuredModelContext)
     }
 
     if (!explicitSessionId) return configuredEmptySnapshot(configuredModelContext)
 
-    if (!sessionData) return configuredEmptySnapshot(configuredModelContext)
+    if (!sessionData) return fallbackSnapshot ?? configuredEmptySnapshot(configuredModelContext)
 
     const model = String(sessionData.model || '')
-    const maxTokens = configuredModelContext?.maxTokens || getContextWindow(model)
+    const sessionContextLength = Number(sessionData.context_length) || 0
+    const maxTokens = resolvePreferredContextWindow(
+      model,
+      configuredModelContext?.maxTokens,
+      sessionContextLength,
+    )
     const cacheReadTokens = Number(sessionData.cache_read_tokens) || 0
     const cacheWriteTokens = Number(sessionData.cache_write_tokens) || 0
     const inputTokens = Number(sessionData.input_tokens) || 0
