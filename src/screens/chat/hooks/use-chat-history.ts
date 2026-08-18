@@ -33,6 +33,10 @@ type UseChatHistoryInput = {
   historyRefetchInterval?: number
   /** When true, skip all server history fetching (portable mode). */
   portableMode?: boolean
+  /** Target profile so history can be read from that profile's state.db. */
+  profileName?: string
+  /** Only fetch after the route session is known to belong to the active profile. */
+  sessionVerified?: boolean
 }
 
 function normalizeSessionCandidate(value: string | undefined): string {
@@ -269,6 +273,8 @@ export function useChatHistory({
   queryClient,
   historyRefetchInterval,
   portableMode = false,
+  profileName,
+  sessionVerified = false,
 }: UseChatHistoryInput) {
   const explicitRouteSessionKey = useMemo(() => {
     const normalizedFriendlyId = normalizeSessionCandidate(activeFriendlyId)
@@ -300,21 +306,14 @@ export function useChatHistory({
     normalizedActiveSessionKey,
     normalizedForcedSessionKey,
   ])
-  const hasDirectSessionKey = Boolean(
-    normalizedForcedSessionKey ||
-    normalizedActiveSessionKey ||
-    explicitRouteSessionKey,
-  )
-  const canFetchWithoutSessions = Boolean(
-    normalizedForcedSessionKey || explicitRouteSessionKey,
-  )
   const shouldFetchHistory =
     !portableMode &&
     !isNewChat &&
     Boolean(sessionKeyForHistory) &&
-    (canFetchWithoutSessions ||
-      (!isRedirecting &&
-        (hasDirectSessionKey || !sessionsReady || activeExists)))
+    !isRedirecting &&
+    (sessionVerified ||
+      Boolean(normalizedForcedSessionKey) ||
+      (sessionsReady && activeExists))
 
   const effectiveFriendlyId = portableMode ? 'main' : activeFriendlyId
   const effectiveSessionKeyForHistory = portableMode
@@ -348,6 +347,7 @@ export function useChatHistory({
       const serverData = await fetchHistory({
         sessionKey: sessionKeyForHistory,
         friendlyId: activeFriendlyId,
+        profile: profileName,
       })
 
       let dataWithRecovery = serverData
@@ -395,12 +395,13 @@ export function useChatHistory({
       return queryClient.getQueryData<HistoryResponse>(historyKey)
     },
     placeholderData: function useCachedHistory(): HistoryResponse | undefined {
+      if (!sessionVerified && !normalizedForcedSessionKey) return undefined
       return queryClient.getQueryData(historyKey)
     },
-    refetchOnMount: 'always',
+    refetchOnMount: true,
     refetchOnWindowFocus: true,
     refetchInterval: historyRefetchInterval,
-    staleTime: 0, // Always refetch on mount — prevents stale data after tab navigation
+    staleTime: 10_000,
     gcTime: 1000 * 60 * 10,
     structuralSharing: true,
     notifyOnChangeProps: ['data', 'error', 'isError'],

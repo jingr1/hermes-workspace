@@ -6,6 +6,7 @@ import {
   getActiveProfileName,
   resolveProfileHermesHome,
 } from './profiles-browser'
+import { profileOwnsPort } from './gateway-port-owner'
 import { ensureProfileApiServerEnv } from './gateway-ports'
 import { getStateDir } from './workspace-state-dir'
 
@@ -130,11 +131,45 @@ export async function isClaudeAgentHealthy(
   try {
     const response = await fetch(`http://127.0.0.1:${port}/health`, {
       signal: AbortSignal.timeout(timeoutMs),
+      headers: { Accept: 'application/json' },
     })
-    return response.ok
+    if (!response.ok) return false
+    const contentType = response.headers.get('content-type') || ''
+    if (contentType.includes('text/html')) return false
+    if (contentType.includes('json')) return true
+    const text = await response.text()
+    const trimmed = text.trim()
+    return trimmed.startsWith('{') || trimmed.startsWith('[')
   } catch {
     return false
   }
+}
+
+export function stopProfileGateway(profileName: string): {
+  ok: boolean
+  message: string
+} {
+  const name = (profileName || 'default').trim() || 'default'
+  const hermesHome = resolveProfileHermesHome(name)
+  const pid = readAliveGatewayPid(hermesHome)
+  if (!pid) {
+    return { ok: true, message: 'not running' }
+  }
+
+  try {
+    process.kill(pid, 'SIGTERM')
+  } catch (error) {
+    const errno = error as NodeJS.ErrnoException
+    if (errno.code === 'ESRCH') {
+      return { ok: true, message: 'already stopped' }
+    }
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : String(error),
+    }
+  }
+
+  return { ok: true, message: 'stopped' }
 }
 
 export function readAliveGatewayPid(hermesHome: string): number | null {
@@ -182,7 +217,8 @@ export async function spawnProfileGateway(
   const agentDir = resolveClaudeAgentDir()
   const stalePid = readAliveGatewayPid(hermesHome)
   const alreadyHealthy = await isClaudeAgentHealthy(port, 250)
-  if (alreadyHealthy && !options.forceReplace) {
+  const owned = profileOwnsPort(profileName, port)
+  if (alreadyHealthy && owned && !options.forceReplace) {
     return {
       ok: true,
       message: 'already running',
@@ -197,7 +233,9 @@ export async function spawnProfileGateway(
     }
   }
   const replace =
-    options.forceReplace === true || (stalePid !== null && !alreadyHealthy)
+    options.forceReplace === true ||
+    (stalePid !== null && !alreadyHealthy) ||
+    (alreadyHealthy && !owned)
   const waitForHealthy = options.waitForHealthy !== false
 
   let command: string
@@ -236,31 +274,38 @@ export async function spawnProfileGateway(
     logFd = undefined
   }
 
-  const child = spawn(command, commandArgs, {
+  const spawnEnv = {
+    ...process.env,
+    ...claudeEnv,
+    ...apiEnv,
+    HERMES_HOME: hermesHome,
+    API_SERVER_ENABLED: 'true',
+    API_SERVER_PORT: String(port),
+    API_SERVER_HOST:
+      apiEnv.API_SERVER_HOST || claudeEnv.API_SERVER_HOST || '127.0.0.1',
+    HERMES_ACCEPT_HOOKS: '1',
+    PATH: [
+      resolve(homedir(), '.claude', 'bin'),
+      resolve(homedir(), '.local', 'bin'),
+      agentDir ? resolve(agentDir, '.venv', 'bin') : '',
+      agentDir ? resolve(agentDir, 'venv', 'bin') : '',
+      process.env.PATH || '',
+    ]
+      .filter(Boolean)
+      .join(':'),
+  }
+  const spawnOpts = {
     cwd,
     detached: true,
-    stdio: logFd === undefined ? 'ignore' : ['ignore', logFd, logFd],
-    env: {
-      ...process.env,
-      ...claudeEnv,
-      ...apiEnv,
-      HERMES_HOME: hermesHome,
-      API_SERVER_ENABLED: 'true',
-      API_SERVER_PORT: String(port),
-      API_SERVER_HOST:
-        apiEnv.API_SERVER_HOST || claudeEnv.API_SERVER_HOST || '127.0.0.1',
-      HERMES_ACCEPT_HOOKS: '1',
-      PATH: [
-        resolve(homedir(), '.claude', 'bin'),
-        resolve(homedir(), '.local', 'bin'),
-        agentDir ? resolve(agentDir, '.venv', 'bin') : '',
-        agentDir ? resolve(agentDir, 'venv', 'bin') : '',
-        process.env.PATH || '',
-      ]
-        .filter(Boolean)
-        .join(':'),
-    },
-  })
+    stdio: (
+      logFd === undefined ? 'ignore' : ['ignore', logFd, logFd]
+    ) as import('node:child_process').StdioOptions,
+    env: spawnEnv,
+  }
+  const setsid = resolve('/usr/bin/setsid')
+  const child = existsSync(setsid)
+    ? spawn(setsid, ['-f', command, ...commandArgs], spawnOpts)
+    : spawn(command, commandArgs, spawnOpts)
 
   child.unref()
 
@@ -274,7 +319,11 @@ export async function spawnProfileGateway(
     }
   }
 
-  if (await isClaudeAgentHealthy(port, 250)) {
+  // forceReplace: the previous occupant may still answer /health for a
+  // moment — wait for a fresh bind instead of treating leftover health
+  // as success.
+  const skipImmediateHealth = options.forceReplace === true
+  if (!skipImmediateHealth && (await isClaudeAgentHealthy(port, 250))) {
     return {
       ok: true,
       pid: child.pid,

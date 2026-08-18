@@ -9,12 +9,13 @@ const source = () =>
   )
 
 describe('ChatComposer context controls', () => {
-  it('wires profile selection through the existing profile APIs', () => {
+  it('shows the active profile read-only via shared useProfiles hook', () => {
     const src = source()
 
-    expect(src).toContain("fetch('/api/profiles/list')")
-    expect(src).toContain("fetch('/api/profiles/activate'")
-    expect(src).toContain('Activated profile')
+    expect(src).toContain('useProfiles')
+    expect(src).toContain('Active profile — read-only')
+    expect(src).not.toContain("queryKey: ['profiles', 'composer']")
+    expect(src).not.toContain("fetch('/api/profiles/activate'")
   })
 
   it('surfaces workspace and reasoning controls next to the model picker', () => {

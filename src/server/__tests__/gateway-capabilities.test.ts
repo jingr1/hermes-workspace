@@ -356,4 +356,24 @@ describe('gateway-capabilities', () => {
       }
     })
   })
+
+  describe('isUsableCapabilityCache', () => {
+    it('rejects disconnected probes so they are not restored on profile switch', async () => {
+      const mod = await loadMod()
+      expect(
+        mod.isUsableCapabilityCache({
+          health: false,
+          sessions: false,
+          chatCompletions: false,
+        }),
+      ).toBe(false)
+      expect(
+        mod.isUsableCapabilityCache({
+          health: true,
+          sessions: true,
+          chatCompletions: true,
+        }),
+      ).toBe(true)
+    })
+  })
 })

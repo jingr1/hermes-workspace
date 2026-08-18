@@ -1,19 +1,14 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { ChatRouteLoading } from '../../screens/chat/chat-route-loading'
+import { readLastSession } from '../../screens/chat/last-session'
 
 export const Route = createFileRoute('/chat/')({
   ssr: false,
   pendingComponent: ChatRouteLoading,
   beforeLoad: () => {
-    // Try to restore last active session from localStorage
-    let lastSession = 'new'
-    try {
-      const stored =
-        typeof window !== 'undefined'
-          ? localStorage.getItem('claude-last-session')
-          : null
-      if (stored && stored !== 'main') lastSession = stored
-    } catch {}
+    // Restore a last session id; ChatScreen still verifies it belongs to the
+    // active profile before painting history.
+    const lastSession = readLastSession() ?? 'new'
     throw redirect({
       to: '/chat/$sessionKey',
       params: { sessionKey: lastSession },

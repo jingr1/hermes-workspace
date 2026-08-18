@@ -79,8 +79,16 @@ export let CLAUDE_DASHBOARD_URL = normalizeUrl(
 export function applyProfileGatewayRoute(url: string): string {
   const normalized = normalizeUrl(url)
   if (!normalized) return CLAUDE_API
+  getGatewayBearerToken()
   if (normalized === CLAUDE_API) return CLAUDE_API
   CLAUDE_API = normalized
+  if (restoreCachedCapabilities(normalized)) {
+    probePromise = null
+    console.log(
+      `[gateway] Routed active profile to ${CLAUDE_API} (cached capabilities)`,
+    )
+    return CLAUDE_API
+  }
   probePromise = null
   lastProbeAt = 0
   console.log(`[gateway] Routed active profile to ${CLAUDE_API}`)
@@ -109,6 +117,7 @@ export function setGatewayUrl(input: string | null | undefined): string {
   // Force reprobe on the next capability check.
   probePromise = null
   lastProbeAt = 0
+  capabilityCacheByUrl.delete(CLAUDE_API)
   return CLAUDE_API
 }
 
@@ -166,7 +175,14 @@ const LOCAL_PROBE_TIMEOUT_MS = 1_000
 const PROBE_TTL_MS = 120_000
 const PROBE_TTL_DISCONNECTED_MS = 15_000
 
-function effectiveProbeTtl(caps: { health: boolean; chatCompletions: boolean }): number {
+function effectiveProbeTtl(caps: {
+  health: boolean
+  chatCompletions: boolean
+  sessions?: boolean
+}): number {
+  // /health can come up before /api/sessions during a gateway restart.
+  // Don't pin that incomplete probe for two minutes (looks like portable).
+  if (caps.health && caps.sessions === false) return 3_000
   if (caps.health || caps.chatCompletions) return PROBE_TTL_MS
   return PROBE_TTL_DISCONNECTED_MS
 }
@@ -274,21 +290,117 @@ let capabilities: GatewayCapabilities = {
 
 let probePromise: Promise<GatewayCapabilities> | null = null
 let lastProbeAt = 0
+/** Per-gateway-url capability cache — avoids full reprobe on profile switch. */
+const capabilityCacheByUrl = new Map<
+  string,
+  { caps: GatewayCapabilities; at: number }
+>()
+
+function rememberCapabilityProbe(url: string, caps: GatewayCapabilities): void {
+  const normalized = normalizeUrl(url)
+  if (!normalized) return
+  if (!isUsableCapabilityCache(caps)) return
+  capabilityCacheByUrl.set(normalized, {
+    caps: { ...caps, dashboard: { ...caps.dashboard } },
+    at: Date.now(),
+  })
+}
+
+function restoreCachedCapabilities(url: string): boolean {
+  const normalized = normalizeUrl(url)
+  if (!normalized) return false
+  const cached = capabilityCacheByUrl.get(normalized)
+  if (!cached) return false
+  if (
+    Date.now() - cached.at > effectiveProbeTtl(cached.caps) ||
+    !isUsableCapabilityCache(cached.caps)
+  ) {
+    capabilityCacheByUrl.delete(normalized)
+    return false
+  }
+  capabilities = {
+    ...cached.caps,
+    dashboard: { ...cached.caps.dashboard },
+  }
+  lastProbeAt = cached.at
+  return true
+}
+
+/** A cold/disconnected probe must not pin "no sessions" onto the next request. */
+export function isUsableCapabilityCache(
+  caps: Pick<GatewayCapabilities, 'health' | 'sessions' | 'chatCompletions'>,
+): boolean {
+  return Boolean(caps.health || caps.sessions || caps.chatCompletions)
+}
 let lastLoggedSummary = ''
 let dashboardTokenPromise: Promise<string> | null = null
 let dashboardTokenCache = ''
 
-/** Optional bearer token for authenticated gateway endpoints. */
-export const BEARER_TOKEN = process.env.HERMES_API_TOKEN || process.env.CLAUDE_API_TOKEN || ''
-
-/**
- * Dashboard API auth uses the ephemeral session token injected into the
- * dashboard root HTML at startup. Do not reuse gateway bearer tokens here and
- * do not trust a manually copied dashboard token env var — it goes stale every
- * time the dashboard restarts.
+/** Optional bearer token for authenticated gateway endpoints.
+ * Read at call time — Vite SSR can evaluate this module before .env is loaded.
  */
+function readLocalApiServerKey(): string {
+  try {
+    const home =
+      process.env.HERMES_HOME ||
+      process.env.CLAUDE_HOME ||
+      path.join(os.homedir(), '.hermes')
+    const activePath = path.join(home, 'active_profile')
+    let profileHome = home
+    try {
+      const active = fs.readFileSync(activePath, 'utf-8').trim()
+      if (active && active !== 'default') {
+        profileHome = path.join(home, 'profiles', active)
+      }
+    } catch {
+      // default home
+    }
+    const raw = fs.readFileSync(path.join(profileHome, '.env'), 'utf-8')
+    for (const line of raw.split('\n')) {
+      const trimmed = line.trim()
+      if (!trimmed.startsWith('API_SERVER_KEY=')) continue
+      let value = trimmed.slice('API_SERVER_KEY='.length).trim()
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1)
+      }
+      return value
+    }
+  } catch {
+    // missing env is fine
+  }
+  return ''
+}
+
+export function getGatewayBearerToken(): string {
+  const fromEnv = (
+    process.env.HERMES_API_TOKEN ||
+    process.env.CLAUDE_API_TOKEN ||
+    ''
+  ).trim()
+  if (fromEnv) {
+    BEARER_TOKEN = fromEnv
+    return fromEnv
+  }
+  const fromProfile = readLocalApiServerKey()
+  if (fromProfile) {
+    BEARER_TOKEN = fromProfile
+    return fromProfile
+  }
+  return BEARER_TOKEN
+}
+
+export let BEARER_TOKEN = (
+  process.env.HERMES_API_TOKEN ||
+  process.env.CLAUDE_API_TOKEN ||
+  ''
+).trim()
+
 function authHeaders(): Record<string, string> {
-  return BEARER_TOKEN ? { Authorization: `Bearer ${BEARER_TOKEN}` } : {}
+  const token = getGatewayBearerToken()
+  return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
 /**
@@ -432,6 +544,8 @@ async function probe(path: string): Promise<boolean> {
       signal: AbortSignal.timeout(probeTimeoutMs()),
     })
     if (res.status === 404 || res.status === 403) return false
+    const contentType = res.headers.get('content-type') || ''
+    if (contentType.includes('text/html')) return false
     return true
   } catch {
     return false
@@ -914,7 +1028,7 @@ export async function probeGateway(options?: {
         health,
         chatCompletions,
         models,
-        legacySessions,
+        sessionsFirst,
         enhancedChat,
         legacySkills,
         legacyConfig,
@@ -931,6 +1045,12 @@ export async function probeGateway(options?: {
         probe('/api/jobs'),
         probeDashboard(),
       ])
+
+      let legacySessions = sessionsFirst
+      if (health && !legacySessions) {
+        await new Promise((resolveRetry) => setTimeout(resolveRetry, 250))
+        legacySessions = await probe('/api/sessions')
+      }
 
       capabilities = {
         health,
@@ -982,6 +1102,7 @@ export async function probeGateway(options?: {
   try {
     await probePromise
     if (waitForEnhanced && enhancedProbePromise) await enhancedProbePromise
+    rememberCapabilityProbe(CLAUDE_API, capabilities)
     return capabilities
   } finally {
     probePromise = null
@@ -996,6 +1117,16 @@ export async function ensureGatewayProbed(): Promise<GatewayCapabilities> {
   }
   if (enhancedProbePromise) await enhancedProbePromise
   return capabilities
+}
+
+/** After a profile switch or cold start, do not trust a disconnected probe. */
+export async function ensureSessionsCapability(): Promise<GatewayCapabilities> {
+  let caps = await ensureGatewayProbed()
+  if (caps.sessions) return caps
+  caps = await probeGateway({ force: true })
+  if (caps.sessions) return caps
+  await new Promise((resolve) => setTimeout(resolve, 400))
+  return probeGateway({ force: true })
 }
 
 export async function ensureGatewayCoreProbed(): Promise<GatewayCapabilities> {

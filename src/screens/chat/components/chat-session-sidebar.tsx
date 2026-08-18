@@ -2,13 +2,14 @@
 
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Add01Icon, UserGroupIcon } from '@hugeicons/core-free-icons'
-import { memo, useCallback, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
-import { useProfiles } from '../hooks/use-profiles'
+import { useGatewayPoolStatus, useProfiles, setActiveProfileOptimistic } from '../hooks/use-profiles'
 import { useRenameSession } from '../hooks/use-rename-session'
 import { useDeleteSession } from '../hooks/use-delete-session'
-import { chatQueryKeys, fetchSessions } from '../chat-queries'
+import { chatQueryKeys, fetchHistory, fetchSessions } from '../chat-queries'
+import { resolveSessionForProfile, writeLastSession } from '../last-session'
 import { SidebarSessions } from './sidebar/sidebar-sessions'
 import { SessionDeleteDialog } from './sidebar/session-delete-dialog'
 import type { SessionMeta } from '../types'
@@ -42,6 +43,24 @@ function profileMeta(profile: {
     .join(' · ')
 }
 
+function prefetchSessionHistory(
+  queryClient: ReturnType<typeof useQueryClient>,
+  profileName: string,
+  sessionId: string,
+) {
+  if (!sessionId || sessionId === 'new') return
+  void queryClient.prefetchQuery({
+    queryKey: chatQueryKeys.history(sessionId, sessionId),
+    queryFn: () =>
+      fetchHistory({
+        sessionKey: sessionId,
+        friendlyId: sessionId,
+        profile: profileName,
+      }),
+    staleTime: 10_000,
+  })
+}
+
 export const ChatSessionSidebar = memo(function ChatSessionSidebar({
   activeFriendlyId,
   sessions,
@@ -61,6 +80,17 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
     isLoading: profilesLoading,
     isError: profilesError,
   } = useProfiles()
+  const gatewayPoolQuery = useGatewayPoolStatus()
+  const gatewayByName = useMemo(() => {
+    const map = new Map<
+      string,
+      { state?: string; port?: number }
+    >()
+    for (const entry of gatewayPoolQuery.data?.gateways ?? []) {
+      map.set(entry.profile, entry)
+    }
+    return map
+  }, [gatewayPoolQuery.data?.gateways])
 
   const { renameSession } = useRenameSession()
   const { deleteSession } = useDeleteSession()
@@ -109,48 +139,53 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
     return [...profiles].sort((a, b) => a.name.localeCompare(b.name))
   }, [profiles])
 
-  // Track which profile we've last navigated for, so we only auto-jump once
-  // per profile switch — not on every background refetch / rename / delete.
-  // (Kept for potential future use; currently navigation is done inline in
-  // handleSelectProfile via queryClient.fetchQuery)
+  // Prefetch session lists + first-session history so profile switches paint instantly.
+  useEffect(() => {
+    for (const profile of profiles) {
+      void queryClient
+        .prefetchQuery({
+          queryKey: chatQueryKeys.sessionsForProfile(profile.name),
+          queryFn: () => fetchSessions(profile.name),
+          staleTime: 60_000,
+        })
+        .then(() => {
+          const cached = queryClient.getQueryData<Array<SessionMeta>>(
+            chatQueryKeys.sessionsForProfile(profile.name),
+          )
+          prefetchSessionHistory(
+            queryClient,
+            profile.name,
+            resolveSessionForProfile(cached, profile.name),
+          )
+        })
+    }
+  }, [profiles, queryClient])
 
   const handleSelectProfile = useCallback(
-    async (profileName: string) => {
+    (profileName: string) => {
       if (profileName === activeProfileName) return
-      // Clear the current session's history cache so the new profile's
-      // session gets a fresh fetch.
-      queryClient.removeQueries({
-        queryKey: ['chat', 'history', activeFriendlyId],
-        exact: false,
+
+      const cached = queryClient.getQueryData<Array<SessionMeta>>(
+        chatQueryKeys.sessionsForProfile(profileName),
+      )
+      writeLastSession(activeFriendlyId, activeProfileName)
+      const targetSession = resolveSessionForProfile(cached, profileName)
+      setActiveProfileOptimistic(queryClient, profileName)
+      prefetchSessionHistory(queryClient, profileName, targetSession)
+      navigate({
+        to: '/chat/$sessionKey',
+        params: { sessionKey: targetSession },
       })
-      // Activate the profile. The optimistic update in useProfiles
-      // changes activeProfileName immediately, which changes the
-      // sessions query key. We then wait for the new profile's
-      // sessions to load before navigating.
+
       activateProfile(profileName)
 
-      // Wait for the new profile's sessions query to complete.
-      try {
-        const sessions = await queryClient.fetchQuery({
-          queryKey: chatQueryKeys.sessionsForProfile(profileName),
-          queryFn: () => fetchSessions(profileName),
-        })
-        if (Array.isArray(sessions) && sessions.length > 0) {
-          const latest = sessions[0]
-          if (latest && latest.friendlyId !== activeFriendlyId) {
-            navigate({
-              to: '/chat/$sessionKey',
-              params: { sessionKey: latest.friendlyId },
-            })
-          }
-        } else {
-          navigate({ to: '/chat/$sessionKey', params: { sessionKey: 'new' } })
-        }
-      } catch {
-        navigate({ to: '/chat/$sessionKey', params: { sessionKey: 'new' } })
-      }
+      void queryClient.prefetchQuery({
+        queryKey: chatQueryKeys.sessionsForProfile(profileName),
+        queryFn: () => fetchSessions(profileName),
+        staleTime: 60_000,
+      })
     },
-    [activateProfile, activeProfileName, activeFriendlyId, queryClient, navigate],
+    [activateProfile, activeFriendlyId, activeProfileName, queryClient, navigate],
   )
 
   return (
@@ -186,6 +221,11 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
               <div className="flex flex-col gap-1 pr-2">
                 {sortedProfiles.map((profile) => {
                   const isActive = profile.name === activeProfileName
+                  const gateway = gatewayByName.get(profile.name)
+                  const gatewayHealthy =
+                    gateway?.state === 'healthy' ||
+                    profile.gatewayState === 'healthy'
+                  const gatewayPort = gateway?.port ?? profile.gatewayPort
                   return (
                     <button
                       key={profile.name}
@@ -197,9 +237,20 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
                           ? 'bg-accent-500/10 text-accent-500'
                           : 'text-primary-900 hover:bg-primary-200 dark:hover:bg-primary-800',
                       )}
-                      title={`Activate profile: ${profile.name}`}
+                      title={
+                        gatewayHealthy
+                          ? `${profile.name} — gateway running${gatewayPort ? ` :${gatewayPort}` : ''}`
+                          : `${profile.name} — gateway stopped`
+                      }
                     >
                       <span className="flex items-center gap-1.5 text-xs font-medium">
+                        <span
+                          className={cn(
+                            'size-1.5 shrink-0 rounded-full',
+                            gatewayHealthy ? 'bg-emerald-400' : 'bg-neutral-500',
+                          )}
+                          aria-hidden="true"
+                        />
                         <span className="truncate">{profile.name}</span>
                         {isActive ? (
                           <span className="shrink-0 text-[9px] text-accent-500">active</span>
@@ -246,6 +297,7 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
           <SidebarSessions
             sessions={sessions}
             activeFriendlyId={activeFriendlyId}
+            profileName={activeProfileName}
             defaultOpen
             onRename={handleRename}
             onDelete={handleOpenDelete}

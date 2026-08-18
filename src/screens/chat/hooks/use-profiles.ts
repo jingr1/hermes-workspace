@@ -1,5 +1,10 @@
-import { chatQueryKeys } from '../chat-queries'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { chatQueryKeys, fetchSessions } from '../chat-queries'
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from '@tanstack/react-query'
 import { toast } from '@/components/ui/toast'
 import { sanitizeHttpErrorText } from '@/lib/http-error'
 
@@ -11,11 +16,33 @@ export type ChatProfileSummary = {
   skillCount?: number
   sessionCount?: number
   description?: string
+  gatewayState?: 'stopped' | 'spawning' | 'healthy' | 'dead'
+  gatewayPort?: number
 }
 
 type ProfilesListResponse = {
   profiles?: Array<ChatProfileSummary>
   activeProfile?: string
+}
+
+export function setActiveProfileOptimistic(
+  queryClient: QueryClient,
+  profileName: string,
+) {
+  queryClient.setQueryData<ProfilesListResponse>(
+    ['profiles', 'chat'],
+    (old) =>
+      old
+        ? {
+            ...old,
+            activeProfile: profileName,
+            profiles: old.profiles?.map((p) => ({
+              ...p,
+              active: p.name === profileName,
+            })),
+          }
+        : { activeProfile: profileName, profiles: [] },
+  )
 }
 
 async function fetchProfiles(): Promise<ProfilesListResponse> {
@@ -50,7 +77,7 @@ export function useProfiles() {
     queryKey: ['profiles', 'chat'],
     queryFn: fetchProfiles,
     retry: false,
-    staleTime: 15_000,
+    staleTime: 60_000,
   })
 
   const activateMutation = useMutation({
@@ -63,18 +90,7 @@ export function useProfiles() {
         'profiles',
         'chat',
       ])
-      queryClient.setQueryData<ProfilesListResponse>(['profiles', 'chat'], (old) =>
-        old
-          ? {
-              ...old,
-              activeProfile: profileName,
-              profiles: old.profiles?.map((p) => ({
-                ...p,
-                active: p.name === profileName,
-              })),
-            }
-          : old,
-      )
+      setActiveProfileOptimistic(queryClient, profileName)
       return { previous }
     },
     onError: (error, _profileName, context) => {
@@ -87,17 +103,25 @@ export function useProfiles() {
     },
     onSuccess: (_data, profileName) => {
       toast(`Activated ${profileName}`)
+      window.setTimeout(() => {
+        void queryClient.invalidateQueries({ queryKey: ['profiles', 'chat'] })
+        void queryClient.invalidateQueries({ queryKey: ['gateway-pool', 'status'] })
+      }, 1500)
     },
-    onSettled: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['profiles'] }),
-        queryClient.invalidateQueries({ queryKey: chatQueryKeys.sessions }),
-        queryClient.invalidateQueries({ queryKey: ['workspace'] }),
-        queryClient.invalidateQueries({ queryKey: ['claude', 'models'] }),
-        queryClient.invalidateQueries({
-          queryKey: ['claude', 'session-status-model'],
-        }),
-      ])
+    onSettled: (_data, _error, profileName) => {
+      // Don't await model refetch — it probes the new gateway and would
+      // contend with the chat history request during profile switch.
+      void queryClient.invalidateQueries({ queryKey: ['claude', 'models'] })
+      void queryClient.invalidateQueries({
+        queryKey: ['claude', 'session-status-model'],
+      })
+      if (profileName) {
+        void queryClient.prefetchQuery({
+          queryKey: chatQueryKeys.sessionsForProfile(profileName),
+          queryFn: () => fetchSessions(profileName),
+          staleTime: 60_000,
+        })
+      }
     },
   })
 
@@ -115,6 +139,7 @@ export function useProfiles() {
     activeProfileName,
     activeProfile,
     isLoading: profilesQuery.isLoading,
+    isReady: profilesQuery.isFetched,
     isError: profilesQuery.isError,
     error:
       profilesQuery.error instanceof Error
@@ -124,4 +149,29 @@ export function useProfiles() {
     isActivating: activateMutation.isPending,
     refetch: profilesQuery.refetch,
   }
+}
+
+export type GatewayPoolEntry = {
+  profile: string
+  port: number
+  url?: string
+  state: 'stopped' | 'spawning' | 'healthy' | 'dead'
+}
+
+export function useGatewayPoolStatus() {
+  return useQuery({
+    queryKey: ['gateway-pool', 'status'],
+    queryFn: async () => {
+      const response = await fetch('/api/gateway-pool')
+      if (!response.ok) {
+        throw new Error(`Failed to load gateway pool (${response.status})`)
+      }
+      return (await response.json()) as {
+        gateways?: Array<GatewayPoolEntry>
+      }
+    },
+    retry: false,
+    staleTime: 5_000,
+    refetchInterval: 10_000,
+  })
 }

@@ -12,6 +12,7 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { getMessageTimestamp } from '../../utils'
 import type { SessionMeta } from '../../types'
 import { cn } from '@/lib/utils'
+import { writeLastSession } from '../../last-session'
 import {
   MenuContent,
   MenuItem,
@@ -22,6 +23,7 @@ import {
 type SessionItemProps = {
   session: SessionMeta
   active: boolean
+  profileName?: string
   isPinned: boolean
   onSelect?: () => void
   onTogglePin: (session: SessionMeta) => void
@@ -99,6 +101,7 @@ function getFriendlyIdLabel(friendlyId: string): string {
 function SessionItemComponent({
   session,
   active,
+  profileName,
   isPinned,
   onSelect,
   onTogglePin,
@@ -210,9 +213,7 @@ function SessionItemComponent({
       to="/chat/$sessionKey"
       params={{ sessionKey: session.friendlyId }}
       onClick={() => {
-        try {
-          localStorage.setItem('claude-last-session', session.friendlyId)
-        } catch {}
+        writeLastSession(session.friendlyId, profileName)
         onSelect?.()
       }}
       className={rowClassName}
@@ -300,6 +301,7 @@ function SessionItemComponent({
 
 function areSessionItemsEqual(prev: SessionItemProps, next: SessionItemProps) {
   if (prev.active !== next.active) return false
+  if (prev.profileName !== next.profileName) return false
   if (prev.isPinned !== next.isPinned) return false
   if (prev.onSelect !== next.onSelect) return false
   if (prev.onTogglePin !== next.onTogglePin) return false

@@ -9,6 +9,7 @@ import {
   deleteSession,
   ensureGatewayCoreProbed,
   ensureGatewayProbed,
+  ensureSessionsCapability,
   getGatewayCapabilities,
   listSessions,
   toSessionSummary,
@@ -113,7 +114,7 @@ export const Route = createFileRoute('/api/sessions')({
           '../../server/gateway-pool'
         )
         await ensureActiveProfileGateway()
-        const capabilities = await ensureGatewayProbed()
+        const capabilities = await ensureSessionsCapability()
         if (!capabilities.sessions) {
           const friendlyId = randomUUID()
           return json({

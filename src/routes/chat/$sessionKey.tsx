@@ -6,6 +6,7 @@ import {
   moveHistoryMessages,
   reconcileSessionDraft,
 } from '../../screens/chat/chat-queries'
+import { writeLastSession } from '../../screens/chat/last-session'
 import { ChatRouteLoading } from '../../screens/chat/chat-route-loading'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { useProfiles } from '../../screens/chat/hooks/use-profiles'
@@ -107,10 +108,7 @@ function ChatRoute() {
         friendlyId: payload.friendlyId,
         sessionKey: payload.sessionKey,
       })
-      // Persist last session for refresh recovery
-      try {
-        localStorage.setItem('claude-last-session', payload.friendlyId)
-      } catch {}
+      writeLastSession(payload.friendlyId, activeProfileName)
       navigate({
         to: '/chat/$sessionKey',
         params: { sessionKey: payload.friendlyId },

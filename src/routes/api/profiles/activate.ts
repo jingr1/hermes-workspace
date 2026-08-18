@@ -12,6 +12,10 @@ import {
 } from '../../../server/gateway-ports'
 import { setActiveProfile, resolveProfileHermesHome } from '../../../server/profiles-browser'
 import { requireJsonContentType } from '../../../server/rate-limit'
+import {
+  ensureGatewayLifecycleScheduler,
+  touchGatewayLease,
+} from '../../../server/gateway-lifecycle'
 
 export const Route = createFileRoute('/api/profiles/activate')({
   server: {
@@ -30,6 +34,8 @@ export const Route = createFileRoute('/api/profiles/activate')({
           const port = resolveProfileGatewayPort(name)
           const url = getProfileGatewayUrl(name)
           const hermesHome = resolveProfileHermesHome(name)
+          touchGatewayLease(name)
+          ensureGatewayLifecycleScheduler()
           // Route chat traffic immediately; do not wait for a cold gateway spawn
           // here — Squid and some browsers drop the connection on long POSTs.
           applyProfileGatewayRoute(url)

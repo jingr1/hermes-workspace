@@ -15,6 +15,10 @@ import {
 } from '../../server/session-utils'
 import { isAuthenticated } from '@/server/auth-middleware'
 import { getLocalSession, getLocalMessages } from '../../server/local-session-store'
+import {
+  getActiveProfileName,
+  getMessagesForProfile,
+} from '../../server/profiles-browser'
 
 export const Route = createFileRoute('/api/history')({
   server: {
@@ -23,22 +27,68 @@ export const Route = createFileRoute('/api/history')({
         if (!isAuthenticated(request)) {
           return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
         }
-        await ensureGatewayCoreProbed()
-        const capabilities = getGatewayCapabilities()
-        if (!capabilities.sessions) {
-          return json({
-            sessionKey: 'new',
-            sessionId: 'new',
-            messages: [],
-            source: 'unavailable',
-            message: SESSIONS_API_UNAVAILABLE_MESSAGE,
-          })
-        }
         try {
           const url = new URL(request.url)
           const limit = Number(url.searchParams.get('limit') || '200')
           const rawSessionKey = url.searchParams.get('sessionKey')?.trim()
           const friendlyId = url.searchParams.get('friendlyId')?.trim()
+          const profile =
+            url.searchParams.get('profile')?.trim() || getActiveProfileName()
+          if (rawSessionKey === 'new' || friendlyId === 'new') {
+            return json({
+              sessionKey: 'new',
+              sessionId: 'new',
+              messages: [],
+            })
+          }
+          const sqliteSessionId =
+            rawSessionKey && rawSessionKey !== 'new' && rawSessionKey !== 'main'
+              ? rawSessionKey
+              : friendlyId && friendlyId !== 'new' && friendlyId !== 'main'
+                ? friendlyId
+                : ''
+          if (sqliteSessionId) {
+            const local = getMessagesForProfile(
+              profile,
+              sqliteSessionId,
+              limit > 0 ? limit : 1000,
+            )
+            if (local) {
+              const bounded = limit > 0 ? local.slice(-limit) : local
+              return json({
+                sessionKey: sqliteSessionId,
+                sessionId: sqliteSessionId,
+                messages: bounded.map((message, index) =>
+                  toChatMessage(
+                    {
+                      id: Number(message.id) || 0,
+                      session_id: message.session_id,
+                      role: message.role,
+                      content: message.content,
+                      timestamp: message.timestamp,
+                      tool_calls: message.tool_calls,
+                      tool_call_id: message.tool_call_id,
+                      tool_name: message.tool_name,
+                    },
+                    { historyIndex: index },
+                  ),
+                ),
+                source: `profile:${profile}`,
+              })
+            }
+          }
+
+          await ensureGatewayCoreProbed()
+          const capabilities = getGatewayCapabilities()
+          if (!capabilities.sessions) {
+            return json({
+              sessionKey: 'new',
+              sessionId: 'new',
+              messages: [],
+              source: 'unavailable',
+              message: SESSIONS_API_UNAVAILABLE_MESSAGE,
+            })
+          }
           let { sessionKey } = await resolveSessionKey({
             rawSessionKey,
             friendlyId,

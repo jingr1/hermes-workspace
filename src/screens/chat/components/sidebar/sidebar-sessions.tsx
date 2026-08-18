@@ -22,6 +22,7 @@ import { usePinnedSessions } from '@/hooks/use-pinned-sessions'
 type SidebarSessionsProps = {
   sessions: Array<SessionMeta>
   activeFriendlyId: string
+  profileName?: string
   defaultOpen?: boolean
   onSelect?: () => void
   onRename: (session: SessionMeta, newTitle: string) => void
@@ -35,6 +36,7 @@ type SidebarSessionsProps = {
 export const SidebarSessions = memo(function SidebarSessions({
   sessions,
   activeFriendlyId,
+  profileName,
   defaultOpen = true,
   onSelect,
   onRename,
@@ -89,6 +91,7 @@ export const SidebarSessions = memo(function SidebarSessions({
               key={session.key}
               session={session}
               active={session.friendlyId === activeFriendlyId}
+              profileName={profileName}
               isPinned
               onSelect={onSelect}
               onTogglePin={handleTogglePin}
@@ -134,6 +137,7 @@ export const SidebarSessions = memo(function SidebarSessions({
                       key={session.key}
                       session={session}
                       active={session.friendlyId === activeFriendlyId}
+                      profileName={profileName}
                       isPinned={false}
                       onSelect={onSelect}
                       onTogglePin={handleTogglePin}
@@ -170,6 +174,7 @@ function areSidebarSessionsEqual(
   next: SidebarSessionsProps,
 ) {
   if (prev.activeFriendlyId !== next.activeFriendlyId) return false
+  if (prev.profileName !== next.profileName) return false
   if (prev.defaultOpen !== next.defaultOpen) return false
   if (prev.onSelect !== next.onSelect) return false
   if (prev.onRename !== next.onRename) return false

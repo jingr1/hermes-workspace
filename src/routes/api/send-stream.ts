@@ -25,7 +25,7 @@ import { selectPortableConversationHistory } from '../../server/portable-history
 import {
   SESSIONS_API_UNAVAILABLE_MESSAGE,
   createSession,
-  ensureGatewayProbed,
+  ensureSessionsCapability,
   getGatewayCapabilities,
   getMessages as getSessionMessagesFromAgent,
   listSessions,
@@ -294,7 +294,7 @@ export const Route = createFileRoute('/api/send-stream')({
           '../../server/gateway-pool'
         )
         await ensureActiveProfileGateway()
-        await ensureGatewayProbed()
+        await ensureSessionsCapability()
 
         // Read body manually to handle large payloads (image attachments
         // can push the JSON body above the default ~1MB parse limit).

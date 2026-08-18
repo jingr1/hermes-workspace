@@ -1,9 +1,12 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { createRequire } from 'node:module'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { listProfiles, readProfile, updateProfileConfig } from './profiles-browser'
+import { listProfiles, readProfile, updateProfileConfig, getMessagesForProfile } from './profiles-browser'
+
+const nodeRequire = createRequire(import.meta.url)
 
 describe('listProfiles', () => {
   let tempHome: string
@@ -137,5 +140,93 @@ describe('listProfiles', () => {
       'You are Leelo, executive assistant.',
     )
     expect(readProfile('ops').systemPrompt).toBe('Config prompt wins')
+  })
+})
+
+describe('getMessagesForProfile', () => {
+  let tempHome: string
+
+  beforeEach(() => {
+    tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-workspace-messages-'))
+    vi.spyOn(os, 'homedir').mockReturnValue(tempHome)
+    delete process.env.HERMES_HOME
+    delete process.env.CLAUDE_HOME
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    fs.rmSync(tempHome, { recursive: true, force: true })
+  })
+
+  it('reads messages from a named profile state.db without a gateway', () => {
+    const profileRoot = path.join(tempHome, '.hermes', 'profiles', 'writer')
+    fs.mkdirSync(profileRoot, { recursive: true })
+    const { DatabaseSync } = nodeRequire('node:sqlite') as {
+      DatabaseSync: new (path: string) => {
+        exec: (sql: string) => void
+        close: () => void
+      }
+    }
+    const db = new DatabaseSync(path.join(profileRoot, 'state.db'))
+    db.exec(`
+      CREATE TABLE sessions (
+        id TEXT PRIMARY KEY, title TEXT, started_at REAL, message_count INTEGER
+      );
+      CREATE TABLE messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT,
+        tool_calls TEXT,
+        tool_call_id TEXT,
+        tool_name TEXT,
+        timestamp REAL NOT NULL
+      );
+      INSERT INTO sessions (id, title, started_at, message_count)
+        VALUES ('sess-1', 'hello', 1700000000, 2);
+      INSERT INTO messages (session_id, role, content, timestamp)
+        VALUES ('sess-1', 'user', 'hi', 1700000001);
+      INSERT INTO messages (session_id, role, content, timestamp)
+        VALUES ('sess-1', 'assistant', 'hello there', 1700000002);
+    `)
+    db.close()
+
+    const messages = getMessagesForProfile('writer', 'sess-1')
+    expect(messages).toHaveLength(2)
+    expect(messages?.[0]?.role).toBe('user')
+    expect(messages?.[0]?.content).toBe('hi')
+    expect(messages?.[1]?.role).toBe('assistant')
+    expect(messages?.[1]?.content).toBe('hello there')
+  })
+
+  it('returns an empty array when the db exists but the session has no messages', () => {
+    const profileRoot = path.join(tempHome, '.hermes', 'profiles', 'writer')
+    fs.mkdirSync(profileRoot, { recursive: true })
+    const { DatabaseSync } = nodeRequire('node:sqlite') as {
+      DatabaseSync: new (path: string) => {
+        exec: (sql: string) => void
+        close: () => void
+      }
+    }
+    const db = new DatabaseSync(path.join(profileRoot, 'state.db'))
+    db.exec(`
+      CREATE TABLE messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT,
+        tool_calls TEXT,
+        tool_call_id TEXT,
+        tool_name TEXT,
+        timestamp REAL NOT NULL
+      );
+    `)
+    db.close()
+
+    expect(getMessagesForProfile('writer', 'missing')).toEqual([])
+  })
+
+  it('returns null when the profile has no state.db', () => {
+    expect(getMessagesForProfile('ghost', 'sess-1')).toBeNull()
   })
 })

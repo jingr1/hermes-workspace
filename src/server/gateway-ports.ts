@@ -12,6 +12,8 @@ import {
 import { getStateDir } from './workspace-state-dir'
 
 export const GATEWAY_BASE_PORT = 8642
+/** Always-resident profile. Kept here to avoid gateway-pool ↔ lifecycle cycles. */
+export const PINNED_GATEWAY_PROFILE = 'default'
 const MIN_PORT = 1024
 const MAX_PORT = 65535
 
@@ -80,6 +82,18 @@ function parsePort(value: unknown): number | null {
   const port = Number(trimmed)
   if (port < MIN_PORT || port > MAX_PORT) return null
   return port
+}
+
+export function readProfileApiServerKey(profileName: string): string {
+  const name = (profileName || 'default').trim() || 'default'
+  const home = resolveProfileHermesHome(name)
+  const envPath = path.join(home, '.env')
+  const current = fs.existsSync(envPath) ? readDotEnvMap(envPath) : {}
+  const key = (current.API_SERVER_KEY || '').trim()
+  if (key) return key
+  if (name === 'default') return ''
+  const root = hermesRootFromHome(home, name)
+  return (readDotEnvMap(path.join(root, '.env')).API_SERVER_KEY || '').trim()
 }
 
 function readDotEnvMap(envPath: string): Record<string, string> {

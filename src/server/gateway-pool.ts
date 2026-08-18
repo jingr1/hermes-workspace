@@ -1,8 +1,8 @@
 /**
  * Multi-gateway pool: one Hermes API server per profile, lazy start,
- * no restart on profile switch.
+ * LRU eviction when more than N profiles stay warm (see gateway-lifecycle.ts).
+ * `default` is pinned resident; background starts never steal CLAUDE_API.
  */
-import fs from 'node:fs'
 import path from 'node:path'
 import {
   getActiveProfileName,
@@ -10,12 +10,11 @@ import {
 } from './profiles-browser'
 import {
   isClaudeAgentHealthy,
-  readAliveGatewayPid,
   spawnProfileGateway,
   type StartClaudeAgentResult,
 } from './claude-agent'
 import {
-  GATEWAY_BASE_PORT,
+  PINNED_GATEWAY_PROFILE,
   bindProfileToPort,
   gatewayUrlForPort,
   getProfileGatewayUrl,
@@ -24,9 +23,16 @@ import {
   profileNameFromHermesHome,
   resolveProfileGatewayPort,
 } from './gateway-ports'
+import {
+  isPortInUse,
+  pidListeningOnPort,
+  profileOwnsPort as profileOwnsPortUnchecked,
+  readProcessHermesHome,
+} from './gateway-port-owner'
 
 export {
   GATEWAY_BASE_PORT,
+  PINNED_GATEWAY_PROFILE,
   bindProfileToPort,
   gatewayUrlForPort,
   getProfileGatewayUrl,
@@ -37,6 +43,19 @@ export {
   resolveProfileGatewayPort,
   ensureProfileApiServerEnv,
 } from './gateway-ports'
+
+function profileOwnsPort(profileName: string, port: number): boolean {
+  try {
+    return profileOwnsPortUnchecked(profileName, port)
+  } catch (error) {
+    console.warn(
+      `[gateway-pool] port ownership check failed for ${profileName}:${port}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    )
+    return false
+  }
+}
 
 export type GatewayPoolState = 'stopped' | 'spawning' | 'healthy' | 'dead'
 
@@ -60,97 +79,6 @@ function homesMatch(left: string, right: string): boolean {
   return path.resolve(left) === path.resolve(right)
 }
 
-const LISTEN_CACHE_MS = 250
-let listenCache: { at: number; inodesByPort: Map<number, Set<string>> } | null =
-  null
-
-function listenInodesByPort(): Map<number, Set<string>> {
-  const now = Date.now()
-  if (listenCache && now - listenCache.at < LISTEN_CACHE_MS) {
-    return listenCache.inodesByPort
-  }
-  const inodesByPort = new Map<number, Set<string>>()
-  for (const file of ['/proc/net/tcp', '/proc/net/tcp6']) {
-    let raw = ''
-    try {
-      raw = fs.readFileSync(file, 'utf8')
-    } catch {
-      continue
-    }
-    for (const line of raw.split('\n').slice(1)) {
-      const parts = line.trim().split(/\s+/)
-      if (parts.length < 10 || parts[3] !== '0A') continue
-      const hex = parts[1]?.split(':')[1]
-      if (!hex) continue
-      const port = Number.parseInt(hex, 16)
-      if (!Number.isInteger(port) || port <= 0) continue
-      if (!parts[9] || parts[9] === '0') continue
-      let inodes = inodesByPort.get(port)
-      if (!inodes) {
-        inodes = new Set<string>()
-        inodesByPort.set(port, inodes)
-      }
-      inodes.add(parts[9])
-    }
-  }
-  listenCache = { at: now, inodesByPort }
-  return inodesByPort
-}
-
-function listenInodesForPort(port: number): Set<string> {
-  return listenInodesByPort().get(port) ?? new Set()
-}
-
-function pidOwnsSocketInodes(pid: number, inodes: Set<string>): boolean {
-  if (!inodes.size) return false
-  let fds: Array<string> = []
-  try {
-    fds = fs.readdirSync(`/proc/${pid}/fd`)
-  } catch {
-    return false
-  }
-  for (const fd of fds) {
-    try {
-      const target = fs.readlinkSync(`/proc/${pid}/fd/${fd}`)
-      const match = target.match(/^socket:\[(\d+)\]$/)
-      if (match && inodes.has(match[1])) return true
-    } catch {
-      // fd vanished
-    }
-  }
-  return false
-}
-
-function pidListeningOnPort(port: number): number | null {
-  const inodes = listenInodesForPort(port)
-  if (!inodes.size) return null
-  for (const name of listManagedProfileNames()) {
-    const pid = readAliveGatewayPid(resolveProfileHermesHome(name))
-    if (pid && pidOwnsSocketInodes(pid, inodes)) return pid
-  }
-  return null
-}
-
-function profileOwnsPort(profileName: string, port: number): boolean {
-  const inodes = listenInodesForPort(port)
-  if (!inodes.size) return false
-  const pid = readAliveGatewayPid(resolveProfileHermesHome(profileName))
-  return Boolean(pid && pidOwnsSocketInodes(pid, inodes))
-}
-
-function readProcessHermesHome(pid: number): string | null {
-  try {
-    const raw = fs.readFileSync(`/proc/${pid}/environ`)
-    const env = raw.toString('utf8').split('\0')
-    const line = env.find((entry) => entry.startsWith('HERMES_HOME='))
-    if (!line) return null
-    const value = line.slice('HERMES_HOME='.length).trim()
-    return value || null
-  } catch {
-    return null
-  }
-}
-
 export function identifyPortOccupant(port: number): {
   pid: number
   hermesHome: string
@@ -159,11 +87,10 @@ export function identifyPortOccupant(port: number): {
   const pid = pidListeningOnPort(port)
   if (!pid) return null
   const hermesHome = readProcessHermesHome(pid)
-  if (!hermesHome) return null
   return {
     pid,
-    hermesHome,
-    profile: profileNameFromHermesHome(hermesHome),
+    hermesHome: hermesHome || '',
+    profile: hermesHome ? profileNameFromHermesHome(hermesHome) : null,
   }
 }
 
@@ -171,19 +98,52 @@ async function vacateForeignOccupant(
   port: number,
   forProfile: string,
 ): Promise<void> {
+  if (process.env.VITEST) return
   const occupant = identifyPortOccupant(port)
-  if (!occupant?.profile || occupant.profile === forProfile) return
-  const theirs = resolveProfileGatewayPort(occupant.profile)
-  if (theirs === port) return
-  await spawnProfileGateway({
-    profileName: occupant.profile,
-    port: theirs,
-    forceReplace: true,
-    waitForHealthy: false,
-  })
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    if (!profileOwnsPort(occupant.profile, port)) return
+  if (!occupant) return
+  if (occupant.profile === forProfile) return
+  if (homesMatch(occupant.hermesHome, resolveProfileHermesHome(forProfile))) {
+    return
+  }
+
+  const theirs = occupant.profile
+    ? resolveProfileGatewayPort(occupant.profile)
+    : null
+  if (occupant.profile && theirs && theirs !== port) {
+    await spawnProfileGateway({
+      profileName: occupant.profile,
+      port: theirs,
+      forceReplace: true,
+      waitForHealthy: false,
+    })
+  }
+
+  try {
+    process.kill(occupant.pid, 'SIGTERM')
+    console.log(
+      `[gateway-pool] vacated :${port} pid=${occupant.pid} profile=${occupant.profile ?? occupant.hermesHome}`,
+    )
+  } catch (error) {
+    const errno = error as NodeJS.ErrnoException
+    if (errno.code !== 'ESRCH') {
+      console.warn(
+        `[gateway-pool] failed to signal occupant of :${port}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+    }
+  }
+
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const current = identifyPortOccupant(port)
+    if (!current || current.pid !== occupant.pid) return
     await new Promise((resolveAttempt) => setTimeout(resolveAttempt, 100))
+  }
+
+  try {
+    process.kill(occupant.pid, 'SIGKILL')
+  } catch {
+    // already gone
   }
 }
 
@@ -220,6 +180,12 @@ async function applyRoute(url: string): Promise<void> {
   applyProfileGatewayRoute(url)
 }
 
+async function applyRouteIfActive(profileName: string, url: string): Promise<void> {
+  const { shouldApplyGatewayRoute } = await import('./gateway-lifecycle')
+  if (!shouldApplyGatewayRoute(profileName, getActiveProfileName())) return
+  await applyRoute(url)
+}
+
 async function ensureProfileGatewayLocked(
   profileName: string,
   options: { forceReplace?: boolean } = {},
@@ -228,13 +194,15 @@ async function ensureProfileGatewayLocked(
   const hermesHome = resolveProfileHermesHome(name)
   const port = resolveProfileGatewayPort(name)
   const url = gatewayUrlForPort(port)
-  await applyRoute(url)
+  await applyRouteIfActive(name, url)
 
   if (
     !options.forceReplace &&
     profileOwnsPort(name, port) &&
     (await isClaudeAgentHealthy(port, 250))
   ) {
+    const { touchGatewayLease } = await import('./gateway-lifecycle')
+    touchGatewayLease(name)
     return {
       ok: true,
       message: 'already running',
@@ -243,6 +211,22 @@ async function ensureProfileGatewayLocked(
       port,
       url,
       started: false,
+    }
+  }
+
+  if (!profileOwnsPort(name, port) && isPortInUse(port)) {
+    const occupant = identifyPortOccupant(port)
+    if (occupant && occupant.profile !== name) {
+      await vacateForeignOccupant(port, name)
+    }
+    if (!profileOwnsPort(name, port) && isPortInUse(port) && !identifyPortOccupant(port)) {
+      return {
+        ok: false,
+        error: `port ${port} is occupied by a non-Hermes process`,
+        port,
+        url,
+        started: false,
+      }
     }
   }
 
@@ -255,30 +239,69 @@ async function ensureProfileGatewayLocked(
   const forceReplace =
     options.forceReplace === true || (healthy && !owned)
 
+  const { evictBeforeGatewayStart } = await import('./gateway-lifecycle')
+  await evictBeforeGatewayStart(name)
+
   const spawned = await spawnProfileGateway({
     profileName: name,
     port,
     forceReplace,
   })
 
-  if (spawned.ok && (await isClaudeAgentHealthy(port, 250))) {
-    const occupant = identifyPortOccupant(port)
-    if (occupant && !homesMatch(occupant.hermesHome, hermesHome)) {
-      return {
-        ok: false,
-        error: `port ${port} is occupied by ${occupant.profile ?? occupant.hermesHome}, not ${name}`,
-        port,
-        url,
-        started: false,
-      }
+  const ownedHealthy = async () =>
+    profileOwnsPort(name, port) && (await isClaudeAgentHealthy(port, 200))
+
+  if (spawned.ok) {
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      if (await ownedHealthy()) break
+      await new Promise((resolveAttempt) => setTimeout(resolveAttempt, 100))
     }
+  }
+
+  if (spawned.ok && (await ownedHealthy())) {
     bindProfileToPort(name, port)
-    await applyRoute(url)
+    await applyRouteIfActive(name, url)
+    const { touchGatewayLease } = await import('./gateway-lifecycle')
+    touchGatewayLease(name)
     return {
       ...spawned,
       port,
       url,
       started: spawned.message === 'started' || spawned.message === 'restarted',
+    }
+  }
+
+  let occupant = identifyPortOccupant(port)
+  if (occupant && !homesMatch(occupant.hermesHome, hermesHome)) {
+    await vacateForeignOccupant(port, name)
+    const retried = await spawnProfileGateway({
+      profileName: name,
+      port,
+      forceReplace: true,
+    })
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      if (await ownedHealthy()) break
+      await new Promise((resolveAttempt) => setTimeout(resolveAttempt, 100))
+    }
+    occupant = identifyPortOccupant(port)
+    if (retried.ok && (await ownedHealthy())) {
+      bindProfileToPort(name, port)
+      await applyRouteIfActive(name, url)
+      const { touchGatewayLease } = await import('./gateway-lifecycle')
+      touchGatewayLease(name)
+      return {
+        ...retried,
+        port,
+        url,
+        started: true,
+      }
+    }
+    return {
+      ok: false,
+      error: `port ${port} is occupied by ${occupant?.profile ?? occupant?.hermesHome ?? 'another process'}, not ${name}`,
+      port,
+      url,
+      started: false,
     }
   }
 
@@ -293,7 +316,7 @@ async function ensureProfileGatewayLocked(
   }
 }
 
-/** Start (or adopt) the gateway for one profile. Never kills other profiles. */
+/** Start (or adopt) the gateway for one profile. Evicts idle peers when needed. */
 export async function ensureProfileGateway(
   profileName: string,
   options: { forceReplace?: boolean } = {},
@@ -311,6 +334,8 @@ export async function ensureProfileGateway(
       started: false,
     }
   }
+  const { ensureGatewayLifecycleScheduler } = await import('./gateway-lifecycle')
+  ensureGatewayLifecycleScheduler()
   const key = `${name}:${options.forceReplace ? 'replace' : 'ensure'}`
   const existing = ensurePromises.get(key)
   if (existing) return existing
@@ -333,12 +358,42 @@ export async function ensureActiveProfileGateway(options?: {
     })
     return started
   }
-  return ensureProfileGateway(getActiveProfileName() || 'default', options)
+  const name = getActiveProfileName() || 'default'
+  const result = await ensureProfileGateway(name, options)
+  if (result.ok && (await probeProfileGateway(name))) {
+    await applyRoute(getProfileGatewayUrl(name))
+    return result
+  }
+
+  if (name !== PINNED_GATEWAY_PROFILE) {
+    console.warn(
+      `[gateway-pool] ${name} gateway unavailable (${'error' in result ? result.error : 'unhealthy'}); falling back to ${PINNED_GATEWAY_PROFILE}`,
+    )
+    const fallback = await ensureProfileGateway(PINNED_GATEWAY_PROFILE, options)
+    if (fallback.ok && (await probeProfileGateway(PINNED_GATEWAY_PROFILE))) {
+      await applyRoute(getProfileGatewayUrl(PINNED_GATEWAY_PROFILE))
+      return fallback
+    }
+  }
+
+  return result
 }
 
 export async function syncActiveProfileGatewayRoute(): Promise<string | null> {
   if (!isGatewayPoolEnabled()) return null
-  const url = getProfileGatewayUrl(getActiveProfileName() || 'default')
-  await applyRoute(url)
-  return url
+  const name = getActiveProfileName() || 'default'
+  if (await probeProfileGateway(name)) {
+    const url = getProfileGatewayUrl(name)
+    await applyRoute(url)
+    return url
+  }
+  if (
+    name !== PINNED_GATEWAY_PROFILE &&
+    (await probeProfileGateway(PINNED_GATEWAY_PROFILE))
+  ) {
+    const url = getProfileGatewayUrl(PINNED_GATEWAY_PROFILE)
+    await applyRoute(url)
+    return url
+  }
+  return null
 }

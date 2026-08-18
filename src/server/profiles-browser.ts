@@ -406,29 +406,49 @@ export async function readProfileWithFallback(
   throw new Error('Profile not found')
 }
 
-export function listSessionsForProfile(
-  name: string,
-): Array<{ key: string; friendlyId: string; updatedAt: number; source: string; title?: string | null; messageCount?: number; model?: string | null }> {
+function profileStateDbPath(name: string): string {
   const normalized = name.trim() || 'default'
-  const dbPath =
-    normalized === 'default'
-      ? path.join(getClaudeRoot(), 'state.db')
-      : path.join(getProfilesRoot(), normalized, 'state.db')
+  return normalized === 'default'
+    ? path.join(getClaudeRoot(), 'state.db')
+    : path.join(getProfilesRoot(), normalized, 'state.db')
+}
 
-  if (!fs.existsSync(dbPath)) return []
-
+function openProfileStateDb(dbPath: string): {
+  prepare: (sql: string) => {
+    all: (...params: Array<unknown>) => Array<Record<string, unknown>>
+  }
+  close: () => void
+} | null {
+  if (!fs.existsSync(dbPath)) return null
   try {
-    // Open read-only to avoid any contention with the running gateway.
     let Database: new (
       path: string,
       opts?: Record<string, unknown>,
-    ) => { prepare: (sql: string) => { all: () => Array<Record<string, unknown>> }; close: () => void }
+    ) => {
+      prepare: (sql: string) => {
+        all: (...params: Array<unknown>) => Array<Record<string, unknown>>
+      }
+      close: () => void
+    }
     try {
       Database = nodeRequire('better-sqlite3')
     } catch {
       Database = nodeRequire('node:sqlite').DatabaseSync
     }
-    const db = new Database(dbPath, { readOnly: true })
+    return new Database(dbPath, { readOnly: true })
+  } catch {
+    return null
+  }
+}
+
+export function listSessionsForProfile(
+  name: string,
+): Array<{ key: string; friendlyId: string; updatedAt: number; source: string; title?: string | null; messageCount?: number; model?: string | null }> {
+  const normalized = name.trim() || 'default'
+  const db = openProfileStateDb(profileStateDbPath(normalized))
+  if (!db) return []
+
+  try {
     const stmt = db.prepare(
       `SELECT id, title, model, started_at, message_count
        FROM sessions
@@ -437,8 +457,6 @@ export function listSessionsForProfile(
        LIMIT 100`,
     )
     const results = stmt.all()
-    db.close()
-
     return results.map((r: Record<string, unknown>) => ({
       key: String(r.id ?? ''),
       friendlyId: String(r.id ?? ''),
@@ -449,9 +467,97 @@ export function listSessionsForProfile(
       model: (r.model as string) || null,
     }))
   } catch {
-    // Fallback: if SQLite fails (corrupted DB, missing table, etc.),
-    // return empty array rather than crashing the API.
     return []
+  } finally {
+    try {
+      db.close()
+    } catch {
+      // ignore
+    }
+  }
+}
+
+function sqliteContentToText(raw: unknown): string {
+  if (typeof raw !== 'string') return raw == null ? '' : String(raw)
+  const trimmed = raw.trim()
+  if (!trimmed.startsWith('[') && !trimmed.startsWith('{')) return raw
+  try {
+    const parsed = JSON.parse(trimmed) as unknown
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map((block) => {
+          if (!block || typeof block !== 'object') return ''
+          const rec = block as Record<string, unknown>
+          if (rec.type === 'text' || rec.type == null) {
+            return typeof rec.text === 'string' ? rec.text : ''
+          }
+          return ''
+        })
+        .filter(Boolean)
+        .join('\n')
+    }
+    if (parsed && typeof parsed === 'object') {
+      const rec = parsed as Record<string, unknown>
+      if (typeof rec.text === 'string') return rec.text
+      if (typeof rec.content === 'string') return rec.content
+    }
+  } catch {
+    // keep raw
+  }
+  return raw
+}
+
+/** Read session messages from a profile's local state.db — no gateway probe. */
+export function getMessagesForProfile(
+  name: string,
+  sessionId: string,
+  limit = 1000,
+): Array<{
+  id: string
+  session_id: string
+  role: string
+  content: string
+  timestamp: number
+  tool_calls?: unknown
+  tool_call_id?: string
+  tool_name?: string
+}> | null {
+  const sid = sessionId.trim()
+  if (!sid || sid === 'new' || sid === 'main') return null
+  const db = openProfileStateDb(profileStateDbPath(name))
+  if (!db) return null
+
+  try {
+    const stmt = db.prepare(
+      `SELECT id, session_id, role, content, tool_calls, tool_call_id, tool_name, timestamp
+       FROM messages
+       WHERE session_id = ?
+       ORDER BY timestamp DESC, id DESC
+       LIMIT ?`,
+    )
+    const rows = stmt.all(sid, limit)
+    return [...rows].reverse().map((r) => ({
+      id: String(r.id ?? ''),
+      session_id: String(r.session_id ?? sid),
+      role: String(r.role ?? 'assistant'),
+      content: sqliteContentToText(r.content),
+      timestamp:
+        typeof r.timestamp === 'number'
+          ? r.timestamp
+          : Number(r.timestamp) || 0,
+      tool_calls: r.tool_calls,
+      tool_call_id:
+        typeof r.tool_call_id === 'string' ? r.tool_call_id : undefined,
+      tool_name: typeof r.tool_name === 'string' ? r.tool_name : undefined,
+    }))
+  } catch {
+    return null
+  } finally {
+    try {
+      db.close()
+    } catch {
+      // ignore
+    }
   }
 }
 

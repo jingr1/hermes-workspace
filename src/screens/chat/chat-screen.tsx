@@ -66,6 +66,7 @@ import { useChatSessions } from './hooks/use-chat-sessions'
 import { useAutoSessionTitle } from './hooks/use-auto-session-title'
 import { useRenameSession } from './hooks/use-rename-session'
 import { useProfiles } from './hooks/use-profiles'
+import { resolveSessionForProfile, writeLastSession } from './last-session'
 import { useContextAlert } from './hooks/use-context-alert'
 import { ContextBar } from './components/context-bar'
 import {
@@ -580,7 +581,7 @@ export function ChatScreen({
   const { renameSession, renaming: renamingSessionTitle } = useRenameSession()
   const sseConnectionState = useChatStore((s) => s.connectionState)
 
-  const { activeProfileName } = useProfiles()
+  const { activeProfileName, isReady: profilesReady } = useProfiles()
 
   const {
     sessionsQuery,
@@ -594,6 +595,16 @@ export function ChatScreen({
     sessionsFetching,
     refetchSessions,
   } = useChatSessions({ activeFriendlyId, isNewChat, forcedSessionKey })
+  const sessionOwnedByProfile = sessions.some(
+    (session) => session.friendlyId === activeFriendlyId,
+  )
+  const sessionVerified =
+    isPortableMode ||
+    isNewChat ||
+    Boolean(forcedSessionKey) ||
+    isRecentSession(activeFriendlyId) ||
+    hasPendingGeneration() ||
+    (profilesReady && sessionsQuery.isSuccess && sessionOwnedByProfile)
   const {
     historyQuery,
     historyMessages,
@@ -613,6 +624,8 @@ export function ChatScreen({
     queryClient,
     historyRefetchInterval: sseConnectionState === 'connected' ? 30_000 : 5_000,
     portableMode: isPortableMode,
+    profileName: activeProfileName,
+    sessionVerified,
   })
 
   // --- Waiting state management (Issue #43 + #449) ---
@@ -932,8 +945,6 @@ export function ChatScreen({
   }, [activeFriendlyId, isNewChat])
 
   refreshHistoryRef.current = function refreshHistory() {
-    if (historyQuery.isFetching) return
-
     // Snapshot any unconfirmed optimistic user messages BEFORE refetch.
     // The refetch replaces the query cache with server data — if the server
     // hasn't processed the user's POST yet, the optimistic message vanishes.
@@ -949,7 +960,7 @@ export function ChatScreen({
       historySessionKey,
     )
 
-    void historyQuery.refetch().then(() => {
+    void historyQuery.refetch({ cancelRefetch: true }).then(() => {
       // Re-inject optimistic messages that weren't in the server response
       reInjectOptimistic()
     })
@@ -1713,13 +1724,13 @@ export function ChatScreen({
   const serverErrorStatus = statusError?.status
   const showErrorNotice = Boolean(serverError) && !isNewChat
   const handleRefetch = useCallback(() => {
-    void statusQuery.refetch()
-    void sessionsQuery.refetch()
-    void historyQuery.refetch()
+    void statusQuery.refetch({ cancelRefetch: true })
+    void sessionsQuery.refetch({ cancelRefetch: true })
+    void historyQuery.refetch({ cancelRefetch: true })
   }, [statusQuery, sessionsQuery, historyQuery])
 
   const handleRefreshHistory = useCallback(() => {
-    void historyQuery.refetch()
+    void historyQuery.refetch({ cancelRefetch: true })
   }, [historyQuery])
 
   useEffect(() => {
@@ -1799,15 +1810,14 @@ export function ChatScreen({
   }, [isMobile, terminalPanelInset])
 
   const shouldRedirectToNew =
+    !isPortableMode &&
     !isNewChat &&
     !forcedSessionKey &&
     !isRecentSession(activeFriendlyId) &&
     !hasPendingGeneration() &&
+    profilesReady &&
     sessionsQuery.isSuccess &&
-    sessions.length > 0 &&
-    !sessions.some((session) => session.friendlyId === activeFriendlyId) &&
-    !historyQuery.isFetching &&
-    !historyQuery.isSuccess
+    !sessionOwnedByProfile
 
   useEffect(() => {
     if (isRedirecting) {
@@ -1871,12 +1881,12 @@ export function ChatScreen({
   useEffect(() => {
     if (embedded) return
     if (isNewChat) return
-    if (!sessionsQuery.isSuccess) return
-    if (sessions.length === 0) return
     if (!shouldRedirectToNew) return
     resetPendingSend()
     clearHistoryMessages(queryClient, activeFriendlyId, sessionKeyForHistory)
-    const latestSession = sessions[0]?.friendlyId ?? 'new'
+    const latestSession = resolveSessionForProfile(sessions, activeProfileName)
+    if (latestSession === activeFriendlyId) return
+    writeLastSession(latestSession, activeProfileName)
     navigate({
       to: '/chat/$sessionKey',
       params: { sessionKey: latestSession },
@@ -1884,21 +1894,24 @@ export function ChatScreen({
     })
   }, [
     activeFriendlyId,
-    historyQuery.isFetching,
-    historyQuery.isSuccess,
+    activeProfileName,
     isNewChat,
     navigate,
     queryClient,
     sessionKeyForHistory,
     sessions,
-    sessionsQuery.isSuccess,
     shouldRedirectToNew,
     embedded,
   ])
 
+  useEffect(() => {
+    if (!sessionVerified || isNewChat) return
+    writeLastSession(activeFriendlyId, activeProfileName)
+  }, [activeFriendlyId, activeProfileName, isNewChat, sessionVerified])
+
   const hideUi = shouldRedirectToNew || isRedirecting
   const isFocusMode = !compact && chatFocusMode
-  const showComposer = !isRedirecting
+  const showComposer = !isRedirecting && sessionVerified
 
   const handleToggleFocusMode = useCallback(() => {
     if (compact) return
@@ -2530,11 +2543,7 @@ export function ChatScreen({
         setWaitingForResponse(true)
 
         const persistLastSession = (friendlyId: string) => {
-          try {
-            localStorage.setItem('claude-last-session', friendlyId)
-          } catch {
-            // ignore
-          }
+          writeLastSession(friendlyId, activeProfileName)
         }
         const routeToSession = (friendlyId: string) => {
           if (embedded) return
@@ -2747,8 +2756,11 @@ export function ChatScreen({
 
   const historyLoading =
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime safety
-    (historyQuery.isLoading && !historyQuery.data) || isRedirecting
-  const historyEmpty = !historyLoading && finalDisplayMessages.length === 0
+    (historyQuery.isLoading && !historyQuery.data) ||
+    isRedirecting ||
+    !sessionVerified
+  const visibleMessages = sessionVerified ? finalDisplayMessages : []
+  const historyEmpty = !historyLoading && visibleMessages.length === 0
   const errorNotice = useMemo(() => {
     if (!showErrorNotice) return null
     if (!serverError) return null
@@ -2868,7 +2880,7 @@ export function ChatScreen({
         >
           {!compact && (
             <ChatHeader
-              activeTitle={activeTitle}
+              activeTitle={sessionVerified ? activeTitle : '\u00a0'}
               onRenameTitle={handleRenameActiveSessionTitle}
               renamingTitle={renamingSessionTitle}
               wrapperRef={headerRef}
@@ -2964,7 +2976,7 @@ export function ChatScreen({
 
           {hideUi ? null : (
             <ChatMessageList
-              messages={finalDisplayMessages}
+              messages={visibleMessages}
               onRetryMessage={handleRetryMessage}
               onRefresh={handleRefreshHistory}
               loading={historyLoading}

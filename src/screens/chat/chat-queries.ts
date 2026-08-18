@@ -70,10 +70,12 @@ export async function fetchSessions(profile?: string): Promise<Array<SessionMeta
 export async function fetchHistory(payload: {
   sessionKey: string
   friendlyId: string
+  profile?: string
 }): Promise<HistoryResponse> {
   const query = new URLSearchParams({ limit: '1000' })
   if (payload.sessionKey) query.set('sessionKey', payload.sessionKey)
   if (payload.friendlyId) query.set('friendlyId', payload.friendlyId)
+  if (payload.profile) query.set('profile', payload.profile)
   const res = await fetch(`/api/history?${query.toString()}`)
   if (!res.ok) throw new Error(await readError(res))
   return (await res.json()) as HistoryResponse
