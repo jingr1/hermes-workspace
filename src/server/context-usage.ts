@@ -21,6 +21,10 @@ export type ContextUsageSnapshot = {
   model: string
   staticTokens: number
   conversationTokens: number
+  thresholdTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+  cacheHitPercent: number | null
 }
 
 type ResolvedModelContext = {
@@ -156,30 +160,81 @@ function authHeaders(): Record<string, string> {
   return BEARER_TOKEN ? { Authorization: `Bearer ${BEARER_TOKEN}` } : {}
 }
 
-function emptySnapshot(): ContextUsageSnapshot {
+function computeThresholdTokens(
+  maxTokens: number,
+  explicitThreshold?: unknown,
+): number {
+  const threshold = Number(explicitThreshold) || 0
+  if (threshold > 0) return threshold
+  return maxTokens > 0 ? Math.floor(maxTokens * 0.75) : 0
+}
+
+function computeCacheHitPercent(
+  cacheReadTokens: number,
+  cacheWriteTokens: number,
+  explicit?: unknown,
+): number | null {
+  if (typeof explicit === 'number' && Number.isFinite(explicit)) {
+    return Math.min(100, Math.max(0, Math.round(explicit)))
+  }
+  const promptTotal = cacheReadTokens + cacheWriteTokens
+  if (promptTotal <= 0) return null
+  return Math.min(100, Math.round((cacheReadTokens / promptTotal) * 100))
+}
+
+function buildSnapshot(partial: {
+  contextPercent: number
+  maxTokens: number
+  usedTokens: number
+  model: string
+  staticTokens?: number
+  conversationTokens?: number
+  thresholdTokens?: number
+  cacheReadTokens?: number
+  cacheWriteTokens?: number
+  cacheHitPercent?: number | null
+}): ContextUsageSnapshot {
+  const maxTokens = partial.maxTokens
+  const cacheReadTokens = partial.cacheReadTokens ?? 0
+  const cacheWriteTokens = partial.cacheWriteTokens ?? 0
   return {
     ok: true,
+    contextPercent: partial.contextPercent,
+    maxTokens,
+    usedTokens: partial.usedTokens,
+    model: partial.model,
+    staticTokens: partial.staticTokens ?? 0,
+    conversationTokens: partial.conversationTokens ?? partial.usedTokens,
+    thresholdTokens: computeThresholdTokens(
+      maxTokens,
+      partial.thresholdTokens,
+    ),
+    cacheReadTokens,
+    cacheWriteTokens,
+    cacheHitPercent:
+      partial.cacheHitPercent ??
+      computeCacheHitPercent(cacheReadTokens, cacheWriteTokens),
+  }
+}
+
+function emptySnapshot(): ContextUsageSnapshot {
+  return buildSnapshot({
     contextPercent: 0,
     maxTokens: 0,
     usedTokens: 0,
     model: '',
-    staticTokens: 0,
-    conversationTokens: 0,
-  }
+  })
 }
 
 function configuredEmptySnapshot(
   configuredModelContext: ResolvedModelContext | null,
 ): ContextUsageSnapshot {
-  return {
-    ok: true,
+  return buildSnapshot({
     contextPercent: 0,
     maxTokens: configuredModelContext?.maxTokens || 0,
     usedTokens: 0,
     model: configuredModelContext?.model || '',
-    staticTokens: 0,
-    conversationTokens: 0,
-  }
+  })
 }
 
 function readConfiguredContextLength(payload: Record<string, unknown>): number {
@@ -251,6 +306,10 @@ async function readGatewayRuntimeSnapshot(
       total_tokens?: unknown
       prompt_tokens?: unknown
       input_tokens?: unknown
+      threshold_tokens?: unknown
+      cache_read_tokens?: unknown
+      cache_write_tokens?: unknown
+      cache_hit_percent?: unknown
     }
     const model = typeof data.model === 'string' ? data.model : ''
     const maxTokens = Number(data.context_length) || 0
@@ -269,15 +328,19 @@ async function readGatewayRuntimeSnapshot(
     if (!model && maxTokens <= 0 && usedTokens <= 0 && contextPercent <= 0) {
       return null
     }
-    return {
-      ok: true,
+    return buildSnapshot({
       contextPercent,
       maxTokens,
       usedTokens,
       model,
-      staticTokens: 0,
-      conversationTokens: usedTokens,
-    }
+      thresholdTokens: Number(data.threshold_tokens) || undefined,
+      cacheReadTokens: Number(data.cache_read_tokens) || 0,
+      cacheWriteTokens: Number(data.cache_write_tokens) || 0,
+      cacheHitPercent:
+        typeof data.cache_hit_percent === 'number'
+          ? data.cache_hit_percent
+          : null,
+    })
   } catch {
     return null
   }
@@ -420,15 +483,12 @@ export async function readContextUsage(
           configuredModelContext?.maxTokens || getContextWindow(model)
         const contextPercent =
           maxTokens > 0 ? Math.round((usedTokens / maxTokens) * 1000) / 10 : 0
-        return {
-          ok: true,
+        return buildSnapshot({
           contextPercent,
           maxTokens,
           usedTokens,
           model,
-          staticTokens: 0,
-          conversationTokens: usedTokens,
-        }
+        })
       }
 
       if (localMessages.length > 0 || activeRun?.assistantText) {
@@ -447,15 +507,12 @@ export async function readContextUsage(
         const maxTokens = configuredModelContext?.maxTokens || getContextWindow(model)
         const contextPercent =
           maxTokens > 0 ? Math.round((usedTokens / maxTokens) * 1000) / 10 : 0
-        return {
-          ok: true,
+        return buildSnapshot({
           contextPercent,
           maxTokens,
           usedTokens,
           model,
-          staticTokens: 0,
-          conversationTokens: usedTokens,
-        }
+        })
       }
     }
 
@@ -561,24 +618,26 @@ export async function readContextUsage(
     const contextPercent =
       maxTokens > 0 ? Math.round((usedTokens / maxTokens) * 1000) / 10 : 0
 
-    return {
-      ok: true,
+    return buildSnapshot({
       contextPercent,
       maxTokens,
       usedTokens,
       model,
-      staticTokens: 0,
-      conversationTokens: usedTokens,
-    }
+      thresholdTokens: Number(sessionData.threshold_tokens) || undefined,
+      cacheReadTokens,
+      cacheWriteTokens,
+      cacheHitPercent: computeCacheHitPercent(
+        cacheReadTokens,
+        cacheWriteTokens,
+        sessionData.cache_hit_percent,
+      ),
+    })
   } catch {
-    return {
-      ok: true,
+    return buildSnapshot({
       contextPercent: 0,
       maxTokens: 128_000,
       usedTokens: 0,
       model: '',
-      staticTokens: 0,
-      conversationTokens: 0,
-    }
+    })
   }
 }

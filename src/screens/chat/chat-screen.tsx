@@ -68,7 +68,6 @@ import { useRenameSession } from './hooks/use-rename-session'
 import { useProfiles } from './hooks/use-profiles'
 import { resolveSessionForProfile, writeLastSession } from './last-session'
 import { useContextAlert } from './hooks/use-context-alert'
-import { ContextBar } from './components/context-bar'
 import {
   CHAT_OPEN_SETTINGS_EVENT,
   CHAT_PENDING_COMMAND_STORAGE_KEY,
@@ -119,7 +118,7 @@ import { ModelSuggestionToast } from '@/components/model-suggestion-toast'
 import { MobileSessionsPanel } from '@/components/mobile-sessions-panel'
 import { ContextAlertModal } from '@/components/usage-meter/context-alert-modal'
 import { ErrorToastContainer, showErrorToast } from '@/components/error-toast'
-// ContextMeter removed — ContextBar (PR #32) replaces it
+// ContextMeter removed — ContextIndicator in composer replaces top ContextBar
 import { persistRecoveryMessage, useChatStore } from '@/stores/chat-store'
 import {
   PENDING_SESSION_MODEL_KEY,
@@ -2964,17 +2963,6 @@ export function ChatScreen({
           )}
 
           {hideUi ? null : (
-            <ContextBar
-              sessionId={
-                resolvedSessionKey ||
-                activeCanonicalKey ||
-                activeSession?.key ||
-                activeSessionKey
-              }
-            />
-          )}
-
-          {hideUi ? null : (
             <ChatMessageList
               messages={visibleMessages}
               onRetryMessage={handleRetryMessage}
@@ -3024,7 +3012,9 @@ export function ChatScreen({
               onSubmit={send}
               onAbort={handleAbortStreaming}
               isLoading={sending || waitingForResponse}
-              disabled={sending || hideUi}
+              disabled={hideUi}
+              isCompacting={isCompacting}
+              contextRefreshToken={`${resolvedSessionKey || activeSessionKey || 'new'}:${lastCompletedRunAt}:${sending ? 1 : 0}:${waitingForResponse ? 1 : 0}`}
               sessionKey={
                 isNewChat
                   ? undefined

@@ -2,13 +2,11 @@ import { createPortal } from 'react-dom'
 import {
   Add01Icon,
   ArrowDown01Icon,
-  ArrowUp02Icon,
   AttachmentIcon,
   Cancel01Icon,
   Delete01Icon,
   Folder01Icon,
   Mic01Icon,
-  StopIcon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -27,7 +25,8 @@ import {
   getZeroForkModelInfoFlags,
   shouldBlockZeroForkModelSwitch,
 } from './chat-composer-model-switch'
-import { ContextBar } from './context-bar'
+import { ComposerPrimaryButton } from './composer-primary-button'
+import { ContextIndicator } from './context-indicator'
 import type { CSSProperties, Ref } from 'react'
 
 import type { ModelCatalogEntry, ModelSwitchResponse } from '@/lib/model-types'
@@ -76,6 +75,7 @@ import { setLocalModelOverride } from '@/screens/chat/local-model-override'
 import { formatModelName } from '@/lib/format-model-name'
 import { sanitizeHttpErrorText } from '@/lib/http-error'
 import { useProfiles } from '@/screens/chat/hooks/use-profiles'
+import { getComposerPrimaryAction, composerPrimaryActionLabel } from '@/screens/chat/lib/composer-primary-action'
 
 type ChatComposerAttachment = {
   id: string
@@ -110,6 +110,10 @@ type ChatComposerProps = {
   /** Called when user changes thinking level */
   onThinkingLevelChange?: (level: ThinkingLevel) => void
   onAbort?: () => void
+  /** True while context compression/compaction UI is active */
+  isCompacting?: boolean
+  /** Bumps context indicator refresh after stream lifecycle events */
+  contextRefreshToken?: string | number
   /** Embedded inside another surface (e.g. Operations card), so mobile composer
    * must stay inline instead of docking fixed to the viewport bottom. */
   embedded?: boolean
@@ -857,6 +861,8 @@ function ChatComposerComponent({
   onAbort,
   embedded = false,
   hideModelSelector = false,
+  isCompacting = false,
+  contextRefreshToken,
 }: ChatComposerProps) {
   const queryClient = useQueryClient()
   const mobileKeyboardInset = useWorkspaceStore((s) => s.mobileKeyboardInset)
@@ -1642,12 +1648,6 @@ function ChatComposerComponent({
       window.removeEventListener('keydown', handleModelShortcut, true)
   }, [])
 
-  const submitDisabled =
-    disabled ||
-    (value.trim().length === 0 &&
-      attachments.length === 0 &&
-      attachmentProcessingCount === 0)
-
   const hasDraft = value.trim().length > 0 || attachments.length > 0
   const promptPlaceholder = isMobileViewport
     ? 'Message...'
@@ -1833,6 +1833,23 @@ function ChatComposerComponent({
     },
     [onAbort],
   )
+
+  const hasComposerContent =
+    value.trim().length > 0 ||
+    attachments.length > 0 ||
+    attachmentProcessingCount > 0
+
+  const primaryAction = getComposerPrimaryAction({
+    disabled,
+    isBusy: isLoading,
+    hasContent: hasComposerContent,
+    isCompacting,
+  })
+
+  const showMicButton =
+    !isLoading &&
+    !hasComposerContent &&
+    (voiceInput.isSupported || voiceRecorder.isSupported)
 
   const handleOpenAttachmentPicker = useCallback(
     function handleOpenAttachmentPicker(
@@ -2250,34 +2267,13 @@ function ChatComposerComponent({
                 className="min-h-[36px] max-h-[120px] flex-1 text-base leading-snug"
               />
 
-              {/* Right side: stop / send / mic */}
-              <div className="shrink-0">
-                {isLoading ? (
-                  <button
-                    type="button"
-                    onClick={handleAbort}
-                    aria-label="Stop generation"
-                    className="size-9 rounded-full bg-red-500 flex items-center justify-center text-white transition-all duration-150"
-                  >
-                    <HugeiconsIcon icon={StopIcon} size={18} strokeWidth={2} />
-                  </button>
-                ) : value.trim().length > 0 ||
-                  attachments.length > 0 ||
-                  attachmentProcessingCount > 0 ? (
-                  <button
-                    type="button"
-                    onClick={handleSubmit}
-                    disabled={submitDisabled}
-                    aria-label="Send message"
-                    className="size-9 rounded-full bg-accent-500 flex items-center justify-center text-white transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
-                  >
-                    <HugeiconsIcon
-                      icon={ArrowUp02Icon}
-                      size={18}
-                      strokeWidth={2}
-                    />
-                  </button>
-                ) : voiceInput.isSupported || voiceRecorder.isSupported ? (
+              {/* Right side: context / stop / send / mic */}
+              <div className="flex shrink-0 items-center gap-1">
+                <ContextIndicator
+                  sessionId={sessionKey}
+                  refreshToken={contextRefreshToken}
+                />
+                {showMicButton ? (
                   <button
                     type="button"
                     onClick={() => {
@@ -2322,19 +2318,12 @@ function ChatComposerComponent({
                     ) : null}
                   </button>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={handleSubmit}
-                    disabled={submitDisabled}
-                    aria-label="Send message"
-                    className="size-9 rounded-full bg-accent-500 flex items-center justify-center text-white transition-all duration-150 disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    <HugeiconsIcon
-                      icon={ArrowUp02Icon}
-                      size={18}
-                      strokeWidth={2}
-                    />
-                  </button>
+                  <ComposerPrimaryButton
+                    action={primaryAction}
+                    onSend={handleSubmit}
+                    onStop={handleAbort}
+                    compact
+                  />
                 )}
               </div>
             </div>
@@ -3027,8 +3016,11 @@ function ChatComposerComponent({
                 ) : null}
               </div>
               <div className="ml-1 flex shrink-0 items-center gap-0.5 md:gap-1">
-                <ContextBar compact sessionId={sessionKey} />
-                {voiceInput.isSupported || voiceRecorder.isSupported ? (
+                <ContextIndicator
+                  sessionId={sessionKey}
+                  refreshToken={contextRefreshToken}
+                />
+                {showMicButton ? (
                   <PromptInputAction
                     tooltip={
                       voiceRecorder.isRecording
@@ -3083,42 +3075,16 @@ function ChatComposerComponent({
                       ) : null}
                     </Button>
                   </PromptInputAction>
-                ) : null}
-                {isLoading ? (
-                  <PromptInputAction tooltip="Stop generation">
-                    <Button
-                      onClick={handleAbort}
-                      size="icon-sm"
-                      variant="destructive"
-                      className="rounded-md"
-                      aria-label="Stop generation"
-                    >
-                      <HugeiconsIcon
-                        icon={StopIcon}
-                        size={20}
-                        strokeWidth={1.5}
-                      />
-                    </Button>
-                  </PromptInputAction>
                 ) : (
-                  <>
-                    <PromptInputAction tooltip="Send message">
-                      <Button
-                        type="button"
-                        onClick={handleSubmit}
-                        disabled={submitDisabled}
-                        size="icon-sm"
-                        className="rounded-full"
-                        aria-label="Send message"
-                      >
-                        <HugeiconsIcon
-                          icon={ArrowUp02Icon}
-                          size={20}
-                          strokeWidth={1.5}
-                        />
-                      </Button>
-                    </PromptInputAction>
-                  </>
+                  <PromptInputAction
+                    tooltip={composerPrimaryActionLabel(primaryAction)}
+                  >
+                    <ComposerPrimaryButton
+                      action={primaryAction}
+                      onSend={handleSubmit}
+                      onStop={handleAbort}
+                    />
+                  </PromptInputAction>
                 )}
               </div>
             </PromptInputActions>
