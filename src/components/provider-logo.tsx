@@ -10,6 +10,7 @@ const CDN_FILE_MAP: Record<string, string> = {
   'openai-codex': 'openai.png',
   openai: 'openai.png',
   anthropic: 'anthropic.png',
+  'claude-oauth': 'anthropic.png',
   deepseek: 'deepseek.png',
   openrouter: 'openrouter.png',
   ollama: 'ollama.png',

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type * as React from 'react'
 import { Button } from '@/components/ui/button'
 import { ProviderLogo } from '@/components/provider-logo'
+import { CodexLoginModal } from '@/components/settings-dialog/codex-login-modal'
+import { AnthropicLoginModal } from '@/components/settings-dialog/anthropic-login-modal'
 import { cn } from '@/lib/utils'
 
 export const PROVIDER_CARDS: Array<{
@@ -61,6 +63,13 @@ export const PROVIDER_CARDS: Array<{
     name: 'OpenAI Codex',
     logo: '/providers/openai.png',
     models: ['gpt-5.4', 'gpt-5.3-codex', 'gpt-4o'],
+    authType: 'oauth',
+  },
+  {
+    id: 'claude-oauth',
+    name: 'Claude (OAuth)',
+    logo: '/providers/anthropic.png',
+    models: ['claude-sonnet-4-6', 'claude-opus-5', 'claude-haiku-3.5'],
     authType: 'oauth',
   },
   {
@@ -176,7 +185,11 @@ export function getProviderCardStatus(
   localOnline = false,
 ): { label: string; verified: boolean; hasKey: boolean } {
   if (card.authType === 'oauth') {
-    return { label: 'OAuth', verified: false, hasKey: true }
+    const oauthKey = configuredKeys[`__oauth:${card.id}`]
+    if (oauthKey) {
+      return { label: 'Connected', verified: true, hasKey: true }
+    }
+    return { label: 'OAuth', verified: false, hasKey: false }
   }
   if (card.authType === 'none') {
     return {
@@ -412,8 +425,12 @@ export function ModelProviderPanel({
     const keys: Record<string, string> = {}
     for (const p of providers) {
       const envKey = p.envKeys?.[0]
-      if (!p.configured || !envKey) continue
-      keys[envKey] = p.maskedCredentials?.[envKey] || '••••'
+      if (p.configured && envKey) {
+        keys[envKey] = p.maskedCredentials?.[envKey] || '••••'
+      }
+      if (p.kind === 'oauth' && p.authenticated && p.maskedCredentials?.['auth-profiles']) {
+        keys[`__oauth:${p.id}`] = p.maskedCredentials['auth-profiles']
+      }
     }
     setConfiguredKeys(keys)
   }
@@ -548,6 +565,9 @@ export function ModelProviderPanel({
       }
       signal.addEventListener('abort', onAbort, { once: true })
     })
+
+  const [showCodexModal, setShowCodexModal] = useState(false)
+  const [showAnthropicModal, setShowAnthropicModal] = useState(false)
 
   const startOAuthFlow = async () => {
     const provider = cards.find((p) => p.id === oauthProviderId)
@@ -689,6 +709,14 @@ export function ModelProviderPanel({
                 key={p.id}
                 type="button"
                 onClick={() => {
+                  if (p.id === 'openai-codex') {
+                    setShowCodexModal(true)
+                    return
+                  }
+                  if (p.id === 'claude-oauth') {
+                    setShowAnthropicModal(true)
+                    return
+                  }
                   if (configureOnly && p.authType === 'api_key' && p.envKey) {
                     selectProvider(p.id)
                     setBuiltinKeyValue('')
@@ -704,6 +732,14 @@ export function ModelProviderPanel({
                     hasKey,
                   })
                   if (action === 'oauth') {
+                    if (p.id === 'openai-codex') {
+                      setShowCodexModal(true)
+                      return
+                    }
+                    if (p.id === 'claude-oauth') {
+                      setShowAnthropicModal(true)
+                      return
+                    }
                     resetOAuthState(p.id)
                     return
                   }
@@ -1268,6 +1304,23 @@ export function ModelProviderPanel({
         </div>
       </div>
       ) : null}
+
+      <CodexLoginModal
+        open={showCodexModal}
+        onClose={() => setShowCodexModal(false)}
+        onSuccess={() => {
+          setShowCodexModal(false)
+          void refreshKeys()
+        }}
+      />
+      <AnthropicLoginModal
+        open={showAnthropicModal}
+        onClose={() => setShowAnthropicModal(false)}
+        onSuccess={() => {
+          setShowAnthropicModal(false)
+          void refreshKeys()
+        }}
+      />
     </div>
   )
 }

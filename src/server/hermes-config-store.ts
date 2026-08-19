@@ -159,6 +159,18 @@ export function readHermesConfigFiles(paths: HermesConfigPaths): HermesConfigFil
   }
 }
 
+export function readAuthJsonFile(hermesHome: string): Record<string, unknown> {
+  try {
+    const raw = fs.readFileSync(path.join(hermesHome, 'auth.json'), 'utf-8')
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {}
+  } catch {
+    return {}
+  }
+}
+
 function readCustomProvidersList(config: Record<string, unknown>): Array<Record<string, unknown>> {
   const entries = config.custom_providers
   return Array.isArray(entries)

@@ -14,6 +14,7 @@ import { normalizeHermesConfigState } from './hermes-config-migration'
 import {
   applyHermesConfigPatch,
   parseEnvFile,
+  readAuthJsonFile,
   readHermesConfigFiles,
   resolveHermesConfigPaths,
   stringifyEnv,
@@ -102,6 +103,7 @@ export async function handleHermesConfigGet({
     config: files.config,
     env: files.env,
     authProfiles: files.authProfiles,
+    authJson: readAuthJsonFile(paths.hermesHome),
     localProviders: getDiscoveryStatus(),
     localModels: getDiscoveredModels(),
   })

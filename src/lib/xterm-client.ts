@@ -44,7 +44,7 @@ export async function loadXtermClient(): Promise<XtermClientCtors> {
   ])
 
   if (typeof window !== 'undefined') {
-    await import('@/lib/xterm-styles.client')
+    await import('xterm/css/xterm.css')
   }
 
   TerminalCtor = pickConstructor<Terminal>(xtermMod as Record<string, unknown>, 'Terminal')

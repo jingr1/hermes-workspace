@@ -79,6 +79,7 @@ export type NormalizeHermesConfigInput = {
   config: Record<string, unknown>
   env: Record<string, string>
   authProfiles: Record<string, unknown>
+  authJson?: Record<string, unknown>
   localProviders: Array<LocalProviderSummary>
   localModels: Array<LocalModelSummary>
 }
@@ -86,6 +87,7 @@ export type NormalizeHermesConfigInput = {
 export const HERMES_PROVIDER_CATALOG: Array<ProviderDef> = [
   { id: 'nous', name: 'Nous Portal', kind: 'oauth', envKeys: [], models: [] },
   { id: 'openai-codex', name: 'OpenAI Codex', kind: 'oauth', envKeys: [], models: [] },
+  { id: 'claude-oauth', name: 'Claude (OAuth)', kind: 'oauth', envKeys: [], models: [] },
   { id: 'anthropic', name: 'Anthropic', kind: 'api_key', envKeys: ['ANTHROPIC_API_KEY'], models: [] },
   { id: 'deepseek', name: 'DeepSeek', kind: 'api_key', envKeys: ['DEEPSEEK_API_KEY'], models: [] },
   { id: 'openrouter', name: 'OpenRouter', kind: 'api_key', envKeys: ['OPENROUTER_API_KEY'], models: [] },
@@ -184,6 +186,7 @@ export function normalizeHermesConfigState(input: NormalizeHermesConfigInput): H
     let authSource: HermesAuthSource = 'none'
     let available = false
     let models = def.models
+    const warnings: Array<string> = []
 
     if (def.kind === 'api_key') {
       for (const envKey of def.envKeys) {
@@ -205,6 +208,26 @@ export function normalizeHermesConfigState(input: NormalizeHermesConfigInput): H
         configured = true
         authSource = 'auth-profiles'
         maskedCredentials['auth-profiles'] = maskSecret(token)
+      }
+      if (!authenticated && input.authJson) {
+        const authJsonProviders = readRecord(input.authJson.providers)
+        const providerEntry = readRecord(authJsonProviders[def.id])
+        const tokens = readRecord(providerEntry.tokens)
+        const accessToken = readString(tokens.access_token)
+        if (accessToken) {
+          authenticated = true
+          configured = true
+          authSource = 'auth-profiles'
+          maskedCredentials['auth-profiles'] = maskSecret(accessToken)
+        }
+        const lastErr = providerEntry.last_auth_error
+        if (lastErr && typeof lastErr === 'object' && (lastErr as Record<string, unknown>).relogin_required === true) {
+          authenticated = false
+          configured = true
+          authSource = 'auth-profiles'
+          const errMsg = readString((lastErr as Record<string, unknown>).message)
+          if (errMsg) warnings.push(errMsg)
+        }
       }
       available = configured
     }
@@ -238,7 +261,7 @@ export function normalizeHermesConfigState(input: NormalizeHermesConfigInput): H
       envKeys: def.envKeys,
       maskedCredentials,
       models,
-      warnings: [],
+      warnings,
     }
   })
 
