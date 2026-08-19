@@ -3,7 +3,7 @@ import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../server/auth-middleware'
 import { requireJsonContentType } from '../../server/rate-limit'
 import { deleteSession } from '../../server/claude-api'
-import { dashboardFetch, ensureGatewayProbed } from '../../server/gateway-capabilities'
+import { dashboardFetch, ensureGatewayEnhancedProbed } from '../../server/gateway-capabilities'
 import { cancelSwarmMission } from '../../server/swarm-missions'
 import { resetSwarmWorkerRuntime } from '../../server/swarm-runtime-reset'
 
@@ -35,7 +35,7 @@ export const Route = createFileRoute('/api/conductor-stop')({
           let deleted = 0
           let stoppedMissions = 0
           let cancelledNativeMissions = 0
-          const capabilities = await ensureGatewayProbed()
+          const capabilities = await ensureGatewayEnhancedProbed()
           for (const missionId of missionIds) {
             try {
               const cancelled = cancelSwarmMission({

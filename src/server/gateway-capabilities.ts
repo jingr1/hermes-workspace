@@ -167,6 +167,8 @@ export const SESSIONS_API_UNAVAILABLE_MESSAGE = `Your Hermes backend does not su
 
 const PROBE_TIMEOUT_MS = 3_000
 const LOCAL_PROBE_TIMEOUT_MS = 1_000
+/** Skip dashboard HTTP probes briefly after a failed attempt (localhost only). */
+const DASHBOARD_NEGATIVE_CACHE_MS = 5 * 60_000
 // Probe TTL: 120s when the gateway is healthy, 15s when it isn't. The
 // shorter window during 'disconnected' state means a Docker stack where
 // the workspace boots before the agent recovers within ~15s of the agent
@@ -290,6 +292,7 @@ let capabilities: GatewayCapabilities = {
 
 let probePromise: Promise<GatewayCapabilities> | null = null
 let lastProbeAt = 0
+let dashboardNegativeUntil = 0
 /** Per-gateway-url capability cache — avoids full reprobe on profile switch. */
 const capabilityCacheByUrl = new Map<
   string,
@@ -735,17 +738,28 @@ async function probeMcpConfigKey(): Promise<boolean> {
 }
 
 async function probeDashboard(): Promise<{ available: boolean; url: string }> {
+  if (Date.now() < dashboardNegativeUntil) {
+    return { available: false, url: CLAUDE_DASHBOARD_URL }
+  }
   try {
     const res = await fetch(`${CLAUDE_DASHBOARD_URL}/api/status`, {
       signal: AbortSignal.timeout(probeTimeoutMs()),
     })
-    if (!res.ok) return { available: false, url: CLAUDE_DASHBOARD_URL }
+    if (!res.ok) {
+      dashboardNegativeUntil = Date.now() + DASHBOARD_NEGATIVE_CACHE_MS
+      return { available: false, url: CLAUDE_DASHBOARD_URL }
+    }
     const body = (await res.json()) as { version?: string }
-    if (!body.version) return { available: false, url: CLAUDE_DASHBOARD_URL }
+    if (!body.version) {
+      dashboardNegativeUntil = Date.now() + DASHBOARD_NEGATIVE_CACHE_MS
+      return { available: false, url: CLAUDE_DASHBOARD_URL }
+    }
+    dashboardNegativeUntil = 0
     // Token scrape is deferred to the first authenticated dashboard call.
     // Blocking probe on HTML fetch adds another timeout when :9119 hangs.
     return { available: true, url: CLAUDE_DASHBOARD_URL }
   } catch {
+    dashboardNegativeUntil = Date.now() + DASHBOARD_NEGATIVE_CACHE_MS
     return { available: false, url: CLAUDE_DASHBOARD_URL }
   }
 }
@@ -957,6 +971,7 @@ async function autoDetectDashboardUrl(): Promise<void> {
   // multi-user setup it attaches to another user's dashboard and leaks their
   // session list. Honor both vars so an explicit setting always wins.
   if (process.env.HERMES_DASHBOARD_URL || process.env.CLAUDE_DASHBOARD_URL) return
+  if (Date.now() < dashboardNegativeUntil) return
 
   const candidates = ['http://127.0.0.1:9119']
   for (const candidate of candidates) {
@@ -966,9 +981,12 @@ async function autoDetectDashboardUrl(): Promise<void> {
       })
       if (res.ok) {
         CLAUDE_DASHBOARD_URL = candidate
+        dashboardNegativeUntil = 0
         return
       }
+      dashboardNegativeUntil = Date.now() + DASHBOARD_NEGATIVE_CACHE_MS
     } catch {
+      dashboardNegativeUntil = Date.now() + DASHBOARD_NEGATIVE_CACHE_MS
       // continue
     }
   }
@@ -1006,10 +1024,11 @@ async function fillEnhancedCapabilities(input: {
 
 export async function probeGateway(options?: {
   force?: boolean
+  /** When true, await MCP/conductor/kanban probes. Default false (background). */
   waitForEnhanced?: boolean
 }): Promise<GatewayCapabilities> {
   const force = options?.force === true
-  const waitForEnhanced = options?.waitForEnhanced !== false
+  const waitForEnhanced = options?.waitForEnhanced === true
   if (!force && capabilities.probed) {
     if (waitForEnhanced && enhancedProbePromise) await enhancedProbePromise
     return capabilities
@@ -1113,9 +1132,31 @@ export async function ensureGatewayProbed(): Promise<GatewayCapabilities> {
   const isStale =
     Date.now() - lastProbeAt > effectiveProbeTtl(capabilities)
   if (!capabilities.probed || isStale) {
-    return probeGateway({ force: isStale })
+    return probeGateway({ force: isStale, waitForEnhanced: false })
   }
-  if (enhancedProbePromise) await enhancedProbePromise
+  return capabilities
+}
+
+/** Await tier-3 probes (MCP, conductor, kanban). Use on those feature surfaces only. */
+export async function ensureGatewayEnhancedProbed(): Promise<GatewayCapabilities> {
+  await ensureGatewayProbed()
+  if (enhancedProbePromise) {
+    await enhancedProbePromise
+    return capabilities
+  }
+  const caps = getCapabilities()
+  if (!caps.probed) return caps
+  enhancedProbePromise = fillEnhancedCapabilities({
+    dashboardAvailable: caps.dashboard.available,
+    legacyConfig: caps.config,
+  }).catch((error) => {
+    console.warn(
+      `[gateway] enhanced probe failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    )
+  })
+  await enhancedProbePromise
   return capabilities
 }
 
@@ -1144,7 +1185,8 @@ export async function ensureGatewayCoreProbed(): Promise<GatewayCapabilities> {
  * (for example after a docker compose restart). See #275.
  */
 export async function forceReprobeGateway(): Promise<GatewayCapabilities> {
-  return probeGateway({ force: true })
+  dashboardNegativeUntil = 0
+  return probeGateway({ force: true, waitForEnhanced: true })
 }
 
 // ── Accessors ─────────────────────────────────────────────────────

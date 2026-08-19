@@ -5,7 +5,7 @@ import { Add01Icon, UserGroupIcon } from '@hugeicons/core-free-icons'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
-import { useGatewayPoolStatus, useProfiles, setActiveProfileOptimistic } from '../hooks/use-profiles'
+import { setActiveProfileOptimistic, useGatewayPoolStatus, useProfiles } from '../hooks/use-profiles'
 import { useRenameSession } from '../hooks/use-rename-session'
 import { useDeleteSession } from '../hooks/use-delete-session'
 import { chatQueryKeys, fetchHistory, fetchSessions } from '../chat-queries'
@@ -42,8 +42,13 @@ function profileMeta(profile: {
   model?: string
   provider?: string
 }): string {
-  return [profile.model, profile.provider]
-    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+  const model = typeof profile.model === 'string' ? profile.model.trim() : ''
+  const provider =
+    typeof profile.provider === 'string' ? profile.provider.trim() : ''
+  return [
+    model ? `${model}` : '',
+    provider ? `${provider}` : '',
+  ]
     .filter(Boolean)
     .join(' · ')
 }

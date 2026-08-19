@@ -148,11 +148,18 @@ function countMcpServers(config: Record<string, unknown>): number {
   }).length
 }
 
+const countCache = new Map<string, { count: number; expiresAt: number }>()
+const COUNT_CACHE_TTL_MS = 30_000
+
 function countFilesRecursive(
   rootPath: string,
   predicate: (fullPath: string) => boolean,
 ): number {
   if (!fs.existsSync(rootPath)) return 0
+  const cacheKey = rootPath
+  const cached = countCache.get(cacheKey)
+  if (cached && cached.expiresAt > Date.now()) return cached.count
+
   let count = 0
   const stack = [rootPath]
   while (stack.length > 0) {
@@ -172,6 +179,7 @@ function countFilesRecursive(
       if (predicate(fullPath)) count += 1
     }
   }
+  countCache.set(cacheKey, { count, expiresAt: Date.now() + COUNT_CACHE_TTL_MS })
   return count
 }
 
@@ -572,6 +580,167 @@ export function getActiveProfileName(): string {
   }
 }
 
+export function readModelProviderFromConfig(config: Record<string, unknown>): {
+  model: string
+  provider: string
+} {
+  let model = ''
+  let provider = ''
+  if (typeof config.model === 'string') {
+    model = config.model.trim()
+  } else if (
+    config.model &&
+    typeof config.model === 'object' &&
+    !Array.isArray(config.model)
+  ) {
+    const nested = config.model as Record<string, unknown>
+    if (typeof nested.default === 'string') model = nested.default.trim()
+    if (typeof nested.provider === 'string') provider = nested.provider.trim()
+  }
+  if (!provider && typeof config.provider === 'string') {
+    provider = config.provider.trim()
+  }
+  return { model, provider }
+}
+
+export function applyModelProviderToConfig(
+  config: Record<string, unknown>,
+  providerId: string,
+  modelId: string,
+): void {
+  config.provider = providerId
+  const existing = config.model
+  if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
+    const next = { ...(existing as Record<string, unknown>) }
+    next.default = modelId
+    next.provider = providerId
+    config.model = next
+    return
+  }
+  config.model = modelId
+}
+
+function profileConfigPath(name: string): { normalized: string; profilePath: string; configPath: string } {
+  const normalized = name.trim() || 'default'
+  const profilePath =
+    normalized === 'default'
+      ? getClaudeRoot()
+      : path.join(getProfilesRoot(), validateProfileName(normalized))
+  return {
+    normalized,
+    profilePath,
+    configPath: path.join(profilePath, 'config.yaml'),
+  }
+}
+
+export function updateProfileModelProvider(
+  name: string,
+  providerId: string,
+  modelId: string,
+): ProfileDetail {
+  const { normalized, profilePath, configPath } = profileConfigPath(name)
+  if (!fs.existsSync(profilePath)) throw new Error('Profile not found')
+  const current = readYamlConfig(configPath)
+  applyModelProviderToConfig(current, providerId, modelId)
+  fs.mkdirSync(path.dirname(configPath), { recursive: true })
+  fs.writeFileSync(configPath, YAML.stringify(current), 'utf-8')
+  return readProfile(normalized)
+}
+
+export function updateAllProfilesModelProvider(
+  providerId: string,
+  modelId: string,
+): {
+  updated: Array<{ name: string; ok: boolean; error?: string }>
+} {
+  const updated: Array<{ name: string; ok: boolean; error?: string }> = []
+  for (const profile of listProfiles()) {
+    try {
+      updateProfileModelProvider(profile.name, providerId, modelId)
+      updated.push({ name: profile.name, ok: true })
+    } catch (error) {
+      updated.push({
+        name: profile.name,
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+  return { updated }
+}
+
+/**
+ * Lightweight profile listing — only returns name, active, model, provider.
+ * Skips expensive recursive file counts (skills, sessions).
+ */
+export function listProfilesLight(): Array<ProfileSummary> {
+  const profilesRoot = getProfilesRoot()
+  const activeProfile = getActiveProfileName()
+  const results: Array<ProfileSummary> = []
+
+  if (fs.existsSync(profilesRoot)) {
+    let entries: Array<fs.Dirent> = []
+    try {
+      entries = fs.readdirSync(profilesRoot, { withFileTypes: true })
+    } catch {
+      entries = []
+    }
+
+    for (const entry of entries) {
+      const name = entry.name
+      if (name === 'default') continue
+      const profilePath = path.join(profilesRoot, name)
+      if (!entry.isDirectory()) {
+        if (!entry.isSymbolicLink()) continue
+        try {
+          if (!fs.statSync(profilePath).isDirectory()) continue
+        } catch {
+          continue
+        }
+      }
+      const configPath = path.join(profilePath, 'config.yaml')
+      const config = readYamlConfig(configPath)
+      const { model: modelName, provider: providerName } =
+        readModelProviderFromConfig(config)
+      results.push({
+        name,
+        path: profilePath,
+        active: name === activeProfile,
+        exists: true,
+        model: modelName || undefined,
+        provider: providerName || undefined,
+        skillCount: 0,
+        mcpCount: 0,
+        sessionCount: 0,
+        hasEnv: fs.existsSync(path.join(profilePath, '.env')),
+      })
+    }
+  }
+
+  const root = getClaudeRoot()
+  const config = readYamlConfig(path.join(root, 'config.yaml'))
+  const defaultModelProvider = readModelProviderFromConfig(config)
+  results.unshift({
+    name: 'default',
+    path: root,
+    active: activeProfile === 'default',
+    exists: true,
+    model: defaultModelProvider.model || undefined,
+    provider: defaultModelProvider.provider || undefined,
+    skillCount: 0,
+    mcpCount: 0,
+    sessionCount: 0,
+    hasEnv: fs.existsSync(path.join(root, '.env')),
+  })
+
+  results.sort((a, b) => {
+    if (a.active && !b.active) return -1
+    if (!a.active && b.active) return 1
+    return 0
+  })
+  return results
+}
+
 export function listProfiles(): Array<ProfileSummary> {
   const profilesRoot = getProfilesRoot()
   const activeProfile = getActiveProfileName()
@@ -610,30 +779,15 @@ export function listProfiles(): Array<ProfileSummary> {
       const sessionCount = countFilesRecursive(sessionsDir, (full) =>
         /\.(jsonl|json|sqlite|db)$/i.test(full),
       )
-      // Resolve model/provider from nested or flat config structure
-      let modelName: string | undefined
-      let providerName: string | undefined
-      if (typeof config.model === 'string') {
-        modelName = config.model
-      } else if (
-        config.model &&
-        typeof config.model === 'object' &&
-        !Array.isArray(config.model)
-      ) {
-        const m = config.model as Record<string, unknown>
-        if (typeof m.default === 'string') modelName = m.default
-        if (typeof m.provider === 'string') providerName = m.provider
-      }
-      if (!providerName && typeof config.provider === 'string') {
-        providerName = config.provider
-      }
+      const { model: modelName, provider: providerName } =
+        readModelProviderFromConfig(config)
       results.push({
         name,
         path: profilePath,
         active: name === activeProfile,
         exists: true,
-        model: modelName,
-        provider: providerName,
+        model: modelName || undefined,
+        provider: providerName || undefined,
         description: extractDescription(config) || undefined,
         systemPrompt: extractSystemPrompt(config, profilePath) || undefined,
         skillCount,
@@ -653,30 +807,14 @@ export function listProfiles(): Array<ProfileSummary> {
 
   const root = getClaudeRoot()
   const config = readYamlConfig(path.join(root, 'config.yaml'))
-  // Resolve model/provider for default profile too
-  let defaultModel: string | undefined
-  let defaultProvider: string | undefined
-  if (typeof config.model === 'string') {
-    defaultModel = config.model
-  } else if (
-    config.model &&
-    typeof config.model === 'object' &&
-    !Array.isArray(config.model)
-  ) {
-    const m = config.model as Record<string, unknown>
-    if (typeof m.default === 'string') defaultModel = m.default
-    if (typeof m.provider === 'string') defaultProvider = m.provider
-  }
-  if (!defaultProvider && typeof config.provider === 'string') {
-    defaultProvider = config.provider
-  }
+  const defaultModelProvider = readModelProviderFromConfig(config)
   results.unshift({
     name: 'default',
     path: root,
     active: activeProfile === 'default',
     exists: true,
-    model: defaultModel,
-    provider: defaultProvider,
+    model: defaultModelProvider.model || undefined,
+    provider: defaultModelProvider.provider || undefined,
     description: extractDescription(config) || undefined,
     systemPrompt: extractSystemPrompt(config, root) || undefined,
     skillCount: countFilesRecursive(

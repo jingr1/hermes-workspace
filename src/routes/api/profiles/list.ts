@@ -6,7 +6,10 @@ import {
   isGatewayPoolEnabled,
   resolveProfileGatewayPort,
 } from '../../../server/gateway-pool'
-import { listProfilesWithFallback } from '../../../server/profiles-browser'
+import {
+  listProfilesLight,
+  listProfilesWithFallback,
+} from '../../../server/profiles-browser'
 
 export const Route = createFileRoute('/api/profiles/list')({
   server: {
@@ -16,6 +19,16 @@ export const Route = createFileRoute('/api/profiles/list')({
           return json({ error: 'Unauthorized' }, { status: 401 })
         }
         try {
+          const url = new URL(request.url, 'http://localhost')
+          const light = url.searchParams.get('light') === '1'
+
+          if (light) {
+            const profiles = listProfilesLight()
+            const activeProfile =
+              profiles.find((p) => p.active)?.name || 'default'
+            return json({ profiles, activeProfile })
+          }
+
           const { profiles, activeProfile } =
             await listProfilesWithFallback()
           if (!isGatewayPoolEnabled()) {

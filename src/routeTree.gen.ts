@@ -135,11 +135,13 @@ import { Route as ApiSkillsHubSearchRouteImport } from './routes/api/skills/hub-
 import { Route as ApiSessionsSendRouteImport } from './routes/api/sessions/send'
 import { Route as ApiSessionsSearchRouteImport } from './routes/api/sessions/search'
 import { Route as ApiRunsActiveRouteImport } from './routes/api/runs/active'
+import { Route as ApiProfilesUpdateAllModelProviderRouteImport } from './routes/api/profiles/update-all-model-provider'
 import { Route as ApiProfilesUpdateRouteImport } from './routes/api/profiles/update'
 import { Route as ApiProfilesToggleSkillRouteImport } from './routes/api/profiles/toggle-skill'
 import { Route as ApiProfilesSkillsRouteImport } from './routes/api/profiles/skills'
 import { Route as ApiProfilesRenameRouteImport } from './routes/api/profiles/rename'
 import { Route as ApiProfilesReadRouteImport } from './routes/api/profiles/read'
+import { Route as ApiProfilesProviderCatalogRouteImport } from './routes/api/profiles/provider-catalog'
 import { Route as ApiProfilesMcpRouteImport } from './routes/api/profiles/mcp'
 import { Route as ApiProfilesListRouteImport } from './routes/api/profiles/list'
 import { Route as ApiProfilesDeleteRouteImport } from './routes/api/profiles/delete'
@@ -816,6 +818,12 @@ const ApiRunsActiveRoute = ApiRunsActiveRouteImport.update({
   path: '/api/runs/active',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiProfilesUpdateAllModelProviderRoute =
+  ApiProfilesUpdateAllModelProviderRouteImport.update({
+    id: '/api/profiles/update-all-model-provider',
+    path: '/api/profiles/update-all-model-provider',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiProfilesUpdateRoute = ApiProfilesUpdateRouteImport.update({
   id: '/api/profiles/update',
   path: '/api/profiles/update',
@@ -841,6 +849,12 @@ const ApiProfilesReadRoute = ApiProfilesReadRouteImport.update({
   path: '/api/profiles/read',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiProfilesProviderCatalogRoute =
+  ApiProfilesProviderCatalogRouteImport.update({
+    id: '/api/profiles/provider-catalog',
+    path: '/api/profiles/provider-catalog',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiProfilesMcpRoute = ApiProfilesMcpRouteImport.update({
   id: '/api/profiles/mcp',
   path: '/api/profiles/mcp',
@@ -1204,11 +1218,13 @@ export interface FileRoutesByFullPath {
   '/api/profiles/delete': typeof ApiProfilesDeleteRoute
   '/api/profiles/list': typeof ApiProfilesListRoute
   '/api/profiles/mcp': typeof ApiProfilesMcpRoute
+  '/api/profiles/provider-catalog': typeof ApiProfilesProviderCatalogRoute
   '/api/profiles/read': typeof ApiProfilesReadRoute
   '/api/profiles/rename': typeof ApiProfilesRenameRoute
   '/api/profiles/skills': typeof ApiProfilesSkillsRoute
   '/api/profiles/toggle-skill': typeof ApiProfilesToggleSkillRoute
   '/api/profiles/update': typeof ApiProfilesUpdateRoute
+  '/api/profiles/update-all-model-provider': typeof ApiProfilesUpdateAllModelProviderRoute
   '/api/runs/active': typeof ApiRunsActiveRoute
   '/api/sessions/search': typeof ApiSessionsSearchRoute
   '/api/sessions/send': typeof ApiSessionsSendRoute
@@ -1378,11 +1394,13 @@ export interface FileRoutesByTo {
   '/api/profiles/delete': typeof ApiProfilesDeleteRoute
   '/api/profiles/list': typeof ApiProfilesListRoute
   '/api/profiles/mcp': typeof ApiProfilesMcpRoute
+  '/api/profiles/provider-catalog': typeof ApiProfilesProviderCatalogRoute
   '/api/profiles/read': typeof ApiProfilesReadRoute
   '/api/profiles/rename': typeof ApiProfilesRenameRoute
   '/api/profiles/skills': typeof ApiProfilesSkillsRoute
   '/api/profiles/toggle-skill': typeof ApiProfilesToggleSkillRoute
   '/api/profiles/update': typeof ApiProfilesUpdateRoute
+  '/api/profiles/update-all-model-provider': typeof ApiProfilesUpdateAllModelProviderRoute
   '/api/runs/active': typeof ApiRunsActiveRoute
   '/api/sessions/search': typeof ApiSessionsSearchRoute
   '/api/sessions/send': typeof ApiSessionsSendRoute
@@ -1554,11 +1572,13 @@ export interface FileRoutesById {
   '/api/profiles/delete': typeof ApiProfilesDeleteRoute
   '/api/profiles/list': typeof ApiProfilesListRoute
   '/api/profiles/mcp': typeof ApiProfilesMcpRoute
+  '/api/profiles/provider-catalog': typeof ApiProfilesProviderCatalogRoute
   '/api/profiles/read': typeof ApiProfilesReadRoute
   '/api/profiles/rename': typeof ApiProfilesRenameRoute
   '/api/profiles/skills': typeof ApiProfilesSkillsRoute
   '/api/profiles/toggle-skill': typeof ApiProfilesToggleSkillRoute
   '/api/profiles/update': typeof ApiProfilesUpdateRoute
+  '/api/profiles/update-all-model-provider': typeof ApiProfilesUpdateAllModelProviderRoute
   '/api/runs/active': typeof ApiRunsActiveRoute
   '/api/sessions/search': typeof ApiSessionsSearchRoute
   '/api/sessions/send': typeof ApiSessionsSendRoute
@@ -1731,11 +1751,13 @@ export interface FileRouteTypes {
     | '/api/profiles/delete'
     | '/api/profiles/list'
     | '/api/profiles/mcp'
+    | '/api/profiles/provider-catalog'
     | '/api/profiles/read'
     | '/api/profiles/rename'
     | '/api/profiles/skills'
     | '/api/profiles/toggle-skill'
     | '/api/profiles/update'
+    | '/api/profiles/update-all-model-provider'
     | '/api/runs/active'
     | '/api/sessions/search'
     | '/api/sessions/send'
@@ -1905,11 +1927,13 @@ export interface FileRouteTypes {
     | '/api/profiles/delete'
     | '/api/profiles/list'
     | '/api/profiles/mcp'
+    | '/api/profiles/provider-catalog'
     | '/api/profiles/read'
     | '/api/profiles/rename'
     | '/api/profiles/skills'
     | '/api/profiles/toggle-skill'
     | '/api/profiles/update'
+    | '/api/profiles/update-all-model-provider'
     | '/api/runs/active'
     | '/api/sessions/search'
     | '/api/sessions/send'
@@ -2080,11 +2104,13 @@ export interface FileRouteTypes {
     | '/api/profiles/delete'
     | '/api/profiles/list'
     | '/api/profiles/mcp'
+    | '/api/profiles/provider-catalog'
     | '/api/profiles/read'
     | '/api/profiles/rename'
     | '/api/profiles/skills'
     | '/api/profiles/toggle-skill'
     | '/api/profiles/update'
+    | '/api/profiles/update-all-model-provider'
     | '/api/runs/active'
     | '/api/sessions/search'
     | '/api/sessions/send'
@@ -2238,11 +2264,13 @@ export interface RootRouteChildren {
   ApiProfilesDeleteRoute: typeof ApiProfilesDeleteRoute
   ApiProfilesListRoute: typeof ApiProfilesListRoute
   ApiProfilesMcpRoute: typeof ApiProfilesMcpRoute
+  ApiProfilesProviderCatalogRoute: typeof ApiProfilesProviderCatalogRoute
   ApiProfilesReadRoute: typeof ApiProfilesReadRoute
   ApiProfilesRenameRoute: typeof ApiProfilesRenameRoute
   ApiProfilesSkillsRoute: typeof ApiProfilesSkillsRoute
   ApiProfilesToggleSkillRoute: typeof ApiProfilesToggleSkillRoute
   ApiProfilesUpdateRoute: typeof ApiProfilesUpdateRoute
+  ApiProfilesUpdateAllModelProviderRoute: typeof ApiProfilesUpdateAllModelProviderRoute
   ApiRunsActiveRoute: typeof ApiRunsActiveRoute
   ApiSwarmLanggraphCancelRoute: typeof ApiSwarmLanggraphCancelRoute
   ApiSwarmLanggraphMissionEventRoute: typeof ApiSwarmLanggraphMissionEventRoute
@@ -3139,6 +3167,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiRunsActiveRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/profiles/update-all-model-provider': {
+      id: '/api/profiles/update-all-model-provider'
+      path: '/api/profiles/update-all-model-provider'
+      fullPath: '/api/profiles/update-all-model-provider'
+      preLoaderRoute: typeof ApiProfilesUpdateAllModelProviderRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/profiles/update': {
       id: '/api/profiles/update'
       path: '/api/profiles/update'
@@ -3172,6 +3207,13 @@ declare module '@tanstack/react-router' {
       path: '/api/profiles/read'
       fullPath: '/api/profiles/read'
       preLoaderRoute: typeof ApiProfilesReadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/profiles/provider-catalog': {
+      id: '/api/profiles/provider-catalog'
+      path: '/api/profiles/provider-catalog'
+      fullPath: '/api/profiles/provider-catalog'
+      preLoaderRoute: typeof ApiProfilesProviderCatalogRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/profiles/mcp': {
@@ -3822,11 +3864,14 @@ const rootRouteChildren: RootRouteChildren = {
   ApiProfilesDeleteRoute: ApiProfilesDeleteRoute,
   ApiProfilesListRoute: ApiProfilesListRoute,
   ApiProfilesMcpRoute: ApiProfilesMcpRoute,
+  ApiProfilesProviderCatalogRoute: ApiProfilesProviderCatalogRoute,
   ApiProfilesReadRoute: ApiProfilesReadRoute,
   ApiProfilesRenameRoute: ApiProfilesRenameRoute,
   ApiProfilesSkillsRoute: ApiProfilesSkillsRoute,
   ApiProfilesToggleSkillRoute: ApiProfilesToggleSkillRoute,
   ApiProfilesUpdateRoute: ApiProfilesUpdateRoute,
+  ApiProfilesUpdateAllModelProviderRoute:
+    ApiProfilesUpdateAllModelProviderRoute,
   ApiRunsActiveRoute: ApiRunsActiveRoute,
   ApiSwarmLanggraphCancelRoute: ApiSwarmLanggraphCancelRoute,
   ApiSwarmLanggraphMissionEventRoute: ApiSwarmLanggraphMissionEventRoute,

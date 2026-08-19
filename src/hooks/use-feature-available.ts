@@ -7,16 +7,19 @@ interface GatewayStatus {
 }
 
 export function useFeatureAvailable(feature: EnhancedFeature): boolean {
-  const { data } = useQuery({
+  const { data, isFetched } = useQuery({
     queryKey: ['gateway-status'],
     queryFn: async () => {
       const res = await fetch('/api/gateway-status')
       if (!res.ok) return null
       return (await res.json()) as GatewayStatus
     },
-    staleTime: 30_000,
-    refetchInterval: 60_000,
+    staleTime: 300_000,
+    refetchInterval: 300_000,
   })
 
+  // Optimistic: assume feature is available while still loading.
+  // Only block rendering after we've confirmed it's unavailable.
+  if (!isFetched) return true
   return data?.capabilities?.[feature] === true
 }

@@ -8,7 +8,6 @@ import {
   createSession,
   deleteSession,
   ensureGatewayCoreProbed,
-  ensureGatewayProbed,
   ensureSessionsCapability,
   getGatewayCapabilities,
   listSessions,
@@ -195,7 +194,7 @@ export const Route = createFileRoute('/api/sessions')({
         }
         const csrfCheckPatch = requireJsonContentType(request)
         if (csrfCheckPatch) return csrfCheckPatch
-        const capabilities = await ensureGatewayProbed()
+        const capabilities = await ensureGatewayCoreProbed()
         if (!capabilities.sessions) {
           const body = (await request.json().catch(() => ({}))) as Record<
             string,
@@ -318,7 +317,7 @@ export const Route = createFileRoute('/api/sessions')({
           return json({ ok: true, sessionKey, source: 'local' })
         }
 
-        const capabilities = await ensureGatewayProbed()
+        const capabilities = await ensureGatewayCoreProbed()
         if (!capabilities.sessions) {
           return json({
             ...createCapabilityUnavailablePayload('sessions'),

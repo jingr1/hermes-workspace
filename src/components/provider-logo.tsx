@@ -1,30 +1,51 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { cn } from '@/lib/utils'
 
-const LIGHT_THEMES = new Set([
-  'claude-nous-light',
-  'claude-official-light',
-  'claude-classic-light',
-  'claude-slate-light',
-  'webui-light',
-])
+const CDN_BASE =
+  'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-png/light'
 
-function useIsLightTheme(): boolean {
-  const [light, setLight] = useState(false)
-  useEffect(() => {
-    const check = () => {
-      const theme = document.documentElement.getAttribute('data-theme') || ''
-      setLight(LIGHT_THEMES.has(theme))
-    }
-    check()
-    const observer = new MutationObserver(check)
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['data-theme'],
-    })
-    return () => observer.disconnect()
-  }, [])
-  return light
+// Provider IDs → lobehub CDN filenames (light variant; inverted in dark mode)
+const CDN_FILE_MAP: Record<string, string> = {
+  nous: 'nousresearch.png',
+  'openai-codex': 'openai.png',
+  openai: 'openai.png',
+  anthropic: 'anthropic.png',
+  deepseek: 'deepseek.png',
+  openrouter: 'openrouter.png',
+  ollama: 'ollama.png',
+  kimi: 'kimi.png',
+  'kimi-coding': 'kimi.png',
+  minimax: 'minimax.png',
+  zai: 'zhipu.png',
+  zhipu: 'zhipu.png',
+  xiaomi: 'xiaomimimo.png',
+}
+
+// Local-only logos (no lobehub asset)
+const LOCAL_FILE_MAP: Record<string, string> = {
+  'atomic-chat': 'atomic-chat.png',
+}
+
+function LetterFallback({
+  provider,
+  size,
+  className,
+}: {
+  provider: string
+  size: number
+  className?: string
+}) {
+  return (
+    <div
+      className={cn(
+        'flex shrink-0 items-center justify-center rounded-lg bg-neutral-600 text-white text-xs font-bold',
+        className,
+      )}
+      style={{ width: size, height: size }}
+    >
+      {(provider || 'C')[0].toUpperCase()}
+    </div>
+  )
 }
 
 export function ProviderLogo({
@@ -36,46 +57,32 @@ export function ProviderLogo({
   size?: number
   className?: string
 }) {
-  const isLight = useIsLightTheme()
-  const base = isLight ? '/providers/light' : '/providers'
+  const [failed, setFailed] = useState(false)
 
-  // Map provider IDs to file names
-  const fileMap: Record<string, string> = {
-    nous: 'nous.png',
-    'openai-codex': 'openai.png',
-    openai: 'openai.png',
-    anthropic: 'anthropic.png',
-    openrouter: 'openrouter.png',
-    ollama: 'ollama.png',
-    'atomic-chat': 'atomic-chat.png',
-    kimi: 'kimi.png',
-    'kimi-coding': 'kimi.png',
-    minimax: 'minimax.png',
-    zai: 'zhipu.png',
-    zhipu: 'zhipu.png',
-  }
+  const cdnFile = CDN_FILE_MAP[provider]
+  const localFile = LOCAL_FILE_MAP[provider]
 
-  const file = fileMap[provider]
-  if (!file) {
+  if (failed || (!cdnFile && !localFile)) {
     return (
-      <div
-        className={cn(
-          'flex items-center justify-center rounded-lg bg-neutral-600 text-white text-xs font-bold',
-          className,
-        )}
-        style={{ width: size, height: size }}
-      >
-        {(provider || 'C')[0].toUpperCase()}
-      </div>
+      <LetterFallback provider={provider} size={size} className={className} />
     )
   }
 
+  const src = cdnFile
+    ? `${CDN_BASE}/${cdnFile}`
+    : `/providers/${localFile}`
+
   return (
     <img
-      src={`${base}/${file}`}
+      src={src}
       alt={provider}
-      className={cn('rounded-lg object-cover', className)}
+      className={cn(
+        'shrink-0 rounded-lg object-contain',
+        cdnFile && 'dark:invert',
+        className,
+      )}
       style={{ width: size, height: size }}
+      onError={() => setFailed(true)}
     />
   )
 }

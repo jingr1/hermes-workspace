@@ -6,7 +6,7 @@ import {
   CLAUDE_API,
   CLAUDE_UPGRADE_INSTRUCTIONS,
   dashboardFetch,
-  ensureGatewayProbed,
+  ensureGatewayEnhancedProbed,
   getCapabilities,
 } from '../../server/gateway-capabilities'
 import { requireJsonContentType, safeErrorMessage } from '../../server/rate-limit'
@@ -112,7 +112,7 @@ export const Route = createFileRoute('/api/mcp')({
         if (!isAuthenticated(request)) {
           return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
         }
-        const capabilities = await ensureGatewayProbed()
+        const capabilities = await ensureGatewayEnhancedProbed()
         if (!capabilities.mcp && !capabilities.mcpFallback) {
           return json(unavailableListPayload())
         }
@@ -189,7 +189,7 @@ export const Route = createFileRoute('/api/mcp')({
         }
         const csrfCheck = requireJsonContentType(request)
         if (csrfCheck) return csrfCheck
-        const capabilities = await ensureGatewayProbed()
+        const capabilities = await ensureGatewayEnhancedProbed()
         if (!capabilities.mcp && !capabilities.mcpFallback) {
           return json(
             createCapabilityUnavailablePayload('mcp', {

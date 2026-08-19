@@ -71,23 +71,20 @@ const LegacyPatchSchema = z.object({
   env: z.record(z.string(), z.union([z.string(), z.null()])).optional(),
 })
 
-async function authorize(request: Request): Promise<AuthResult> {
+async function authorizeRead(request: Request): Promise<AuthResult> {
+  const result = isAuthenticated(request) as AuthResult
+  if (result !== true) return result
+  // Config GET reads local files — do not block the response on gateway probes.
+  void Promise.resolve(ensureGatewayProbed()).catch(() => {})
+  void Promise.resolve(ensureDiscovery()).catch(() => {})
+  return true
+}
+
+async function authorizeWrite(request: Request): Promise<AuthResult> {
   const result = isAuthenticated(request) as AuthResult
   if (result !== true) return result
   await ensureGatewayProbed()
   return true
-}
-
-function unavailablePayload(extra: Record<string, unknown> = {}): Response {
-  return Response.json({
-    ...createCapabilityUnavailablePayload('config'),
-    config: {},
-    providers: [],
-    customProviders: [],
-    activeProvider: '',
-    activeModel: '',
-    ...extra,
-  })
 }
 
 export async function handleHermesConfigGet({
@@ -95,15 +92,10 @@ export async function handleHermesConfigGet({
 }: {
   request: Request
 }): Promise<Response> {
-  const auth = await authorize(request)
+  const auth = await authorizeRead(request)
   if (auth !== true) return auth
 
   const paths = resolveHermesConfigPaths()
-  if (!getCapabilities().config) {
-    return unavailablePayload({ paths, claudeHome: paths.hermesHome })
-  }
-
-  await ensureDiscovery()
   const files = readHermesConfigFiles(paths)
   const state = normalizeHermesConfigState({
     paths,
@@ -196,7 +188,7 @@ export async function handleHermesConfigPatch({
 }: {
   request: Request
 }): Promise<Response> {
-  const auth = await authorize(request)
+  const auth = await authorizeWrite(request)
   if (auth !== true) return auth
 
   if (!getCapabilities().config) {

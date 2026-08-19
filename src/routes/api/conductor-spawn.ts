@@ -5,7 +5,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../server/auth-middleware'
 import { requireJsonContentType } from '../../server/rate-limit'
-import { dashboardFetch, ensureGatewayProbed } from '../../server/gateway-capabilities'
+import { dashboardFetch, ensureGatewayEnhancedProbed } from '../../server/gateway-capabilities'
 import { sanitizeConductorMissionGoal } from '../../server/conductor-mission-sanitize'
 import { getSwarmMission, recordMissionCheckpoint  } from '../../server/swarm-missions'
 import { getSwarmProfilePath } from '../../server/swarm-foundation'
@@ -407,7 +407,7 @@ export const Route = createFileRoute('/api/conductor-spawn')({
           return json({ ok: true, mode: 'native-swarm', mission: toNativeConductorMissionRecord(updatedNative, lines) })
         }
 
-        const capabilities = await ensureGatewayProbed()
+        const capabilities = await ensureGatewayEnhancedProbed()
         if (!capabilities.dashboard.available || !capabilities.conductor) {
           return json({ ok: false, error: 'Conductor mission not found in native swarm store and dashboard Conductor API is unavailable' }, { status: 404 })
         }
@@ -462,7 +462,7 @@ export const Route = createFileRoute('/api/conductor-spawn')({
             supervised,
           })
           const missionName = `conductor-${Date.now()}`
-          const capabilities = await ensureGatewayProbed()
+          const capabilities = await ensureGatewayEnhancedProbed()
 
           if (!capabilities.dashboard.available || !capabilities.conductor) {
             const native = createNativeConductorMission({

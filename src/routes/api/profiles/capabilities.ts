@@ -22,7 +22,7 @@ import {
 import { normalizeMcpListFromConfig, maskSecretsInPlace } from '../../../server/mcp-normalize'
 import {
   dashboardFetch,
-  ensureGatewayProbed,
+  ensureGatewayEnhancedProbed,
 } from '../../../server/gateway-capabilities'
 import { createCapabilityUnavailablePayload } from '@/lib/feature-gates'
 
@@ -152,7 +152,7 @@ function listLocalSkills(profilePath: string, disabledSet: Set<string>): SkillIt
 }
 
 async function fetchDashboardSkills(profile: string): Promise<SkillItem[] | null> {
-  const capabilities = await ensureGatewayProbed()
+  const capabilities = await ensureGatewayEnhancedProbed()
   if (!capabilities.skills || !capabilities.dashboard.available) {
     return null
   }

@@ -8,7 +8,7 @@
 
 | 源 | 位置 | 问题 |
 |---|---|---|
-| 1 | `~/.hermes/config.yaml` | provider 定义（api_key、base_url）+ model 段 — **保留，作为唯一定义源** |
+| 1 | `~/.hermes/config.yaml` | **Custom provider** 定义（api_key、base_url、models）+ model 段 — **保留，作为 custom 定义源**；**Builtin provider 不在此重复定义**（见 [provider-catalog.md](./provider-catalog.md)） |
 | 2 | `swarm-model-resolver.ts` | 硬编码翻译表（`"GPT-5.5"` → `{provider, default}`）— **已删除** |
 | 3 | `swarm.yaml` | 仅存人类可读标签（`model: GPT-5.5`）— **已改为 `provider/model-id`** |
 | 4 | `operational-worker-card.tsx` | `MODEL_OPTIONS` 硬编码数组 + `formatAssignedModel()` 反向翻译 — **已改为动态读取** |

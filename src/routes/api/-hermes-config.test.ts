@@ -12,12 +12,12 @@ vi.mock('../../server/auth-middleware', () => ({
 }))
 
 vi.mock('../../server/gateway-capabilities', () => ({
-  ensureGatewayProbed: vi.fn(),
+  ensureGatewayProbed: vi.fn(async () => ({ config: true })),
   getCapabilities: () => ({ config: true }),
 }))
 
 vi.mock('../../server/local-provider-discovery', () => ({
-  ensureDiscovery: vi.fn(),
+  ensureDiscovery: vi.fn(async () => {}),
   getDiscoveryStatus: () => [],
   getDiscoveredModels: () => [],
 }))
@@ -131,9 +131,50 @@ describe('canonical /api/hermes-config route', () => {
     expect(res.status).toBe(400)
   })
 
+  it('GET returns local config without waiting for gateway probe', async () => {
+    let resolveProbe: (() => void) | undefined
+    const probeGate = new Promise<void>((resolve) => {
+      resolveProbe = resolve
+    })
+    vi.doMock('../../server/gateway-capabilities', () => ({
+      ensureGatewayProbed: vi.fn(() => probeGate),
+      getCapabilities: () => ({ config: false }),
+    }))
+    vi.doMock('../../server/local-provider-discovery', () => ({
+      ensureDiscovery: vi.fn(() => new Promise(() => {})),
+      getDiscoveryStatus: () => [],
+      getDiscoveredModels: () => [],
+    }))
+
+    fs.writeFileSync(
+      path.join(tmpHome, 'config.yaml'),
+      'provider: openrouter\nmodel: auto\n',
+      'utf-8',
+    )
+
+    const handlers = await loadHandlers('./hermes-config')
+    const getPromise = handlers.GET({
+      request: new Request('http://localhost/api/hermes-config'),
+    })
+
+    const res = await Promise.race([
+      getPromise,
+      new Promise<Response>((_, reject) =>
+        setTimeout(() => reject(new Error('GET blocked on gateway probe')), 200),
+      ),
+    ])
+    const body = await res.json()
+
+    expect(body.activeProvider).toBe('openrouter')
+    expect(body.activeModel).toBe('auto')
+    resolveProbe?.()
+    vi.doUnmock('../../server/gateway-capabilities')
+    vi.doUnmock('../../server/local-provider-discovery')
+  })
+
   it('PATCH returns 503 when the gateway capability is unavailable', async () => {
     vi.doMock('../../server/gateway-capabilities', () => ({
-      ensureGatewayProbed: vi.fn(),
+      ensureGatewayProbed: vi.fn(async () => ({ config: false })),
       getCapabilities: () => ({ config: false }),
     }))
     const handlers = await loadHandlers('./hermes-config')

@@ -4,7 +4,7 @@ import { isAuthenticated } from '../../../server/auth-middleware'
 import {
   CLAUDE_UPGRADE_INSTRUCTIONS,
   dashboardFetch,
-  ensureGatewayProbed,
+  ensureGatewayEnhancedProbed,
 } from '../../../server/gateway-capabilities'
 import { createCapabilityUnavailablePayload } from '@/lib/feature-gates'
 
@@ -24,7 +24,7 @@ export const Route = createFileRoute('/api/mcp/$name/logs')({
         if (!name) {
           return json({ ok: false, error: 'Missing server name' }, { status: 400 })
         }
-        const capabilities = await ensureGatewayProbed()
+        const capabilities = await ensureGatewayEnhancedProbed()
         if (capabilities.mcpFallback && !capabilities.mcp) {
           return json(
             {

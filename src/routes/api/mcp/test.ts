@@ -6,7 +6,7 @@ import {
   CLAUDE_API,
   CLAUDE_UPGRADE_INSTRUCTIONS,
   dashboardFetch,
-  ensureGatewayProbed,
+  ensureGatewayEnhancedProbed,
   getCapabilities,
 } from '../../../server/gateway-capabilities'
 import { requireJsonContentType, safeErrorMessage } from '../../../server/rate-limit'
@@ -39,7 +39,7 @@ export const Route = createFileRoute('/api/mcp/test')({
         }
         const csrfCheck = requireJsonContentType(request)
         if (csrfCheck) return csrfCheck
-        const capabilities = await ensureGatewayProbed()
+        const capabilities = await ensureGatewayEnhancedProbed()
         if (capabilities.mcpFallback && !capabilities.mcp) {
           // Phase 1.5 fallback: shell out to `hermes mcp test <name>` and
           // parse stdout. Reuses the CLI's _probe_single_server logic

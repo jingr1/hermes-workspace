@@ -6,7 +6,7 @@ import {
   CLAUDE_API,
   CLAUDE_UPGRADE_INSTRUCTIONS,
   dashboardFetch,
-  ensureGatewayProbed,
+  ensureGatewayEnhancedProbed,
   getCapabilities,
 } from '../../../server/gateway-capabilities'
 import { requireJsonContentType, safeErrorMessage } from '../../../server/rate-limit'
@@ -37,7 +37,7 @@ export const Route = createFileRoute('/api/mcp/discover')({
         }
         const csrfCheck = requireJsonContentType(request)
         if (csrfCheck) return csrfCheck
-        const capabilities = await ensureGatewayProbed()
+        const capabilities = await ensureGatewayEnhancedProbed()
         if (capabilities.mcpFallback && !capabilities.mcp) {
           // Phase 1.5: live discover requires the runtime endpoint.
           return json({

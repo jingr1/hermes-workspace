@@ -46,7 +46,7 @@ export function setActiveProfileOptimistic(
 }
 
 async function fetchProfiles(): Promise<ProfilesListResponse> {
-  const response = await fetch('/api/profiles/list')
+  const response = await fetch('/api/profiles/list?light=1')
   if (!response.ok) {
     const text = await response.text().catch(() => '')
     throw new Error(text || `Failed to load profiles (${response.status})`)

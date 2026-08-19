@@ -271,7 +271,7 @@ describe('gateway-capabilities', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const mod = await loadMod()
-    const caps = await mod.probeGateway({ force: true })
+    const caps = await mod.probeGateway({ force: true, waitForEnhanced: true })
 
     expect(caps.dashboard.available).toBe(true)
     expect(caps.conductor).toBe(false)
@@ -316,7 +316,7 @@ describe('gateway-capabilities', () => {
     }))
 
     const mod = await loadMod()
-    const caps = await mod.probeGateway({ force: true })
+    const caps = await mod.probeGateway({ force: true, waitForEnhanced: true })
 
     expect(caps.conductor).toBe(true)
   })
@@ -355,6 +355,76 @@ describe('gateway-capabilities', () => {
         mod.setGatewayUrl(null as never)
       }
     })
+  })
+
+  it('ensureGatewayProbed returns before slow enhanced probes finish', async () => {
+    process.env.HERMES_API_URL = 'http://gateway.test'
+    process.env.CLAUDE_DASHBOARD_URL = 'http://dashboard.test'
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url === 'http://dashboard.test/api/conductor/missions') {
+          await new Promise((resolve) => setTimeout(resolve, 250))
+          return new Response(JSON.stringify({ missions: [] }), {
+            headers: { 'content-type': 'application/json' },
+          })
+        }
+        if (url === 'http://dashboard.test/api/status') {
+          return new Response(JSON.stringify({ version: '0.12.0' }), {
+            headers: { 'content-type': 'application/json' },
+          })
+        }
+        if (url === 'http://gateway.test/v1/chat/completions') {
+          return new Response('', { status: 405 })
+        }
+        if (url === 'http://gateway.test/api/sessions/__probe__/chat/stream') {
+          return new Response('', { status: 404 })
+        }
+        if (url.endsWith('/api/mcp')) return new Response('', { status: 404 })
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { 'content-type': 'application/json' },
+        })
+      }),
+    )
+
+    const mod = await loadMod()
+    const started = Date.now()
+    const caps = await mod.ensureGatewayProbed()
+    const elapsed = Date.now() - started
+
+    expect(caps.health).toBe(true)
+    expect(elapsed).toBeLessThan(200)
+  })
+
+  it('caches dashboard-unavailable and skips repeated dashboard probes', async () => {
+    process.env.HERMES_API_URL = 'http://gateway.test'
+    let dashboardCalls = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url === 'http://127.0.0.1:9119/api/status') {
+          dashboardCalls += 1
+          throw new Error('connection refused')
+        }
+        if (url === 'http://gateway.test/v1/chat/completions') {
+          return new Response('', { status: 405 })
+        }
+        if (url === 'http://gateway.test/api/sessions/__probe__/chat/stream') {
+          return new Response('', { status: 404 })
+        }
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { 'content-type': 'application/json' },
+        })
+      }),
+    )
+
+    const mod = await loadMod()
+    await mod.probeGateway({ force: true })
+    const afterFirst = dashboardCalls
+    await mod.probeGateway({ force: true })
+    expect(dashboardCalls).toBe(afterFirst)
   })
 
   describe('isUsableCapabilityCache', () => {

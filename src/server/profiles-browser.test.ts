@@ -4,7 +4,7 @@ import path from 'node:path'
 import { createRequire } from 'node:module'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { listProfiles, readProfile, updateProfileConfig, getMessagesForProfile } from './profiles-browser'
+import { listProfiles, readProfile, updateProfileConfig, getMessagesForProfile, updateProfileModelProvider, updateAllProfilesModelProvider, readModelProviderFromConfig } from './profiles-browser'
 
 const nodeRequire = createRequire(import.meta.url)
 
@@ -228,5 +228,100 @@ describe('getMessagesForProfile', () => {
 
   it('returns null when the profile has no state.db', () => {
     expect(getMessagesForProfile('ghost', 'sess-1')).toBeNull()
+  })
+})
+
+describe('profile model/provider updates', () => {
+  let tempHome: string
+
+  beforeEach(() => {
+    tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-workspace-profiles-mp-'))
+    vi.spyOn(os, 'homedir').mockReturnValue(tempHome)
+    delete process.env.HERMES_HOME
+    delete process.env.CLAUDE_HOME
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    fs.rmSync(tempHome, { recursive: true, force: true })
+  })
+
+  it('updates a single nested profile model/provider without flattening extra fields', () => {
+    const hermesRoot = path.join(tempHome, '.hermes')
+    const profileRoot = path.join(hermesRoot, 'profiles', 'developer')
+    fs.mkdirSync(profileRoot, { recursive: true })
+    fs.writeFileSync(
+      path.join(profileRoot, 'config.yaml'),
+      'model:\n  default: old-model\n  provider: tokenx\n  temperature: 0.2\nprovider: tokenx\n',
+      'utf-8',
+    )
+
+    updateProfileModelProvider('developer', 'custom:tokenx', 'Kimi-K2.7-Code')
+    const profile = readProfile('developer')
+    expect(readModelProviderFromConfig(profile.config)).toEqual({
+      model: 'Kimi-K2.7-Code',
+      provider: 'custom:tokenx',
+    })
+    const nested = profile.config.model as Record<string, unknown>
+    expect(nested.temperature).toBe(0.2)
+  })
+
+  it('writes the same model/provider to every profile including default', () => {
+    const hermesRoot = path.join(tempHome, '.hermes')
+    const developerRoot = path.join(hermesRoot, 'profiles', 'developer')
+    const writerRoot = path.join(hermesRoot, 'profiles', 'writer')
+    fs.mkdirSync(developerRoot, { recursive: true })
+    fs.mkdirSync(writerRoot, { recursive: true })
+    fs.writeFileSync(path.join(hermesRoot, 'config.yaml'), 'model: root-model\nprovider: openai\n', 'utf-8')
+    fs.writeFileSync(
+      path.join(developerRoot, 'config.yaml'),
+      'model:\n  default: old-dev\n  provider: tokenx\n',
+      'utf-8',
+    )
+    fs.writeFileSync(path.join(writerRoot, 'config.yaml'), 'model: old-writer\nprovider: anthropic\n', 'utf-8')
+
+    const result = updateAllProfilesModelProvider('tokenx', 'Kimi-K2.7-Code')
+    expect(result.updated.every((entry) => entry.ok)).toBe(true)
+    expect(result.updated.map((entry) => entry.name).sort()).toEqual([
+      'default',
+      'developer',
+      'writer',
+    ])
+    expect(readModelProviderFromConfig(readProfile('default').config)).toEqual({
+      model: 'Kimi-K2.7-Code',
+      provider: 'tokenx',
+    })
+    expect(readModelProviderFromConfig(readProfile('developer').config)).toEqual({
+      model: 'Kimi-K2.7-Code',
+      provider: 'tokenx',
+    })
+    expect(readModelProviderFromConfig(readProfile('writer').config)).toEqual({
+      model: 'Kimi-K2.7-Code',
+      provider: 'tokenx',
+    })
+  })
+
+  it('listProfiles reports the same default model/provider as each profile config', () => {
+    const hermesRoot = path.join(tempHome, '.hermes')
+    const developerRoot = path.join(hermesRoot, 'profiles', 'developer')
+    fs.mkdirSync(developerRoot, { recursive: true })
+    fs.writeFileSync(path.join(hermesRoot, 'config.yaml'), 'model: root-model\nprovider: openai\n', 'utf-8')
+    fs.writeFileSync(
+      path.join(developerRoot, 'config.yaml'),
+      'model:\n  default: Kimi-K2.7-Code\n  provider: custom:tokenx\n',
+      'utf-8',
+    )
+
+    const listed = Object.fromEntries(
+      listProfiles().map((profile) => [profile.name, profile]),
+    )
+    expect(listed.default).toMatchObject({
+      model: 'root-model',
+      provider: 'openai',
+    })
+    expect(listed.developer).toMatchObject({
+      model: 'Kimi-K2.7-Code',
+      provider: 'custom:tokenx',
+    })
   })
 })

@@ -87,15 +87,16 @@ export const HERMES_PROVIDER_CATALOG: Array<ProviderDef> = [
   { id: 'nous', name: 'Nous Portal', kind: 'oauth', envKeys: [], models: [] },
   { id: 'openai-codex', name: 'OpenAI Codex', kind: 'oauth', envKeys: [], models: [] },
   { id: 'anthropic', name: 'Anthropic', kind: 'api_key', envKeys: ['ANTHROPIC_API_KEY'], models: [] },
+  { id: 'deepseek', name: 'DeepSeek', kind: 'api_key', envKeys: ['DEEPSEEK_API_KEY'], models: [] },
   { id: 'openrouter', name: 'OpenRouter', kind: 'api_key', envKeys: ['OPENROUTER_API_KEY'], models: [] },
   { id: 'zai', name: 'Z.AI / GLM', kind: 'api_key', envKeys: ['GLM_API_KEY'], models: [] },
   { id: 'kimi-coding', name: 'Kimi', kind: 'api_key', envKeys: ['KIMI_API_KEY'], models: [] },
   { id: 'minimax', name: 'MiniMax', kind: 'api_key', envKeys: ['MINIMAX_API_KEY'], models: [] },
   { id: 'minimax-cn', name: 'MiniMax (China)', kind: 'api_key', envKeys: ['MINIMAX_CN_API_KEY'], models: [] },
   { id: 'xiaomi', name: 'Xiaomi MiMo', kind: 'api_key', envKeys: ['XIAOMI_API_KEY'], models: [] },
+  { id: 'nvidia', name: 'NVIDIA NIM', kind: 'api_key', envKeys: ['NVIDIA_API_KEY'], models: [] },
   { id: 'ollama', name: 'Ollama', kind: 'local', envKeys: [], models: [] },
   { id: 'atomic-chat', name: 'Atomic Chat', kind: 'local', envKeys: [], models: [] },
-  { id: 'custom', name: 'Custom', kind: 'custom', envKeys: ['CUSTOM_API_KEY'], models: [] },
 ]
 
 const KNOWN_PROVIDER_IDS = new Set(HERMES_PROVIDER_CATALOG.map((p) => p.id))
@@ -184,7 +185,7 @@ export function normalizeHermesConfigState(input: NormalizeHermesConfigInput): H
     let available = false
     let models = def.models
 
-    if (def.kind === 'api_key' || def.kind === 'custom') {
+    if (def.kind === 'api_key') {
       for (const envKey of def.envKeys) {
         const value = input.env[envKey]
         if (value) {

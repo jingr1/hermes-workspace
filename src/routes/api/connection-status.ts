@@ -10,7 +10,7 @@ import { json } from '@tanstack/react-start'
 import YAML from 'yaml'
 import {
   CLAUDE_API,
-  ensureGatewayProbed,
+  ensureGatewayCoreProbed,
   getChatMode,
 } from '../../server/gateway-capabilities'
 import { isAuthenticated } from '../../server/auth-middleware'
@@ -60,7 +60,7 @@ export const Route = createFileRoute('/api/connection-status')({
           return json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        const caps = await ensureGatewayProbed()
+        const caps = await ensureGatewayCoreProbed()
         const activeModel = readActiveModel()
         const modelConfigured = Boolean(activeModel)
 

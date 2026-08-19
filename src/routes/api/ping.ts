@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import {
   CLAUDE_API,
-  ensureGatewayProbed,
+  ensureGatewayCoreProbed,
 } from '../../server/gateway-capabilities'
 import { requireLocalOrAuth } from '../../server/auth-middleware'
 
@@ -28,7 +28,7 @@ export const Route = createFileRoute('/api/ping')({
           )
         }
 
-        const caps = await ensureGatewayProbed()
+        const caps = await ensureGatewayCoreProbed()
         if (!caps.health) {
           return Response.json(
             {
