@@ -1,31 +1,101 @@
 /**
- * Proxy for the dashboard's per-profile skills endpoint.
+ * Per-profile skills listing — reads directly from the profile's local
+ * `skills/` directory and `config.yaml` `skills.disabled` list.
+ * No dashboard (:9119) dependency.
  *
  *   GET /api/profiles/skills?name=<profile>
- *     → dashboard GET /api/profiles/<profile>/skills
- *
- * Pairs with NousResearch/hermes-agent#25116, which lets one dashboard
- * daemon edit `skills.disabled` across every installed profile. Without
- * this proxy the workspace can only manage the dashboard's currently
- * bound profile (whichever HERMES_HOME the daemon launched against),
- * matching the old single-profile constraint.
- *
- * The dashboard returns a lighter payload than `/api/skills` — just
- * `{name, description, category, path, enabled}` per entry, scoped to
- * the profile's own `skills/` directory. The frontend normalizes these
- * entries into the workspace's richer `SkillSummary` shape with safe
- * defaults for fields the dashboard doesn't supply at the profile scope.
  */
+import fs from 'node:fs'
+import pathMod from 'node:path'
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../server/auth-middleware'
 import {
-  dashboardFetch,
-  ensureGatewayProbed,
-} from '../../../server/gateway-capabilities'
-import { createCapabilityUnavailablePayload } from '@/lib/feature-gates'
+  readProfile,
+  resolveProfileHermesHome,
+} from '../../../server/profiles-browser'
 
 const PROFILE_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
+
+type SkillItem = {
+  name: string
+  description: string
+  category: string
+  enabled: boolean
+  path: string
+}
+
+function getSkillsDisabledSet(config: Record<string, unknown>): Set<string> {
+  const skills = config.skills
+  if (!skills || typeof skills !== 'object' || Array.isArray(skills)) {
+    return new Set()
+  }
+  const disabled = (skills as Record<string, unknown>).disabled
+  if (!Array.isArray(disabled)) return new Set()
+  return new Set(
+    disabled.filter(
+      (value): value is string =>
+        typeof value === 'string' && value.trim().length > 0,
+    ),
+  )
+}
+
+function listLocalSkills(
+  profilePath: string,
+  disabledSet: Set<string>,
+): SkillItem[] {
+  const skillsDir = pathMod.join(profilePath, 'skills')
+  const results: SkillItem[] = []
+  if (!fs.existsSync(skillsDir)) return results
+
+  let categoryEntries: Array<fs.Dirent> = []
+  try {
+    categoryEntries = fs.readdirSync(skillsDir, { withFileTypes: true })
+  } catch {
+    return results
+  }
+
+  for (const cat of categoryEntries) {
+    if (!cat.isDirectory() || cat.name.startsWith('.')) continue
+    const catPath = pathMod.join(skillsDir, cat.name)
+    let skillEntries: Array<fs.Dirent> = []
+    try {
+      skillEntries = fs.readdirSync(catPath, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const skill of skillEntries) {
+      if (!skill.isDirectory() && !skill.isSymbolicLink()) continue
+      if (skill.name.startsWith('.')) continue
+      const skillPath = pathMod.join(catPath, skill.name)
+      const skillMdPath = pathMod.join(skillPath, 'SKILL.md')
+      if (!fs.existsSync(skillMdPath)) continue
+
+      let description = ''
+      try {
+        const raw = fs.readFileSync(skillMdPath, 'utf-8')
+        const fmMatch = raw.match(/^---\n([\s\S]*?)\n---/)
+        if (fmMatch) {
+          const descMatch = fmMatch[1].match(/^description:\s*(.+?)\s*$/m)
+          if (descMatch) {
+            description = descMatch[1].replace(/^["']|["']$/g, '')
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      results.push({
+        name: skill.name,
+        description,
+        category: cat.name,
+        enabled: !disabledSet.has(skill.name),
+        path: skillPath,
+      })
+    }
+  }
+  return results
+}
 
 export const Route = createFileRoute('/api/profiles/skills')({
   server: {
@@ -33,16 +103,6 @@ export const Route = createFileRoute('/api/profiles/skills')({
       GET: async ({ request }) => {
         if (!isAuthenticated(request)) {
           return json({ error: 'Unauthorized' }, { status: 401 })
-        }
-        const capabilities = await ensureGatewayProbed()
-        if (!capabilities.skills || !capabilities.dashboard.available) {
-          return json(
-            {
-              ...createCapabilityUnavailablePayload('skills'),
-              items: [],
-            },
-            { status: 503 },
-          )
         }
 
         try {
@@ -55,34 +115,20 @@ export const Route = createFileRoute('/api/profiles/skills')({
             )
           }
 
-          const response = await dashboardFetch(
-            `/api/profiles/${encodeURIComponent(profile)}/skills`,
-            { signal: AbortSignal.timeout(30_000) },
-          )
-          const body = await response.text()
-          if (!response.ok) {
-            // 404 from dashboard means the profile doesn't exist or doesn't
-            // expose the endpoint (older dashboard without PR #25116).
+          let detail
+          try {
+            detail = readProfile(profile)
+          } catch {
             return json(
-              {
-                error:
-                  body ||
-                  `Dashboard profile skills request failed (${response.status})`,
-              },
-              { status: response.status },
+              { error: `Profile "${profile}" not found` },
+              { status: 404 },
             )
           }
 
-          let parsed: unknown
-          try {
-            parsed = JSON.parse(body)
-          } catch {
-            return json(
-              { error: 'Dashboard returned malformed JSON for profile skills' },
-              { status: 502 },
-            )
-          }
-          const items = Array.isArray(parsed) ? parsed : []
+          const profilePath = resolveProfileHermesHome(profile)
+          const disabledSet = getSkillsDisabledSet(detail.config)
+          const items = listLocalSkills(profilePath, disabledSet)
+
           return json({ profile, items })
         } catch (err) {
           return json(

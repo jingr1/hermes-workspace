@@ -1,5 +1,7 @@
 # Run Hermes Workspace as a user service
 
+> **Note:** The `:9119` dashboard is now **optional** for workspace users. Sessions, skills, config, and jobs are all served from the local profile directory. The dashboard provides analytics and external link features only. You can run the workspace with just `hermes gateway run`.
+
 Hermes Workspace can run without keeping a terminal open. The helper below installs a **user-level** service, not a system-wide root service.
 
 ## Prerequisites

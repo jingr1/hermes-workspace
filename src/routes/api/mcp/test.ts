@@ -5,9 +5,7 @@ import {
   BEARER_TOKEN,
   CLAUDE_API,
   CLAUDE_UPGRADE_INSTRUCTIONS,
-  dashboardFetch,
   ensureGatewayEnhancedProbed,
-  getCapabilities,
 } from '../../../server/gateway-capabilities'
 import { requireJsonContentType, safeErrorMessage } from '../../../server/rate-limit'
 import { normalizeTestResult } from '../../../server/mcp-normalize'
@@ -19,10 +17,6 @@ import { createCapabilityUnavailablePayload } from '@/lib/feature-gates'
 const TEST_TIMEOUT_MS = 30_000
 
 async function mcpFetch(path: string, init: RequestInit): Promise<Response> {
-  const capabilities = getCapabilities()
-  if (capabilities.dashboard.available) {
-    return dashboardFetch(path, init)
-  }
   const headers = new Headers(init.headers)
   if (BEARER_TOKEN && !headers.has('Authorization')) {
     headers.set('Authorization', `Bearer ${BEARER_TOKEN}`)

@@ -15,6 +15,11 @@ type SessionLike = {
   message_count?: number | null
 }
 
+/**
+ * @deprecated No longer used — `main` always resolves to state.db's most
+ * recent real session. Kept temporarily for callers that haven't been
+ * migrated yet; always returns false.
+ */
 type PortableMainBindingOptions = {
   sessionKey: string | null | undefined
   dashboardAvailable: boolean
@@ -60,16 +65,17 @@ export function isSyntheticSessionKey(
   return SYNTHETIC_SESSION_KEYS.has(value.trim())
 }
 
+/**
+ * @deprecated Always returns false. `main` now resolves via
+ * `resolveMainChatSessionId()` against the active profile's state.db.
+ * Dashboard availability is no longer a binding condition.
+ */
 export function shouldBindMainToPortableSession({
-  sessionKey,
-  dashboardAvailable,
-  enhancedChat,
+  sessionKey: _sessionKey,
+  dashboardAvailable: _dashboardAvailable,
+  enhancedChat: _enhancedChat,
 }: PortableMainBindingOptions): boolean {
-  return (
-    (sessionKey ?? '').trim() === 'main' &&
-    dashboardAvailable &&
-    !enhancedChat
-  )
+  return false
 }
 
 export async function resolveSessionKey({

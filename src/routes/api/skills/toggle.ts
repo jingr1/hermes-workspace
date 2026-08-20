@@ -1,16 +1,15 @@
+/**
+ * Toggle a skill's enabled/disabled state for the active profile.
+ * Writes to config.yaml `skills.disabled` directly — no dashboard dependency.
+ */
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../server/auth-middleware'
 import {
-  BEARER_TOKEN,
-  CLAUDE_API,
-  dashboardFetch,
-  ensureGatewayProbed,
-} from '../../../server/gateway-capabilities'
-
-function authHeaders(): Record<string, string> {
-  return BEARER_TOKEN ? { Authorization: `Bearer ${BEARER_TOKEN}` } : {}
-}
+  getActiveProfileName,
+  readProfile,
+  updateProfileConfig,
+} from '../../../server/profiles-browser'
 
 export const Route = createFileRoute('/api/skills/toggle')({
   server: {
@@ -39,34 +38,33 @@ export const Route = createFileRoute('/api/skills/toggle')({
             )
           }
 
-          const capabilities = await ensureGatewayProbed()
-          const response = capabilities.dashboard.available
-            ? await dashboardFetch('/api/skills/toggle', {
-                method: 'PUT',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  name,
-                  enabled: body.enabled,
-                }),
-                signal: AbortSignal.timeout(15_000),
-              })
-            : await fetch(`${CLAUDE_API}/api/skills/toggle`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  ...authHeaders(),
-                },
-                body: JSON.stringify({
-                  name,
-                  enabled: body.enabled,
-                }),
-                signal: AbortSignal.timeout(15_000),
-              })
+          const profile = getActiveProfileName() || 'default'
+          const detail = readProfile(profile)
+          const currentDisabled: string[] = Array.isArray(
+            (detail.config as any)?.skills?.disabled,
+          )
+            ? ((detail.config as any).skills.disabled as string[])
+            : []
 
-          const result = await response.json()
-          return json(result, { status: response.status })
+          let nextDisabled: string[]
+          if (body.enabled) {
+            nextDisabled = currentDisabled.filter((s) => s !== name)
+          } else {
+            nextDisabled = currentDisabled.includes(name)
+              ? currentDisabled
+              : [...currentDisabled, name]
+          }
+
+          updateProfileConfig(profile, {
+            skills: { disabled: nextDisabled },
+          })
+
+          return json({
+            ok: true,
+            name,
+            enabled: body.enabled,
+            disabled: nextDisabled,
+          })
         } catch (error) {
           return json(
             {

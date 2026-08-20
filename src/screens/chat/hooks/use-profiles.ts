@@ -1,10 +1,16 @@
 import { chatQueryKeys, fetchSessions } from '../chat-queries'
 import {
+  prefetchProfileWorkspace,
+  WORKSPACE_PROFILE_QUERY_KEY,
+  type ActivateProfileResponse,
+} from '@/lib/workspace-client'
+import {
   useMutation,
   useQuery,
   useQueryClient,
   type QueryClient,
 } from '@tanstack/react-query'
+import { useEffect } from 'react'
 import { toast } from '@/components/ui/toast'
 import { sanitizeHttpErrorText } from '@/lib/http-error'
 
@@ -54,12 +60,11 @@ async function fetchProfiles(): Promise<ProfilesListResponse> {
   return (await response.json()) as ProfilesListResponse
 }
 
-async function activateProfile(name: string): Promise<void> {
+async function activateProfile(name: string): Promise<ActivateProfileResponse> {
   const response = await fetch('/api/profiles/activate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name }),
-    signal: AbortSignal.timeout(15_000),
   })
   if (!response.ok) {
     const text = sanitizeHttpErrorText(
@@ -68,6 +73,7 @@ async function activateProfile(name: string): Promise<void> {
     )
     throw new Error(text)
   }
+  return (await response.json()) as ActivateProfileResponse
 }
 
 export function useProfiles() {
@@ -80,11 +86,24 @@ export function useProfiles() {
     staleTime: 60_000,
   })
 
+  const activeProfileName =
+    profilesQuery.data?.activeProfile ||
+    profilesQuery.data?.profiles?.find((p) => p.active)?.name ||
+    'default'
+
+  const workspaceProfileQuery = useQuery<string>({
+    queryKey: WORKSPACE_PROFILE_QUERY_KEY,
+    queryFn: async () => activeProfileName,
+    initialData: activeProfileName,
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: Number.POSITIVE_INFINITY,
+  })
+  const workspaceProfileName =
+    workspaceProfileQuery.data ?? activeProfileName ?? 'default'
+
   const activateMutation = useMutation({
     mutationFn: activateProfile,
     onMutate: async (profileName) => {
-      // Optimistically update the active profile so the UI (including the
-      // ChatSessionSidebar session list) switches immediately.
       await queryClient.cancelQueries({ queryKey: ['profiles', 'chat'] })
       const previous = queryClient.getQueryData<ProfilesListResponse>([
         'profiles',
@@ -101,16 +120,20 @@ export function useProfiles() {
         error instanceof Error ? error.message : 'Failed to activate profile',
       )
     },
-    onSuccess: (_data, profileName) => {
+    onSuccess: async (data, profileName) => {
       toast(`Activated ${profileName}`)
+      queryClient.setQueryData(WORKSPACE_PROFILE_QUERY_KEY, profileName)
+      if (data.workspace) {
+        await prefetchProfileWorkspace(queryClient, profileName, data.workspace)
+      } else {
+        await prefetchProfileWorkspace(queryClient, profileName)
+      }
       window.setTimeout(() => {
         void queryClient.invalidateQueries({ queryKey: ['profiles', 'chat'] })
         void queryClient.invalidateQueries({ queryKey: ['gateway-pool', 'status'] })
       }, 1500)
     },
     onSettled: (_data, _error, profileName) => {
-      // Don't await model refetch — it probes the new gateway and would
-      // contend with the chat history request during profile switch.
       void queryClient.invalidateQueries({ queryKey: ['claude', 'models'] })
       void queryClient.invalidateQueries({
         queryKey: ['claude', 'session-status-model'],
@@ -125,10 +148,15 @@ export function useProfiles() {
     },
   })
 
-  const activeProfileName =
-    profilesQuery.data?.activeProfile ||
-    profilesQuery.data?.profiles?.find((p) => p.active)?.name ||
-    'default'
+  useEffect(() => {
+    if (!profilesQuery.isFetched || activateMutation.isPending) return
+    queryClient.setQueryData(WORKSPACE_PROFILE_QUERY_KEY, activeProfileName)
+  }, [
+    profilesQuery.isFetched,
+    activeProfileName,
+    activateMutation.isPending,
+    queryClient,
+  ])
 
   const activeProfile = profilesQuery.data?.profiles?.find(
     (profile) => profile.name === activeProfileName,
@@ -137,6 +165,7 @@ export function useProfiles() {
   return {
     profiles: profilesQuery.data?.profiles ?? [],
     activeProfileName,
+    workspaceProfileName,
     activeProfile,
     isLoading: profilesQuery.isLoading,
     isReady: profilesQuery.isFetched,

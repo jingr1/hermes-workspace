@@ -201,11 +201,8 @@ export const Route = createFileRoute('/api/profiles/capabilities')({
           const toolsets = readEnabledToolsets(config)
           const disabledSet = getSkillsDisabledSet(config)
 
-          // Try dashboard skills first, fall back to local FS
-          let skills: SkillItem[] | null = await fetchDashboardSkills(name)
-          if (!skills) {
-            skills = listLocalSkills(profile.path, disabledSet)
-          }
+          // Control-plane refactor: always read skills from local filesystem
+          const skills = listLocalSkills(profile.path, disabledSet)
 
           return json({
             profile: name,

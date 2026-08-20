@@ -12,16 +12,6 @@ import type { StreamingState } from '../../../stores/chat-store'
 const PORTABLE_HISTORY_STORAGE_KEY = 'claude_portable_chat_main'
 const PORTABLE_HISTORY_LIMIT = 100
 
-/** Read clientId from a message using either camelCase or snake_case field. */
-function readClientId(message: ChatMessage): string {
-  const raw = message as Record<string, unknown>
-  for (const key of ['clientId', 'client_id']) {
-    const val = raw[key]
-    if (typeof val === 'string' && val.trim().length > 0) return val.trim()
-  }
-  return ''
-}
-
 /**
  * Extract plain-text content from a user message for dedup comparison.
  *
@@ -29,10 +19,6 @@ function readClientId(message: ChatMessage): string {
  * adapters shape the SSE payload differently:
  *   • Modern format:  content: [{type:'text', text:'...'}]
  *   • Legacy format:  text: '...' | body: '...' | message: '...'
- *
- * textFromMessage() only reads the content-array format, so using it alone
- * causes the dedup to miss echoes that carry a top-level `text` field,
- * leaving those duplicate messages visible in the chat.
  */
 function extractUserMessageText(message: ChatMessage): string {
   // Primary: content-array format (modern canonical)
@@ -47,26 +33,6 @@ function extractUserMessageText(message: ChatMessage): string {
   }
 
   return ''
-}
-
-/**
- * Build a compact attachment-identity signature for image-only dedup.
- * Compares name + size because those survive the round-trip to the server;
- * base64 content is stripped before storage.
- */
-function attachmentSignature(message: ChatMessage): string {
-  const attachments = Array.isArray(
-    (message as Record<string, unknown>).attachments,
-  )
-    ? ((message as Record<string, unknown>).attachments as Array<
-        Record<string, unknown>
-      >)
-    : []
-  if (attachments.length === 0) return ''
-  return attachments
-    .map((a) => `${String(a.name ?? '')}:${String(a.size ?? '')}`)
-    .sort()
-    .join('|')
 }
 
 function persistPortableHistory(messages: Array<ChatMessage>) {
@@ -211,67 +177,10 @@ export function useRealtimeChatHistory({
 
         clearCompletedStreaming()
 
-        // When we receive a user message from an external channel,
-        // append it to the query cache immediately for instant display
+        // Append (or merge into an existing pending local message) via the
+        // shared history cache updater. appendHistoryMessage replaces optimistic
+        // / sent-but-unechoed copies instead of appending duplicates.
         if (effectiveSessionKey && effectiveSessionKey !== 'new') {
-          // Early-exit dedup: if the SSE echo has no clientId AND its text
-          // content (or attachment signature) matches an existing optimistic
-          // user message in the cache, skip the append — the optimistic entry
-          // is already displayed.
-          //
-          // Bug: previous implementation used textFromMessage() which only
-          // reads from the content-array format. Some server / channel
-          // adapters echo the message with a top-level `text` or `body` field
-          // instead, causing extractUserMessageText() to return '' and the
-          // dedup guard to be skipped — resulting in a duplicate user message.
-          //
-          // Fix: use extractUserMessageText() which checks both the
-          // content-array AND legacy top-level text/body/message fields.
-          // For image-only messages (no text), fall back to attachment
-          // signature matching so those are also deduplicated.
-          const echoClientId = readClientId(message)
-          if (!echoClientId) {
-            const echoText = extractUserMessageText(message)
-            const echoAttachSig = attachmentSignature(message)
-            const hasContent = echoText.length > 0 || echoAttachSig.length > 0
-            if (hasContent) {
-              const key = chatQueryKeys.history(
-                effectiveFriendlyId,
-                effectiveSessionKey,
-              )
-              const cached =
-                queryClient.getQueryData<Record<string, unknown>>(key)
-              const existing = (cached?.messages ?? []) as Array<any>
-              const hasOptimistic = existing.some((m: any) => {
-                if (m.role !== 'user') return false
-                const isOptimistic =
-                  typeof m.__optimisticId === 'string' &&
-                  m.__optimisticId.length > 0
-                if (!isOptimistic) return false
-                // Text match (plain-text messages)
-                if (
-                  echoText.length > 0 &&
-                  extractUserMessageText(m).trim() === echoText
-                ) {
-                  return true
-                }
-                // Attachment signature match (image-only messages)
-                if (
-                  echoAttachSig.length > 0 &&
-                  attachmentSignature(m) === echoAttachSig
-                ) {
-                  return true
-                }
-                return false
-              })
-              if (hasOptimistic) {
-                // The optimistic message is already displayed — skip SSE echo
-                onUserMessage?.(message, source)
-                return
-              }
-            }
-          }
-
           appendHistoryMessage(
             queryClient,
             effectiveFriendlyId,

@@ -1,10 +1,45 @@
 import { createServer } from 'node:http'
 import { readFile, stat } from 'node:fs/promises'
+import { existsSync, readFileSync } from 'node:fs'
 import { join, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import server from './dist/server/server.js'
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
+const ENV_PATH = join(__dirname, '.env')
+
+/** Parse KEY=VALUE lines; only fills keys not already in process.env. */
+function loadDotEnvFile(filePath) {
+  const dotenv = readFileSync(filePath, 'utf-8')
+  for (const line of dotenv.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const eq = trimmed.indexOf('=')
+    if (eq < 0) continue
+    const key = trimmed.slice(0, eq)
+    const val = trimmed.slice(eq + 1)
+    if (!(key in process.env)) process.env[key] = val
+  }
+}
+
+// Production `node server-entry.js` has no Vite loadEnv(). Require a project .env
+// (same as dev after `cp .env.example .env`) — do not fall back to ~/.hermes/.
+if (!existsSync(ENV_PATH)) {
+  console.error(
+    '\n[workspace] refusing to start.\n' +
+      '  Production mode requires .env in the project root.\n' +
+      '  Vite dev loads this file automatically; `pnpm start` does not read ~/.hermes/.env.\n' +
+      '\n' +
+      '  Create it from the template:\n' +
+      '    cp .env.example .env\n' +
+      '\n' +
+      '  When Hermes Agent uses API_SERVER_KEY, set the same value as HERMES_API_TOKEN\n' +
+      '  in .env (see .env.example). Shell exports still override .env values.\n',
+  )
+  process.exit(1)
+}
+loadDotEnvFile(ENV_PATH)
+
+const { default: server } = await import('./dist/server/server.js')
 const CLIENT_DIR = join(__dirname, 'dist', 'client')
 
 // Content Security Policy — emitted as an HTTP response header on EVERY

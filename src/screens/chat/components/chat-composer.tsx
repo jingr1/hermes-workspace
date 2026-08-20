@@ -815,8 +815,10 @@ async function fetchModelInfo(): Promise<ModelInfoApiResponse | null> {
   return (await response.json()) as ModelInfoApiResponse
 }
 
-async function fetchWorkspaceContext(): Promise<WorkspaceDetectionResponse> {
-  const response = await fetch('/api/workspace')
+async function fetchWorkspaceContext(profileName: string): Promise<WorkspaceDetectionResponse> {
+  const response = await fetch(
+    `/api/workspace?profile=${encodeURIComponent(profileName)}`,
+  )
   if (!response.ok) {
     throw new Error(await readResponseError(response))
   }
@@ -1017,7 +1019,7 @@ function ChatComposerComponent({
     [modelInfoQuery.data],
   )
 
-  const { activeProfileName, activeProfile } = useProfiles()
+  const { activeProfileName, activeProfile, workspaceProfileName } = useProfiles()
   const installedSkillsQuery = useQuery({
     queryKey: ['chat', 'composer', 'installed-skills'],
     queryFn: fetchInstalledSkills,
@@ -1025,8 +1027,8 @@ function ChatComposerComponent({
     staleTime: 60_000,
   })
   const workspaceContextQuery = useQuery({
-    queryKey: ['workspace', 'composer-context'],
-    queryFn: fetchWorkspaceContext,
+    queryKey: ['workspace', 'composer-context', workspaceProfileName],
+    queryFn: () => fetchWorkspaceContext(workspaceProfileName),
     retry: false,
     staleTime: 30_000,
   })
@@ -1133,6 +1135,21 @@ function ChatComposerComponent({
 
   const workspaceEntries = workspaceContextQuery.data?.workspaces ?? []
   const detectedWorkspacePath = workspaceContextQuery.data?.path ?? ''
+
+  useEffect(() => {
+    setIsWorkspaceMenuOpen(false)
+    setWorkspaceDraftPath('')
+  }, [workspaceProfileName])
+
+  useEffect(() => {
+    if (!isWorkspaceMenuOpen) {
+      setWorkspaceDraftPath(detectedWorkspacePath)
+      return
+    }
+    if (detectedWorkspacePath) {
+      setWorkspaceDraftPath((current) => current || detectedWorkspacePath)
+    }
+  }, [detectedWorkspacePath, isWorkspaceMenuOpen])
   const activeWorkspace = workspaceEntries.find(
     (workspace) => workspace.path === detectedWorkspacePath,
   )
@@ -2772,7 +2789,8 @@ function ChatComposerComponent({
                         <div className="p-4">
                           <DialogTitle className="mb-1">Workspace</DialogTitle>
                           <DialogDescription className="mb-3">
-                            Enter a project path or pick a folder from your home directory.
+                            Enter a project path or pick a folder. SSH profiles
+                            browse the remote working directory, not this machine.
                           </DialogDescription>
                           {workspaceEntries.length > 0 ? (
                             <div className="mb-3">
@@ -2805,6 +2823,7 @@ function ChatComposerComponent({
                           ) : null}
                           {isWorkspaceMenuOpen ? (
                             <WorkspaceFolderPicker
+                              reloadKey={workspaceProfileName}
                               value={workspaceDraftPath}
                               onChange={setWorkspaceDraftPath}
                             />

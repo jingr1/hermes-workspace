@@ -1,19 +1,22 @@
 /**
  * Probes Hermes services to detect which API groups are available.
  *
- * Zero-fork architecture:
- *   - Gateway (:8642 by default): /health, /v1/chat/completions, /v1/models
- *   - Dashboard (:9119 by default): sessions, skills, config, cron, env, analytics
+ * Control-plane refactored architecture:
+ *   - Control plane: local profile directory (config.yaml, skills/, state.db,
+ *     cron/, MEMORY.md). No dependency on :9119.
+ *   - Runtime: current profile gateway (:8642 by default) for chat, models,
+ *     live MCP, and job execution.
+ *   - Dashboard (:9119): optional outbound link only. Not an ability gate.
  *
  * Legacy enhanced-fork compatibility remains for users still running the
  * older all-in-one web API on the gateway port.
  *
- * Precedence for gateway/dashboard URLs:
- *   1. Runtime override saved via setGatewayUrl() / setDashboardUrl()
+ * Precedence for gateway URLs:
+ *   1. Runtime override saved via setGatewayUrl()
  *      (persisted to ~/.hermes/workspace-overrides.json) — set from the UI
  *      so remote / Tailscale users can relocate without a restart (#101).
- *   2. process.env.HERMES_API_URL / HERMES_DASHBOARD_URL at process start.
- *   3. Default localhost (8642 / 9119).
+ *   2. process.env.HERMES_API_URL at process start.
+ *   3. Default localhost (8642).
  */
 
 import fs from 'node:fs'
@@ -158,15 +161,15 @@ export function getResolvedUrls(): {
 }
 
 export const CLAUDE_UPGRADE_INSTRUCTIONS =
-  'For full features, install Hermes Agent from source (`git clone https://github.com/NousResearch/hermes-agent && cd hermes-agent && pip install -e .`), then start the gateway on :8642 (`hermes gateway run`). For the extended APIs (Sessions, Skills, Config, Jobs) also start the dashboard on :9119 (`hermes dashboard`).'
+  'For full features, install Hermes Agent from source (`git clone https://github.com/NousResearch/hermes-agent && cd hermes-agent && pip install -e .`), then start the gateway on :8642 (`hermes gateway run`). Sessions, skills, config, and jobs are read from the local profile directory.'
 
 export const DASHBOARD_REQUIRED_INSTRUCTIONS =
-  'Hermes gateway core APIs are healthy, but dashboard-backed APIs are unavailable. Start the dashboard on :9119 (`hermes dashboard`) or point HERMES_DASHBOARD_URL at the running dashboard service.'
+  'Hermes gateway core APIs are healthy. Sessions, skills, config, and jobs are served from the local profile directory. The optional Agent Dashboard (:9119) can be started separately for analytics.'
 
 export const SESSIONS_API_UNAVAILABLE_MESSAGE = `Your Hermes backend does not support the sessions API. ${CLAUDE_UPGRADE_INSTRUCTIONS}`
 
 const PROBE_TIMEOUT_MS = 3_000
-const LOCAL_PROBE_TIMEOUT_MS = 1_000
+const LOCAL_PROBE_TIMEOUT_MS = 2_000
 /** Skip dashboard HTTP probes briefly after a failed attempt (localhost only). */
 const DASHBOARD_NEGATIVE_CACHE_MS = 5 * 60_000
 // Probe TTL: 120s when the gateway is healthy, 15s when it isn't. The
@@ -538,11 +541,84 @@ export async function gatewayFetch(
   return fetch(url, { ...init, headers })
 }
 
+// ── Local control plane detection ─────────────────────────────────
+
+/**
+ * Check whether the active profile's local directory has the files that
+ * constitute a usable control plane (config.yaml or skills/ or state.db).
+ * When true, sessions/skills/config/jobs capabilities are satisfied locally
+ * without requiring dashboard :9119 or even a running gateway.
+ */
+function hasLocalControlPlane(): boolean {
+  try {
+    const home =
+      process.env.HERMES_HOME ||
+      process.env.CLAUDE_HOME ||
+      path.join(os.homedir(), '.hermes')
+    const activePath = path.join(home, 'active_profile')
+    let profileHome = home
+    try {
+      const active = fs.readFileSync(activePath, 'utf-8').trim()
+      if (active && active !== 'default') {
+        profileHome = path.join(home, 'profiles', active)
+      }
+    } catch {
+      // default home
+    }
+    return (
+      fs.existsSync(path.join(profileHome, 'config.yaml')) ||
+      fs.existsSync(path.join(profileHome, 'skills')) ||
+      fs.existsSync(path.join(profileHome, 'state.db'))
+    )
+  } catch {
+    return false
+  }
+}
+
 // ── Probing ───────────────────────────────────────────────────────
 
-async function probe(path: string): Promise<boolean> {
+async function probeBooleanWithRetry(
+  probeFn: () => Promise<boolean>,
+  attempts = 3,
+  delayMs = 300,
+): Promise<boolean> {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (await probeFn()) return true
+    if (attempt < attempts - 1) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+    }
+  }
+  return false
+}
+
+/** Keep last-known-good chat capability when a reprobe races Vite HMR / profile switch. */
+function preserveCoreCapabilitiesOnTransientFailure(
+  previous: GatewayCapabilities,
+  next: GatewayCapabilities,
+  localControlPlane: boolean,
+): GatewayCapabilities {
+  if (!localControlPlane) return next
+
+  const hadWorkingChat =
+    previous.probed && (previous.health || previous.chatCompletions)
+  const probeFailed = !next.health && !next.chatCompletions
+  if (!hadWorkingChat || !probeFailed) return next
+
+  const previousProbeAgeMs = Date.now() - lastProbeAt
+  if (previousProbeAgeMs > effectiveProbeTtl(previous)) return next
+
+  return {
+    ...next,
+    health: previous.health,
+    chatCompletions: previous.chatCompletions,
+    models: previous.models || next.models,
+    streaming: previous.streaming || next.streaming,
+  }
+}
+
+async function probe(probePath: string): Promise<boolean> {
   try {
-    const res = await fetch(`${CLAUDE_API}${path}`, {
+    const res = await fetch(`${CLAUDE_API}${probePath}`, {
       headers: authHeaders(),
       signal: AbortSignal.timeout(probeTimeoutMs()),
     })
@@ -848,19 +924,8 @@ export function getCapabilityWarningMessage(
   next: GatewayCapabilities,
   criticalMissing: string[],
 ): string | null {
-  if (criticalMissing.length === 0 || (!next.health && !next.dashboard.available)) {
+  if (criticalMissing.length === 0 || !next.health) {
     return null
-  }
-
-  const dashboardBackedMissing = criticalMissing.filter((key) =>
-    DASHBOARD_BACKED_APIS.has(key),
-  )
-  if (
-    !next.dashboard.available &&
-    next.chatCompletions &&
-    dashboardBackedMissing.length === criticalMissing.length
-  ) {
-    return `[gateway] ${DASHBOARD_REQUIRED_INSTRUCTIONS}`
   }
 
   return `[gateway] Missing Hermes APIs detected. ${CLAUDE_UPGRADE_INSTRUCTIONS}`
@@ -998,15 +1063,26 @@ async function fillEnhancedCapabilities(input: {
   dashboardAvailable: boolean
   legacyConfig: boolean
 }): Promise<void> {
+  const localControlPlane = hasLocalControlPlane()
+  // Zero-fork: control plane is local; do not block startup on :9119 token
+  // scraping or dashboard-only endpoints (Conductor/Kanban/MCP via dashboard).
+  const probeDashboardBacked = !localControlPlane && input.dashboardAvailable
+
   const [mcp, conductor, kanban] = await Promise.all([
-    probeMcp(input.dashboardAvailable),
-    probeConductor(input.dashboardAvailable),
-    probeKanban(input.dashboardAvailable),
+    probeMcp(probeDashboardBacked),
+    probeDashboardBacked
+      ? probeConductor(input.dashboardAvailable)
+      : Promise.resolve(false),
+    probeDashboardBacked
+      ? probeKanban(input.dashboardAvailable)
+      : Promise.resolve(false),
   ])
 
-  const dashboardConfigAvailable = input.dashboardAvailable || input.legacyConfig
+  const dashboardConfigAvailable =
+    input.dashboardAvailable || input.legacyConfig || localControlPlane
   const mcpFallback =
     !mcp &&
+    !localControlPlane &&
     input.dashboardAvailable &&
     dashboardConfigAvailable &&
     isLocalhostDeployment() &&
@@ -1043,6 +1119,12 @@ export async function probeGateway(options?: {
     try {
       await Promise.all([autoDetectGatewayUrl(), autoDetectDashboardUrl()])
 
+      const previousCapabilities = {
+        ...capabilities,
+        dashboard: { ...capabilities.dashboard },
+      }
+      const localControlPlane = hasLocalControlPlane()
+
       const [
         health,
         chatCompletions,
@@ -1054,15 +1136,20 @@ export async function probeGateway(options?: {
         legacyJobs,
         dashboard,
       ] = await Promise.all([
-        probe('/health'),
-        probeChatCompletions(),
-        probe('/v1/models'),
+        probeBooleanWithRetry(() => probe('/health')),
+        probeBooleanWithRetry(() => probeChatCompletions()),
+        probeBooleanWithRetry(() => probe('/v1/models')),
         probe('/api/sessions'),
         probeEnhancedChatStream(),
         probe('/api/skills'),
         probe('/api/config'),
         probe('/api/jobs'),
-        probeDashboard(),
+        localControlPlane
+          ? Promise.resolve({
+              available: false,
+              url: CLAUDE_DASHBOARD_URL,
+            })
+          : probeDashboard(),
       ])
 
       let legacySessions = sessionsFirst
@@ -1071,31 +1158,42 @@ export async function probeGateway(options?: {
         legacySessions = await probe('/api/sessions')
       }
 
-      capabilities = {
-        health,
-        chatCompletions,
-        models,
-        streaming: chatCompletions,
-        probed: true,
-        sessions: dashboard.available || legacySessions,
-        enhancedChat,
-        skills: dashboard.available || legacySkills,
-        // Memory is always available: workspace reads $HERMES_HOME/MEMORY.md +
-        // memory/*.md + memories/*.md directly from the local filesystem.
-        // No remote gateway endpoint is required.
-        memory: true,
-        config: dashboard.available || legacyConfig,
-        jobs: dashboard.available || legacyJobs,
-        mcp: false,
-        mcpFallback: false,
-        conductor: false,
-        kanban: false,
-        dashboard,
-      }
+      // Control-plane refactor: sessions, skills, config, jobs are satisfied
+      // by the local profile directory (state.db, skills/, config.yaml,
+      // cron/jobs.json). Gateway probes serve as fallback, not primary.
+      // Dashboard availability is informational only — not a capability gate.
+      capabilities = preserveCoreCapabilitiesOnTransientFailure(
+        previousCapabilities,
+        {
+          health,
+          chatCompletions,
+          models,
+          streaming: chatCompletions,
+          probed: true,
+          sessions: localControlPlane || legacySessions,
+          enhancedChat,
+          skills: localControlPlane || legacySkills,
+          // Memory is always available: workspace reads $HERMES_HOME/MEMORY.md +
+          // memory/*.md + memories/*.md directly from the local filesystem.
+          // No remote gateway endpoint is required.
+          memory: true,
+          config: localControlPlane || legacyConfig,
+          jobs: localControlPlane || legacyJobs,
+          mcp: false,
+          mcpFallback: false,
+          conductor: false,
+          kanban: false,
+          dashboard,
+        },
+        localControlPlane,
+      )
       lastProbeAt = Date.now()
       // Log after enhanced probes so a slow dashboard during Vite boot is not
       // reported as "start the dashboard" and then immediately contradicted.
 
+      // Dashboard availability is informational — enhanced probes (MCP,
+      // conductor, kanban) still benefit from the dashboard when present
+      // but their absence no longer blocks core functionality.
       enhancedProbePromise = fillEnhancedCapabilities({
         dashboardAvailable: dashboard.available,
         legacyConfig,
@@ -1221,12 +1319,11 @@ export function getEnhancedCapabilities(): EnhancedCapabilities {
 }
 
 export function getGatewayMode(): GatewayMode {
-  // 'zero-fork' requires the optional dashboard plugin bundle; 'enhanced' is
-  // granted whenever the core enhanced-chat endpoints are present — which
-  // vanilla hermes-agent (≥0.10) satisfies. The label 'enhanced-fork' is
-  // legacy copy from the 2025-era fork and does NOT imply an actual fork is
-  // required. We keep the value for backwards compatibility with UI code.
-  if (capabilities.dashboard.available && capabilities.chatCompletions) {
+  // 'zero-fork' = gateway can do inference AND control plane is satisfied
+  // (local profile files or gateway endpoints). Dashboard :9119 is NOT
+  // required — the control plane reads config.yaml, skills/, state.db
+  // directly from the profile directory.
+  if (capabilities.chatCompletions && capabilities.sessions) {
     return 'zero-fork'
   }
   if (capabilities.sessions && capabilities.enhancedChat) {
@@ -1250,10 +1347,11 @@ export function getChatMode(): ChatMode {
 
 export function getConnectionStatus(): ConnectionStatus {
   if (!capabilities.health && !capabilities.chatCompletions) {
-    return capabilities.dashboard.available ? 'partial' : 'disconnected'
+    // Local control plane alone doesn't mean connected — we need a gateway
+    return 'disconnected'
   }
   const enhanced =
-    (capabilities.dashboard.available || capabilities.sessions) &&
+    capabilities.sessions &&
     capabilities.skills &&
     capabilities.config
   if (enhanced) return 'enhanced'
@@ -1262,5 +1360,5 @@ export function getConnectionStatus(): ConnectionStatus {
 }
 
 export function isClaudeConnected(): boolean {
-  return capabilities.health || capabilities.dashboard.available
+  return capabilities.health || capabilities.chatCompletions
 }

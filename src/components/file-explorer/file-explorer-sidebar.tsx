@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   ArrowRight01Icon,
@@ -15,6 +16,8 @@ import {
 import FilePreviewDialog from './file-preview-dialog'
 import { cn } from '@/lib/utils'
 import { useActiveWorkspace } from '@/hooks/use-active-workspace'
+import { fetchFileTree } from '@/lib/workspace-client'
+import { useProfiles } from '@/screens/chat/hooks/use-profiles'
 import {
   ScrollAreaCorner,
   ScrollAreaRoot,
@@ -101,13 +104,6 @@ function buildReference(pathValue: string) {
   return `See file: workspace/${normalized}`
 }
 
-async function fetchFileTree(): Promise<Array<FileEntry>> {
-  const res = await fetch('/api/files?action=list')
-  if (!res.ok) throw new Error('Failed to load files')
-  const data = (await res.json()) as { entries?: Array<FileEntry> }
-  return Array.isArray(data.entries) ? data.entries : []
-}
-
 function filterTree(entries: Array<FileEntry>, term: string): Array<FileEntry> {
   if (!term.trim()) return entries
   const lower = term.toLowerCase()
@@ -139,10 +135,7 @@ export function FileExplorerSidebar({
   hidden = false,
   className,
 }: FileExplorerSidebarProps) {
-  const [entries, setEntries] = useState<Array<FileEntry>>([])
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [promptState, setPromptState] = useState<PromptState | null>(null)
@@ -151,32 +144,34 @@ export function FileExplorerSidebar({
   const uploadTargetRef = useRef<string>('')
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
   const workspaceQuery = useActiveWorkspace()
+  const { workspaceProfileName } = useProfiles()
   const workspacePath = workspaceQuery.data?.path ?? ''
   const workspaceLabel = shortWorkspaceLabel(
     workspacePath,
     workspaceQuery.data?.folderName ?? '',
   )
 
+  const filesQuery = useQuery({
+    queryKey: ['files', 'tree', workspaceProfileName, workspacePath],
+    queryFn: () => fetchFileTree(workspaceProfileName, 1) as Promise<Array<FileEntry>>,
+    enabled: workspaceQuery.isFetched && Boolean(workspacePath),
+    staleTime: 30_000,
+    retry: false,
+  })
+  const entries = filesQuery.data ?? []
+  const loading = filesQuery.isFetching
+  const error =
+    filesQuery.error instanceof Error ? filesQuery.error.message : null
+
   const refresh = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const nextEntries = await fetchFileTree()
-      setEntries(nextEntries)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+    await filesQuery.refetch()
+  }, [filesQuery])
 
   useEffect(() => {
-    if (!workspaceQuery.isFetched) return
     setExpanded(new Set())
     setPreviewPath(null)
     setContextMenu(null)
-    void refresh()
-  }, [workspacePath, workspaceQuery.isFetched, refresh])
+  }, [workspacePath, workspaceProfileName])
 
   useEffect(() => {
     if (!contextMenu) return
@@ -462,7 +457,7 @@ export function FileExplorerSidebar({
         <ScrollAreaViewport className="px-1">
           {loading ? (
             <div className="px-3 py-2 text-xs text-primary-500">Loading…</div>
-          ) : error ? (
+          ) : !workspacePath ? (
             <div className="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center">
               <div className="flex size-10 items-center justify-center rounded-xl border border-primary-200 bg-primary-100/60">
                 <HugeiconsIcon
@@ -478,6 +473,25 @@ export function FileExplorerSidebar({
                 </p>
                 <p className="mt-1 text-xs text-primary-500 text-pretty">
                   Select a folder to browse and edit files.
+                </p>
+              </div>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center">
+              <div className="flex size-10 items-center justify-center rounded-xl border border-primary-200 bg-primary-100/60">
+                <HugeiconsIcon
+                  icon={Folder01Icon}
+                  size={20}
+                  strokeWidth={1.5}
+                  className="text-primary-500"
+                />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-primary-800">
+                  Couldn't load workspace files
+                </p>
+                <p className="mt-1 text-xs text-primary-500 text-pretty">
+                  {error}
                 </p>
               </div>
               <Button

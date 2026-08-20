@@ -5,7 +5,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../server/auth-middleware'
 import { requireJsonContentType } from '../../server/rate-limit'
-import { dashboardFetch, ensureGatewayEnhancedProbed } from '../../server/gateway-capabilities'
+// gateway-capabilities import removed — conductor now defaults to native-swarm
 import { sanitizeConductorMissionGoal } from '../../server/conductor-mission-sanitize'
 import { getSwarmMission, recordMissionCheckpoint  } from '../../server/swarm-missions'
 import { getSwarmProfilePath } from '../../server/swarm-foundation'
@@ -407,24 +407,7 @@ export const Route = createFileRoute('/api/conductor-spawn')({
           return json({ ok: true, mode: 'native-swarm', mission: toNativeConductorMissionRecord(updatedNative, lines) })
         }
 
-        const capabilities = await ensureGatewayEnhancedProbed()
-        if (!capabilities.dashboard.available || !capabilities.conductor) {
-          return json({ ok: false, error: 'Conductor mission not found in native swarm store and dashboard Conductor API is unavailable' }, { status: 404 })
-        }
-
-        const res = await dashboardFetch(`/api/conductor/missions/${encodeURIComponent(missionId)}?lines=${lines}`)
-        const text = await res.text()
-        let mission: Record<string, unknown> = {}
-        try {
-          mission = JSON.parse(text) as Record<string, unknown>
-        } catch {
-          return json({ ok: false, error: text || `HTTP ${res.status}` }, { status: res.ok ? 502 : res.status })
-        }
-        if (!res.ok) {
-          const error = typeof mission.detail === 'string' ? mission.detail : typeof mission.error === 'string' ? mission.error : `HTTP ${res.status}`
-          return json({ ok: false, error }, { status: res.status })
-        }
-        return json({ ok: true, mission })
+        return json({ ok: false, error: 'Conductor mission not found in native swarm store' }, { status: 404 })
       },
       POST: async ({ request }) => {
         if (!isAuthenticated(request)) return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
@@ -461,48 +444,30 @@ export const Route = createFileRoute('/api/conductor-spawn')({
             maxParallel,
             supervised,
           })
+          // Control-plane refactor: default to native-swarm. Dashboard
+          // conductor is optional and only used when explicitly probed.
           const missionName = `conductor-${Date.now()}`
-          const capabilities = await ensureGatewayEnhancedProbed()
-
-          if (!capabilities.dashboard.available || !capabilities.conductor) {
-            const native = createNativeConductorMission({
-              goal,
-              missionName,
-              maxParallel,
-              supervised,
-            })
-            return json({
-              ok: true,
-              mode: 'native-swarm',
-              modeOfficialOotb: true,
-              modeNote: NATIVE_CONDUCTOR_MODE_NOTE,
-              prompt: null,
-              missionId: native.missionId,
-              sessionKey: null,
-              sessionKeyPrefix: null,
-              jobId: native.missionId,
-              jobName: native.missionTitle,
-              runId: null,
-              warnings: goalSanitization.warnings,
-              assignments: native.assignments,
-              results: null,
-            })
-          }
-
-          const result = await createDashboardConductorMission({ name: missionName, prompt })
-          if (result.error) return json({ ok: false, error: result.error }, { status: 502 })
-          const missionId = result.id ?? missionName
+          const native = createNativeConductorMission({
+            goal,
+            missionName,
+            maxParallel,
+            supervised,
+          })
           return json({
             ok: true,
-            mode: 'dashboard',
+            mode: 'native-swarm',
+            modeOfficialOotb: true,
+            modeNote: NATIVE_CONDUCTOR_MODE_NOTE,
             prompt: null,
-            missionId,
-            sessionKey: result.sessionKey ?? null,
-            sessionKeyPrefix: (result as Record<string, unknown>).sessionKeyPrefix ?? null,
-            jobId: missionId,
-            jobName: result.name ?? missionName,
+            missionId: native.missionId,
+            sessionKey: null,
+            sessionKeyPrefix: null,
+            jobId: native.missionId,
+            jobName: native.missionTitle,
             runId: null,
             warnings: goalSanitization.warnings,
+            assignments: native.assignments,
+            results: null,
           })
         } catch (error) {
           return json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 500 })

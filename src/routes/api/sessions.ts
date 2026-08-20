@@ -4,13 +4,11 @@ import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../server/auth-middleware'
 import { requireJsonContentType } from '../../server/rate-limit'
 import {
-  SESSIONS_API_UNAVAILABLE_MESSAGE,
   createSession,
   deleteSession,
   ensureGatewayCoreProbed,
   ensureSessionsCapability,
   getGatewayCapabilities,
-  listSessions,
   toSessionSummary,
   updateSession,
 } from '../../server/claude-api'
@@ -58,26 +56,35 @@ export const Route = createFileRoute('/api/sessions')({
           })
         }
 
-        const capabilities = await ensureGatewayCoreProbed()
-        if (!capabilities.sessions) {
-          return json({
-            ok: true,
-            sessions: [],
-            source: 'unavailable',
-            message: SESSIONS_API_UNAVAILABLE_MESSAGE,
-          })
-        }
-
+        // Control-plane refactor: default listing reads active profile
+        // state.db (same codepath as ?profile=), merging local portable
+        // sessions. Gateway/dashboard are not required for listing.
         try {
-          const sessions = await listSessions(50, 0)
-          const gatewaySessions = sessions.map(toSessionSummary)
+          const { getActiveProfileName } = await import(
+            '../../server/profiles-browser'
+          )
+          const activeProfile = getActiveProfileName() || 'default'
+          const fsSessions = listSessionsForProfile(activeProfile)
+          const result: Array<any> = fsSessions.map((s) => ({
+            key: s.key,
+            id: s.key,
+            friendlyId: s.friendlyId,
+            title: s.title || s.friendlyId,
+            label: s.title || null,
+            derivedTitle: s.title || s.friendlyId,
+            updatedAt: s.updatedAt,
+            startedAt: s.updatedAt,
+            source: s.source,
+            model: s.model || undefined,
+            message_count: s.messageCount ?? 0,
+          }))
 
           // Merge local portable sessions (Ollama, Atomic Chat, etc.)
           const localSessions = listLocalSessions()
-          const gatewayIds = new Set(gatewaySessions.map((s: any) => s.key || s.id))
+          const dbIds = new Set(result.map((s: any) => s.key || s.id))
           for (const ls of localSessions) {
-            if (!gatewayIds.has(ls.id)) {
-              gatewaySessions.push({
+            if (!dbIds.has(ls.id)) {
+              result.push({
                 key: ls.id,
                 id: ls.id,
                 friendlyId: ls.id,
@@ -89,11 +96,11 @@ export const Route = createFileRoute('/api/sessions')({
                 message_count: ls.messageCount,
                 model: ls.model,
                 source: 'local',
-              } as any)
+              })
             }
           }
 
-          return json({ sessions: gatewaySessions })
+          return json({ sessions: result })
         } catch (err) {
           return json(
             {
@@ -141,28 +148,6 @@ export const Route = createFileRoute('/api/sessions')({
           const requestedModel =
             typeof body.model === 'string' ? body.model.trim() : ''
           const model = requestedModel || undefined
-
-          if (capabilities.dashboard.available && !capabilities.enhancedChat) {
-            return json({
-              ok: true,
-              sessionKey: friendlyId,
-              friendlyId,
-              entry: {
-                key: friendlyId,
-                id: friendlyId,
-                title: label || friendlyId,
-                label: label || friendlyId,
-                derivedTitle: label || friendlyId,
-                model: model || '',
-                startedAt: Date.now(),
-                updatedAt: Date.now(),
-                message_count: 0,
-                source: 'dashboard',
-              },
-              modelApplied: Boolean(model),
-              persisted: false,
-            })
-          }
 
           const session = await createSession({
             id: friendlyId || randomUUID(),
@@ -256,22 +241,6 @@ export const Route = createFileRoute('/api/sessions')({
               },
               updated: true,
               source: 'local',
-            })
-          }
-
-          if (capabilities.dashboard.available && !capabilities.enhancedChat) {
-            return json({
-              ok: true,
-              sessionKey,
-              entry: {
-                key: sessionKey,
-                id: sessionKey,
-                title: label || sessionKey,
-                label: label || sessionKey,
-                derivedTitle: label || sessionKey,
-                updatedAt: Date.now(),
-              },
-              updated: false,
             })
           }
 

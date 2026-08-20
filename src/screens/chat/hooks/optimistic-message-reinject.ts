@@ -1,4 +1,4 @@
-import { appendHistoryMessage, chatQueryKeys } from '../chat-queries'
+import { appendHistoryMessage, chatQueryKeys, collapseRecentDuplicateUserMessages } from '../chat-queries'
 import { textFromMessage } from '../utils'
 import type { QueryClient } from '@tanstack/react-query'
 import type { ChatMessage } from '../types'
@@ -83,6 +83,16 @@ export function snapshotOptimisticUserMessages(
       if (!alreadyPresent) {
         appendHistoryMessage(queryClient, friendlyId, sessionKey, msg)
       }
+    }
+
+    const latestData = queryClient.getQueryData<Record<string, unknown>>(key)
+    const latestMessages = (latestData?.messages as Array<ChatMessage> | undefined) ?? []
+    const collapsed = collapseRecentDuplicateUserMessages(latestMessages)
+    if (collapsed.length !== latestMessages.length) {
+      queryClient.setQueryData(key, {
+        ...(latestData ?? {}),
+        messages: collapsed,
+      })
     }
   }
 }

@@ -81,23 +81,27 @@ hermes gateway run --replace
 
 ---
 
-## 4. Dashboard not running (sessions / skills / jobs missing)
+## 4. Sessions / skills / jobs missing
 
 **Symptom:** Chat works, but Sessions/Skills/Jobs stay offline or `/api/sessions` says the backend does not support the sessions API.
 
-**Cause:** `hermes dashboard` is not running on port 9119.
+**Cause:** The gateway is not serving control-plane APIs, or the local profile directory is misconfigured.
 
 **Fix:**
+
+Ensure `hermes gateway run` is running on `:8642` with an up-to-date version. Sessions, skills, config, and jobs are served from the local profile directory — the dashboard is not required for these.
+
+```bash
+hermes gateway run
+curl -sf http://127.0.0.1:8642/health && echo "gateway ok"
+```
+
+If you still want the analytics dashboard (optional):
 
 ```bash
 hermes dashboard
 curl -sf http://127.0.0.1:9119/ && echo "dashboard ok"
 ```
-
-Workspace needs both:
-
-- `hermes gateway run` on `:8642`
-- `hermes dashboard` on `:9119`
 
 ---
 

@@ -1,23 +1,19 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import {
-  SESSIONS_API_UNAVAILABLE_MESSAGE,
-  ensureGatewayCoreProbed,
-  getGatewayCapabilities,
   getMessages,
-  listSessions,
   toChatMessage,
 } from '../../server/claude-api'
 import {
   resolveMainChatSessionId,
   resolveSessionKey,
-  shouldBindMainToPortableSession,
 } from '../../server/session-utils'
 import { isAuthenticated } from '@/server/auth-middleware'
 import { getLocalSession, getLocalMessages } from '../../server/local-session-store'
 import {
   getActiveProfileName,
   getMessagesForProfile,
+  listSessionsForProfile,
 } from '../../server/profiles-browser'
 
 export const Route = createFileRoute('/api/history')({
@@ -78,28 +74,11 @@ export const Route = createFileRoute('/api/history')({
             }
           }
 
-          await ensureGatewayCoreProbed()
-          const capabilities = getGatewayCapabilities()
-          if (!capabilities.sessions) {
-            return json({
-              sessionKey: 'new',
-              sessionId: 'new',
-              messages: [],
-              source: 'unavailable',
-              message: SESSIONS_API_UNAVAILABLE_MESSAGE,
-            })
-          }
           let { sessionKey } = await resolveSessionKey({
             rawSessionKey,
             friendlyId,
             defaultKey: 'main',
           })
-          const pinPortableMain = shouldBindMainToPortableSession({
-            sessionKey,
-            dashboardAvailable: capabilities.dashboard.available,
-            enhancedChat: capabilities.enhancedChat,
-          })
-          // Keep /chat/new empty until the first message creates a real session.
           if (sessionKey === 'new') {
             return json({
               sessionKey: 'new',
@@ -107,17 +86,16 @@ export const Route = createFileRoute('/api/history')({
               messages: [],
             })
           }
-          // "main" doesn't exist in Claude — resolve it to the user's real
-          // main chat session. We prefer (in order):
-          //   1. The most recent session with a real human-set title
-          //      (label !== id, e.g. "hows everything"). This is what users
-          //      actually mean by "main".
-          //   2. The most recent non-internal session with messages.
-          // Cron + Operations per-agent sessions are skipped so the
-          // orchestrator chat doesn't latch onto runtime junk.
-          if (sessionKey === 'main' && !pinPortableMain) {
+          // "main" resolves to the most recent real session in state.db.
+          // No dashboard dependency — reads directly from the profile directory.
+          if (sessionKey === 'main') {
             try {
-              const sessions = await listSessions(30, 0)
+              const rawSessions = listSessionsForProfile(profile)
+              const sessions = rawSessions.map((s) => ({
+                id: s.key,
+                title: s.title,
+                message_count: s.messageCount ?? 0,
+              }))
               const candidate = resolveMainChatSessionId(sessions)
               if (candidate) {
                 sessionKey = candidate
@@ -131,21 +109,6 @@ export const Route = createFileRoute('/api/history')({
             } catch {
               return json({ sessionKey: 'new', sessionId: 'new', messages: [] })
             }
-          }
-
-          if (pinPortableMain) {
-            const localMessages = getLocalMessages('main')
-            return json({
-              sessionKey: 'main',
-              sessionId: 'main',
-              messages: localMessages.map((m, index) => ({
-                id: m.id,
-                role: m.role,
-                content: [{ type: 'text', text: m.content }],
-                timestamp: m.timestamp,
-                historyIndex: index,
-              })),
-            })
           }
           let messages: Awaited<ReturnType<typeof getMessages>> = []
           try {

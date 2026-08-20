@@ -1,23 +1,20 @@
 /**
- * Proxy for the dashboard's per-profile skills toggle endpoint.
+ * Toggle a skill's enabled/disabled state for a specific profile.
  *
  *   PUT /api/profiles/toggle-skill
  *     body: { profile: string, name: string, enabled: boolean }
- *     → dashboard PUT /api/profiles/<profile>/skills/toggle
  *
- * Writes `skills.disabled` in the *target profile's* config.yaml, not the
- * active profile's. Pairs with the per-profile skills GET proxy and
- * NousResearch/hermes-agent#25116.
+ * Writes `skills.disabled` in the target profile's config.yaml directly,
+ * without proxying through the dashboard (:9119).
  */
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../server/auth-middleware'
-import {
-  dashboardFetch,
-  ensureGatewayProbed,
-} from '../../../server/gateway-capabilities'
 import { requireJsonContentType } from '../../../server/rate-limit'
-import { createCapabilityUnavailablePayload } from '@/lib/feature-gates'
+import {
+  readProfile,
+  updateProfileConfig,
+} from '../../../server/profiles-browser'
 
 const PROFILE_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
 
@@ -27,16 +24,6 @@ export const Route = createFileRoute('/api/profiles/toggle-skill')({
       PUT: async ({ request }) => {
         if (!isAuthenticated(request)) {
           return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
-        }
-        const capabilities = await ensureGatewayProbed()
-        if (!capabilities.skills || !capabilities.dashboard.available) {
-          return json(
-            {
-              ok: false,
-              ...createCapabilityUnavailablePayload('skills'),
-            },
-            { status: 503 },
-          )
         }
         const csrfCheck = requireJsonContentType(request)
         if (csrfCheck) return csrfCheck
@@ -63,23 +50,41 @@ export const Route = createFileRoute('/api/profiles/toggle-skill')({
             )
           }
 
-          const response = await dashboardFetch(
-            `/api/profiles/${encodeURIComponent(profile)}/skills/toggle`,
-            {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name, enabled }),
-              signal: AbortSignal.timeout(30_000),
-            },
-          )
-          const text = await response.text()
-          let payload: unknown = null
+          let detail
           try {
-            payload = text ? JSON.parse(text) : null
+            detail = readProfile(profile)
           } catch {
-            payload = { ok: false, error: text }
+            return json(
+              { ok: false, error: `Profile "${profile}" not found` },
+              { status: 404 },
+            )
           }
-          return json(payload, { status: response.status })
+
+          const currentDisabled: string[] = Array.isArray(
+            (detail.config as any)?.skills?.disabled,
+          )
+            ? ((detail.config as any).skills.disabled as string[])
+            : []
+
+          let nextDisabled: string[]
+          if (enabled) {
+            nextDisabled = currentDisabled.filter((s) => s !== name)
+          } else {
+            nextDisabled = currentDisabled.includes(name)
+              ? currentDisabled
+              : [...currentDisabled, name]
+          }
+
+          updateProfileConfig(profile, {
+            skills: { disabled: nextDisabled },
+          })
+
+          return json({
+            ok: true,
+            name,
+            enabled,
+            disabled: nextDisabled,
+          })
         } catch (err) {
           return json(
             {

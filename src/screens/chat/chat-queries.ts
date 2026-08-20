@@ -174,26 +174,65 @@ function normalizeAttachmentSignature(message: ChatMessage): string {
     .join('|')
 }
 
-function replaceMatchingOptimisticUserMessage(
+function getMessageServerId(message: ChatMessage): string {
+  const raw = message as Record<string, unknown>
+  return normalizeId(raw.id) || normalizeId(raw.messageId)
+}
+
+/** Local user message still awaiting a server echo (optimistic or confirmed send). */
+function isPendingLocalUserMessage(message: ChatMessage): boolean {
+  if (message.role !== 'user') return false
+
+  const raw = message as Record<string, unknown>
+  if (normalizeId(raw.__optimisticId).length > 0) return true
+
+  const status = normalizeId(raw.status)
+  if (status === 'sending' || status === 'queued') return true
+
+  const clientId = getMessageClientId(message)
+  const serverId = getMessageServerId(message)
+  if (
+    clientId &&
+    !serverId &&
+    (status === 'sent' || status === 'done' || status.length === 0)
+  ) {
+    return true
+  }
+
+  return false
+}
+
+function mergeConfirmedUserMessage(
+  existing: ChatMessage,
+  incoming: ChatMessage,
+): ChatMessage {
+  const incomingClientId = getMessageClientId(incoming)
+  const existingClientId = getMessageClientId(existing)
+  return {
+    ...existing,
+    ...incoming,
+    clientId: existingClientId || incomingClientId || undefined,
+    client_id: existingClientId || incomingClientId || undefined,
+    __optimisticId: undefined,
+    status: undefined,
+  }
+}
+
+function findRecentMatchingUserMessageIndex(
   messages: Array<ChatMessage>,
   incomingMessage: ChatMessage,
-): Array<ChatMessage> | null {
-  if (incomingMessage.role !== 'user') return null
+  nowMs = Date.now(),
+): number {
+  if (incomingMessage.role !== 'user') return -1
 
-  const incomingClientId = getMessageClientId(incomingMessage)
-  const incomingOptimisticId = getMessageOptimisticId(incomingMessage)
   const incomingText = normalizeMessageText(incomingMessage)
   const incomingAttachSig = normalizeAttachmentSignature(incomingMessage)
-  const nowMs = Date.now()
+  const incomingClientId = getMessageClientId(incomingMessage)
+  const incomingOptimisticId = getMessageOptimisticId(incomingMessage)
   const TEN_SECONDS = 10_000
 
-  const matchIndex = messages.findIndex((message) => {
+  return messages.findIndex((message) => {
     if (message.role !== 'user') return false
-
-    const raw = message as Record<string, unknown>
-    const isOptimistic =
-      typeof raw.__optimisticId === 'string' && raw.__optimisticId.length > 0
-    if (!isOptimistic) return false
 
     if (
       incomingClientId &&
@@ -219,6 +258,7 @@ function replaceMatchingOptimisticUserMessage(
 
     if (!isContentMatch) return false
 
+    const raw = message as Record<string, unknown>
     const timestamp =
       typeof raw.timestamp === 'number' && Number.isFinite(raw.timestamp)
         ? raw.timestamp
@@ -230,18 +270,28 @@ function replaceMatchingOptimisticUserMessage(
     const idx = messages.indexOf(message)
     return idx >= messages.length - 5
   })
+}
+
+function replaceMatchingOptimisticUserMessage(
+  messages: Array<ChatMessage>,
+  incomingMessage: ChatMessage,
+): Array<ChatMessage> | null {
+  if (incomingMessage.role !== 'user') return null
+
+  const nowMs = Date.now()
+
+  const matchIndex = messages.findIndex((message) => {
+    if (!isPendingLocalUserMessage(message)) return false
+    return (
+      findRecentMatchingUserMessageIndex([message], incomingMessage, nowMs) ===
+      0
+    )
+  })
 
   if (matchIndex === -1) return null
 
   const existing = messages[matchIndex]
-  const replacement: ChatMessage = {
-    ...existing,
-    ...incomingMessage,
-    clientId: incomingClientId || getMessageClientId(existing) || undefined,
-    client_id: incomingClientId || getMessageClientId(existing) || undefined,
-    __optimisticId: undefined,
-    status: undefined,
-  }
+  const replacement = mergeConfirmedUserMessage(existing, incomingMessage)
 
   const next = [...messages]
   next[matchIndex] = replacement
@@ -297,44 +347,18 @@ export function appendHistoryMessage(
         const incomingAttachSig = normalizeAttachmentSignature(message)
         // Only apply dedup if there is SOME identity to match against
         if (incomingText.length > 0 || incomingAttachSig.length > 0) {
-          const nowMs = Date.now()
-          const TEN_SECONDS = 10_000
-          const isDuplicate = messages.some((m) => {
-            if (m.role !== 'user') return false
-
-            // Determine if this candidate is a content match:
-            // • Text messages: compare normalised text
-            // • Image-only messages: compare attachment signatures
-            // • Mixed (text + image): text takes priority; attachment sig is a
-            //   secondary signal used only when text also matches
-            const textMatch =
-              incomingText.length > 0 &&
-              normalizeMessageText(m) === incomingText
-            const attachMatch =
-              incomingAttachSig.length > 0 &&
-              normalizeAttachmentSignature(m) === incomingAttachSig
-
-            const isContentMatch =
-              (incomingText.length > 0 && textMatch) ||
-              (incomingText.length === 0 &&
-                incomingAttachSig.length > 0 &&
-                attachMatch)
-
-            if (!isContentMatch) return false
-
-            // If we have timestamps, check recency; otherwise check the last
-            // few recent messages (optimistic messages are at the tail).
-            const msgTimestamp =
-              typeof m.timestamp === 'number' ? m.timestamp : null
-            if (msgTimestamp !== null) {
-              return nowMs - msgTimestamp < TEN_SECONDS
-            }
-            // No timestamps — check if this is one of the last 5 messages
-            // (optimistic messages are always appended at the end)
-            const idx = messages.indexOf(m)
-            return idx >= messages.length - 5
-          })
-          if (isDuplicate) return messages
+          const duplicateIndex = findRecentMatchingUserMessageIndex(
+            messages,
+            message,
+          )
+          if (duplicateIndex >= 0) {
+            const next = [...messages]
+            next[duplicateIndex] = mergeConfirmedUserMessage(
+              messages[duplicateIndex],
+              message,
+            )
+            return next
+          }
         }
       }
 
@@ -610,4 +634,57 @@ export function removeSessionFromCache(
       exact: false,
     })
   }
+}
+
+/** Collapse same-turn duplicate user bubbles (optimistic + server echo). */
+export function collapseRecentDuplicateUserMessages(
+  messages: Array<ChatMessage>,
+): Array<ChatMessage> {
+  const keep = new Set<ChatMessage>()
+  const seenText = new Map<string, ChatMessage>()
+  const FIFTEEN_SECONDS = 15_000
+
+  for (const message of messages) {
+    if (message.role !== 'user') {
+      keep.add(message)
+      continue
+    }
+
+    const text = normalizeMessageText(message).replace(/\s+/g, ' ').trim()
+    if (!text) {
+      keep.add(message)
+      continue
+    }
+
+    const existing = seenText.get(text)
+    if (!existing) {
+      seenText.set(text, message)
+      keep.add(message)
+      continue
+    }
+
+    const raw = message as Record<string, unknown>
+    const existingRaw = existing as Record<string, unknown>
+    const ts = typeof raw.timestamp === 'number' ? raw.timestamp : null
+    const existingTs =
+      typeof existingRaw.timestamp === 'number' ? existingRaw.timestamp : null
+    if (
+      ts !== null &&
+      existingTs !== null &&
+      Math.abs(ts - existingTs) > FIFTEEN_SECONDS
+    ) {
+      keep.add(message)
+      continue
+    }
+
+    const serverId = getMessageServerId(message)
+    const existingServerId = getMessageServerId(existing)
+    if (!existingServerId && serverId) {
+      keep.delete(existing)
+      seenText.set(text, message)
+      keep.add(message)
+    }
+  }
+
+  return messages.filter((message) => keep.has(message))
 }

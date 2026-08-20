@@ -11,6 +11,7 @@ import {
   resolveProfileGatewayPort,
 } from '../../../server/gateway-ports'
 import { setActiveProfile, resolveProfileHermesHome } from '../../../server/profiles-browser'
+import { loadWorkspaceCatalog } from '../workspace'
 import { requireJsonContentType } from '../../../server/rate-limit'
 import {
   ensureGatewayLifecycleScheduler,
@@ -36,37 +37,31 @@ export const Route = createFileRoute('/api/profiles/activate')({
           const hermesHome = resolveProfileHermesHome(name)
           touchGatewayLease(name)
           ensureGatewayLifecycleScheduler()
-          // Route chat traffic immediately; do not wait for a cold gateway spawn
-          // here — Squid and some browsers drop the connection on long POSTs.
+          // Route chat traffic immediately; respond without probing gateway health.
+          // Cold starts and port ownership checks run in the background so profile
+          // switches (especially to default) are not blocked by SSH/workspace work
+          // or a slow /proc scan on busy hosts.
           applyProfileGatewayRoute(url)
 
-          if (await probeProfileGateway(name)) {
-            return json({
-              ok: true,
-              profile: name,
-              gateway: {
-                ok: true,
-                message: 'already running',
-                profile: name,
-                hermesHome,
-                port,
-                url,
-                started: false,
-              },
-            })
-          }
+          void (async () => {
+            try {
+              if (await probeProfileGateway(name)) return
+              await ensureProfileGateway(name)
+            } catch (error) {
+              console.warn(
+                `[profiles] background gateway start for ${name} failed:`,
+                error instanceof Error ? error.message : error,
+              )
+            }
+          })()
 
-          void ensureProfileGateway(name).catch((error) => {
-            console.warn(
-              `[profiles] background gateway start for ${name} failed:`,
-              error instanceof Error ? error.message : error,
-            )
-          })
+          const workspace = await loadWorkspaceCatalog(name)
 
           return json({
             ok: true,
             profile: name,
             pending: true,
+            workspace,
             gateway: {
               ok: true,
               message: 'starting',

@@ -2,8 +2,9 @@ import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../server/auth-middleware'
 import {
+  BEARER_TOKEN,
+  CLAUDE_API,
   CLAUDE_UPGRADE_INSTRUCTIONS,
-  dashboardFetch,
   ensureGatewayEnhancedProbed,
 } from '../../../server/gateway-capabilities'
 import { createCapabilityUnavailablePayload } from '@/lib/feature-gates'
@@ -50,8 +51,13 @@ export const Route = createFileRoute('/api/mcp/$name/logs')({
 
         let upstream: Response
         try {
-          upstream = await dashboardFetch(`/api/mcp/${encodeURIComponent(name)}/logs`, {
+          const headers = new Headers()
+          if (BEARER_TOKEN) {
+            headers.set('Authorization', `Bearer ${BEARER_TOKEN}`)
+          }
+          upstream = await fetch(`${CLAUDE_API}/api/mcp/${encodeURIComponent(name)}/logs`, {
             method: 'GET',
+            headers,
             signal: upstreamController.signal,
           })
         } catch (err) {

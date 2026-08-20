@@ -7,7 +7,6 @@ import {
   BEARER_TOKEN,
   CLAUDE_API,
   CLAUDE_UPGRADE_INSTRUCTIONS,
-  dashboardFetch,
   ensureGatewayProbed,
 } from '../../server/gateway-capabilities'
 import {
@@ -79,11 +78,9 @@ export const Route = createFileRoute('/api/claude-jobs')({
           )
         }
         const params = url.searchParams.toString()
-        const res = capabilities.dashboard.available
-          ? await dashboardFetch(`/api/cron/jobs${params ? `?${params}` : ''}`)
-          : await fetch(`${CLAUDE_API}/api/jobs${params ? `?${params}` : ''}`, {
-              headers: authHeaders(),
-            })
+        const res = await fetch(`${CLAUDE_API}/api/jobs${params ? `?${params}` : ''}`, {
+          headers: authHeaders(),
+        })
         return jobsResponse(res)
       },
       POST: async ({ request }) => {
@@ -134,17 +131,11 @@ export const Route = createFileRoute('/api/claude-jobs')({
             { status: 503, headers: { 'Content-Type': 'application/json' } },
           )
         }
-        const res = capabilities.dashboard.available
-          ? await dashboardFetch('/api/cron/jobs', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body,
-            })
-          : await fetch(`${CLAUDE_API}/api/jobs`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', ...authHeaders() },
-              body,
-            })
+        const res = await fetch(`${CLAUDE_API}/api/jobs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
+          body,
+        })
         return new Response(await res.text(), {
           status: res.status,
           headers: { 'Content-Type': 'application/json' },

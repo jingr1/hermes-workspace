@@ -67,7 +67,7 @@ export const Route = createFileRoute('/api/connection-status')({
         const chatReady = caps.chatCompletions
         const enhancedReady =
           chatReady &&
-          (caps.dashboard.available || caps.sessions) &&
+          caps.sessions &&
           caps.skills &&
           caps.config
 
@@ -83,18 +83,12 @@ export const Route = createFileRoute('/api/connection-status')({
           status = 'enhanced'
           label = 'Enhanced'
           detail = modelConfigured
-            ? caps.dashboard.available
-              ? 'Core chat works and the Hermes Agent dashboard APIs are available.'
-              : 'Core chat works and Hermes Agent gateway APIs are available.'
-            : caps.dashboard.available
-              ? 'Hermes Agent dashboard APIs are available. Choose a model to start chatting.'
-              : 'Hermes Agent gateway APIs are available. Choose a model to start chatting.'
+            ? 'Core chat works and Hermes Agent control plane APIs are available.'
+            : 'Hermes Agent gateway APIs are available. Choose a model to start chatting.'
         } else if (chatReady && modelConfigured) {
           status = 'connected'
           label = 'Connected'
-          detail = caps.dashboard.available
-            ? 'Core chat is ready on this backend.'
-            : 'Core chat is ready. Start `hermes dashboard` to enable Sessions, Skills, Config, and Jobs.'
+          detail = 'Core chat is ready. Sessions, Skills, Config, and Jobs are served from the local profile directory.'
         } else {
           status = 'partial'
           label = 'Partial'

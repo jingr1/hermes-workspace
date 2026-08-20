@@ -48,7 +48,7 @@ Canonical contracts: [`docs/swarm/HANDOFF-PROTOCOL.md`](docs/swarm/HANDOFF-PROTO
 - **Knowledge layering:** `~/wiki` holds durable domain knowledge; `memory/swarm/missions/<missionId>/` holds archived mission artifacts; `memory/swarm/<worker>/` holds in-progress drafts; `memory/handoffs/swarm/` holds latest checkpoints; `learning` ingests reusable conclusions into the wiki after missions complete (see `docs/swarm/LEARNING-WIKI-INGEST.md`).
 - **Researcher** establishes facts only (competitive analysis, validation, source trails); no strategy or recommendations. **Architect** may challenge findings; researcher responds with evidence. **Architect** owns direction (wedge/bets/kill criteria), technical/content specs, **executor lane selection** (`developer` \| `writer`), and review/harden of the chosen executor — not primary fact-gathering, coding, or audience authoring. **Developer** / **Writer** execute only their lane per architect specs; no architecture or design changes; escalate gaps to architect (writer fact gaps → researcher via architect). **Learning** documents and wiki-ingests; **Orchestrator** routes and enforces greenlight. Challenge/response max 3 rounds, then escalate per `docs/swarm/ESCALATION-GUIDE.md`.
 - Do not enable optional Hermes plugins globally unless the task explicitly needs them; record plugin/toolset alignment in `swarm.yaml` first.
-- For local Workspace pairing/debugging, treat **one gateway + one dashboard** as canonical: `hermes gateway run` on `:8642` and `hermes dashboard` on `:9119`. Before starting another gateway, verify `curl http://127.0.0.1:3000/api/sessions` (or the active workspace port) first. If Sessions already returns data, refresh/reprobe the UI instead of spawning a duplicate gateway.
+- For local Workspace pairing/debugging, treat **one gateway** as canonical: `hermes gateway run` on `:8642`. The dashboard (`:9119`) is optional — for analytics only. Before starting another gateway, verify `curl http://127.0.0.1:3000/api/sessions` (or the active workspace port) first. If Sessions already returns data, refresh/reprobe the UI instead of spawning a duplicate gateway.
 - If the default model is `gpt-5.4` / `openai-codex`, remember that chat depends on a live local Codex CLI login (`codex login`).
 
 ## LangGraph Phase 2 human gate
@@ -67,11 +67,11 @@ When the Phase 2 orchestrator raises `needs_human=True`, use one of:
 
 ## Windows-specific notes (2026-06-01)
 
-- **Three services required**: Gateway (:8642) + Dashboard (:9119) + Workspace (:3000). All must be running for full functionality.
+- **Two services required**: Gateway (:8642) + Workspace (:3000). Dashboard (:9119) is optional (analytics only).
   - Gateway: `hermes gateway run`
-  - Dashboard: `hermes dashboard --port 9119 --host 127.0.0.1 --no-open`
   - Workspace: `pnpm dev`
-  - Or use the Electron desktop app: `pnpm electron:dev` (auto-starts all three)
+  - Optional: `hermes dashboard --port 9119 --host 127.0.0.1 --no-open` (analytics)
+  - Or use the Electron desktop app: `pnpm electron:dev` (auto-starts gateway + workspace)
 - **Desktop app**: Full Electron app (`electron/main.cjs`). Double-click to launch — no terminal needed. Auto-detects and spawns gateway (or dashboard if configured).
 - **Build**: `electron:build:win` produces NSIS installer in `release/`.
 - **Dev mode**: `electron:dev` launches Electron in dev mode (builds Vite client first, hot-reloads on change).

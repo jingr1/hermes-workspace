@@ -118,8 +118,9 @@ cp .env.example .env
 
 # Point at your existing Hermes Agent services.
 echo 'HERMES_API_URL=http://127.0.0.1:8642' >> .env
-# Zero-fork installs also need the separate dashboard API for config/sessions/skills/jobs.
-echo 'HERMES_DASHBOARD_URL=http://127.0.0.1:9119' >> .env
+# Optional: point at the dashboard for analytics and external link features.
+# Sessions, skills, config, and jobs are served from the local profile directory.
+# echo 'HERMES_DASHBOARD_URL=http://127.0.0.1:9119' >> .env
 
 # If your gateway was started with API_SERVER_KEY (auth enabled), set the same value:
 # echo 'HERMES_API_TOKEN=***' >> .env
@@ -131,13 +132,13 @@ Requirements on the agent side:
 
 - Gateway bound to an address the workspace can reach (typically `API_SERVER_HOST=0.0.0.0` + the port exposed).
 - `API_SERVER_ENABLED=true` in `~/.hermes/.env` (or the agent's env) so the gateway serves core APIs on `:8642`.
-- `hermes dashboard` running (default `http://127.0.0.1:9119`) for zero-fork installs. The dashboard provides config, sessions, skills, and jobs APIs.
+- *(Optional)* `hermes dashboard` on `http://127.0.0.1:9119` for analytics and external link features. Sessions, skills, config, and jobs are now served from the local profile directory without the dashboard.
 - If `API_SERVER_KEY` is set, the workspace must pass the same value via `HERMES_API_TOKEN` — otherwise leave both unset.
 
 Verify both services before opening the workspace:
 
 - `curl http://127.0.0.1:8642/health` should return ok.
-- `curl http://127.0.0.1:9119/api/status` should return dashboard metadata.
+- *(Optional)* `curl http://127.0.0.1:9119/api/status` should return dashboard metadata (only needed if you run the dashboard for analytics).
 - `curl http://127.0.0.1:3000/api/sessions` (after the workspace boots) should return a sessions payload or an empty list.
 
 If `/api/sessions` is already returning data, **do not start another gateway just because the UI still says Offline** — refresh or reprobe the Workspace UI first.
@@ -148,7 +149,7 @@ If your default model is `gpt-5.4` / `openai-codex`, make sure Codex CLI auth is
 codex login
 ```
 
-Then start the workspace and complete onboarding — it should detect the gateway + dashboard pair and unlock the enhanced panes automatically.
+Then start the workspace and complete onboarding — it should detect the gateway and unlock the enhanced panes automatically.
 
 #### Running on a remote host (Tailscale / VPN / LAN)
 
@@ -157,14 +158,15 @@ If the workspace and its browser live on different machines — e.g. the workspa
 ```bash
 # On the server running the workspace + gateway:
 echo 'HERMES_API_URL=http://100.x.y.z:8642' >> .env
-echo 'HERMES_DASHBOARD_URL=http://100.x.y.z:9119' >> .env
+# Optional: dashboard URL for analytics (not required for core functionality)
+# echo 'HERMES_DASHBOARD_URL=http://100.x.y.z:9119' >> .env
 
 # Also tell the gateway to listen on all interfaces so Tailscale peers can reach it.
 # In ~/.hermes/.env (or wherever the gateway reads config):
 echo 'API_SERVER_HOST=0.0.0.0' >> ~/.hermes/.env
 ```
 
-Then restart the gateway, dashboard, and workspace. Hit the workspace from the remote device and the connection probe will use the Tailscale IP instead of localhost. Both `HERMES_API_URL` and `HERMES_DASHBOARD_URL` must be set to Tailscale/LAN-reachable URLs — setting only one will leave the other probing `127.0.0.1` and failing.
+Then restart the gateway and workspace (and optionally the dashboard). Hit the workspace from the remote device and the connection probe will use the Tailscale IP instead of localhost. `HERMES_API_URL` must be set to a Tailscale/LAN-reachable URL. If you optionally use the dashboard, `HERMES_DASHBOARD_URL` must also be reachable.
 
 **If you've already started the workspace**, you can update both URLs from `Settings → Connection` without restarting. The values are persisted to `~/.hermes/workspace-overrides.json` and take effect immediately (gateway capabilities are reprobed on save). Editing `.env` still works for pre-start config and for CI/containers.
 
@@ -314,10 +316,9 @@ API_SERVER_ENABLED=true
 **3. Start the gateway, dashboard, and workspace:**
 
 ```bash
-hermes gateway run          # Starts core APIs on :8642
-hermes dashboard            # Starts dashboard APIs on :9119
+hermes gateway run          # Starts core APIs on :8642 (required)
+hermes dashboard            # (Optional) Starts dashboard on :9119 for analytics
 HERMES_API_URL=http://127.0.0.1:8642 \
-HERMES_DASHBOARD_URL=http://127.0.0.1:9119 \
 pnpm dev
 ```
 
@@ -337,15 +338,15 @@ Workspace is the UI. **Hermes Agent** is the brain. They talk over two HTTP serv
 ┌───────────────┐         :8642 gateway          ┌────────────────┐
 │   Workspace    │ ─────────────────────▶ │  Hermes Agent  │
 │   :3000 (UI)   │ ◀───────────────────── │  CLI / brain   │
-└───────────────┘         :9119 dashboard        └────────────────┘
+└───────────────┘    (:9119 dashboard — optional)  └────────────────┘
 ```
 
 ### Two services, three commands
 
 ```bash
-hermes gateway run     # terminal 1 · :8642 · chat, models, streaming, jobs
-hermes dashboard       # terminal 2 · :9119 · sessions, skills, config, MCP
-cd ~/hermes-workspace && pnpm dev   # terminal 3 · :3000 · the UI
+hermes gateway run     # terminal 1 · :8642 · chat, models, streaming, jobs, sessions, skills, config
+hermes dashboard       # (optional) terminal 2 · :9119 · analytics dashboard
+cd ~/hermes-workspace && pnpm dev   # terminal 2 (or 3) · :3000 · the UI
 ```
 
 > **Tip:** `pnpm start:all` starts gateway + dashboard + workspace in one shot if you've installed via the one-liner.
@@ -374,7 +375,7 @@ Optional parameters:
 
 ```bash
 curl http://127.0.0.1:8642/health        # → {"status":"ok","platform":"hermes-agent"}
-curl http://127.0.0.1:9119/api/status    # → {"status":"ok", ...}
+curl http://127.0.0.1:9119/api/status    # (optional) → {"status":"ok", ...}
 ```
 
 Both must return `200`. If either fails, the workspace will fall back to **portable mode** (chat works, sessions/skills/memory show "Not Available").
@@ -385,8 +386,8 @@ Both must return `200`. If either fails, the workspace will fall back to **porta
 # Required: where the gateway is
 HERMES_API_URL=http://127.0.0.1:8642
 
-# Recommended: where the dashboard is (unlocks sessions/skills/config/MCP/jobs)
-HERMES_DASHBOARD_URL=http://127.0.0.1:9119
+# Optional: where the dashboard is (for analytics only — sessions/skills/config/jobs are local)
+# HERMES_DASHBOARD_URL=http://127.0.0.1:9119
 
 # Only if your gateway was started with API_SERVER_KEY=... — paste the same value:
 # HERMES_API_TOKEN=***
@@ -399,9 +400,9 @@ HERMES_DASHBOARD_URL=http://127.0.0.1:9119
 
 | Scenario | Set this |
 |---|---|
-| Workspace + gateway on the same machine | `HERMES_API_URL=http://127.0.0.1:8642`, `HERMES_DASHBOARD_URL=http://127.0.0.1:9119` |
-| Gateway on a remote server (Tailscale / VPN) | Set both URLs to the reachable IP (e.g. `http://100.x.y.z:8642`) and add `API_SERVER_HOST=0.0.0.0` to the gateway's `~/.hermes/.env` |
-| Already-running `hermes-agent` from upstream installer | Just set `HERMES_API_URL` + `HERMES_DASHBOARD_URL` and skip the one-liner installer |
+| Workspace + gateway on the same machine | `HERMES_API_URL=http://127.0.0.1:8642` (optionally add `HERMES_DASHBOARD_URL` for analytics) |
+| Gateway on a remote server (Tailscale / VPN) | Set `HERMES_API_URL` to the reachable IP (e.g. `http://100.x.y.z:8642`) and add `API_SERVER_HOST=0.0.0.0` to the gateway's `~/.hermes/.env` |
+| Already-running `hermes-agent` from upstream installer | Just set `HERMES_API_URL` and skip the one-liner installer |
 | Multiple agent profiles | Profiles live under `~/.hermes/profiles/<name>` — see [API server & multi-profile gateways](#api-server--multi-profile-gateways) below |
 
 ### API server & multi-profile gateways
@@ -464,7 +465,7 @@ If you've already started the workspace, change either URL from **Settings → C
 
 - **`Could not reach Hermes gateway on 8645, 8642, or 8643`** — gateway isn't running, or `HERMES_API_URL` points somewhere unreachable. Run `hermes gateway run` and re-check.
 - **`api_server_port_in_use` / Port 8642 already in use** — more than one profile has `API_SERVER_ENABLED=true` without unique `API_SERVER_PORT`s. Disable API server on unused profiles, or assign distinct ports / use multiplex. See [API server & multi-profile gateways](#api-server--multi-profile-gateways).
-- **Workspace shows "portable mode" / extended APIs missing** — dashboard isn't running. Start `hermes dashboard` in another terminal and refresh.
+- **Workspace shows "portable mode" / extended APIs missing** — the gateway is not serving control-plane APIs. Verify `hermes gateway run` is up-to-date. Optionally start `hermes dashboard` for analytics.
 - **Sessions probe says unavailable / UI claims Offline but pairing should be live** — verify `curl http://localhost:3000/api/sessions` before starting another gateway. If it returns sessions (or an empty array), the backend pairing is alive and the UI needs a refresh/reprobe.
 - **Chat send fails on `gpt-5.4` / Codex** — Codex CLI auth is stale. Run `codex login`, then retry the chat without starting another gateway.
 - **`Unauthorized` on every API call** — gateway has `API_SERVER_KEY` set but workspace is missing `HERMES_API_TOKEN`. Match them.
@@ -848,8 +849,8 @@ If using Docker Compose and getting auth errors:
 The `claude webapi` command referenced in some pre-rename docs doesn't exist. The correct commands are:
 
 ```bash
-hermes gateway run    # FastAPI gateway on :8642
-hermes dashboard      # dashboard plugin on :9119 (sessions/skills/jobs/config)
+hermes gateway run    # FastAPI gateway on :8642 (serves all core APIs)
+hermes dashboard      # (optional) analytics dashboard on :9119
 ```
 
 The Docker setup runs both automatically — no action needed if using `docker compose up`.

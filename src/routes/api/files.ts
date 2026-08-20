@@ -16,6 +16,20 @@ import {
   safeErrorMessage,
 } from '../../server/rate-limit'
 import { loadWorkspaceCatalog } from './workspace'
+import {
+  deleteSshPath,
+  listSshFileTree,
+  mkdirSshPath,
+  readSshFile,
+  readSshTerminalConfig,
+  renameSshPath,
+  writeSshFile,
+} from '../../server/ssh-terminal'
+import {
+  readProfileQueryParam,
+  remoteWorkspaceContextForScope,
+  workspaceProfileScope,
+} from '../../server/workspace-profile'
 
 const execFileAsync = promisify(execFile)
 
@@ -36,12 +50,33 @@ type FileEntry = {
  * form rejects any candidate that escapes the root via `..` segments or
  * that resolves to an absolute path outside the root. See #121.
  */
-async function getWorkspaceRoot(): Promise<string> {
-  const catalog = await loadWorkspaceCatalog()
+async function getWorkspaceRoot(profileName?: string): Promise<string> {
+  const catalog = await loadWorkspaceCatalog(profileName)
   if (!catalog.isValid || !catalog.path) {
     throw new Error('No valid workspace selected')
   }
   return catalog.path
+}
+
+function getRemoteSshContext(profileName?: string) {
+  const scope = workspaceProfileScope(profileName)
+  const remote = remoteWorkspaceContextForScope(scope)
+  if (!remote) return null
+  const backend = String(
+    (remote.config.terminal as Record<string, unknown> | undefined)?.backend ??
+      '',
+  )
+    .trim()
+    .toLowerCase()
+  if (backend !== 'ssh') return null
+  const ssh = readSshTerminalConfig(remote.config)
+  if (!ssh) return null
+  return { ...remote, ssh, scope }
+}
+
+function toRemoteRelative(resolvedPath: string, workspaceRoot: string) {
+  if (resolvedPath === workspaceRoot) return ''
+  return path.posix.relative(workspaceRoot, resolvedPath)
 }
 
 function ensureWorkspacePath(input: string, workspaceRoot: string) {
@@ -281,8 +316,83 @@ export const Route = createFileRoute('/api/files')({
           const maxEntriesParam = parseMaxEntries(
             url.searchParams.get('maxEntries'),
           )
+          const profile = readProfileQueryParam(request)
 
-          const workspaceRoot = await getWorkspaceRoot()
+          const workspaceRoot = await getWorkspaceRoot(profile)
+          const remote = getRemoteSshContext(profile)
+
+          if (remote) {
+            if (action === 'list' && hasGlob(inputPath)) {
+              return json(
+                {
+                  error:
+                    'Glob listing is not supported over SSH. Open a folder instead.',
+                },
+                { status: 501 },
+              )
+            }
+            const resolvedPath = inputPath.trim()
+              ? path.posix.normalize(
+                  inputPath.startsWith('/')
+                    ? inputPath
+                    : path.posix.join(workspaceRoot, inputPath),
+                )
+              : workspaceRoot
+
+            if (action === 'read') {
+              const buffer = await readSshFile({
+                config: remote.config,
+                workspaceRoot,
+                filePath: resolvedPath,
+              })
+              if (isImageFile(resolvedPath)) {
+                const mime = getMimeType(resolvedPath)
+                return json({
+                  type: 'image',
+                  path: toRemoteRelative(resolvedPath, workspaceRoot),
+                  content: `data:${mime};base64,${buffer.toString('base64')}`,
+                })
+              }
+              return json({
+                type: 'text',
+                path: toRemoteRelative(resolvedPath, workspaceRoot),
+                content: buffer.toString('utf8'),
+              })
+            }
+
+            if (action === 'download' || action === 'view') {
+              const buffer = await readSshFile({
+                config: remote.config,
+                workspaceRoot,
+                filePath: resolvedPath,
+              })
+              const mime = getMimeType(resolvedPath)
+              const headers: Record<string, string> = {
+                'Content-Type':
+                  action === 'view' && mime === 'application/octet-stream'
+                    ? 'text/plain; charset=utf-8'
+                    : mime,
+              }
+              if (action === 'download') {
+                headers['Content-Disposition'] =
+                  `attachment; filename="${path.posix.basename(resolvedPath)}"`
+              }
+              return new Response(buffer, { headers })
+            }
+
+            const tree = await listSshFileTree({
+              config: remote.config,
+              workspaceRoot,
+              dirPath: resolvedPath,
+              maxDepth: maxDepthParam ?? MAX_DIRECTORY_DEPTH,
+            })
+            return json({
+              root: toRemoteRelative(resolvedPath, workspaceRoot),
+              base: workspaceRoot,
+              remote: true,
+              entries: tree,
+            })
+          }
 
           if (action === 'list' && hasGlob(inputPath)) {
             const globListing = await readGlobDirectory(
@@ -357,10 +467,86 @@ export const Route = createFileRoute('/api/files')({
 
         try {
           const workspaceRoot = await getWorkspaceRoot()
+          const remote = getRemoteSshContext()
           const contentType = request.headers.get('content-type') || ''
           if (!contentType.includes('multipart/form-data')) {
             const csrfCheck = requireJsonContentType(request)
             if (csrfCheck) return csrfCheck
+          }
+          if (remote) {
+            if (contentType.includes('multipart/form-data')) {
+              const form = await request.formData()
+              const action = String(form.get('action') || 'upload')
+              if (action !== 'upload') {
+                return json({ error: 'Invalid upload request' }, { status: 400 })
+              }
+              const file = form.get('file')
+              const targetPath = String(form.get('path') || '')
+              if (!(file instanceof File)) {
+                return json({ error: 'Missing file' }, { status: 400 })
+              }
+              const destination = targetPath.endsWith('/')
+                ? path.posix.join(targetPath, path.posix.basename(file.name))
+                : targetPath || path.posix.join(workspaceRoot, file.name)
+              const buffer = Buffer.from(await file.arrayBuffer())
+              await writeSshFile({
+                config: remote.config,
+                workspaceRoot,
+                filePath: destination,
+                content: buffer,
+              })
+              return json({
+                ok: true,
+                path: toRemoteRelative(
+                  destination.startsWith('/')
+                    ? destination
+                    : path.posix.join(workspaceRoot, destination),
+                  workspaceRoot,
+                ),
+              })
+            }
+
+            const body = (await request.json().catch(() => ({}))) as Record<
+              string,
+              unknown
+            >
+            const action = typeof body.action === 'string' ? body.action : 'write'
+            if (action === 'mkdir') {
+              const dirPath = String(body.path || '')
+              await mkdirSshPath({
+                config: remote.config,
+                workspaceRoot,
+                dirPath,
+              })
+              return json({ ok: true, path: dirPath })
+            }
+            if (action === 'rename') {
+              await renameSshPath({
+                config: remote.config,
+                workspaceRoot,
+                from: String(body.from || ''),
+                to: String(body.to || ''),
+              })
+              return json({ ok: true, path: String(body.to || '') })
+            }
+            if (action === 'delete') {
+              if (!requireLocalOrAuth(request)) {
+                return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
+              }
+              await deleteSshPath({
+                config: remote.config,
+                workspaceRoot,
+                targetPath: String(body.path || ''),
+              })
+              return json({ ok: true })
+            }
+            await writeSshFile({
+              config: remote.config,
+              workspaceRoot,
+              filePath: String(body.path || ''),
+              content: typeof body.content === 'string' ? body.content : '',
+            })
+            return json({ ok: true, path: String(body.path || '') })
           }
           if (contentType.includes('multipart/form-data')) {
             const form = await request.formData()

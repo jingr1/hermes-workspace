@@ -94,5 +94,5 @@ if (options.sessionId) {
 ## Operational Notes
 
 - Keep credentials redacted when inspecting `.env`, service files, or built bundles.
-- In zero-fork deployments, Workspace commonly talks to Hermes Agent gateway on `127.0.0.1:8642` and Dashboard on `127.0.0.1:9119`.
+- In zero-fork deployments, Workspace talks to Hermes Agent gateway on `127.0.0.1:8642`. The dashboard on `127.0.0.1:9119` is optional (analytics only); session routing is handled by the gateway and local profile directory.
 - A successful `/health` probe means the gateway is reachable; it does not prove session continuity is wired correctly. Verify the actual chat path.

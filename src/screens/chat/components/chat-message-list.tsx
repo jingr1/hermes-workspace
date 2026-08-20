@@ -10,6 +10,7 @@ import {
   getToolCallsFromMessage,
   textFromMessage,
 } from '../utils'
+import { collapseRecentDuplicateUserMessages } from '../chat-queries'
 import { MessageItem } from './message-item'
 import { TuiActivityCard } from './tui-activity-card'
 import { ScrollToBottomButton } from './scroll-to-bottom-button'
@@ -902,7 +903,9 @@ function ChatMessageListComponent({
       seenMessageIds.add(scopedId)
       return true
     })
-    return sortMessagesChronologically(deduped)
+    return sortMessagesChronologically(
+      collapseRecentDuplicateUserMessages(deduped),
+    )
   }, [hideSystemMessages, messages])
 
   const displayEntries = useMemo<Array<DisplayEntry>>(

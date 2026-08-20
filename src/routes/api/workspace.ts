@@ -9,21 +9,26 @@
 import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs/promises'
-import YAML from 'yaml'
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../server/auth-middleware'
 import { requireJsonContentType } from '../../server/rate-limit'
-import {
-  getActiveProfileName,
-  readProfile,
-} from '../../server/profiles-browser'
 import {
   assertWorkspaceAllowed,
   isBlockedSystemPath,
   isHermesStatePath,
   normalizeCandidate,
 } from '../../server/workspace-path-policy'
+import {
+  profileDefaultRemoteWorkspace,
+  remoteTerminalWorkspaceCandidate,
+} from '../../server/workspace-remote'
+import {
+  readProfileQueryParam,
+  remoteWorkspaceContextForScope,
+  workspaceProfileScope,
+  type WorkspaceProfileScope,
+} from '../../server/workspace-profile'
 
 type WorkspaceEntry = {
   name: string
@@ -37,11 +42,105 @@ type WorkspaceDetectionResponse = {
   isValid: boolean
   workspaces: Array<WorkspaceEntry>
   last: string
+  profile?: string
 }
 
 type WorkspaceState = {
   workspaces?: Array<WorkspaceEntry>
   last?: string
+}
+
+function remoteWorkspaceContext(scope: WorkspaceProfileScope): {
+  remoteCwd: string
+  config: Record<string, unknown>
+} | null {
+  return remoteWorkspaceContextForScope(scope)
+}
+
+function workspaceStateDir(scope: WorkspaceProfileScope): string {
+  return path.join(scope.profileHome, 'webui_state')
+}
+
+function workspaceStateFile(scope: WorkspaceProfileScope): string {
+  return path.join(workspaceStateDir(scope), 'workspaces.json')
+}
+
+function lastWorkspaceFile(scope: WorkspaceProfileScope): string {
+  return path.join(workspaceStateDir(scope), 'last_workspace.txt')
+}
+
+async function readWorkspaceState(
+  scope: WorkspaceProfileScope,
+): Promise<WorkspaceState> {
+  try {
+    const raw = await fs.readFile(workspaceStateFile(scope), 'utf-8')
+    const parsed = JSON.parse(raw) as unknown
+    if (Array.isArray(parsed))
+      return { workspaces: parsed as Array<WorkspaceEntry> }
+    if (parsed && typeof parsed === 'object') return parsed as WorkspaceState
+  } catch {
+    // No persisted state yet.
+  }
+  return {}
+}
+
+async function writeWorkspaceState(
+  scope: WorkspaceProfileScope,
+  state: WorkspaceState,
+): Promise<void> {
+  const stateDir = workspaceStateDir(scope)
+  await fs.mkdir(stateDir, { recursive: true })
+  await fs.writeFile(
+    workspaceStateFile(scope),
+    JSON.stringify(
+      {
+        workspaces: state.workspaces ?? [],
+        last: state.last ?? '',
+      },
+      null,
+      2,
+    ),
+    'utf-8',
+  )
+  if (state.last) {
+    await fs.writeFile(lastWorkspaceFile(scope), `${state.last}\n`, 'utf-8')
+  }
+}
+
+async function configuredDefaultWorkspace(
+  scope: WorkspaceProfileScope,
+): Promise<{ path: string; source: string } | null> {
+  const remote = remoteWorkspaceContext(scope)
+  if (remote) {
+    const path = profileDefaultRemoteWorkspace(remote.config, remote.remoteCwd)
+    return { path, source: 'config.terminal.cwd' }
+  }
+
+  const cfg = scope.config
+  const terminal = cfg.terminal
+  const terminalCwd =
+    terminal && typeof terminal === 'object' && !Array.isArray(terminal)
+      ? readString((terminal as Record<string, unknown>).cwd)
+      : ''
+
+  return firstValidDirectory([
+    { path: process.env.HERMES_WORKSPACE_DIR ?? '', source: 'env' },
+    { path: process.env.CLAUDE_WORKSPACE_DIR ?? '', source: 'env' },
+    { path: process.env.HERMES_WEBUI_DEFAULT_WORKSPACE ?? '', source: 'env' },
+    { path: readString(cfg.workspace), source: 'config.workspace' },
+    {
+      path: readString(cfg.default_workspace),
+      source: 'config.default_workspace',
+    },
+    { path: terminalCwd, source: 'config.terminal.cwd' },
+    { path: path.join(os.homedir(), 'workspace'), source: 'home.workspace' },
+    { path: path.join(os.homedir(), 'work'), source: 'home.work' },
+    {
+      path: path.join(os.homedir(), 'workspace'),
+      source: 'home.workspace.created',
+      create: true,
+    },
+  ])
 }
 
 function extractFolderName(fullPath: string): string {
@@ -55,20 +154,6 @@ async function isValidDirectory(dirPath: string): Promise<boolean> {
     return stat.isDirectory()
   } catch {
     return false
-  }
-}
-
-async function readYamlConfig(
-  configPath: string,
-): Promise<Record<string, unknown>> {
-  try {
-    const raw = await fs.readFile(configPath, 'utf-8')
-    const parsed = YAML.parse(raw)
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {}
-  } catch {
-    return {}
   }
 }
 
@@ -98,96 +183,6 @@ async function firstValidDirectory(
   return null
 }
 
-function activeProfileHome(): string {
-  try {
-    const active = getActiveProfileName()
-    return readProfile(active).path
-  } catch {
-    return (
-      process.env.HERMES_HOME ??
-      process.env.CLAUDE_HOME ??
-      path.join(os.homedir(), '.hermes')
-    )
-  }
-}
-
-function workspaceStateDir(): string {
-  return path.join(activeProfileHome(), 'webui_state')
-}
-
-function workspaceStateFile(): string {
-  return path.join(workspaceStateDir(), 'workspaces.json')
-}
-
-function lastWorkspaceFile(): string {
-  return path.join(workspaceStateDir(), 'last_workspace.txt')
-}
-
-async function readWorkspaceState(): Promise<WorkspaceState> {
-  try {
-    const raw = await fs.readFile(workspaceStateFile(), 'utf-8')
-    const parsed = JSON.parse(raw) as unknown
-    if (Array.isArray(parsed))
-      return { workspaces: parsed as Array<WorkspaceEntry> }
-    if (parsed && typeof parsed === 'object') return parsed as WorkspaceState
-  } catch {
-    // No persisted state yet.
-  }
-  return {}
-}
-
-async function writeWorkspaceState(state: WorkspaceState): Promise<void> {
-  const stateDir = workspaceStateDir()
-  await fs.mkdir(stateDir, { recursive: true })
-  await fs.writeFile(
-    workspaceStateFile(),
-    JSON.stringify(
-      {
-        workspaces: state.workspaces ?? [],
-        last: state.last ?? '',
-      },
-      null,
-      2,
-    ),
-    'utf-8',
-  )
-  if (state.last) {
-    await fs.writeFile(lastWorkspaceFile(), `${state.last}\n`, 'utf-8')
-  }
-}
-
-async function configuredDefaultWorkspace(): Promise<{
-  path: string
-  source: string
-} | null> {
-  const profileHome = activeProfileHome()
-  const cfg = await readYamlConfig(path.join(profileHome, 'config.yaml'))
-  const terminal = cfg.terminal
-  const terminalCwd =
-    terminal && typeof terminal === 'object' && !Array.isArray(terminal)
-      ? readString((terminal as Record<string, unknown>).cwd)
-      : ''
-
-  return firstValidDirectory([
-    { path: process.env.HERMES_WORKSPACE_DIR ?? '', source: 'env' },
-    { path: process.env.CLAUDE_WORKSPACE_DIR ?? '', source: 'env' },
-    { path: process.env.HERMES_WEBUI_DEFAULT_WORKSPACE ?? '', source: 'env' },
-    { path: readString(cfg.workspace), source: 'config.workspace' },
-    {
-      path: readString(cfg.default_workspace),
-      source: 'config.default_workspace',
-    },
-    { path: terminalCwd, source: 'config.terminal.cwd' },
-    { path: path.join(os.homedir(), 'workspace'), source: 'home.workspace' },
-    { path: path.join(os.homedir(), 'work'), source: 'home.work' },
-    {
-      path: path.join(os.homedir(), 'workspace'),
-      source: 'home.workspace.created',
-      create: true,
-    },
-  ])
-}
-
 function dedupeWorkspaces(
   workspaces: Array<WorkspaceEntry>,
 ): Array<WorkspaceEntry> {
@@ -209,39 +204,55 @@ function dedupeWorkspaces(
 
 async function cleanExistingWorkspaces(
   workspaces: Array<WorkspaceEntry>,
+  remoteCwd?: string,
 ): Promise<Array<WorkspaceEntry>> {
   const cleaned = dedupeWorkspaces(workspaces)
   const existing: Array<WorkspaceEntry> = []
   for (const workspace of cleaned) {
+    if (remoteCwd) {
+      const candidate = remoteTerminalWorkspaceCandidate(workspace.path, remoteCwd)
+      if (candidate) {
+        existing.push({ ...workspace, path: candidate })
+      }
+      continue
+    }
     if (await isValidDirectory(workspace.path)) existing.push(workspace)
   }
   return existing
 }
 
-export async function loadWorkspaceCatalog(): Promise<WorkspaceDetectionResponse> {
-  const state = await readWorkspaceState()
-  const configured = await configuredDefaultWorkspace()
+export async function loadWorkspaceCatalog(
+  profileName?: string | null,
+): Promise<WorkspaceDetectionResponse> {
+  const scope = workspaceProfileScope(profileName)
+  const remote = remoteWorkspaceContext(scope)
+  const remoteCwd = remote?.remoteCwd
+  const state = await readWorkspaceState(scope)
+  const configured = await configuredDefaultWorkspace(scope)
   const fallback = configured ?? { path: '', source: 'none' }
-  let workspaces = await cleanExistingWorkspaces(state.workspaces ?? [])
+  let workspaces = await cleanExistingWorkspaces(state.workspaces ?? [], remoteCwd)
 
   if (workspaces.length === 0 && fallback.path) {
     workspaces = [{ name: 'Home', path: fallback.path }]
   }
 
-  // Priority 2: Environment variable
-  const envWorkspace =
-    process.env.HERMES_WORKSPACE_DIR?.trim() ||
-    process.env.CLAUDE_WORKSPACE_DIR?.trim()
-  if (envWorkspace) {
-    const isValid = await isValidDirectory(envWorkspace)
-    if (isValid) {
-      return {
-        path: envWorkspace,
-        folderName: extractFolderName(envWorkspace),
-        source: 'env',
-        isValid: true,
-        workspaces,
-        last: envWorkspace,
+  // Priority 2: Environment variable (local profiles only — env paths are host-side)
+  if (!remoteCwd) {
+    const envWorkspace =
+      process.env.HERMES_WORKSPACE_DIR?.trim() ||
+      process.env.CLAUDE_WORKSPACE_DIR?.trim()
+    if (envWorkspace) {
+      const isValid = await isValidDirectory(envWorkspace)
+      if (isValid) {
+        return {
+          path: envWorkspace,
+          folderName: extractFolderName(envWorkspace),
+          source: 'env',
+          isValid: true,
+          workspaces,
+          last: envWorkspace,
+          profile: scope.profileName,
+        }
       }
     }
   }
@@ -249,16 +260,28 @@ export async function loadWorkspaceCatalog(): Promise<WorkspaceDetectionResponse
   const savedLast = readString(state.last)
   const lastFromFile = await (async () => {
     try {
-      return (await fs.readFile(lastWorkspaceFile(), 'utf-8')).trim()
+      return (await fs.readFile(lastWorkspaceFile(scope), 'utf-8')).trim()
     } catch {
       return ''
     }
   })()
+
+  const resolveLastCandidate = (raw: string): string => {
+    if (!raw) return ''
+    if (remoteCwd) {
+      return remoteTerminalWorkspaceCandidate(raw, remoteCwd) ?? ''
+    }
+    const normalized = normalizeCandidate(raw)
+    return normalized
+  }
+
   const lastCandidate =
-    [savedLast, lastFromFile, fallback.path].find(Boolean) ?? ''
-  const normalizedLast = lastCandidate ? normalizeCandidate(lastCandidate) : ''
+    [savedLast, lastFromFile, fallback.path]
+      .map(resolveLastCandidate)
+      .find(Boolean) ?? ''
+
   const activeWorkspace =
-    workspaces.find((workspace) => workspace.path === normalizedLast) ??
+    workspaces.find((workspace) => workspace.path === lastCandidate) ??
     workspaces.at(0)
   const active =
     activeWorkspace ??
@@ -275,6 +298,7 @@ export async function loadWorkspaceCatalog(): Promise<WorkspaceDetectionResponse
     isValid: Boolean(activePath),
     workspaces,
     last: activePath,
+    profile: scope.profileName,
   }
 }
 
@@ -284,13 +308,28 @@ export async function saveWorkspaceSelection(input: {
 }): Promise<WorkspaceDetectionResponse> {
   const rawPath = readString(input.path)
   if (!rawPath) throw new Error('path is required')
-  const target = normalizeCandidate(rawPath)
-  assertWorkspaceAllowed(target)
-  if (!(await isValidDirectory(target))) {
-    throw new Error(`Path is not an existing directory: ${target}`)
+
+  const scope = workspaceProfileScope()
+  const remote = remoteWorkspaceContext(scope)
+  let target: string
+  if (remote) {
+    const candidate = remoteTerminalWorkspaceCandidate(rawPath, remote.remoteCwd)
+    if (!candidate) {
+      throw new Error(
+        `Path is not under the remote terminal working directory (${remote.remoteCwd}): ${rawPath}`,
+      )
+    }
+    target = candidate
+    assertWorkspaceAllowed(target)
+  } else {
+    target = normalizeCandidate(rawPath)
+    assertWorkspaceAllowed(target)
+    if (!(await isValidDirectory(target))) {
+      throw new Error(`Path is not an existing directory: ${target}`)
+    }
   }
 
-  const current = await loadWorkspaceCatalog()
+  const current = await loadWorkspaceCatalog(scope.profileName)
   const next = dedupeWorkspaces([
     ...current.workspaces,
     {
@@ -300,8 +339,8 @@ export async function saveWorkspaceSelection(input: {
         (current.workspaces.length === 0 ? 'Home' : extractFolderName(target)),
     },
   ])
-  await writeWorkspaceState({ workspaces: next, last: target })
-  return loadWorkspaceCatalog()
+  await writeWorkspaceState(scope, { workspaces: next, last: target })
+  return loadWorkspaceCatalog(scope.profileName)
 }
 
 export const Route = createFileRoute('/api/workspace')({
@@ -312,7 +351,8 @@ export const Route = createFileRoute('/api/workspace')({
           return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
         }
         try {
-          return json(await loadWorkspaceCatalog())
+          const profile = readProfileQueryParam(request)
+          return json(await loadWorkspaceCatalog(profile))
         } catch (err) {
           return json(
             {

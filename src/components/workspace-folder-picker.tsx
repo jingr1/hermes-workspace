@@ -16,6 +16,10 @@ type FolderListResponse = {
   base: string
   current: string
   folders: Array<WorkspaceFolderEntry>
+  remote?: boolean
+  backend?: string
+  host?: string
+  error?: string
 }
 
 type FlatNode = {
@@ -30,16 +34,60 @@ type WorkspaceFolderPickerProps = {
   value: string
   onChange: (path: string) => void
   className?: string
+  /** Remount/refetch when the active profile changes. */
+  reloadKey?: string
 }
 
-async function fetchFolders(subPath = ''): Promise<FolderListResponse | null> {
+function isAbortError(error: unknown): boolean {
+  return (
+    (error instanceof DOMException &&
+      (error.name === 'AbortError' || error.name === 'TimeoutError')) ||
+    (error instanceof Error &&
+      (error.name === 'AbortError' || error.name === 'TimeoutError'))
+  )
+}
+
+async function fetchFolders(
+  subPath = '',
+  profileName = '',
+): Promise<FolderListResponse | null> {
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), 30_000)
   try {
-    const query = subPath ? `?path=${encodeURIComponent(subPath)}` : ''
-    const response = await fetch(`/api/workspace/folders${query}`)
-    if (!response.ok) return null
-    return (await response.json()) as FolderListResponse
-  } catch {
-    return null
+    const params = new URLSearchParams()
+    if (subPath) params.set('path', subPath)
+    if (profileName) params.set('profile', profileName)
+    const query = params.size ? `?${params.toString()}` : ''
+    const response = await fetch(`/api/workspace/folders${query}`, {
+      signal: controller.signal,
+    })
+    const payload = (await response.json().catch(() => null)) as
+      | FolderListResponse
+      | { error?: string; folders?: Array<WorkspaceFolderEntry> }
+      | null
+    if (!response.ok) {
+      return {
+        base: '',
+        current: '',
+        folders: [],
+        error:
+          payload && typeof payload === 'object' && 'error' in payload
+            ? String(payload.error || 'Failed to list folders')
+            : 'Failed to list folders',
+      }
+    }
+    return payload as FolderListResponse
+  } catch (error) {
+    return {
+      base: '',
+      current: '',
+      folders: [],
+      error: isAbortError(error)
+        ? 'Folder listing timed out. You can still type a path and click Set workspace.'
+        : 'Failed to list folders. You can still type a path and click Set workspace.',
+    }
+  } finally {
+    window.clearTimeout(timer)
   }
 }
 
@@ -47,10 +95,13 @@ export function WorkspaceFolderPicker({
   value,
   onChange,
   className,
+  reloadKey = '',
 }: WorkspaceFolderPickerProps) {
   const [loading, setLoading] = useState(true)
   const [loadFailed, setLoadFailed] = useState(false)
+  const [loadError, setLoadError] = useState('')
   const [basePath, setBasePath] = useState('')
+  const [remoteHost, setRemoteHost] = useState('')
   const [folders, setFolders] = useState<Array<WorkspaceFolderEntry>>([])
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
   const [childrenCache, setChildrenCache] = useState<
@@ -61,21 +112,44 @@ export function WorkspaceFolderPicker({
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    void fetchFolders('').then((res) => {
-      if (cancelled) return
-      setLoading(false)
-      if (!res) {
+    setLoadFailed(false)
+    setLoadError('')
+    setBasePath('')
+    setRemoteHost('')
+    setFolders([])
+    setExpandedPaths(new Set())
+    setChildrenCache(new Map())
+    setLoadingPaths(new Set())
+    void fetchFolders('', reloadKey)
+      .then((res) => {
+        if (cancelled) return
+        setLoading(false)
+        if (!res || res.error) {
+          setLoadFailed(true)
+          setLoadError(res?.error || 'Failed to list folders')
+          setFolders([])
+          if (res?.base) setBasePath(res.base)
+          if (res?.host) setRemoteHost(res.host)
+          return
+        }
+        setLoadFailed(false)
+        setLoadError('')
+        setBasePath(res.base)
+        setRemoteHost(res.host || '')
+        setFolders(res.folders ?? [])
+      })
+      .catch(() => {
+        if (cancelled) return
+        setLoading(false)
         setLoadFailed(true)
-        return
-      }
-      setLoadFailed(false)
-      setBasePath(res.base)
-      setFolders(res.folders)
-    })
+        setLoadError(
+          'Failed to list folders. You can still type a path and click Set workspace.',
+        )
+      })
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [reloadKey])
 
   const toggleExpand = useCallback((folder: WorkspaceFolderEntry) => {
     setExpandedPaths((current) => {
@@ -101,7 +175,7 @@ export function WorkspaceFolderPicker({
       return next
     })
     for (const entryPath of pending) {
-      void fetchFolders(entryPath).then((res) => {
+      void fetchFolders(entryPath, reloadKey).then((res) => {
         setChildrenCache((current) => {
           const next = new Map(current)
           next.set(entryPath, res?.folders ?? [])
@@ -148,10 +222,19 @@ export function WorkspaceFolderPicker({
       <Input
         size="sm"
         value={value}
-        placeholder="Enter project path, e.g. /home/user/project"
+        placeholder={
+          remoteHost
+            ? `Remote path on ${remoteHost}`
+            : 'Enter project path, e.g. /home/user/project'
+        }
         onChange={(event) => onChange(event.target.value)}
         className="mb-2 shrink-0"
       />
+      {remoteHost ? (
+        <div className="mb-2 px-1 text-[11px] text-[var(--theme-muted)]">
+          Browsing SSH host {remoteHost}
+        </div>
+      ) : null}
       {loading ? (
         <div className="flex justify-center px-3 py-6 text-xs text-[var(--theme-muted)]">
           Loading folders…
@@ -220,7 +303,7 @@ export function WorkspaceFolderPicker({
 
           {(folders.length === 0 || loadFailed) && !loading ? (
             <div className="px-3 py-4 text-center text-[var(--theme-muted)]">
-              No workspace folders
+              {loadError || 'No workspace folders'}
             </div>
           ) : null}
         </div>

@@ -68,7 +68,7 @@ describe('gateway-capabilities', () => {
   })
 
   describe('capability warnings', () => {
-    it('tells users to start the dashboard when only dashboard-backed APIs are missing', async () => {
+    it('shows upgrade warning when critical APIs are missing', async () => {
       const mod = await loadMod()
       expect(
         mod.getCapabilityWarningMessage(
@@ -95,7 +95,7 @@ describe('gateway-capabilities', () => {
           },
           ['sessions', 'skills', 'config'],
         ),
-      ).toBe(`[gateway] ${mod.DASHBOARD_REQUIRED_INSTRUCTIONS}`)
+      ).toBe(`[gateway] Missing Hermes APIs detected. ${mod.CLAUDE_UPGRADE_INSTRUCTIONS}`)
     })
 
     it('keeps the upgrade warning for broader capability gaps', async () => {
@@ -425,6 +425,44 @@ describe('gateway-capabilities', () => {
     const afterFirst = dashboardCalls
     await mod.probeGateway({ force: true })
     expect(dashboardCalls).toBe(afterFirst)
+  })
+
+  it('zero-fork when gateway healthy and :9119 down (local control plane)', async () => {
+    process.env.HERMES_API_URL = 'http://gateway.test'
+    process.env.CLAUDE_DASHBOARD_URL = 'http://dashboard.test'
+    // Simulate: profile directory has config.yaml (existsSync returns true)
+    existsSync.mockReturnValue(true)
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      // Dashboard is DOWN
+      if (url.startsWith('http://dashboard.test')) {
+        throw new Error('connection refused')
+      }
+      // Gateway is healthy
+      if (url === 'http://gateway.test/health') {
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+      if (url === 'http://gateway.test/v1/chat/completions') {
+        return new Response('', { status: 405 })
+      }
+      if (url === 'http://gateway.test/api/sessions/__probe__/chat/stream') {
+        return new Response('', { status: 404 })
+      }
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { 'content-type': 'application/json' },
+      })
+    }))
+
+    const mod = await loadMod()
+    const caps = await mod.probeGateway({ force: true, waitForEnhanced: true })
+
+    expect(caps.dashboard.available).toBe(false)
+    expect(caps.sessions).toBe(true)
+    expect(caps.skills).toBe(true)
+    expect(caps.config).toBe(true)
+    expect(mod.getGatewayMode()).toBe('zero-fork')
   })
 
   describe('isUsableCapabilityCache', () => {

@@ -154,6 +154,106 @@ describe('workspace API catalog semantics', () => {
       ),
     ).resolves.toBe(`${selectedProject}\n`)
   })
+
+  it('uses remote terminal.cwd when SSH backend has stale local workspace paths', async () => {
+    const remoteCwd = '/home/ramonjing'
+    const staleLocal = await makeDir(tempRoot, 'hermes-workspace')
+    await fs.writeFile(
+      path.join(process.env.HERMES_HOME!, 'config.yaml'),
+      `terminal:
+  backend: ssh
+  cwd: ${remoteCwd}
+`,
+      'utf-8',
+    )
+    await fs.mkdir(path.join(process.env.HERMES_HOME!, 'webui_state'), {
+      recursive: true,
+    })
+    await fs.writeFile(
+      path.join(process.env.HERMES_HOME!, 'webui_state', 'workspaces.json'),
+      JSON.stringify({
+        workspaces: [{ name: 'Workspace', path: staleLocal }],
+        last: staleLocal,
+      }),
+      'utf-8',
+    )
+    await fs.writeFile(
+      path.join(process.env.HERMES_HOME!, 'webui_state', 'last_workspace.txt'),
+      `${staleLocal}\n`,
+      'utf-8',
+    )
+
+    const catalog = await loadWorkspaceCatalog()
+
+    expect(catalog.path).toBe(remoteCwd)
+    expect(catalog.workspaces).toEqual([{ name: 'Home', path: remoteCwd }])
+    expect(catalog.source).toBe('config.terminal.cwd')
+  })
+
+  it('accepts remote workspace selection under terminal.cwd without local stat', async () => {
+    const remoteCwd = '/home/ramonjing'
+    const remoteProject = `${remoteCwd}/projects/demo`
+    await fs.writeFile(
+      path.join(process.env.HERMES_HOME!, 'config.yaml'),
+      `terminal:
+  backend: ssh
+  cwd: ${remoteCwd}
+`,
+      'utf-8',
+    )
+
+    const saved = await saveWorkspaceSelection({
+      path: remoteProject,
+      name: 'Demo',
+    })
+
+    expect(saved.path).toBe(remoteProject)
+    expect(saved.workspaces).toContainEqual({
+      name: 'Demo',
+      path: remoteProject,
+    })
+  })
+
+  it('loads workspace state from an explicit profile without active_profile', async () => {
+    const localProject = await makeDir(tempRoot, 'local-app')
+    const sshProfileDir = path.join(process.env.HERMES_HOME!, 'profiles', 'gpussh')
+    await fs.mkdir(sshProfileDir, { recursive: true })
+    await fs.writeFile(
+      path.join(sshProfileDir, 'config.yaml'),
+      `terminal:
+  backend: ssh
+  cwd: /home/ramonjing
+  ssh_host: dev-wsl
+`,
+      'utf-8',
+    )
+    await fs.mkdir(path.join(sshProfileDir, 'webui_state'), { recursive: true })
+    await fs.writeFile(
+      path.join(sshProfileDir, 'webui_state', 'workspaces.json'),
+      JSON.stringify({
+        workspaces: [{ name: 'Remote', path: '/home/ramonjing/vhl_dyn_sim' }],
+        last: '/home/ramonjing/vhl_dyn_sim',
+      }),
+      'utf-8',
+    )
+    await fs.writeFile(
+      path.join(process.env.HERMES_HOME!, 'active_profile'),
+      'default\n',
+      'utf-8',
+    )
+    await fs.writeFile(
+      path.join(process.env.HERMES_HOME!, 'config.yaml'),
+      `default_workspace: ${JSON.stringify(localProject)}\n`,
+      'utf-8',
+    )
+
+    const localCatalog = await loadWorkspaceCatalog('default')
+    const sshCatalog = await loadWorkspaceCatalog('gpussh')
+
+    expect(localCatalog.path).toBe(localProject)
+    expect(sshCatalog.path).toBe('/home/ramonjing/vhl_dyn_sim')
+    expect(sshCatalog.profile).toBe('gpussh')
+  })
 })
 
 describe('workspace folder listing', () => {

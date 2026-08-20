@@ -8,9 +8,7 @@ import {
   BEARER_TOKEN,
   CLAUDE_API,
   CLAUDE_UPGRADE_INSTRUCTIONS,
-  dashboardFetch,
   ensureGatewayProbed,
-  getCapabilities,
 } from '../../server/gateway-capabilities'
 import { requireJsonContentType } from '../../server/rate-limit'
 import { createCapabilityUnavailablePayload } from '@/lib/feature-gates'
@@ -360,13 +358,11 @@ function normalizeSkill(value: unknown): SkillSummary | null {
 }
 
 async function fetchClaudeSkills(): Promise<Array<SkillSummary>> {
-  const capabilities = getCapabilities()
+  // Control-plane refactor: always go through the gateway, not dashboard
   const headers: Record<string, string> = {}
   if (BEARER_TOKEN) headers['Authorization'] = `Bearer ${BEARER_TOKEN}`
 
-  const response = capabilities.dashboard.available
-    ? await dashboardFetch('/api/skills')
-    : await fetch(`${CLAUDE_API}/api/skills`, { headers })
+  const response = await fetch(`${CLAUDE_API}/api/skills`, { headers })
   if (!response.ok) {
     const body = await response.text().catch(() => '')
     throw new Error(body || `Claude skills request failed (${response.status})`)
@@ -572,29 +568,6 @@ export const Route = createFileRoute('/api/skills')({
               category: body.category || '',
               force: Boolean(body.force),
             }
-          }
-
-          if (capabilities.dashboard.available) {
-            if (action !== 'toggle') {
-              return json(
-                {
-                  ok: false,
-                  error:
-                    'Skill install/uninstall is only available on the legacy enhanced fork right now. Zero-fork mode supports listing and toggling installed skills.',
-                },
-                { status: 501 },
-              )
-            }
-
-            const response = await dashboardFetch('/api/skills/toggle', {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload),
-              signal: AbortSignal.timeout(30_000),
-            })
-
-            const result = await response.json()
-            return json(result, { status: response.status })
           }
 
           const headers: Record<string, string> = {

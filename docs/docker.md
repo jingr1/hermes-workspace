@@ -42,8 +42,9 @@ In `.env`:
 ```bash
 HERMES_API_URL=http://<agent-host-or-service>:8642
 HERMES_API_TOKEN=<the same value as API_SERVER_KEY>
-HERMES_DASHBOARD_URL=http://<agent-host-or-service>:9119
-HERMES_DASHBOARD_TOKEN=<same key, or set CLAUDE_DASHBOARD_TOKEN>
+# Optional: dashboard for analytics (not required for core functionality)
+# HERMES_DASHBOARD_URL=http://<agent-host-or-service>:9119
+# HERMES_DASHBOARD_TOKEN=<same key, or set CLAUDE_DASHBOARD_TOKEN>
 ```
 
 Inside docker compose on the same host, `<agent-host-or-service>` is the service name from your compose file (e.g. `hermes-agent`). On a Synology NAS with a separate workspace stack, it's the LAN IP (e.g. `192.168.1.78`).
@@ -131,7 +132,7 @@ If your workspace and agent are on **different stacks** on the same NAS (or diff
 ```bash
 HERMES_API_URL=http://192.168.1.78:8642
 HERMES_API_TOKEN=<API_SERVER_KEY>
-HERMES_DASHBOARD_URL=http://192.168.1.78:9119
+# Optional: HERMES_DASHBOARD_URL=http://192.168.1.78:9119
 ```
 
 3. The agent to bind on `0.0.0.0`:

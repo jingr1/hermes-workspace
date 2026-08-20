@@ -27,10 +27,7 @@ const KNOWN_CATEGORIES = ['All', 'Connected', 'Failed', 'Disabled'] as const
 const REQUEST_TIMEOUT_MS = 30_000
 
 async function mcpFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  const capabilities = getCapabilities()
-  if (capabilities.dashboard.available) {
-    return dashboardFetch(path, init)
-  }
+  // Control-plane refactor: always route to gateway, not dashboard
   const headers = new Headers(init.headers)
   if (BEARER_TOKEN && !headers.has('Authorization')) {
     headers.set('Authorization', `Bearer ${BEARER_TOKEN}`)

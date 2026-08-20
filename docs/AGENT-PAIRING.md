@@ -18,13 +18,12 @@
 
 Workspace talks to Hermes Agent over HTTP. No WebSocket. No magic.
 
-A fully paired local setup has two services:
+A fully paired local setup requires one service:
 
-- `hermes gateway run` on **:8642** for chat, models, and streaming
-- `hermes dashboard` on **:9119** for sessions, skills, config, and jobs
+- `hermes gateway run` on **:8642** for chat, models, streaming, sessions, skills, config, and jobs
+- *(Optional)* `hermes dashboard` on **:9119** for analytics and external link features
 
-If `curl http://127.0.0.1:8642/health` and `curl http://127.0.0.1:9119/` both
-return successfully, they can pair.
+If `curl http://127.0.0.1:8642/health` returns successfully, the workspace can pair.
 
 ---
 
@@ -156,7 +155,9 @@ ss -tlnp | grep 8642   # Linux
 # Kill the stale process, then restart gateway
 ```
 
-## Step 4b — Is the dashboard running on 9119?
+## Step 4b — (Optional) Is the dashboard running on 9119?
+
+The dashboard is optional — sessions, skills, config, and jobs are served from the local profile directory. Only start it if you need analytics.
 
 ```bash
 curl -sf http://127.0.0.1:9119/ && echo "DASHBOARD OK" || echo "DASHBOARD NOT REACHABLE"
@@ -164,7 +165,7 @@ curl -sf http://127.0.0.1:9119/ && echo "DASHBOARD OK" || echo "DASHBOARD NOT RE
 
 **Pass:** returns HTTP 200 (HTML or JSON is fine).
 
-### Fix
+### Fix (if you want analytics)
 
 ```bash
 hermes dashboard
@@ -181,19 +182,19 @@ cat .env | grep HERMES_API_URL
 
 **Pass:** `HERMES_API_URL=http://127.0.0.1:8642`
 
-Also set the dashboard URL:
+Optionally set the dashboard URL (for analytics only):
 
 ```bash
 grep HERMES_DASHBOARD_URL .env
 ```
 
-**Pass:** `HERMES_DASHBOARD_URL=http://127.0.0.1:9119`
+**Pass:** `HERMES_DASHBOARD_URL=http://127.0.0.1:9119` (or not set — dashboard is optional)
 
-**Fail or missing:**
+**If you want analytics and it's missing:**
 ```bash
 # In the hermes-workspace directory
 echo 'HERMES_API_URL=http://127.0.0.1:8642' >> .env
-echo 'HERMES_DASHBOARD_URL=http://127.0.0.1:9119' >> .env
+# echo 'HERMES_DASHBOARD_URL=http://127.0.0.1:9119' >> .env  # optional
 ```
 
 If `.env` doesn't exist:

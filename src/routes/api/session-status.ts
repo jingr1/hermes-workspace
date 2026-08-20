@@ -5,14 +5,13 @@ import {
   getConfig,
   getGatewayCapabilities,
   getSession,
-  listSessions,
 } from '../../server/claude-api'
 import {
   isSyntheticSessionKey,
   resolveMainChatSessionId,
-  shouldBindMainToPortableSession,
 } from '../../server/session-utils'
 import { getLocalSession } from '../../server/local-session-store'
+import { listSessionsForProfile, getActiveProfileName } from '../../server/profiles-browser'
 import { getActiveRunForSession } from '../../server/run-store'
 import { isAuthenticated } from '@/server/auth-middleware'
 import { readContextUsage } from '@/server/context-usage'
@@ -83,11 +82,6 @@ export const Route = createFileRoute('/api/session-status')({
           const url = new URL(request.url)
           const requestedKey = url.searchParams.get('sessionKey')?.trim() || ''
           let sessionKey = requestedKey || 'main'
-          const pinPortableMain = shouldBindMainToPortableSession({
-            sessionKey,
-            dashboardAvailable: capabilities.dashboard.available,
-            enhancedChat: capabilities.enhancedChat,
-          })
 
           if (sessionKey === 'new') {
             const contextUsage = await readContextUsage('new')
@@ -110,9 +104,15 @@ export const Route = createFileRoute('/api/session-status')({
             })
           }
 
-          if (sessionKey === 'main' && !pinPortableMain) {
+          if (sessionKey === 'main') {
             try {
-              const sessions = await listSessions(30, 0)
+              const profile = getActiveProfileName() || 'default'
+              const rawSessions = listSessionsForProfile(profile)
+              const sessions = rawSessions.map((s) => ({
+                id: s.key,
+                title: s.title,
+                message_count: s.messageCount ?? 0,
+              }))
               const candidate = resolveMainChatSessionId(sessions)
               if (candidate) {
                 sessionKey = candidate
@@ -120,30 +120,6 @@ export const Route = createFileRoute('/api/session-status')({
             } catch {
               // Fall through to local/synthetic handling below.
             }
-          }
-
-          if (pinPortableMain) {
-            const contextUsage = await readContextUsage('main')
-            const localMain = getLocalSession('main')
-            const activeRun = await getActiveRunForSession('main')
-            const outputTokens = estimateTokensFromText(activeRun?.assistantText ?? '')
-            return json({
-              ok: true,
-              payload: {
-                status: activeRun ? activeRun.status : 'idle',
-                sessionKey: 'main',
-                sessionLabel: localMain?.title ?? '',
-                model: localMain?.model ?? contextUsage.model,
-                modelProvider: 'portable',
-                inputTokens: contextUsage.usedTokens,
-                outputTokens,
-                totalTokens: contextUsage.usedTokens + outputTokens,
-                contextPercent: contextUsage.contextPercent,
-                maxTokens: contextUsage.maxTokens,
-                usedTokens: contextUsage.usedTokens,
-                sessions: [],
-              },
-            })
           }
 
           const localSession = getLocalSession(sessionKey)

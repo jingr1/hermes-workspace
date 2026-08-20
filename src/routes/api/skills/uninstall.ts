@@ -4,7 +4,6 @@ import { isAuthenticated } from '../../../server/auth-middleware'
 import {
   BEARER_TOKEN,
   CLAUDE_API,
-  ensureGatewayProbed,
 } from '../../../server/gateway-capabilities'
 
 function authHeaders(): Record<string, string> {
@@ -28,18 +27,6 @@ export const Route = createFileRoute('/api/skills/uninstall')({
             return json(
               { ok: false, error: 'name or skillId required' },
               { status: 400 },
-            )
-          }
-
-          const capabilities = await ensureGatewayProbed()
-          if (capabilities.dashboard.available) {
-            return json(
-              {
-                ok: false,
-                error:
-                  'Skill uninstall is only available on the legacy enhanced fork right now.',
-              },
-              { status: 501 },
             )
           }
 

@@ -31,7 +31,7 @@ Same as above — same keys, same API_SERVER_KEY.
 ```
 OPENROUTER_API_KEY=<your-key>
 HERMES_API_URL=http://127.0.0.1:8642
-HERMES_DASHBOARD_URL=http://127.0.0.1:9119
+# Optional: HERMES_DASHBOARD_URL=http://127.0.0.1:9119  # analytics only
 HERMES_API_TOKEN=<must-match-API_SERVER_KEY-above>
 PORT=3000
 HOST=127.0.0.1

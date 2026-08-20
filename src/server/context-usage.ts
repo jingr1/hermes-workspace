@@ -274,10 +274,11 @@ function readConfiguredContextLength(payload: Record<string, unknown>): number {
 
 async function readConfiguredModelContext(): Promise<ResolvedModelContext | null> {
   try {
-    const capabilities = getCapabilities()
-    if (!capabilities.dashboard.available) return null
-
-    const response = await dashboardFetch('/api/model/info', {
+    const { CLAUDE_API, getGatewayBearerToken } = await import('./gateway-capabilities')
+    const token = getGatewayBearerToken()
+    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
+    const response = await fetch(`${CLAUDE_API}/api/model/info`, {
+      headers,
       signal: AbortSignal.timeout(2500),
     })
     if (!response.ok) return null

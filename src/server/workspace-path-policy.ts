@@ -23,6 +23,9 @@ export type WorkspaceFolderListResponse = {
   current: string
   folders: Array<WorkspaceFolderEntry>
   roots?: Array<WorkspaceFolderEntry>
+  remote?: boolean
+  backend?: string
+  host?: string
 }
 
 export class WorkspaceFolderAccessError extends Error {

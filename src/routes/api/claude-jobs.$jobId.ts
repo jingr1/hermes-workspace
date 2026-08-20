@@ -8,7 +8,6 @@ import {
   BEARER_TOKEN,
   CLAUDE_API,
   CLAUDE_UPGRADE_INSTRUCTIONS,
-  dashboardFetch,
   ensureGatewayProbed,
 } from '../../server/gateway-capabilities'
 import {
@@ -62,17 +61,6 @@ export const Route = createFileRoute('/api/claude-jobs/$jobId')({
 
         const capabilities = await ensureGatewayProbed()
         if (!capabilities.jobs) return notSupported()
-
-        if (capabilities.dashboard.available) {
-          const dashboardPath = action
-            ? `/api/cron/jobs/${params.jobId}/${action === 'run' ? 'trigger' : action}`
-            : `/api/cron/jobs/${params.jobId}`
-          const res = await dashboardFetch(dashboardPath)
-          return new Response(await res.text(), {
-            status: res.status,
-            headers: { 'Content-Type': 'application/json' },
-          })
-        }
 
         const target = action
           ? `${CLAUDE_API}/api/jobs/${params.jobId}/${action}${url.search}`
@@ -138,23 +126,6 @@ export const Route = createFileRoute('/api/claude-jobs/$jobId')({
 
         const capabilities = await ensureGatewayProbed()
         if (!capabilities.jobs) return notSupported()
-
-        if (capabilities.dashboard.available) {
-          const dashboardAction = action === 'run' ? 'trigger' : action
-          const dashboardPath = dashboardAction
-            ? `/api/cron/jobs/${params.jobId}/${dashboardAction}`
-            : `/api/cron/jobs/${params.jobId}`
-          const method = dashboardAction ? 'POST' : 'PUT'
-          const res = await dashboardFetch(dashboardPath, {
-            method,
-            headers: body ? { 'Content-Type': 'application/json' } : undefined,
-            body: body || undefined,
-          })
-          return new Response(await res.text(), {
-            status: res.status,
-            headers: { 'Content-Type': 'application/json' },
-          })
-        }
 
         const target = action
           ? `${CLAUDE_API}/api/jobs/${params.jobId}/${action}`
@@ -242,17 +213,11 @@ export const Route = createFileRoute('/api/claude-jobs/$jobId')({
         const capabilities = await ensureGatewayProbed()
         if (!capabilities.jobs) return notSupported()
 
-        const res = capabilities.dashboard.available
-          ? await dashboardFetch(`/api/cron/jobs/${params.jobId}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ updates: body ? JSON.parse(body) : {} }),
-            })
-          : await fetch(`${CLAUDE_API}/api/jobs/${params.jobId}`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json', ...authHeaders() },
-              body,
-            })
+        const res = await fetch(`${CLAUDE_API}/api/jobs/${params.jobId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
+          body,
+        })
         return new Response(await res.text(), {
           status: res.status,
           headers: { 'Content-Type': 'application/json' },
@@ -289,14 +254,10 @@ export const Route = createFileRoute('/api/claude-jobs/$jobId')({
         const capabilities = await ensureGatewayProbed()
         if (!capabilities.jobs) return notSupported()
 
-        const res = capabilities.dashboard.available
-          ? await dashboardFetch(`/api/cron/jobs/${params.jobId}`, {
-              method: 'DELETE',
-            })
-          : await fetch(`${CLAUDE_API}/api/jobs/${params.jobId}`, {
-              method: 'DELETE',
-              headers: authHeaders(),
-            })
+        const res = await fetch(`${CLAUDE_API}/api/jobs/${params.jobId}`, {
+          method: 'DELETE',
+          headers: authHeaders(),
+        })
         return new Response(await res.text(), {
           status: res.status,
           headers: { 'Content-Type': 'application/json' },
