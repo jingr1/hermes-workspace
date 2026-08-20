@@ -243,6 +243,11 @@ function upsertDotEnv(
  * Hermes only binds `/health` when the profile .env has a usable
  * API_SERVER_KEY. Named profiles that omit the key (and the pool port)
  * come up as cron-only processes, so chat routes to a dead port.
+ *
+ * Hermes loads `HERMES_HOME/.env` with `override=True`, so a spawn-time
+ * `API_SERVER_PORT` is overwritten by whatever is on disk. A profile
+ * `.env` symlink to `~/.hermes/.env` is a configuration error — refuse
+ * to start rather than rewrite the operator's files.
  */
 export function ensureProfileApiServerEnv(
   profileName: string,
@@ -254,7 +259,13 @@ export function ensureProfileApiServerEnv(
   const home = resolveProfileHermesHome(name)
   const root = hermesRootFromHome(home, name)
   const envPath = path.join(home, '.env')
-  const shared = envIsSharedWithRoot(home, root)
+  if (envIsSharedWithRoot(home, root)) {
+    throw new Error(
+      `profile ${name} .env is a symlink to the hermes root .env; ` +
+        `replace it with a private file so API_SERVER_PORT can differ from default ` +
+        `(run swarm profile bootstrap, or copy ~/.hermes/.env → ${envPath} and set API_SERVER_PORT=${assigned})`,
+    )
+  }
   const current = fs.existsSync(envPath) ? readDotEnvMap(envPath) : {}
   const defaultEnv =
     name === 'default' ? current : readDotEnvMap(path.join(root, '.env'))
@@ -273,16 +284,14 @@ export function ensureProfileApiServerEnv(
   if (key.length >= 16 && !current.API_SERVER_KEY) {
     updates.API_SERVER_KEY = key
   }
-  if (!shared) {
-    try {
-      upsertDotEnv(envPath, updates)
-    } catch (error) {
-      console.warn(
-        `[gateway-pool] failed to persist API server env for ${name}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      )
-    }
+  try {
+    upsertDotEnv(envPath, updates)
+  } catch (error) {
+    console.warn(
+      `[gateway-pool] failed to persist API server env for ${name}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    )
   }
   return {
     API_SERVER_ENABLED: 'true',

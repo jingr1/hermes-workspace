@@ -1671,7 +1671,7 @@ function ChatComposerComponent({
   const hasDraft = value.trim().length > 0 || attachments.length > 0
   const promptPlaceholder = isMobileViewport
     ? 'Message...'
-    : 'Ask anything... (↵ to send · ⇧↵ new line · ⌘⇧M switch model)'
+    : 'Ask anything...'
   const [serverCommands, setServerCommands] = useState<Array<SlashCommandDefinition>>([])
 
   useEffect(() => {

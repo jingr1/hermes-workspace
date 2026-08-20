@@ -1,4 +1,5 @@
 import {
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -162,6 +163,7 @@ describe('profileNameFromHermesHome', () => {
 describe('ensureProfileApiServerEnv', () => {
   it('writes pool port and copies API_SERVER_KEY from default when missing', async () => {
     const home = makeHome()
+    delete process.env.API_SERVER_KEY
     writeFileSync(
       path.join(home, '.env'),
       'API_SERVER_ENABLED=true\nAPI_SERVER_KEY=default-profile-api-key-16\n',
@@ -179,7 +181,7 @@ describe('ensureProfileApiServerEnv', () => {
     expect(raw).toContain('API_SERVER_KEY=default-profile-api-key-16')
   })
 
-  it('does not write pool port into a .env symlink to the hermes root', async () => {
+  it('throws when the profile .env is a symlink to the hermes root', async () => {
     const home = makeHome()
     writeFileSync(
       path.join(home, '.env'),
@@ -189,11 +191,14 @@ describe('ensureProfileApiServerEnv', () => {
     symlinkSync(path.join(home, '.env'), path.join(writer, '.env'))
 
     const mod = await loadMod()
-    const env = mod.ensureProfileApiServerEnv('writer', 8644)
-    expect(env.API_SERVER_PORT).toBe('8644')
-    const raw = readFileSync(path.join(home, '.env'), 'utf-8')
-    expect(raw).toContain('API_SERVER_PORT=8642')
-    expect(raw).not.toContain('API_SERVER_PORT=8644')
+    expect(() => mod.ensureProfileApiServerEnv('writer', 8644)).toThrow(
+      /symlink to the hermes root/,
+    )
+    // Root and symlink must be untouched.
+    expect(lstatSync(path.join(writer, '.env')).isSymbolicLink()).toBe(true)
+    expect(readFileSync(path.join(home, '.env'), 'utf-8')).toContain(
+      'API_SERVER_PORT=8642',
+    )
   })
 })
 

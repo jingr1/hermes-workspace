@@ -26,7 +26,8 @@ export type ConfigSyncResult =
 export type ProfileBootstrapResult = {
   ok: boolean
   configCreated: boolean
-  envLinked: boolean
+  /** True when a private `.env` was created/replaced (never a symlink to root). */
+  envCopied: boolean
   authLinked: boolean
   mcpTokensLinked: number
   error?: string
@@ -62,47 +63,80 @@ function linkSharedFile(source: string, target: string): boolean {
 }
 
 /**
+ * Copy root `.env` into a profile as a real file.
+ *
+ * Never symlink: Hermes loads `.env` with override=True, so a shared
+ * `API_SERVER_PORT=8642` would make every worker fight for default's port.
+ * Strip that key so the gateway pool can assign a unique port later.
+ */
+function copyPrivateEnv(sourceEnv: string, envPath: string): boolean {
+  const raw = readFileSync(sourceEnv, 'utf8')
+  const lines = raw.split('\n').filter((line) => {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) return true
+    const eq = trimmed.indexOf('=')
+    if (eq <= 0) return true
+    const key = trimmed.slice(0, eq).trim()
+    return key !== 'API_SERVER_PORT'
+  })
+  const body = `${lines.join('\n').replace(/\n+$/, '')}\n`
+  writeFileSync(envPath, body, { encoding: 'utf8', mode: 0o600 })
+  return true
+}
+
+/**
  * Ensure a worker HERMES_HOME has enough runtime config to boot Hermes.
  *
  * Swarm dispatch runs workers with HERMES_HOME=~/.hermes/profiles/<workerId>.
  * A brand-new profile only has memory/runtime files, so `hermes chat -q` exits
  * with first-run setup before the worker can do any work. Bootstrap by copying
- * the operator's non-secret config.yaml and linking the private .env locally.
- * The config is copied (not symlinked) because per-worker model sync edits it.
+ * the operator's non-secret config.yaml and a private `.env` (keys shared,
+ * ports not). The config is copied (not symlinked) because per-worker model
+ * sync edits it. `auth.json` / mcp-tokens stay symlinked — they have no port.
  */
-export function ensureSwarmProfileConfig(profilePath: string): ProfileBootstrapResult {
-  const result: ProfileBootstrapResult = { ok: true, configCreated: false, envLinked: false, authLinked: false, mcpTokensLinked: 0 }
+export function ensureSwarmProfileConfig(
+  profilePath: string,
+  options: { hermesRoot?: string } = {},
+): ProfileBootstrapResult {
+  const result: ProfileBootstrapResult = {
+    ok: true,
+    configCreated: false,
+    envCopied: false,
+    authLinked: false,
+    mcpTokensLinked: 0,
+  }
   try {
     mkdirSync(profilePath, { recursive: true })
+    const hermesRoot = options.hermesRoot ?? join(homedir(), '.hermes')
 
     const configPath = join(profilePath, 'config.yaml')
-    const sourceConfig = join(homedir(), '.hermes', 'config.yaml')
+    const sourceConfig = join(hermesRoot, 'config.yaml')
     if (!existsSync(configPath) && existsSync(sourceConfig)) {
       copyFileSync(sourceConfig, configPath)
       result.configCreated = true
     }
 
     const envPath = join(profilePath, '.env')
-    const sourceEnv = join(homedir(), '.hermes', '.env')
+    const sourceEnv = join(hermesRoot, '.env')
     if (existsSync(sourceEnv)) {
-      let shouldLink = !existsSync(envPath)
-      if (!shouldLink) {
+      let shouldCopy = !existsSync(envPath)
+      if (!shouldCopy) {
         try {
-          const stat = lstatSync(envPath)
-          shouldLink = stat.isSymbolicLink()
-          if (shouldLink) unlinkSync(envPath)
+          // Break legacy symlinks that shared default's API_SERVER_PORT.
+          shouldCopy = lstatSync(envPath).isSymbolicLink()
+          if (shouldCopy) unlinkSync(envPath)
         } catch {
-          shouldLink = false
+          shouldCopy = false
         }
       }
-      if (shouldLink) {
-        symlinkSync(sourceEnv, envPath)
-        result.envLinked = true
+      if (shouldCopy) {
+        copyPrivateEnv(sourceEnv, envPath)
+        result.envCopied = true
       }
     }
 
     const authPath = join(profilePath, 'auth.json')
-    const sourceAuth = join(homedir(), '.hermes', 'auth.json')
+    const sourceAuth = join(hermesRoot, 'auth.json')
     if (existsSync(sourceAuth)) {
       let shouldLink = !existsSync(authPath)
       if (!shouldLink) {
@@ -121,7 +155,7 @@ export function ensureSwarmProfileConfig(profilePath: string): ProfileBootstrapR
     }
 
     const mcpTokensDir = join(profilePath, 'mcp-tokens')
-    const sourceMcpTokensDir = join(homedir(), '.hermes', 'mcp-tokens')
+    const sourceMcpTokensDir = join(hermesRoot, 'mcp-tokens')
     if (existsSync(sourceMcpTokensDir)) {
       mkdirSync(mcpTokensDir, { recursive: true })
       for (const name of readdirSync(sourceMcpTokensDir)) {

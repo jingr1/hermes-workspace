@@ -422,7 +422,7 @@ HERMES_API_URL=http://127.0.0.1:8642
 
 Every profile that sets `API_SERVER_ENABLED=true` defaults to port **8642**. Starting several `hermes -p <name> gateway run` processes without unique ports fails with `api_server_port_in_use`.
 
-Workspace avoids that by injecting `API_SERVER_PORT` when it lazy-starts a profile gateway. You can still pin a port yourself (env wins over YAML; a `.env` symlink to `~/.hermes/.env` is ignored so shared files cannot collide):
+Workspace assigns a unique pool port and persists it into that profile's own `.env`. You can still pin a port yourself (env wins over YAML):
 
 ```env
 # e.g. ~/.hermes/profiles/writer/.env  (do NOT share one .env symlink across profiles if ports differ)
@@ -455,7 +455,7 @@ Example port map (adjust as needed):
 
 Disable the pool with `HERMES_GATEWAY_POOL=0` (remote `HERMES_API_URL` already disables it). Multiplex (`gateway.multiplex_profiles: true` on a shared listener) remains an alternative; see Hermes Agent docs: *Running Many Gateways at Once*.
 
-> **Symlinked `.env` pitfall:** if `~/.hermes/profiles/<name>/.env` → `~/.hermes/.env`, Workspace ignores that shared `API_SERVER_PORT` and assigns a unique pool port instead. Pin a port in that profile's own `.env` or `config.yaml` if you need a fixed value.
+> **Symlinked `.env`:** older swarm bootstrap linked `profiles/<name>/.env` → `~/.hermes/.env`, so every worker inherited `API_SERVER_PORT=8642`. Current `ensureSwarmProfileConfig` **copies** `.env` (strips `API_SERVER_PORT`). If a profile still has a symlink, gateway start **fails with a clear error** — fix by replacing it with a private file; do not re-symlink.
 
 ### Live re-pairing (no restart)
 

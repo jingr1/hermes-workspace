@@ -211,7 +211,17 @@ export async function spawnProfileGateway(
     'default'
   const hermesHome = resolveProfileHermesHome(profileName)
   const port = options.port ?? CLAUDE_START_PORT
-  const apiEnv = ensureProfileApiServerEnv(profileName, port)
+  let apiEnv: Record<string, string>
+  try {
+    apiEnv = ensureProfileApiServerEnv(profileName, port)
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+      profile: profileName,
+      hermesHome,
+    }
+  }
   const claudeEnv = readClaudeEnv(hermesHome)
   const claudeBin = resolveClaudeBinary()
   const agentDir = resolveClaudeAgentDir()
@@ -274,8 +284,21 @@ export async function spawnProfileGateway(
     logFd = undefined
   }
 
+  // Cursor agent shells may inject bubblewrap netns via CURSOR_SANDBOX_*;
+  // never inherit those into a long-lived gateway or /health becomes unreachable.
+  const parentEnv: Record<string, string | undefined> = { ...process.env }
+  for (const key of Object.keys(parentEnv)) {
+    if (
+      key === 'CURSOR_SANDBOX' ||
+      key.startsWith('CURSOR_SANDBOX_') ||
+      key === '__CURSOR_SANDBOX_ENV_RESTORE'
+    ) {
+      delete parentEnv[key]
+    }
+  }
+
   const spawnEnv = {
-    ...process.env,
+    ...parentEnv,
     ...claudeEnv,
     ...apiEnv,
     HERMES_HOME: hermesHome,
