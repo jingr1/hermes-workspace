@@ -1,4 +1,5 @@
 import { chatQueryKeys, fetchSessions } from '../chat-queries'
+import { preloadWorkspaceFolders } from '@/components/workspace-folder-picker'
 import {
   prefetchProfileWorkspace,
   WORKSPACE_PROFILE_QUERY_KEY,
@@ -123,6 +124,7 @@ export function useProfiles() {
     onSuccess: async (data, profileName) => {
       toast(`Activated ${profileName}`)
       queryClient.setQueryData(WORKSPACE_PROFILE_QUERY_KEY, profileName)
+      preloadWorkspaceFolders(profileName)
       if (data.workspace) {
         await prefetchProfileWorkspace(queryClient, profileName, data.workspace)
       } else {
@@ -151,6 +153,7 @@ export function useProfiles() {
   useEffect(() => {
     if (!profilesQuery.isFetched || activateMutation.isPending) return
     queryClient.setQueryData(WORKSPACE_PROFILE_QUERY_KEY, activeProfileName)
+    preloadWorkspaceFolders(activeProfileName)
   }, [
     profilesQuery.isFetched,
     activeProfileName,

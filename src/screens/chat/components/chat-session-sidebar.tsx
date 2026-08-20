@@ -13,6 +13,7 @@ import { resolveSessionForProfile, writeLastSession } from '../last-session'
 import { SidebarSessions } from './sidebar/sidebar-sessions'
 import { SessionDeleteDialog } from './sidebar/session-delete-dialog'
 import type { SessionMeta } from '../types'
+import { preloadWorkspaceFolders } from '@/components/workspace-folder-picker'
 import { cn } from '@/lib/utils'
 import { Button, buttonVariants } from '@/components/ui/button'
 import {
@@ -185,6 +186,7 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
       const targetSession = resolveSessionForProfile(cached, profileName)
       setActiveProfileOptimistic(queryClient, profileName)
       prefetchSessionHistory(queryClient, profileName, targetSession)
+      preloadWorkspaceFolders(profileName)
       navigate({
         to: '/chat/$sessionKey',
         params: { sessionKey: targetSession },

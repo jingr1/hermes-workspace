@@ -38,6 +38,17 @@ type WorkspaceFolderPickerProps = {
   reloadKey?: string
 }
 
+type FolderCacheEntry = {
+  data?: FolderListResponse | null
+  promise?: Promise<FolderListResponse | null>
+}
+
+const folderCache = new Map<string, FolderCacheEntry>()
+
+function folderCacheKey(subPath: string, profileName: string): string {
+  return `${profileName}::${subPath}`
+}
+
 function isAbortError(error: unknown): boolean {
   return (
     (error instanceof DOMException &&
@@ -91,6 +102,26 @@ async function fetchFolders(
   }
 }
 
+function cachedFetchFolders(
+  subPath = '',
+  profileName = '',
+): Promise<FolderListResponse | null> {
+  const key = folderCacheKey(subPath, profileName)
+  const cached = folderCache.get(key)
+  if (cached?.data !== undefined) return Promise.resolve(cached.data)
+  if (cached?.promise) return cached.promise
+  const promise = fetchFolders(subPath, profileName).then((result) => {
+    folderCache.set(key, { data: result })
+    return result
+  })
+  folderCache.set(key, { promise })
+  return promise
+}
+
+export function preloadWorkspaceFolders(profileName = ''): void {
+  void cachedFetchFolders('', profileName)
+}
+
 export function WorkspaceFolderPicker({
   value,
   onChange,
@@ -111,16 +142,34 @@ export function WorkspaceFolderPicker({
 
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
     setLoadFailed(false)
     setLoadError('')
-    setBasePath('')
-    setRemoteHost('')
-    setFolders([])
     setExpandedPaths(new Set())
     setChildrenCache(new Map())
     setLoadingPaths(new Set())
-    void fetchFolders('', reloadKey)
+    const cached = folderCache.get(folderCacheKey('', reloadKey))?.data
+    if (cached) {
+      setLoading(false)
+      if (cached.error) {
+        setLoadFailed(true)
+        setLoadError(cached.error)
+        setFolders([])
+        setBasePath(cached.base || '')
+        setRemoteHost(cached.host || '')
+      } else {
+        setLoadFailed(false)
+        setLoadError('')
+        setBasePath(cached.base)
+        setRemoteHost(cached.host || '')
+        setFolders(cached.folders ?? [])
+      }
+    } else {
+      setLoading(true)
+      setBasePath('')
+      setRemoteHost('')
+      setFolders([])
+    }
+    void cachedFetchFolders('', reloadKey)
       .then((res) => {
         if (cancelled) return
         setLoading(false)
@@ -175,7 +224,7 @@ export function WorkspaceFolderPicker({
       return next
     })
     for (const entryPath of pending) {
-      void fetchFolders(entryPath, reloadKey).then((res) => {
+      void cachedFetchFolders(entryPath, reloadKey).then((res) => {
         setChildrenCache((current) => {
           const next = new Map(current)
           next.set(entryPath, res?.folders ?? [])

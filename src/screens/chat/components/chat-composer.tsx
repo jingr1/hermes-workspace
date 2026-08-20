@@ -60,7 +60,10 @@ import {
   DialogRoot,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { WorkspaceFolderPicker } from '@/components/workspace-folder-picker'
+import {
+  preloadWorkspaceFolders,
+  WorkspaceFolderPicker,
+} from '@/components/workspace-folder-picker'
 import { usePinnedModels } from '@/hooks/use-pinned-models'
 // import { ModeSelector } from '@/components/mode-selector'
 import { cn } from '@/lib/utils'
@@ -2764,6 +2767,7 @@ function ChatComposerComponent({
                     <button
                       type="button"
                       onClick={() => {
+                        preloadWorkspaceFolders(workspaceProfileName)
                         setWorkspaceDraftPath(detectedWorkspacePath)
                         setIsWorkspaceMenuOpen(true)
                         setIsThinkingMenuOpen(false)

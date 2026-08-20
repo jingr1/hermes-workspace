@@ -9,6 +9,7 @@ describe('WorkspaceFolderPicker', () => {
       'utf8',
     )
     expect(source).toContain('/api/workspace/folders')
+    expect(source).toContain('preloadWorkspaceFolders')
     expect(source).toContain('Enter project path, e.g. /home/user/project')
     expect(source).toContain('No workspace folders')
     expect(source).toContain('controller.abort()')
