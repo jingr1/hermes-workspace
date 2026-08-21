@@ -298,10 +298,13 @@ function OrchestratorCard({
       } catch { /* noop */ }
     }
 
-    void fetchAll()
+    const bootTimer = setTimeout(() => {
+      if (!cancelled) void fetchAll()
+    }, 2500)
     const timer = setInterval(fetchAll, USAGE_POLL_MS)
     return () => {
       cancelled = true
+      clearTimeout(bootTimer)
       clearInterval(timer)
       if (flashTimerRefOc.current) clearTimeout(flashTimerRefOc.current)
     }

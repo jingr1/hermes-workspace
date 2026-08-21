@@ -137,6 +137,12 @@ export function UpdateCenterNotifier() {
     // status poll should not interrupt users with stale "what changed" copy.
   }, [])
 
+  const [bootDeferred, setBootDeferred] = useState(false)
+  useEffect(() => {
+    const timer = window.setTimeout(() => setBootDeferred(true), 3000)
+    return () => window.clearTimeout(timer)
+  }, [])
+
   const { data } = useQuery({
     queryKey: ['update-status-v2'],
     queryFn: async () => {
@@ -144,6 +150,7 @@ export function UpdateCenterNotifier() {
       if (!res.ok) return null
       return res.json() as Promise<UpdateStatus>
     },
+    enabled: bootDeferred,
     refetchInterval: CHECK_INTERVAL_MS,
     staleTime: CHECK_INTERVAL_MS,
     retry: false,

@@ -153,31 +153,29 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
     return [...profiles].sort((a, b) => a.name.localeCompare(b.name))
   }, [profiles])
 
-  // Prefetch active profile immediately; defer the rest so first paint isn't
-  // competing with N parallel sessions+history requests.
+  // Prefetch active profile sessions+history immediately; defer other
+  // profiles' sessions lists only (no history) so the visible chat's
+  // /api/history is not starved by N parallel history reads.
   useEffect(() => {
     if (profiles.length === 0) return
 
-    const prefetchOne = (profileName: string) => {
-      void queryClient
-        .prefetchQuery({
-          queryKey: chatQueryKeys.sessionsForProfile(profileName),
-          queryFn: () => fetchSessions(profileName),
-          staleTime: 60_000,
-        })
-        .then(() => {
-          const cached = queryClient.getQueryData<Array<SessionMeta>>(
-            chatQueryKeys.sessionsForProfile(profileName),
-          )
-          prefetchSessionHistory(
-            queryClient,
-            profileName,
-            resolveSessionForProfile(cached, profileName),
-          )
-        })
-    }
+    const prefetchSessions = (profileName: string) =>
+      queryClient.prefetchQuery({
+        queryKey: chatQueryKeys.sessionsForProfile(profileName),
+        queryFn: () => fetchSessions(profileName),
+        staleTime: 60_000,
+      })
 
-    prefetchOne(activeProfileName)
+    void prefetchSessions(activeProfileName).then(() => {
+      const cached = queryClient.getQueryData<Array<SessionMeta>>(
+        chatQueryKeys.sessionsForProfile(activeProfileName),
+      )
+      prefetchSessionHistory(
+        queryClient,
+        activeProfileName,
+        resolveSessionForProfile(cached, activeProfileName),
+      )
+    })
 
     const deferred = profiles
       .map((profile) => profile.name)
@@ -193,7 +191,7 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
       deferred.forEach((name, index) => {
         timers.push(
           setTimeout(() => {
-            if (!cancelled) prefetchOne(name)
+            if (!cancelled) void prefetchSessions(name)
           }, index * 150),
         )
       })

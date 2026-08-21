@@ -37,6 +37,7 @@ export function MobileSetupModal({ isOpen, onClose }: MobileSetupModalProps) {
   } | null>(null)
 
   useEffect(() => {
+    if (!isOpen) return
     fetch(`/api/network-url?port=${window.location.port || 3000}`)
       .then(
         (r) =>
@@ -49,7 +50,7 @@ export function MobileSetupModal({ isOpen, onClose }: MobileSetupModalProps) {
       .catch(() =>
         setNetworkUrl({ url: window.location.origin, source: 'localhost' }),
       )
-  }, [])
+  }, [isOpen])
 
   useEffect(() => {
     if (isOpen) setStep(0)

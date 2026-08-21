@@ -88,9 +88,14 @@ function ContextIndicatorComponent({
   }, [sessionId])
 
   useEffect(() => {
-    void refresh()
+    const boot = window.setTimeout(() => {
+      void refresh()
+    }, 2500)
     const id = window.setInterval(refresh, POLL_MS)
-    return () => window.clearInterval(id)
+    return () => {
+      window.clearTimeout(boot)
+      window.clearInterval(id)
+    }
   }, [refresh])
 
   useEffect(() => {

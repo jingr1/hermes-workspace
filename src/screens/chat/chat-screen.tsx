@@ -629,6 +629,15 @@ export function ChatScreen({
     sessionVerified,
   })
 
+  // Skeleton / gateway-deferral gate — defined early so models/composer don't
+  // race history on a cold gateway.
+  const historyLoading =
+    isRedirecting ||
+    (!historyQuery.data &&
+      (historyQuery.isPending ||
+        historyQuery.isLoading ||
+        historyQuery.isFetching))
+
   // --- Waiting state management (Issue #43 + #449) ---
   // resolvedSessionKey is now available (defined above from useChatHistory).
   const storeWaiting = useChatStore((s) => s.waitingSessionKeys)
@@ -1024,7 +1033,8 @@ export function ChatScreen({
       !isNewChat && Boolean(resolvedSessionKey) && historyQuery.isSuccess,
   })
 
-  // Phase 4.1: Smart Model Suggestions
+  // Phase 4.1: Smart Model Suggestions — defer until history leaves the
+  // skeleton so cold gateway probes don't starve /api/history.
   const modelsQuery = useQuery({
     queryKey: ['models'],
     queryFn: async () => {
@@ -1033,6 +1043,7 @@ export function ChatScreen({
       const data = await res.json()
       return data
     },
+    enabled: !historyLoading,
     staleTime: 5 * 60 * 1000, // 5 minutes
   })
 
@@ -1064,7 +1075,8 @@ export function ChatScreen({
         return ''
       }
     },
-    refetchInterval: 30_000,
+    enabled: !historyLoading,
+    refetchInterval: historyLoading ? false : 30_000,
     retry: false,
   })
 
@@ -1087,6 +1099,7 @@ export function ChatScreen({
         return 'low'
       }
     },
+    enabled: !historyLoading,
     staleTime: 10 * 60 * 1000,
     retry: false,
   })
@@ -2755,13 +2768,6 @@ export function ChatScreen({
     composerHandleRef.current?.insertText(reference)
   }, [])
 
-  // Skeleton only until the first history payload exists. Prefer !data over
-  // isFetching — historyQuery uses notifyOnChangeProps that omit fetch flags,
-  // and background refetches must not re-show the skeleton.
-  const historyLoading =
-    isRedirecting ||
-    (!historyQuery.data &&
-      (historyQuery.isPending || historyQuery.isLoading || historyQuery.isFetching))
   const visibleMessages =
     sessionVerified || Boolean(historyQuery.data) || !historyLoading
       ? finalDisplayMessages
@@ -3037,6 +3043,7 @@ export function ChatScreen({
               focusKey={`${isNewChat ? 'new' : activeFriendlyId}:${activeCanonicalKey ?? ''}`}
               thinkingLevel={thinkingLevel}
               onThinkingLevelChange={handleThinkingLevelChange}
+              gatewayQueriesEnabled={!historyLoading}
             />
           ) : null}
         </main>

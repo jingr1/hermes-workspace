@@ -540,26 +540,35 @@ export function UsageMeter({ visible = true }: { visible?: boolean }) {
 
   useEffect(() => {
     let active = true
-    void refresh()
+    // Defer gateway-backed status polls until after first chat history paint.
+    const bootTimer = window.setTimeout(() => {
+      if (!active) return
+      void refresh()
+    }, 2500)
     const interval = window.setInterval(() => {
       if (!active) return
       void refresh()
     }, POLL_INTERVAL_MS)
     return () => {
       active = false
+      window.clearTimeout(bootTimer)
       window.clearInterval(interval)
     }
   }, [refresh])
 
   useEffect(() => {
     let active = true
-    void refreshProviders()
+    const bootTimer = window.setTimeout(() => {
+      if (!active) return
+      void refreshProviders()
+    }, 2500)
     const interval = window.setInterval(() => {
       if (!active) return
       void refreshProviders()
     }, PROVIDER_POLL_INTERVAL_MS)
     return () => {
       active = false
+      window.clearTimeout(bootTimer)
       window.clearInterval(interval)
     }
   }, [refreshProviders])

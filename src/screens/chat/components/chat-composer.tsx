@@ -121,6 +121,11 @@ type ChatComposerProps = {
    * must stay inline instead of docking fixed to the viewport bottom. */
   embedded?: boolean
   hideModelSelector?: boolean
+  /**
+   * When false, skip gateway-backed catalog/status fetches so the first history
+   * payload is not competing with models/session-status/etc. on a cold gateway.
+   */
+  gatewayQueriesEnabled?: boolean
 }
 
 type ChatComposerHelpers = {
@@ -868,6 +873,7 @@ function ChatComposerComponent({
   hideModelSelector = false,
   isCompacting = false,
   contextRefreshToken,
+  gatewayQueriesEnabled = true,
 }: ChatComposerProps) {
   const queryClient = useQueryClient()
   const mobileKeyboardInset = useWorkspaceStore((s) => s.mobileKeyboardInset)
@@ -950,7 +956,8 @@ function ChatComposerComponent({
   const modelsQuery = useQuery({
     queryKey: ['claude', 'models'],
     queryFn: fetchModels,
-    refetchInterval: 60_000,
+    enabled: gatewayQueriesEnabled,
+    refetchInterval: gatewayQueriesEnabled ? 60_000 : false,
     retry: false,
   })
   const currentProvider = modelsQuery.data?.currentProvider ?? ''
@@ -971,7 +978,10 @@ function ChatComposerComponent({
         .sort()
         .join('|'),
     ],
-    enabled: isProviderSwitcherExpanded && otherProviders.length > 0,
+    enabled:
+      gatewayQueriesEnabled &&
+      isProviderSwitcherExpanded &&
+      otherProviders.length > 0,
     retry: false,
     queryFn: async () => {
       const modelEntries = await Promise.all(
@@ -993,7 +1003,8 @@ function ChatComposerComponent({
   const currentModelQuery = useQuery({
     queryKey: ['claude', 'session-status-model', sessionKey || 'main'],
     queryFn: () => fetchCurrentModelFromStatus(sessionKey),
-    refetchInterval: 30_000,
+    enabled: gatewayQueriesEnabled,
+    refetchInterval: gatewayQueriesEnabled ? 30_000 : false,
     retry: false,
   })
   const sttConfigQuery = useQuery({
@@ -1005,18 +1016,21 @@ function ChatComposerComponent({
       }
       return (await response.json()) as ClaudeConfigApiResponse
     },
+    enabled: gatewayQueriesEnabled,
     staleTime: 60_000,
     retry: false,
   })
   const gatewayModeQuery = useQuery({
     queryKey: ['gateway-status', 'mode'],
     queryFn: fetchGatewayMode,
+    enabled: gatewayQueriesEnabled,
     staleTime: 30_000,
     retry: false,
   })
   const modelInfoQuery = useQuery({
     queryKey: ['dashboard', 'model-info'],
     queryFn: fetchModelInfo,
+    enabled: gatewayQueriesEnabled,
     staleTime: 30_000,
     retry: false,
   })

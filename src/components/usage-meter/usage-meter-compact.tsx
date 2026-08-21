@@ -236,15 +236,25 @@ export function UsageMeterCompact() {
   // ── Polling effects ──────────────────────────────────────────────────────
 
   useEffect(() => {
-    void fetchSession()
+    const boot = window.setTimeout(() => {
+      void fetchSession()
+    }, 2500)
     const id = window.setInterval(fetchSession, POLL_INTERVAL_MS)
-    return () => window.clearInterval(id)
+    return () => {
+      window.clearTimeout(boot)
+      window.clearInterval(id)
+    }
   }, [fetchSession])
 
   useEffect(() => {
-    void fetchProvider(preferredProvider)
+    const boot = window.setTimeout(() => {
+      void fetchProvider(preferredProvider)
+    }, 2500)
     const id = window.setInterval(() => fetchProvider(preferredProvider), POLL_INTERVAL_MS)
-    return () => window.clearInterval(id)
+    return () => {
+      window.clearTimeout(boot)
+      window.clearInterval(id)
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchProvider])
 
