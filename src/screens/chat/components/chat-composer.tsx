@@ -902,6 +902,9 @@ function ChatComposerComponent({
   })
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false)
   const [isWorkspaceMenuOpen, setIsWorkspaceMenuOpen] = useState(false)
+  // Keep the folder picker mounted through the dialog close animation (150ms)
+  // so Cancel does not flash an empty/smaller modal mid-exit.
+  const [showWorkspacePicker, setShowWorkspacePicker] = useState(false)
   const [workspaceDraftPath, setWorkspaceDraftPath] = useState('')
   const [isThinkingMenuOpen, setIsThinkingMenuOpen] = useState(false)
   const [isControlsMenuOpen, setIsControlsMenuOpen] = useState(false)
@@ -1141,18 +1144,30 @@ function ChatComposerComponent({
 
   useEffect(() => {
     setIsWorkspaceMenuOpen(false)
+    setShowWorkspacePicker(false)
     setWorkspaceDraftPath('')
   }, [workspaceProfileName])
 
   useEffect(() => {
-    if (!isWorkspaceMenuOpen) {
-      setWorkspaceDraftPath(detectedWorkspacePath)
+    if (isWorkspaceMenuOpen) {
+      setShowWorkspacePicker(true)
       return
     }
-    if (detectedWorkspacePath) {
-      setWorkspaceDraftPath((current) => current || detectedWorkspacePath)
+    const timer = window.setTimeout(() => setShowWorkspacePicker(false), 180)
+    return () => window.clearTimeout(timer)
+  }, [isWorkspaceMenuOpen])
+
+  useEffect(() => {
+    if (isWorkspaceMenuOpen) {
+      if (detectedWorkspacePath) {
+        setWorkspaceDraftPath((current) => current || detectedWorkspacePath)
+      }
+      return
     }
-  }, [detectedWorkspacePath, isWorkspaceMenuOpen])
+    if (!showWorkspacePicker) {
+      setWorkspaceDraftPath(detectedWorkspacePath)
+    }
+  }, [detectedWorkspacePath, isWorkspaceMenuOpen, showWorkspacePicker])
   const activeWorkspace = workspaceEntries.find(
     (workspace) => workspace.path === detectedWorkspacePath,
   )
@@ -2825,7 +2840,7 @@ function ChatComposerComponent({
                               </div>
                             </div>
                           ) : null}
-                          {isWorkspaceMenuOpen ? (
+                          {showWorkspacePicker ? (
                             <WorkspaceFolderPicker
                               reloadKey={workspaceProfileName}
                               value={workspaceDraftPath}

@@ -4,10 +4,12 @@ import path from 'node:path'
 import YAML from 'yaml'
 
 // createRequire is the canonical ESM→CJS bridge. We need it because
-// node:sqlite is a native module and Vite dev server runs in ESM mode.
+// better-sqlite3 / node:sqlite are native modules and Vite runs in ESM mode.
 // @ts-ignore -- LSP/tsconfig doesn't include node types but runtime has it
 import { createRequire as _createRequire } from 'node:module'
 const nodeRequire = _createRequire(import.meta.url)
+
+let profileSqliteFallbackWarned = false
 
 export type ProfileSummary = {
   name: string
@@ -438,12 +440,22 @@ function openProfileStateDb(dbPath: string): {
       }
       close: () => void
     }
+    let opts: Record<string, unknown> = { readonly: true }
     try {
       Database = nodeRequire('better-sqlite3')
-    } catch {
+    } catch (error) {
       Database = nodeRequire('node:sqlite').DatabaseSync
+      opts = { readOnly: true }
+      if (!profileSqliteFallbackWarned) {
+        profileSqliteFallbackWarned = true
+        console.warn(
+          '[profiles] better-sqlite3 unavailable; falling back to experimental node:sqlite' +
+            ` (${error instanceof Error ? error.message : String(error)}).` +
+            ' Install better-sqlite3 for the supported local profile DB path.',
+        )
+      }
     }
-    return new Database(dbPath, { readOnly: true })
+    return new Database(dbPath, opts)
   } catch {
     return null
   }

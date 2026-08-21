@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import * as fs from 'node:fs'
+import { createRequire } from 'node:module'
 import * as path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { getClaudeRoot, getWorkspaceClaudeHome } from './claude-paths'
@@ -19,6 +20,9 @@ import {
   updateDashboardKanbanTask,
   type DashboardKanbanTask,
 } from './kanban-dashboard-proxy'
+
+// Vite ESM cannot statically import native sqlite modules; bridge like profiles-browser.
+const nodeRequire = createRequire(import.meta.url)
 
 export type KanbanBackendId = 'local' | 'claude' | 'hermes-proxy'
 
@@ -211,7 +215,96 @@ function sqliteQuote(value: string): string {
   return `'${value.replace(/'/g, "''")}'`
 }
 
+type SqliteDatabase = {
+  prepare: (sql: string) => { all: (...params: Array<unknown>) => Array<Record<string, unknown>> }
+  exec: (sql: string) => void
+  close: () => void
+}
+
+type SqliteDriver = 'better-sqlite3' | 'node:sqlite'
+
+let sqliteDriverWarningShown = false
+let sqliteCliWarningShown = false
+
+function warnSqliteFallback(driver: SqliteDriver | 'sqlite3-cli', detail?: string): void {
+  if (driver === 'node:sqlite') {
+    if (sqliteDriverWarningShown) return
+    sqliteDriverWarningShown = true
+    console.warn(
+      '[kanban] better-sqlite3 unavailable; falling back to experimental node:sqlite' +
+        (detail ? ` (${detail})` : '') +
+        '. Install better-sqlite3 for the supported local kanban path.',
+    )
+    return
+  }
+  if (driver === 'sqlite3-cli') {
+    if (sqliteCliWarningShown) return
+    sqliteCliWarningShown = true
+    console.warn(
+      '[kanban] in-process SQLite unavailable; falling back to system sqlite3 CLI' +
+        (detail ? ` (${detail})` : '') +
+        '. Install better-sqlite3 for the supported local kanban path.',
+    )
+  }
+}
+
+function openSqliteDatabase(dbPath: string, readOnly: boolean): SqliteDatabase {
+  let Database: new (
+    path: string,
+    opts?: Record<string, unknown>,
+  ) => SqliteDatabase
+  let driver: SqliteDriver
+  try {
+    Database = nodeRequire('better-sqlite3')
+    driver = 'better-sqlite3'
+  } catch (error) {
+    Database = nodeRequire('node:sqlite').DatabaseSync
+    driver = 'node:sqlite'
+    warnSqliteFallback(
+      'node:sqlite',
+      error instanceof Error ? error.message : String(error),
+    )
+  }
+  // better-sqlite3 uses `readonly`; node:sqlite DatabaseSync uses `readOnly`.
+  const opts = readOnly
+    ? driver === 'better-sqlite3'
+      ? { readonly: true }
+      : { readOnly: true }
+    : undefined
+  return new Database(dbPath, opts)
+}
+
+/**
+ * Run SQL against kanban.db.
+ * Prefer better-sqlite3 (product path); fall back to experimental node:sqlite,
+ * then to the system sqlite3 CLI (tests / last resort).
+ */
 function runSqlite(dbPath: string, sql: string): string {
+  const trimmed = sql.trim()
+  const isSelect = /^select\b/i.test(trimmed)
+
+  if (fs.existsSync(dbPath)) {
+    try {
+      const db = openSqliteDatabase(dbPath, isSelect)
+      try {
+        if (isSelect) {
+          const rows = db.prepare(trimmed).all()
+          return rows.length > 0 ? JSON.stringify(rows) : ''
+        }
+        db.exec(trimmed)
+        return ''
+      } finally {
+        db.close()
+      }
+    } catch (error) {
+      warnSqliteFallback(
+        'sqlite3-cli',
+        error instanceof Error ? error.message : String(error),
+      )
+      // Fall through to CLI — tests mock execFileSync('sqlite3', ...).
+    }
+  }
+
   return execFileSync('sqlite3', [dbPath, '-json', sql], {
     encoding: 'utf8',
     timeout: 15_000,
