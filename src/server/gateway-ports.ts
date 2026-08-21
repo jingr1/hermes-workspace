@@ -9,6 +9,7 @@ import {
   listProfiles,
   resolveProfileHermesHome,
 } from './profiles-browser'
+import { ensureSwarmProfileConfig } from './swarm-profile-config'
 import { getStateDir } from './workspace-state-dir'
 
 export const GATEWAY_BASE_PORT = 8642
@@ -126,7 +127,8 @@ function envIsSharedWithRoot(profileHome: string, hermesRoot: string): boolean {
   const rootEnv = path.join(hermesRoot, '.env')
   try {
     if (!fs.lstatSync(envPath).isSymbolicLink()) return false
-    return path.resolve(fs.realpathSync(envPath)) === path.resolve(rootEnv)
+    // realpath both sides — macOS tmp/home paths often differ by /private prefix.
+    return fs.realpathSync(envPath) === fs.realpathSync(rootEnv)
   } catch {
     return false
   }
@@ -260,11 +262,16 @@ export function ensureProfileApiServerEnv(
   const root = hermesRootFromHome(home, name)
   const envPath = path.join(home, '.env')
   if (envIsSharedWithRoot(home, root)) {
-    throw new Error(
-      `profile ${name} .env is a symlink to the hermes root .env; ` +
-        `replace it with a private file so API_SERVER_PORT can differ from default ` +
-        `(run swarm profile bootstrap, or copy ~/.hermes/.env → ${envPath} and set API_SERVER_PORT=${assigned})`,
-    )
+    // Legacy profiles often symlink `.env` to the hermes root. Auto-heal into a
+    // private copy (API_SERVER_PORT stripped) so this profile can bind its own port.
+    ensureSwarmProfileConfig(home, { hermesRoot: root })
+    if (envIsSharedWithRoot(home, root)) {
+      throw new Error(
+        `profile ${name} .env is a symlink to the hermes root .env; ` +
+          `replace it with a private file so API_SERVER_PORT can differ from default ` +
+          `(run swarm profile bootstrap, or copy ~/.hermes/.env → ${envPath} and set API_SERVER_PORT=${assigned})`,
+      )
+    }
   }
   const current = fs.existsSync(envPath) ? readDotEnvMap(envPath) : {}
   const defaultEnv =

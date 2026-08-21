@@ -504,8 +504,11 @@ export function UsageMeter({ visible = true }: { visible?: boolean }) {
         /gateway/i.test(errorMessage) ||
         /timeout/i.test(errorMessage) ||
         /failed to fetch/i.test(errorMessage) ||
+        /fetch failed/i.test(errorMessage) ||
         /network/i.test(errorMessage) ||
-        /econnrefused/i.test(errorMessage)
+        /econnrefused/i.test(errorMessage) ||
+        /service unavailable/i.test(errorMessage) ||
+        /request failed/i.test(errorMessage)
       if (!silent) {
         toast('Failed to fetch usage data', { type: 'error' })
       }

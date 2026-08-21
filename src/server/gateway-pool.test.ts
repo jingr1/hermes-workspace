@@ -181,7 +181,7 @@ describe('ensureProfileApiServerEnv', () => {
     expect(raw).toContain('API_SERVER_KEY=default-profile-api-key-16')
   })
 
-  it('throws when the profile .env is a symlink to the hermes root', async () => {
+  it('auto-heals a profile .env symlink to the hermes root', async () => {
     const home = makeHome()
     writeFileSync(
       path.join(home, '.env'),
@@ -191,11 +191,12 @@ describe('ensureProfileApiServerEnv', () => {
     symlinkSync(path.join(home, '.env'), path.join(writer, '.env'))
 
     const mod = await loadMod()
-    expect(() => mod.ensureProfileApiServerEnv('writer', 8644)).toThrow(
-      /symlink to the hermes root/,
-    )
-    // Root and symlink must be untouched.
-    expect(lstatSync(path.join(writer, '.env')).isSymbolicLink()).toBe(true)
+    const env = mod.ensureProfileApiServerEnv('writer', 8644)
+    expect(env.API_SERVER_PORT).toBe('8644')
+    expect(lstatSync(path.join(writer, '.env')).isSymbolicLink()).toBe(false)
+    const raw = readFileSync(path.join(writer, '.env'), 'utf-8')
+    expect(raw).toContain('API_SERVER_PORT=8644')
+    // Root file must stay untouched.
     expect(readFileSync(path.join(home, '.env'), 'utf-8')).toContain(
       'API_SERVER_PORT=8642',
     )

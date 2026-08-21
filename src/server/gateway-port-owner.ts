@@ -4,7 +4,12 @@
  * Keep this module a leaf: no imports from gateway-pool / lifecycle / ports.
  * Vite SSR rewrites `export function` into live `const` bindings; keep inode
  * helpers as non-exported function declarations so HMR cannot drop them.
+ *
+ * Linux uses `/proc` (fast). macOS/Windows fall back to `lsof` + `ps` because
+ * `/proc/net/tcp` is unavailable — without that fallback every profile looks
+ * `stopped` (gray) in the UI even when gateways are healthy.
  */
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { resolveProfileHermesHome } from './profiles-browser'
@@ -34,6 +39,18 @@ const LISTEN_CACHE_MS = 250
 let listenCache: { at: number; inodesByPort: Map<number, Set<string>> } | null =
   null
 let pidCache: { at: number; pidByPort: Map<number, number | null> } | null = null
+let linuxProcAvailable: boolean | null = null
+
+function hasLinuxProcNet(): boolean {
+  if (linuxProcAvailable != null) return linuxProcAvailable
+  try {
+    fs.accessSync('/proc/net/tcp', fs.constants.R_OK)
+    linuxProcAvailable = true
+  } catch {
+    linuxProcAvailable = false
+  }
+  return linuxProcAvailable
+}
 
 function listenInodesByPort(): Map<number, Set<string>> {
   const now = Date.now()
@@ -115,8 +132,30 @@ function rememberPid(port: number, pid: number | null): void {
   pidCache.pidByPort.set(port, pid)
 }
 
+function lsofListeningPid(port: number): number | null {
+  if (!Number.isInteger(port) || port <= 0) return null
+  try {
+    const out = execFileSync(
+      'lsof',
+      ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'],
+      {
+        encoding: 'utf8',
+        timeout: 1500,
+        maxBuffer: 64_000,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      },
+    ).trim()
+    const first = out.split(/\s+/)[0]?.trim()
+    if (first && /^\d+$/.test(first)) return Number(first)
+  } catch {
+    // not listening, or lsof unavailable
+  }
+  return null
+}
+
 export function isPortInUse(port: number): boolean {
-  return inodesForPort(port).size > 0
+  if (hasLinuxProcNet()) return inodesForPort(port).size > 0
+  return lsofListeningPid(port) != null
 }
 
 export function pidListeningOnPort(port: number): number | null {
@@ -124,24 +163,42 @@ export function pidListeningOnPort(port: number): number | null {
   if (pidCache && now - pidCache.at < LISTEN_CACHE_MS && pidCache.pidByPort.has(port)) {
     return pidCache.pidByPort.get(port) ?? null
   }
-  const inodes = inodesForPort(port)
-  if (!inodes.size) {
-    rememberPid(port, null)
-    return null
+
+  if (hasLinuxProcNet()) {
+    const inodes = inodesForPort(port)
+    if (!inodes.size) {
+      rememberPid(port, null)
+      return null
+    }
+    const scanned = findPidBySocketInodes(inodes)
+    rememberPid(port, scanned)
+    return scanned
   }
-  const scanned = findPidBySocketInodes(inodes)
-  rememberPid(port, scanned)
-  return scanned
+
+  const pid = lsofListeningPid(port)
+  rememberPid(port, pid)
+  return pid
 }
 
 export function profileOwnsPort(profileName: string, port: number): boolean {
-  const inodes = inodesForPort(port)
-  if (!inodes.size) return false
   const home = resolveProfileHermesHome(profileName)
   const pidFromFile = readAliveGatewayPid(home)
-  if (pidFromFile && pidOwnsSocketInodes(pidFromFile, inodes)) return true
+
+  if (hasLinuxProcNet()) {
+    const inodes = inodesForPort(port)
+    if (!inodes.size) return false
+    if (pidFromFile && pidOwnsSocketInodes(pidFromFile, inodes)) return true
+    const pid = pidListeningOnPort(port)
+    if (!pid) return false
+    const occupantHome = readProcessHermesHome(pid)
+    return Boolean(
+      occupantHome && path.resolve(occupantHome) === path.resolve(home),
+    )
+  }
+
   const pid = pidListeningOnPort(port)
   if (!pid) return false
+  if (pidFromFile && pidFromFile === pid) return true
   const occupantHome = readProcessHermesHome(pid)
   return Boolean(
     occupantHome && path.resolve(occupantHome) === path.resolve(home),
@@ -157,6 +214,23 @@ export function readProcessHermesHome(pid: number): string | null {
     const value = line.slice('HERMES_HOME='.length).trim()
     return value || null
   } catch {
-    return null
+    // fall through to platform-specific probes
   }
+
+  if (process.platform === 'darwin') {
+    try {
+      const out = execFileSync('ps', ['eww', '-p', String(pid)], {
+        encoding: 'utf8',
+        timeout: 1500,
+        maxBuffer: 2_000_000,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      })
+      const match = out.match(/\bHERMES_HOME=([^\s]+)/)
+      return match?.[1] ? match[1].trim() : null
+    } catch {
+      return null
+    }
+  }
+
+  return null
 }

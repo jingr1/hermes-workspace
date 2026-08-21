@@ -11,6 +11,7 @@ import {
   resolveProfileGatewayPort,
 } from '../../../server/gateway-ports'
 import { setActiveProfile, resolveProfileHermesHome } from '../../../server/profiles-browser'
+import { ensureSwarmProfileConfig } from '../../../server/swarm-profile-config'
 import { loadWorkspaceCatalog } from '../workspace'
 import { requireJsonContentType } from '../../../server/rate-limit'
 import {
@@ -35,6 +36,10 @@ export const Route = createFileRoute('/api/profiles/activate')({
           const port = resolveProfileGatewayPort(name)
           const url = getProfileGatewayUrl(name)
           const hermesHome = resolveProfileHermesHome(name)
+          // Break legacy `.env` symlinks to root before spawning a per-profile gateway.
+          if (name !== 'default') {
+            ensureSwarmProfileConfig(hermesHome)
+          }
           touchGatewayLease(name)
           ensureGatewayLifecycleScheduler()
           // Route chat traffic immediately; respond without probing gateway health.

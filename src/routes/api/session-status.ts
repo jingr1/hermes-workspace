@@ -210,27 +210,34 @@ export const Route = createFileRoute('/api/session-status')({
           } catch (sessionErr) {
             const message =
               sessionErr instanceof Error ? sessionErr.message : String(sessionErr)
-            if (!/not found|404/i.test(message)) {
-              throw sessionErr
+            // During profile switches the gateway is often briefly unreachable
+            // ("fetch failed"). Treat as idle rather than hard-failing the meter.
+            if (
+              /not found|404/i.test(message) ||
+              /fetch failed|failed to fetch|econnrefused|timeout|network/i.test(
+                message,
+              )
+            ) {
+              const contextUsage = await readContextUsage(sessionKey)
+              return json({
+                ok: true,
+                payload: {
+                  status: 'idle',
+                  sessionKey,
+                  sessionLabel: '',
+                  model: contextUsage.model,
+                  modelProvider: '',
+                  inputTokens: 0,
+                  outputTokens: 0,
+                  totalTokens: 0,
+                  contextPercent: contextUsage.contextPercent,
+                  maxTokens: contextUsage.maxTokens,
+                  usedTokens: contextUsage.usedTokens,
+                  sessions: [],
+                },
+              })
             }
-            const contextUsage = await readContextUsage(sessionKey)
-            return json({
-              ok: true,
-              payload: {
-                status: 'idle',
-                sessionKey,
-                sessionLabel: '',
-                model: contextUsage.model,
-                modelProvider: '',
-                inputTokens: 0,
-                outputTokens: 0,
-                totalTokens: 0,
-                contextPercent: contextUsage.contextPercent,
-                maxTokens: contextUsage.maxTokens,
-                usedTokens: contextUsage.usedTokens,
-                sessions: [],
-              },
-            })
+            throw sessionErr
           }
         } catch (err) {
           return json(
