@@ -32,6 +32,15 @@ Autonomous PR/issue lanes, lab experiments, and the repair playbook keep the mac
 
 Start here: [docs/swarm/](./docs/swarm/)
 
+**LangGraph orchestrator (required for Swarm missions from the UI):** needs a local venv once per machine — **Python ≥ 3.10** (3.11+ recommended; macOS system Python 3.9 is too old):
+
+```bash
+cd hermes_langgraph_orchestrator
+python3.11 -m venv .venv && .venv/bin/pip install -r requirements.txt
+```
+
+Details: [hermes_langgraph_orchestrator/README.md](./hermes_langgraph_orchestrator/README.md).
+
 - **Orchestrator Chat** — ask the control plane for one task, a decomposed mission, or a full broadcast.
 - **Multi-Agent Control Plane** — see persistent Hermes Agents, roles, state, runtime, and routing wires in one surface.
 - **Kanban TaskBoard** — plan backlog, ready, running, review, blocked, and done lanes without leaving the workspace.
@@ -181,6 +190,7 @@ Hermes Workspace works with any OpenAI-compatible backend. If your backend also 
 - **Node.js 22+** — [nodejs.org](https://nodejs.org/)
 - **An OpenAI-compatible backend** — local, self-hosted, or remote
 - **Optional:** Python 3.11+ if you want to run a Hermes Agent gateway locally
+- **Swarm / LangGraph missions:** Python **≥ 3.10** and a one-time `hermes_langgraph_orchestrator/.venv` (see [orchestrator README](./hermes_langgraph_orchestrator/README.md)); 
 
 #### Step 1: Start your backend
 

@@ -22,13 +22,24 @@ LangGraph 作为 Hermes Swarm 的**确定性编排大脑**：加载 workflow.yam
 
 ## 环境准备
 
+需要 **Python ≥ 3.10**（推荐 3.11+）。`~/.local/bin/python3.11` 等较新解释器建 venv，否则会在类型注解（`str | None`）处失败。
+
+Workspace UI 启动 LangGraph mission 时默认调用：
+
+`hermes_langgraph_orchestrator/.venv/bin/python`
+
+缺 venv 会 spawn 失败（严重时拖垮 `pnpm dev`）。换机或新 clone 后务必先跑：
+
 ```bash
 cd ~/hermes-workspace/hermes_langgraph_orchestrator
-python3 -m venv .venv
+python3.11 -m venv .venv   # 或本机任意 python3.10+
+.venv/bin/pip install -U pip
 .venv/bin/pip install -r requirements.txt
 ```
 
-> 如果系统已安装全部依赖，也可以直接用 `python3 -m hermes_langgraph_orchestrator ...`。
+也可用环境变量覆盖解释器：`HERMES_LANGGRAPH_PYTHON=/path/to/python`。
+
+> 如果系统已安装全部依赖，也可以直接用 `python3 -m hermes_langgraph_orchestrator ...`（仍须 ≥ 3.10）。
 > 但 Phase 2 的 SQLite checkpointer 需要 `langgraph-checkpoint-sqlite`，建议用上面的 venv。
 
 ### 从任意目录启动

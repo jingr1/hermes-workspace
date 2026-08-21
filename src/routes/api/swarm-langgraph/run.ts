@@ -69,18 +69,29 @@ export const Route = createFileRoute('/api/swarm-langgraph/run')({
           args.push('--initial-workers', initialWorkers)
         }
 
-        const { pid, logFile } = spawnLanggraphDetached(args)
-        return json({
-          ok: true,
-          accepted: true,
-          missionId,
-          threadId: missionId,
-          pid,
-          logFile,
-          mock: useMock,
-          workflowId: workflowId ?? null,
-          initialWorkers: initialWorkers ?? null,
-        })
+        try {
+          const { pid, logFile } = spawnLanggraphDetached(args)
+          return json({
+            ok: true,
+            accepted: true,
+            missionId,
+            threadId: missionId,
+            pid,
+            logFile,
+            mock: useMock,
+            workflowId: workflowId ?? null,
+            initialWorkers: initialWorkers ?? null,
+          })
+        } catch (error) {
+          return json(
+            {
+              ok: false,
+              error: error instanceof Error ? error.message : String(error),
+              missionId,
+            },
+            { status: 503 },
+          )
+        }
       },
     },
   },
