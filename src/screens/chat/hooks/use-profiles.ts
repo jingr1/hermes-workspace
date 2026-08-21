@@ -32,10 +32,43 @@ type ProfilesListResponse = {
   activeProfile?: string
 }
 
+const ACTIVE_PROFILE_CACHE_KEY = 'hermes-active-profile'
+const PROFILE_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
+
+function canUseLocalStorage(): boolean {
+  return (
+    typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
+  )
+}
+
+/** Last known active profile — used so sessions fetch before /profiles/list returns. */
+export function readCachedActiveProfile(): string | null {
+  try {
+    if (!canUseLocalStorage()) return null
+    const raw = window.localStorage.getItem(ACTIVE_PROFILE_CACHE_KEY)?.trim()
+    if (!raw || !PROFILE_NAME_RE.test(raw)) return null
+    return raw
+  } catch {
+    return null
+  }
+}
+
+export function writeCachedActiveProfile(profileName: string): void {
+  const trimmed = profileName.trim()
+  if (!trimmed || !PROFILE_NAME_RE.test(trimmed)) return
+  try {
+    if (!canUseLocalStorage()) return
+    window.localStorage.setItem(ACTIVE_PROFILE_CACHE_KEY, trimmed)
+  } catch {
+    // Ignore quota / private-mode failures.
+  }
+}
+
 export function setActiveProfileOptimistic(
   queryClient: QueryClient,
   profileName: string,
 ) {
+  writeCachedActiveProfile(profileName)
   queryClient.setQueryData<ProfilesListResponse>(
     ['profiles', 'chat'],
     (old) =>
@@ -90,6 +123,7 @@ export function useProfiles() {
   const activeProfileName =
     profilesQuery.data?.activeProfile ||
     profilesQuery.data?.profiles?.find((p) => p.active)?.name ||
+    readCachedActiveProfile() ||
     'default'
 
   const workspaceProfileQuery = useQuery<string>({
@@ -116,12 +150,17 @@ export function useProfiles() {
     onError: (error, _profileName, context) => {
       if (context?.previous) {
         queryClient.setQueryData(['profiles', 'chat'], context.previous)
+        const restored =
+          context.previous.activeProfile ||
+          context.previous.profiles?.find((p) => p.active)?.name
+        if (restored) writeCachedActiveProfile(restored)
       }
       toast(
         error instanceof Error ? error.message : 'Failed to activate profile',
       )
     },
     onSuccess: async (data, profileName) => {
+      writeCachedActiveProfile(profileName)
       toast(`Activated ${profileName}`)
       queryClient.setQueryData(WORKSPACE_PROFILE_QUERY_KEY, profileName)
       preloadWorkspaceFolders(profileName)
@@ -152,6 +191,7 @@ export function useProfiles() {
 
   useEffect(() => {
     if (!profilesQuery.isFetched || activateMutation.isPending) return
+    writeCachedActiveProfile(activeProfileName)
     queryClient.setQueryData(WORKSPACE_PROFILE_QUERY_KEY, activeProfileName)
     preloadWorkspaceFolders(activeProfileName)
   }, [

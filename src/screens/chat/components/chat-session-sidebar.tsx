@@ -153,52 +153,99 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
     return [...profiles].sort((a, b) => a.name.localeCompare(b.name))
   }, [profiles])
 
-  // Prefetch session lists + first-session history so profile switches paint instantly.
+  // Prefetch active profile immediately; defer the rest so first paint isn't
+  // competing with N parallel sessions+history requests.
   useEffect(() => {
-    for (const profile of profiles) {
+    if (profiles.length === 0) return
+
+    const prefetchOne = (profileName: string) => {
       void queryClient
         .prefetchQuery({
-          queryKey: chatQueryKeys.sessionsForProfile(profile.name),
-          queryFn: () => fetchSessions(profile.name),
+          queryKey: chatQueryKeys.sessionsForProfile(profileName),
+          queryFn: () => fetchSessions(profileName),
           staleTime: 60_000,
         })
         .then(() => {
           const cached = queryClient.getQueryData<Array<SessionMeta>>(
-            chatQueryKeys.sessionsForProfile(profile.name),
+            chatQueryKeys.sessionsForProfile(profileName),
           )
           prefetchSessionHistory(
             queryClient,
-            profile.name,
-            resolveSessionForProfile(cached, profile.name),
+            profileName,
+            resolveSessionForProfile(cached, profileName),
           )
         })
     }
-  }, [profiles, queryClient])
+
+    prefetchOne(activeProfileName)
+
+    const deferred = profiles
+      .map((profile) => profile.name)
+      .filter((name) => name !== activeProfileName)
+    if (deferred.length === 0) return
+
+    let cancelled = false
+    let idleId: number | undefined
+    const timers: Array<ReturnType<typeof setTimeout>> = []
+
+    const runDeferred = () => {
+      if (cancelled) return
+      deferred.forEach((name, index) => {
+        timers.push(
+          setTimeout(() => {
+            if (!cancelled) prefetchOne(name)
+          }, index * 150),
+        )
+      })
+    }
+
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      idleId = window.requestIdleCallback(runDeferred, { timeout: 2500 })
+    } else {
+      timers.push(setTimeout(runDeferred, 1200))
+    }
+
+    return () => {
+      cancelled = true
+      if (idleId !== undefined) {
+        window.cancelIdleCallback?.(idleId)
+      }
+      for (const timer of timers) clearTimeout(timer)
+    }
+  }, [profiles, activeProfileName, queryClient])
 
   const handleSelectProfile = useCallback(
     (profileName: string) => {
       if (profileName === activeProfileName) return
 
-      const cached = queryClient.getQueryData<Array<SessionMeta>>(
-        chatQueryKeys.sessionsForProfile(profileName),
-      )
       writeLastSession(activeFriendlyId, activeProfileName)
-      const targetSession = resolveSessionForProfile(cached, profileName)
       setActiveProfileOptimistic(queryClient, profileName)
-      prefetchSessionHistory(queryClient, profileName, targetSession)
       preloadWorkspaceFolders(profileName)
-      navigate({
-        to: '/chat/$sessionKey',
-        params: { sessionKey: targetSession },
-      })
-
       activateProfile(profileName)
 
-      void queryClient.prefetchQuery({
-        queryKey: chatQueryKeys.sessionsForProfile(profileName),
-        queryFn: () => fetchSessions(profileName),
-        staleTime: 60_000,
-      })
+      // Prefer warm cache; if miss, fetch before navigating so we don't land on "new".
+      void (async () => {
+        let sessions = queryClient.getQueryData<Array<SessionMeta>>(
+          chatQueryKeys.sessionsForProfile(profileName),
+        )
+        if (!sessions) {
+          try {
+            sessions = await queryClient.fetchQuery({
+              queryKey: chatQueryKeys.sessionsForProfile(profileName),
+              queryFn: () => fetchSessions(profileName),
+              staleTime: 60_000,
+            })
+          } catch {
+            sessions = undefined
+          }
+        }
+        const targetSession = resolveSessionForProfile(sessions, profileName)
+        prefetchSessionHistory(queryClient, profileName, targetSession)
+        navigate({
+          to: '/chat/$sessionKey',
+          params: { sessionKey: targetSession },
+        })
+      })()
     },
     [activateProfile, activeFriendlyId, activeProfileName, queryClient, navigate],
   )

@@ -47,7 +47,7 @@ export function ChatEmptyState({
   const [activeProfile, setActiveProfile] = useState<ProfileSummary | null>(null)
 
   useEffect(() => {
-    fetch('/api/profiles/list')
+    fetch('/api/profiles/list?light=1')
       .then((res) => res.json())
       .then((data) => {
         const profiles = data?.profiles as Array<ProfileSummary> | undefined

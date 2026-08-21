@@ -209,7 +209,7 @@ export function SkillsScreen() {
   const profilesQuery = useQuery({
     queryKey: ['skills-profiles-list'],
     queryFn: async function fetchProfiles(): Promise<ProfileListResponse> {
-      const response = await fetch('/api/profiles/list')
+      const response = await fetch('/api/profiles/list?light=1')
       const payload = (await response.json()) as ProfileListResponse
       if (!response.ok) {
         throw new Error(payload.error || 'Failed to load profiles')

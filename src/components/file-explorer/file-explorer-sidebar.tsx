@@ -150,16 +150,21 @@ export function FileExplorerSidebar({
     workspacePath,
     workspaceQuery.data?.folderName ?? '',
   )
+  // Only treat as pending when we have nothing to show yet. Background
+  // refetches (isFetching) used to keep the sidebar stuck on "Loading...".
+  const workspacePending = !workspaceQuery.data && workspaceQuery.isPending
 
   const filesQuery = useQuery({
     queryKey: ['files', 'tree', workspaceProfileName, workspacePath],
     queryFn: () => fetchFileTree(workspaceProfileName, 1) as Promise<Array<FileEntry>>,
-    enabled: workspaceQuery.isFetched && Boolean(workspacePath),
+    enabled: Boolean(workspaceQuery.data) && Boolean(workspacePath),
     staleTime: 30_000,
     retry: false,
   })
   const entries = filesQuery.data ?? []
-  const loading = filesQuery.isFetching
+  const loading =
+    workspacePending ||
+    (Boolean(workspacePath) && !filesQuery.data && filesQuery.isPending)
   const error =
     filesQuery.error instanceof Error ? filesQuery.error.message : null
 

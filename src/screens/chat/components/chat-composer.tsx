@@ -1026,11 +1026,32 @@ function ChatComposerComponent({
   )
 
   const { activeProfileName, activeProfile, workspaceProfileName } = useProfiles()
+  const slashCommandQuery = useMemo(() => readSlashCommandQuery(value), [value])
+  // Prefetch after first paint is idle so `/` menus are warm, without competing
+  // with sessions/history on chat mount. Slash open still enables immediately.
+  const [skillsIdlePrefetch, setSkillsIdlePrefetch] = useState(false)
+  useEffect(() => {
+    if (disabled) return
+    let idleId: number | undefined
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
+    const arm = () => setSkillsIdlePrefetch(true)
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      idleId = window.requestIdleCallback(arm, { timeout: 2500 })
+    } else {
+      timeoutId = setTimeout(arm, 1200)
+    }
+    return () => {
+      if (idleId !== undefined) window.cancelIdleCallback?.(idleId)
+      if (timeoutId) clearTimeout(timeoutId)
+    }
+  }, [disabled])
   const installedSkillsQuery = useQuery({
     queryKey: ['chat', 'composer', 'installed-skills'],
     queryFn: fetchInstalledSkills,
     retry: false,
     staleTime: 60_000,
+    enabled:
+      !disabled && (slashCommandQuery !== null || skillsIdlePrefetch),
   })
   const workspaceContextQuery = useQuery({
     queryKey: ['workspace', 'composer-context', workspaceProfileName],
@@ -1716,7 +1737,6 @@ function ChatComposerComponent({
       ),
     [serverCommands, installedSkillsQuery.data],
   )
-  const slashCommandQuery = useMemo(() => readSlashCommandQuery(value), [value])
   const isSlashMenuOpen =
     slashCommandQuery !== null && !disabled && !isSlashMenuDismissed
 

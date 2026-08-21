@@ -77,13 +77,21 @@ export function resolveSessionForProfile(
   profileName: string,
 ): string {
   const list = Array.isArray(sessions) ? sessions : []
+  const profileLast = readStorage(profileLastSessionKey(profileName.trim()))
+
+  // Sessions not loaded yet — trust this profile's remembered id so switches
+  // don't bounce to "new". Do not fall back to the global last session here;
+  // that often belongs to a different profile.
+  if (list.length === 0) {
+    return profileLast || 'new'
+  }
+
   const ids = new Set(
     list
       .map((session) => session.friendlyId?.trim())
       .filter((id): id is string => Boolean(id)),
   )
 
-  const profileLast = readStorage(profileLastSessionKey(profileName.trim()))
   if (profileLast && ids.has(profileLast)) return profileLast
 
   const globalLast = readStorage(GLOBAL_LAST_SESSION_KEY)

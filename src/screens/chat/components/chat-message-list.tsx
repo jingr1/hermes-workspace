@@ -1101,7 +1101,7 @@ function ChatMessageListComponent({
     })
   }, [displayEntries])
 
-  const visibleEntries = useMemo<Array<DisplayEntry>>(
+  const allVisibleEntries = useMemo<Array<DisplayEntry>>(
     function getVisibleEntries() {
       if (!isMessageSearchActive) return displayEntries
 
@@ -1114,6 +1114,60 @@ function ChatMessageListComponent({
     },
     [displayEntries, isMessageSearchActive, normalizedMessageSearch],
   )
+
+  // Soft windowing + progressive mount: first paint only recent messages,
+  // then grow on rAF so markdown/shiki work doesn't hitch the history reveal.
+  // Show enough of a typical session on first paint; grow for longer threads.
+  const INITIAL_RENDER_WINDOW = 24
+  const MESSAGE_RENDER_WINDOW = 64
+  const RENDER_GROW_STEP = 16
+  const [earlierPages, setEarlierPages] = useState(0)
+  const [renderBudget, setRenderBudget] = useState(INITIAL_RENDER_WINDOW)
+  const transcriptEpoch = useMemo(() => {
+    const first = displayEntries[0]?.message as { id?: string | number } | undefined
+    const last = displayEntries[displayEntries.length - 1]?.message as
+      | { id?: string | number }
+      | undefined
+    return `${displayEntries.length}:${String(first?.id ?? '')}:${String(last?.id ?? '')}`
+  }, [displayEntries])
+  useEffect(() => {
+    setEarlierPages(0)
+    setRenderBudget(INITIAL_RENDER_WINDOW)
+  }, [transcriptEpoch])
+
+  const maxWindow = MESSAGE_RENDER_WINDOW * (1 + earlierPages)
+  useEffect(() => {
+    if (isMessageSearchActive) return
+    const target = Math.min(maxWindow, allVisibleEntries.length)
+    if (renderBudget >= target) return
+    const frameId = window.requestAnimationFrame(() => {
+      setRenderBudget((budget) => Math.min(target, budget + RENDER_GROW_STEP))
+    })
+    return () => window.cancelAnimationFrame(frameId)
+  }, [
+    allVisibleEntries.length,
+    isMessageSearchActive,
+    maxWindow,
+    renderBudget,
+    transcriptEpoch,
+  ])
+
+  const visibleEntries = useMemo(() => {
+    if (isMessageSearchActive) return allVisibleEntries
+    const limit = Math.min(
+      allVisibleEntries.length,
+      Math.max(renderBudget, earlierPages > 0 ? maxWindow : renderBudget),
+    )
+    if (allVisibleEntries.length <= limit) return allVisibleEntries
+    return allVisibleEntries.slice(allVisibleEntries.length - limit)
+  }, [
+    allVisibleEntries,
+    earlierPages,
+    isMessageSearchActive,
+    maxWindow,
+    renderBudget,
+  ])
+  const hiddenEarlierCount = allVisibleEntries.length - visibleEntries.length
 
   const toolInteractionCount = useMemo(() => {
     const seenToolCallIds = new Set<string>()
@@ -1890,6 +1944,27 @@ function ChatMessageListComponent({
               </div>
             ) : hasGroup ? (
               <>
+                {hiddenEarlierCount > 0 ? (
+                  <div className="mb-3 flex justify-center">
+                    <button
+                      type="button"
+                      className="rounded-md border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs font-medium text-primary-700 hover:bg-primary-100"
+                      onClick={() => {
+                        setEarlierPages((pages) => {
+                          const next = pages + 1
+                          setRenderBudget(MESSAGE_RENDER_WINDOW * (1 + next))
+                          return next
+                        })
+                      }}
+                    >
+                      Show {Math.min(MESSAGE_RENDER_WINDOW, hiddenEarlierCount)}{' '}
+                      earlier messages
+                      {hiddenEarlierCount > MESSAGE_RENDER_WINDOW
+                        ? ` (${hiddenEarlierCount} hidden)`
+                        : ''}
+                    </button>
+                  </div>
+                ) : null}
                 {visibleEntries.slice(0, groupStartIndex).map(renderMessage)}
                 {/* // Keep the last exchange pinned without extra tail gap. // Account
               for space-y-6 (24px) when pinning. */}
@@ -1962,6 +2037,27 @@ function ChatMessageListComponent({
               </>
             ) : (
               <>
+                {hiddenEarlierCount > 0 ? (
+                  <div className="mb-3 flex justify-center">
+                    <button
+                      type="button"
+                      className="rounded-md border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs font-medium text-primary-700 hover:bg-primary-100"
+                      onClick={() => {
+                        setEarlierPages((pages) => {
+                          const next = pages + 1
+                          setRenderBudget(MESSAGE_RENDER_WINDOW * (1 + next))
+                          return next
+                        })
+                      }}
+                    >
+                      Show {Math.min(MESSAGE_RENDER_WINDOW, hiddenEarlierCount)}{' '}
+                      earlier messages
+                      {hiddenEarlierCount > MESSAGE_RENDER_WINDOW
+                        ? ` (${hiddenEarlierCount} hidden)`
+                        : ''}
+                    </button>
+                  </div>
+                ) : null}
                 {shouldVirtualize && virtualRange.topSpacerHeight > 0 ? (
                   <div
                     aria-hidden="true"

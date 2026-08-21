@@ -313,6 +313,8 @@ export function useChatHistory({
     !isRedirecting &&
     (sessionVerified ||
       Boolean(normalizedForcedSessionKey) ||
+      // Route already names a concrete session — don't wait for the sessions list.
+      Boolean(explicitRouteSessionKey) ||
       (sessionsReady && activeExists))
 
   const effectiveFriendlyId = portableMode ? 'main' : activeFriendlyId
@@ -395,7 +397,13 @@ export function useChatHistory({
       return queryClient.getQueryData<HistoryResponse>(historyKey)
     },
     placeholderData: function useCachedHistory(): HistoryResponse | undefined {
-      if (!sessionVerified && !normalizedForcedSessionKey) return undefined
+      if (
+        !sessionVerified &&
+        !normalizedForcedSessionKey &&
+        !explicitRouteSessionKey
+      ) {
+        return undefined
+      }
       return queryClient.getQueryData(historyKey)
     },
     refetchOnMount: true,
@@ -404,7 +412,17 @@ export function useChatHistory({
     staleTime: 10_000,
     gcTime: 1000 * 60 * 10,
     structuralSharing: true,
-    notifyOnChangeProps: ['data', 'error', 'isError'],
+    // Include pending/fetch flags so the skeleton can clear/update even when
+    // data is still undefined (previous list omitted isPending/isFetching).
+    notifyOnChangeProps: [
+      'data',
+      'error',
+      'isError',
+      'isPending',
+      'isLoading',
+      'isFetching',
+      'status',
+    ],
   })
 
   const [persistedPending, setPersistedPending] =

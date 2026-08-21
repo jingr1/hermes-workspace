@@ -3,6 +3,7 @@ import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   chatQueryKeys,
+  fetchHistory,
   moveHistoryMessages,
   reconcileSessionDraft,
 } from '../../screens/chat/chat-queries'
@@ -11,10 +12,16 @@ import { ChatRouteLoading } from '../../screens/chat/chat-route-loading'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { useProfiles } from '../../screens/chat/hooks/use-profiles'
 
-const ChatScreen = lazy(async () => {
-  const module = await import('../../screens/chat/chat-screen')
-  return { default: module.ChatScreen }
-})
+const loadChatScreen = () =>
+  import('../../screens/chat/chat-screen').then((module) => ({
+    default: module.ChatScreen,
+  }))
+
+// Warm the chat chunk as soon as this module evaluates (route match), not
+// only after Suspense mounts — cuts the spinner→shell gap on cold navigations.
+void loadChatScreen()
+
+const ChatScreen = lazy(loadChatScreen)
 
 export const Route = createFileRoute('/chat/$sessionKey')({
   component: ChatRoute,
@@ -80,6 +87,23 @@ function ChatRoute() {
       queryClient.removeQueries({ queryKey: ['chat', 'history', 'new', 'new'] })
     }
   }, [isNewChat, queryClient])
+
+  // Prefetch history while the chat chunk is still downloading so the first
+  // ChatScreen paint often already has messages (no second skeleton wait).
+  useEffect(() => {
+    if (isNewChat || !activeFriendlyId || activeFriendlyId === 'main') return
+    const historyKey = chatQueryKeys.history(activeFriendlyId, activeFriendlyId)
+    void queryClient.prefetchQuery({
+      queryKey: historyKey,
+      queryFn: () =>
+        fetchHistory({
+          sessionKey: activeFriendlyId,
+          friendlyId: activeFriendlyId,
+          profile: activeProfileName,
+        }),
+      staleTime: 10_000,
+    })
+  }, [activeFriendlyId, activeProfileName, isNewChat, queryClient])
 
   const handleSessionResolved = useCallback(
     function handleSessionResolved(payload: {

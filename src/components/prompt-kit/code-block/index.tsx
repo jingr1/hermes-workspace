@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Copy01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { createHighlighter } from 'shiki'
@@ -35,11 +35,14 @@ export function CodeBlock({
   className,
 }: CodeBlockProps) {
   const resolvedTheme = useResolvedTheme()
+  const rootRef = useRef<HTMLDivElement | null>(null)
   const [copied, setCopied] = useState(false)
   const [showLineNumbers, setShowLineNumbers] = useState(false)
   const [html, setHtml] = useState<string | null>(null)
   const [resolvedLanguage, setResolvedLanguage] = useState('text')
   const [headerBg, setHeaderBg] = useState<string | undefined>()
+  // Defer Shiki until near viewport so history paint isn't blocked by highlighting.
+  const [shouldHighlight, setShouldHighlight] = useState(false)
 
   const fallback = useMemo(() => {
     return content
@@ -54,6 +57,27 @@ export function CodeBlock({
   const canShowLineNumbers = lineCount > 1
 
   useEffect(() => {
+    const node = rootRef.current
+    if (!node || shouldHighlight) return
+    if (typeof IntersectionObserver === 'undefined') {
+      setShouldHighlight(true)
+      return
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setShouldHighlight(true)
+          observer.disconnect()
+        }
+      },
+      { rootMargin: '200px 0px', threshold: 0.01 },
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [shouldHighlight])
+
+  useEffect(() => {
+    if (!shouldHighlight) return
     let active = true
     getHighlighter()
       .then(async (highlighter) => {
@@ -82,7 +106,7 @@ export function CodeBlock({
     return () => {
       active = false
     }
-  }, [content, normalizedLanguage, themeName])
+  }, [content, normalizedLanguage, shouldHighlight, themeName])
 
   async function handleCopy() {
     try {
@@ -99,6 +123,7 @@ export function CodeBlock({
 
   return (
     <div
+      ref={rootRef}
       className={cn(
         'group relative min-w-0 overflow-hidden rounded-lg border border-primary-200',
         className,

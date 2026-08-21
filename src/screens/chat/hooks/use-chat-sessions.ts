@@ -88,7 +88,10 @@ export function useChatSessions({
   const sessionsQuery = useQuery({
     queryKey: chatQueryKeys.sessionsForProfile(activeProfileName),
     queryFn: () => fetchSessions(activeProfileName),
-    refetchInterval: 5000,
+    // Prefer event-driven refresh (activate/create/delete); keep a slow safety poll.
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+    staleTime: 10_000,
   })
   const storedTitles = useSessionTitles()
 

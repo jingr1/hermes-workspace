@@ -2591,11 +2591,13 @@ function MessageItemComponent({
       ref={wrapperRef}
       data-chat-message-role={role}
       data-chat-message-id={wrapperDataMessageId}
-      style={
-        typeof wrapperScrollMarginTop === 'number'
+      style={{
+        contentVisibility: 'auto',
+        containIntrinsicSize: 'auto 160px',
+        ...(typeof wrapperScrollMarginTop === 'number'
           ? { scrollMarginTop: `${wrapperScrollMarginTop}px` }
-          : undefined
-      }
+          : null),
+      }}
       className={cn(
         'group relative flex flex-col',
         hasText || hasAttachments || hasSelectionCards ? 'gap-0.5 md:gap-1' : 'gap-0',

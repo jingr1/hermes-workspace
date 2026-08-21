@@ -263,7 +263,11 @@ async function fetchSkills(
   })
 }
 
-export function useSearchData(scope: SearchQueryScope, query = '') {
+export function useSearchData(
+  scope: SearchQueryScope,
+  query = '',
+  enabled = true,
+) {
   const sessionsAvailable = useFeatureAvailable('sessions')
   const skillsAvailable = useFeatureAvailable('skills')
   const trimmedQuery = query.trim()
@@ -274,7 +278,8 @@ export function useSearchData(scope: SearchQueryScope, query = '') {
   const sessionsQuery = useQuery({
     queryKey: ['search', 'sessions'],
     queryFn: ({ signal }) => fetchSessions(signal),
-    enabled: sessionsAvailable && (scope === 'all' || scope === 'chats'),
+    enabled:
+      enabled && sessionsAvailable && (scope === 'all' || scope === 'chats'),
     staleTime: SESSIONS_STALE_TIME_MS,
     gcTime: SEARCH_QUERY_GC_TIME_MS,
     retry: false,
@@ -286,6 +291,7 @@ export function useSearchData(scope: SearchQueryScope, query = '') {
     queryKey: ['search', 'sessions-fts', trimmedQuery],
     queryFn: ({ signal }) => fetchSessionSearch(trimmedQuery, signal),
     enabled:
+      enabled &&
       sessionsAvailable &&
       trimmedQuery.length >= 2 &&
       (scope === 'all' || scope === 'chats'),
@@ -296,12 +302,14 @@ export function useSearchData(scope: SearchQueryScope, query = '') {
     refetchOnReconnect: false,
   })
 
-  // Files
+  // Files — deep tree is expensive; only when search UI is open.
   const filesQuery = useQuery({
     queryKey: ['search', 'files', workspacePath],
     queryFn: ({ signal }) => fetchFiles(signal),
     enabled:
-      (scope === 'all' || scope === 'files') && workspaceQuery.isFetched,
+      enabled &&
+      (scope === 'all' || scope === 'files') &&
+      Boolean(workspaceQuery.data),
     staleTime: FILES_STALE_TIME_MS,
     gcTime: SEARCH_QUERY_GC_TIME_MS,
     retry: false,
@@ -313,7 +321,8 @@ export function useSearchData(scope: SearchQueryScope, query = '') {
   const skillsQuery = useQuery({
     queryKey: ['search', 'skills'],
     queryFn: ({ signal }) => fetchSkills(signal),
-    enabled: skillsAvailable && (scope === 'all' || scope === 'skills'),
+    enabled:
+      enabled && skillsAvailable && (scope === 'all' || scope === 'skills'),
     staleTime: SKILLS_STALE_TIME_MS,
     gcTime: SEARCH_QUERY_GC_TIME_MS,
     retry: false,

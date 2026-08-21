@@ -71,10 +71,12 @@ export function SearchModal() {
   const [selectedIndex, setSelectedIndex] = useState(0)
   const deferredQuery = useDeferredValue(debouncedQuery)
 
-  // Real data (Phase 3.2)
+  // Real data — only fetch while the modal is open so chat boot isn't
+  // blocked by a deep maxDepth=5 file tree scan.
   const { sessions, sessionSearchResults, files, skills } = useSearchData(
     scope,
     deferredQuery,
+    isOpen,
   )
   const searchableFiles = useMemo(
     () => files.filter((entry) => entry.type === 'file'),

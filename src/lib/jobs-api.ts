@@ -303,7 +303,7 @@ export async function triggerJob(jobId: string): Promise<ClaudeJob> {
 }
 
 export async function fetchJobProfiles(): Promise<Array<JobProfileOption>> {
-  const res = await fetch('/api/profiles/list')
+  const res = await fetch('/api/profiles/list?light=1')
   if (!res.ok) throw new Error(`Failed to fetch profiles: ${res.status}`)
   const cronProfileNamePattern = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
   const data = (await res.json()) as {

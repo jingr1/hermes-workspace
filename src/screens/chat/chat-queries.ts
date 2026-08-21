@@ -71,8 +71,11 @@ export async function fetchHistory(payload: {
   sessionKey: string
   friendlyId: string
   profile?: string
+  /** Initial paint should stay small; default keeps last N messages. */
+  limit?: number
 }): Promise<HistoryResponse> {
-  const query = new URLSearchParams({ limit: '1000' })
+  const limit = Math.min(500, Math.max(1, payload.limit ?? 80))
+  const query = new URLSearchParams({ limit: String(limit) })
   if (payload.sessionKey) query.set('sessionKey', payload.sessionKey)
   if (payload.friendlyId) query.set('friendlyId', payload.friendlyId)
   if (payload.profile) query.set('profile', payload.profile)

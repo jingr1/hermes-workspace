@@ -10,17 +10,26 @@ import {
   CLAUDE_UPGRADE_INSTRUCTIONS,
   ensureGatewayProbed,
 } from '../../server/gateway-capabilities'
+import {
+  getActiveProfileName,
+  resolveProfileHermesHome,
+} from '../../server/profiles-browser'
 import { requireJsonContentType } from '../../server/rate-limit'
 import { createCapabilityUnavailablePayload } from '@/lib/feature-gates'
 
 function getSkillsDir(): string {
-  return (
-    process.env.HERMES_SKILLS_DIR ||
-    path.join(
+  if (process.env.HERMES_SKILLS_DIR) return process.env.HERMES_SKILLS_DIR
+  try {
+    return path.join(
+      resolveProfileHermesHome(getActiveProfileName() || 'default'),
+      'skills',
+    )
+  } catch {
+    return path.join(
       process.env.HERMES_HOME || path.join(os.homedir(), '.hermes'),
       'skills',
     )
-  )
+  }
 }
 
 type LocalSkillMeta = { path: string; author: string }
@@ -357,29 +366,100 @@ function normalizeSkill(value: unknown): SkillSummary | null {
   }
 }
 
+function extractSkillItems(payload: unknown): Array<unknown> {
+  if (Array.isArray(payload)) return payload
+  const record = asRecord(payload)
+  if (Array.isArray(record.items)) return record.items as Array<unknown>
+  if (Array.isArray(record.skills)) return record.skills as Array<unknown>
+  // OpenAI-style list from hermes-agent `/v1/skills`
+  if (Array.isArray(record.data)) return record.data as Array<unknown>
+  return []
+}
+
+async function readSkillDescription(skillDir: string): Promise<string> {
+  try {
+    const raw = await fs.readFile(path.join(skillDir, 'SKILL.md'), 'utf-8')
+    const fmMatch = raw.match(/^---\n([\s\S]*?)\n---/)
+    if (!fmMatch) return ''
+    const descMatch = fmMatch[1].match(/^description:\s*(.+?)\s*$/m)
+    return descMatch?.[1]?.replace(/^["']|["']$/g, '') || ''
+  } catch {
+    return ''
+  }
+}
+
+/** Local profile `skills/` inventory — used when gateway has no /api/skills. */
+async function listLocalInstalledSkills(): Promise<Array<SkillSummary>> {
+  const root = getSkillsDir()
+  const results: Array<SkillSummary> = []
+  let categoryEntries: Array<{ name: string; isDirectory: () => boolean }>
+  try {
+    categoryEntries = (await fs.readdir(root, {
+      withFileTypes: true,
+    })) as unknown as Array<{ name: string; isDirectory: () => boolean }>
+  } catch {
+    return results
+  }
+
+  for (const cat of categoryEntries) {
+    if (!cat.isDirectory() || cat.name.startsWith('.')) continue
+    const catPath = path.join(root, cat.name)
+    let skillEntries: Array<{ name: string; isDirectory: () => boolean }>
+    try {
+      skillEntries = (await fs.readdir(catPath, {
+        withFileTypes: true,
+      })) as unknown as Array<{ name: string; isDirectory: () => boolean }>
+    } catch {
+      continue
+    }
+    for (const skill of skillEntries) {
+      if (!skill.isDirectory() || skill.name.startsWith('.')) continue
+      const fullPath = path.join(catPath, skill.name)
+      try {
+        await fs.access(path.join(fullPath, 'SKILL.md'))
+      } catch {
+        continue
+      }
+      const [author, description] = await Promise.all([
+        readSkillAuthor(fullPath),
+        readSkillDescription(fullPath),
+      ])
+      const normalized = normalizeSkill({
+        id: skill.name,
+        name: skill.name,
+        description,
+        author,
+        category: cat.name,
+        path: fullPath,
+        installed: true,
+        enabled: true,
+      })
+      if (normalized) results.push(normalized)
+    }
+  }
+  return results
+}
+
 async function fetchClaudeSkills(): Promise<Array<SkillSummary>> {
-  // Control-plane refactor: always go through the gateway, not dashboard
+  // Control-plane: prefer gateway inventory, then local profile skills/.
+  // Current hermes-agent exposes `/v1/skills`; older forks used `/api/skills`.
   const headers: Record<string, string> = {}
   if (BEARER_TOKEN) headers['Authorization'] = `Bearer ${BEARER_TOKEN}`
 
-  const response = await fetch(`${CLAUDE_API}/api/skills`, { headers })
-  if (!response.ok) {
-    const body = await response.text().catch(() => '')
-    throw new Error(body || `Claude skills request failed (${response.status})`)
+  // `/v1/skills` first: current agent; `/api/skills` is legacy and often 404s.
+  for (const endpoint of ['/v1/skills', '/api/skills'] as const) {
+    try {
+      const response = await fetch(`${CLAUDE_API}${endpoint}`, { headers })
+      if (!response.ok) continue
+      return extractSkillItems(await response.json())
+        .map((entry) => normalizeSkill(entry))
+        .filter((entry): entry is SkillSummary => entry !== null)
+    } catch {
+      // try next source
+    }
   }
 
-  const payload = (await response.json()) as unknown
-  const items = Array.isArray(payload)
-    ? payload
-    : Array.isArray(asRecord(payload).items)
-      ? (asRecord(payload).items as Array<unknown>)
-      : Array.isArray(asRecord(payload).skills)
-        ? (asRecord(payload).skills as Array<unknown>)
-        : []
-
-  return items
-    .map((entry) => normalizeSkill(entry))
-    .filter((entry): entry is SkillSummary => entry !== null)
+  return listLocalInstalledSkills()
 }
 
 function matchesSearch(skill: SkillSummary, rawSearch: string): boolean {

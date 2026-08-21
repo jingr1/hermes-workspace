@@ -123,9 +123,18 @@ function activeProfileHome(): string {
   }
 }
 
-export function isHermesStatePath(candidatePath: string): boolean {
-  const normalized = normalizeCandidate(candidatePath)
-  const stateRoots = Array.from(
+let hermesStateRootsCache: { roots: Array<string>; at: number } | null = null
+const HERMES_STATE_ROOTS_TTL_MS = 5_000
+
+function hermesStateRoots(): Array<string> {
+  const now = Date.now()
+  if (
+    hermesStateRootsCache &&
+    now - hermesStateRootsCache.at < HERMES_STATE_ROOTS_TTL_MS
+  ) {
+    return hermesStateRootsCache.roots
+  }
+  const roots = Array.from(
     new Set(
       [
         process.env.HERMES_HOME,
@@ -138,8 +147,13 @@ export function isHermesStatePath(candidatePath: string): boolean {
         .map(normalizeCandidate),
     ),
   )
+  hermesStateRootsCache = { roots, at: now }
+  return roots
+}
 
-  return stateRoots.some(
+export function isHermesStatePath(candidatePath: string): boolean {
+  const normalized = normalizeCandidate(candidatePath)
+  return hermesStateRoots().some(
     (root) => normalized === root || pathContains(root, normalized),
   )
 }
@@ -236,30 +250,46 @@ async function listDirectoryEntries(
   options: { absoluteChildPaths?: boolean } = {},
 ): Promise<Array<WorkspaceFolderEntry>> {
   const entries = await fs.readdir(fullPath, { withFileTypes: true })
-  const folders = (
-    await Promise.all(
-      entries.map(async (entry) => {
-        const entryFullPath = options.absoluteChildPaths
-          ? path.win32.join(fullPath, entry.name)
-          : path.join(fullPath, entry.name)
-        const isDir =
-          entry.isDirectory() ||
-          (typeof entry.isSymbolicLink === 'function' && entry.isSymbolicLink())
-        if (!isDir) return null
-        if (!(await isSafeListDirectory(entryFullPath, basePath))) return null
-        const relativePath = options.absoluteChildPaths
-          ? entryFullPath
-          : subPath
-            ? `${subPath.replace(/\\/g, '/')}/${entry.name}`
-            : entry.name
-        return {
-          name: entry.name,
-          path: relativePath,
-          fullPath: entryFullPath,
-        }
-      }),
-    )
-  ).filter((entry): entry is WorkspaceFolderEntry => Boolean(entry))
+  // Resolve once per listing — isHermesStatePath used to re-read the active
+  // profile for every child and stalled the whole Node event loop (~500ms).
+  const blockedRoots = hermesStateRoots()
+  const folders: Array<WorkspaceFolderEntry> = []
+
+  for (const entry of entries) {
+    const entryFullPath = options.absoluteChildPaths
+      ? path.win32.join(fullPath, entry.name)
+      : path.join(fullPath, entry.name)
+    const isSymlink =
+      typeof entry.isSymbolicLink === 'function' && entry.isSymbolicLink()
+    const isDir = entry.isDirectory() || isSymlink
+    if (!isDir) continue
+
+    if (entry.isDirectory() && !isSymlink) {
+      if (!isPathWithin(entryFullPath, basePath)) continue
+      const normalized = normalizeCandidate(entryFullPath)
+      if (
+        blockedRoots.some(
+          (root) => normalized === root || pathContains(root, normalized),
+        ) ||
+        isBlockedSystemPath(entryFullPath)
+      ) {
+        continue
+      }
+    } else if (!(await isSafeListDirectory(entryFullPath, basePath))) {
+      continue
+    }
+
+    const relativePath = options.absoluteChildPaths
+      ? entryFullPath
+      : subPath
+        ? `${subPath.replace(/\\/g, '/')}/${entry.name}`
+        : entry.name
+    folders.push({
+      name: entry.name,
+      path: relativePath,
+      fullPath: entryFullPath,
+    })
+  }
 
   folders.sort((a, b) => a.name.localeCompare(b.name))
   return folders

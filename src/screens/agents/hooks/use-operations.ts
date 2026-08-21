@@ -294,7 +294,7 @@ function parseConfigPayload(payload: ConfigPayload): ConfigPayload {
 }
 
 async function fetchClaudeProfiles(): Promise<ClaudeProfileSummary[]> {
-  const response = await fetch('/api/profiles/list')
+  const response = await fetch('/api/profiles/list?light=1')
   const contentType = response.headers.get('content-type') || ''
   if (!contentType.includes('json')) {
     throw new Error('/api/profiles/list returned non-JSON')

@@ -597,13 +597,15 @@ export function ChatScreen({
   const sessionOwnedByProfile = sessions.some(
     (session) => session.friendlyId === activeFriendlyId,
   )
+  // With a cached active profile, sessions can succeed before /profiles/list.
+  // Don't block history on profilesReady once this route session is in the list.
   const sessionVerified =
     isPortableMode ||
     isNewChat ||
     Boolean(forcedSessionKey) ||
     isRecentSession(activeFriendlyId) ||
     hasPendingGeneration() ||
-    (profilesReady && sessionsQuery.isSuccess && sessionOwnedByProfile)
+    (sessionsQuery.isSuccess && sessionOwnedByProfile)
   const {
     historyQuery,
     historyMessages,
@@ -621,7 +623,7 @@ export function ChatScreen({
     activeExists,
     sessionsReady: sessionsQuery.isSuccess,
     queryClient,
-    historyRefetchInterval: sseConnectionState === 'connected' ? 30_000 : 5_000,
+    historyRefetchInterval: sseConnectionState === 'connected' ? 60_000 : 20_000,
     portableMode: isPortableMode,
     profileName: activeProfileName,
     sessionVerified,
@@ -2753,12 +2755,17 @@ export function ChatScreen({
     composerHandleRef.current?.insertText(reference)
   }, [])
 
+  // Skeleton only until the first history payload exists. Prefer !data over
+  // isFetching — historyQuery uses notifyOnChangeProps that omit fetch flags,
+  // and background refetches must not re-show the skeleton.
   const historyLoading =
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime safety
-    (historyQuery.isLoading && !historyQuery.data) ||
     isRedirecting ||
-    !sessionVerified
-  const visibleMessages = sessionVerified ? finalDisplayMessages : []
+    (!historyQuery.data &&
+      (historyQuery.isPending || historyQuery.isLoading || historyQuery.isFetching))
+  const visibleMessages =
+    sessionVerified || Boolean(historyQuery.data) || !historyLoading
+      ? finalDisplayMessages
+      : []
   const historyEmpty = !historyLoading && visibleMessages.length === 0
   const errorNotice = useMemo(() => {
     if (!showErrorNotice) return null

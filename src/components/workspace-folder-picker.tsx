@@ -119,7 +119,15 @@ function cachedFetchFolders(
 }
 
 export function preloadWorkspaceFolders(profileName = ''): void {
-  void cachedFetchFolders('', profileName)
+  // Defer so chat boot (sessions/history) is not blocked by home directory listing.
+  const run = () => {
+    void cachedFetchFolders('', profileName)
+  }
+  if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+    window.requestIdleCallback(run, { timeout: 3000 })
+    return
+  }
+  window.setTimeout(run, 1200)
 }
 
 export function WorkspaceFolderPicker({

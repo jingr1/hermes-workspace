@@ -59,4 +59,12 @@ describe('last-session', () => {
       resolveSessionForProfile([session('default-one')], 'developer'),
     ).toBe('default-one')
   })
+
+  it('uses profile last session when the list is still empty', () => {
+    writeLastSession('dev-chat', 'developer')
+
+    expect(resolveSessionForProfile(undefined, 'developer')).toBe('dev-chat')
+    expect(resolveSessionForProfile([], 'developer')).toBe('dev-chat')
+    expect(resolveSessionForProfile(undefined, 'default')).toBe('new')
+  })
 })
