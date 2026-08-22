@@ -13,9 +13,41 @@ import yaml from 'yaml'
 
 const WS = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
 const PROFILES = path.join(os.homedir(), '.hermes', 'profiles')
+const LOCAL_BIN = path.join(os.homedir(), '.local', 'bin')
 const SWARM_SOUL_BEGIN = '<!-- SWARM_ROLE_EXTENSION -->'
 const SWARM_SOUL_END = '<!-- /SWARM_ROLE_EXTENSION -->'
 const swarm = yaml.parse(fs.readFileSync(path.join(WS, 'swarm.yaml'), 'utf8'))
+
+function installWorkerWrappers(workers) {
+  fs.mkdirSync(LOCAL_BIN, { recursive: true })
+  const installed = []
+  for (const w of workers) {
+    const name = (w.wrapper || w.id || '').trim()
+    if (!name) continue
+    const profile = w.id
+    const profileHomeExpr =
+      profile === 'default' ? '$HOME/.hermes' : `$HOME/.hermes/profiles/${profile}`
+    const script = `#!/usr/bin/env bash
+set -euo pipefail
+cd '${WS}'
+export HERMES_HOME="\${HERMES_HOME:-${profileHomeExpr}}"
+HERMES_BIN="\${HERMES_CLI_BIN:-\$HOME/.hermes/hermes-agent/venv/bin/hermes}"
+if [ ! -x "\$HERMES_BIN" ]; then HERMES_BIN="\$(command -v hermes || true)"; fi
+if [ -z "\$HERMES_BIN" ]; then
+  echo "hermes CLI not found" >&2
+  exit 127
+fi
+if [ "\$#" -gt 0 ]; then
+  exec "\$HERMES_BIN" -p ${profile} "\$@"
+fi
+exec "\$HERMES_BIN" chat --tui
+`
+    const target = path.join(LOCAL_BIN, name)
+    fs.writeFileSync(target, script, { mode: 0o755 })
+    installed.push(name)
+  }
+  return installed
+}
 
 function parseModel(label) {
   if (!label) return null
@@ -286,5 +318,8 @@ for (const w of swarm.workers) {
 
 const globalSynced = syncGlobalSwarmSkills(swarm.workers)
 results.push(`global: ${globalSynced} swarm skills → ~/.hermes/skills/swarm/ (for /slash commands)`)
+
+const wrappers = installWorkerWrappers(swarm.workers)
+results.push(`wrappers: ${wrappers.length} → ~/.local/bin/ (${wrappers.join(', ')})`)
 
 console.log(results.join('\n'))

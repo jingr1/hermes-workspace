@@ -107,6 +107,7 @@ swarm.yaml                    ~/.hermes/profiles/<id>/           ~/.local/bin/
 cd ~/hermes-workspace
 
 # 1. 同步 config.yaml（model + toolsets）、SOUL.md、memory/IDENTITY.md、skills/swarm/ 下的角色技能
+#    以及 ~/.local/bin/<wrapper> 启动脚本（缺 wrapper 时 LangGraph 会卡在 ensure_sessions）
 node scripts/sync-swarm-profiles.mjs
 
 # 2. 同步 autoresearch 技能与 wrapper（orchestrator:autoresearch-dispatch 等）

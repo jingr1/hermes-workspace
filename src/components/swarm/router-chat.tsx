@@ -95,6 +95,38 @@ async function pollMissionUntilSettled(missionId: string): Promise<MissionSnapsh
     // Only exit once we have seen the mission appear at least once.
     // When mission is still null the LangGraph process is starting up — keep waiting.
     if (missionEverSeen && !missionStillRunning(latest)) return latest
+
+    // LangGraph missions often never create a swarm-missions row. Fall back to
+    // orchestrator SQLite state so UI does not sit on "starting" forever after
+    // init_error / finalize.
+    try {
+      const orchRes = await fetch(
+        `/api/orchestrator-state?missionId=${encodeURIComponent(missionId)}`,
+      )
+      if (orchRes.ok) {
+        const orch = (await orchRes.json()) as {
+          ok?: boolean
+          state?: {
+            all_done?: boolean
+            collection_error?: string | null
+            langgraph_needs_human?: boolean
+            log_entries?: Array<string>
+          } | null
+        }
+        const state = orch.state
+        if (state && (state.all_done || state.collection_error || state.langgraph_needs_human)) {
+          if (state.collection_error) {
+            throw new Error(state.collection_error)
+          }
+          return latest
+        }
+      }
+    } catch (err) {
+      if (err instanceof Error && !/Failed to fetch|NetworkError/i.test(err.message)) {
+        throw err
+      }
+    }
+
     await sleep(MISSION_POLL_MS)
   }
   return latest

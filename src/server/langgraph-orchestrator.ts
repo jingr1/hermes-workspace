@@ -62,11 +62,18 @@ function langgraphSpawnEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.Process
 }
 
 export function parseJsonFromStdout(stdout: string): unknown {
-  const start = stdout.indexOf('{')
+  // Prefer array payloads (e.g. --list-active-gates) when `[` appears before `{`.
+  // Otherwise slicing from the first `{` leaves trailing `,...]` and JSON.parse fails.
+  const objStart = stdout.indexOf('{')
+  const arrStart = stdout.indexOf('[')
+  let start = -1
+  if (arrStart !== -1 && (objStart === -1 || arrStart < objStart)) {
+    start = arrStart
+  } else if (objStart !== -1) {
+    start = objStart
+  }
   if (start === -1) {
-    const arrStart = stdout.indexOf('[')
-    if (arrStart === -1) throw new Error('No JSON object or array found in Python output')
-    return JSON.parse(stdout.slice(arrStart))
+    throw new Error('No JSON object or array found in Python output')
   }
   return JSON.parse(stdout.slice(start))
 }
