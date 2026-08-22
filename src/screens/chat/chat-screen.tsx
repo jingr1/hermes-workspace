@@ -634,13 +634,16 @@ export function ChatScreen({
   })
 
   // Skeleton / gateway-deferral gate — defined early so models/composer don't
-  // race history on a cold gateway.
+  // race history on a cold gateway. Skip for /chat/new: history query is
+  // disabled there but stays isPending with no data, which would trap the UI
+  // in the skeleton forever instead of ChatEmptyState.
   const historyLoading =
-    isRedirecting ||
-    (!historyQuery.data &&
-      (historyQuery.isPending ||
-        historyQuery.isLoading ||
-        historyQuery.isFetching))
+    !isNewChat &&
+    (isRedirecting ||
+      (!historyQuery.data &&
+        (historyQuery.isPending ||
+          historyQuery.isLoading ||
+          historyQuery.isFetching)))
 
   // --- Waiting state management (Issue #43 + #449) ---
   // resolvedSessionKey is now available (defined above from useChatHistory).
