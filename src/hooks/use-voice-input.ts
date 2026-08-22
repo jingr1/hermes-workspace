@@ -5,7 +5,9 @@ import {
   createAudioRecorder,
   detectAudioRecordingSupport,
   detectSpeechRecognitionSupport,
+  formatMicrophoneAccessError,
   requestAudioStream,
+  resolveSpeechRecognitionLang,
   startAudioRecorder,
 } from '@/lib/voice-capture-support'
 
@@ -47,30 +49,14 @@ async function ensureMicrophonePermission(): Promise<void> {
 }
 
 function formatVoiceInputError(error: unknown): string {
-  if (error instanceof DOMException) {
-    if (error.name === 'NotAllowedError' || error.name === 'SecurityError') {
-      return 'Microphone blocked — allow it in browser site settings and macOS Privacy & Security → Microphone'
-    }
-    if (error.name === 'NotFoundError') {
-      return 'No microphone detected'
-    }
-    return error.message || error.name
-  }
-  if (typeof error === 'string') {
-    if (error === 'not-allowed') {
-      return 'Microphone blocked — allow it in browser site settings and macOS Privacy & Security → Microphone'
-    }
-    return error
-  }
-  if (error instanceof Error) return error.message
-  return 'Microphone access denied'
+  return formatMicrophoneAccessError(error)
 }
 
 export function useVoiceInput(
   options: UseVoiceInputOptions = {},
 ): UseVoiceInputReturn {
   const {
-    lang = 'en-US',
+    lang = resolveSpeechRecognitionLang(),
     interim = true,
     transcribe,
     onResult,
@@ -92,7 +78,7 @@ export function useVoiceInput(
     setIsSupported(
       transcribe
         ? detectAudioRecordingSupport()
-        : detectSpeechRecognitionSupport(),
+        : detectSpeechRecognitionSupport() || detectAudioRecordingSupport(),
     )
   }, [transcribe])
 

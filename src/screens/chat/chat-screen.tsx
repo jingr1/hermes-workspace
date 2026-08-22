@@ -3067,7 +3067,7 @@ export function ChatScreen({
             <ChatComposer
               onSubmit={send}
               onAbort={handleAbortStreaming}
-              isLoading={sending || waitingForResponse}
+              isLoading={headerStatusMode !== 'idle'}
               disabled={hideUi}
               isCompacting={isCompacting}
               contextRefreshToken={`${resolvedSessionKey || activeSessionKey || 'new'}:${lastCompletedRunAt}:${sending ? 1 : 0}:${waitingForResponse ? 1 : 0}`}

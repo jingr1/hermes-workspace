@@ -69,6 +69,11 @@ import { usePinnedModels } from '@/hooks/use-pinned-models'
 import { cn } from '@/lib/utils'
 import { useVoiceInput } from '@/hooks/use-voice-input'
 import { useVoiceRecorder } from '@/hooks/use-voice-recorder'
+import {
+  detectMicrophoneBrowserSupport,
+  INSECURE_MICROPHONE_MESSAGE,
+  isMicrophoneContextSecure,
+} from '@/lib/voice-capture-support'
 import { toast } from '@/components/ui/toast'
 import {
   SEARCH_MODAL_EVENTS,
@@ -1016,7 +1021,22 @@ function ChatComposerComponent({
       }
       return (await response.json()) as ClaudeConfigApiResponse
     },
-    enabled: gatewayQueriesEnabled,
+    staleTime: 60_000,
+    retry: false,
+  })
+  const sttStatusQuery = useQuery({
+    queryKey: ['claude', 'stt-status'],
+    queryFn: async () => {
+      const response = await fetch('/api/stt-status')
+      if (!response.ok) {
+        throw new Error(`STT status request failed (${response.status})`)
+      }
+      return (await response.json()) as {
+        provider?: string
+        remoteReady?: boolean
+        error?: string | null
+      }
+    },
     staleTime: 60_000,
     retry: false,
   })
@@ -1764,8 +1784,17 @@ function ChatComposerComponent({
   const sttConfig =
     (sttConfigQuery.data?.config?.stt as Record<string, unknown> | undefined) || {}
   const sttProvider =
-    typeof sttConfig.provider === 'string' ? sttConfig.provider.trim() : 'local'
-  const useRemoteStt = sttProvider === 'groq' || sttProvider === 'openai'
+    typeof sttStatusQuery.data?.provider === 'string' &&
+    sttStatusQuery.data.provider.trim()
+      ? sttStatusQuery.data.provider.trim()
+      : typeof sttConfig.provider === 'string'
+        ? sttConfig.provider.trim()
+        : 'local'
+  const useRemoteStt = sttStatusQuery.data?.remoteReady === true
+  const remoteSttError =
+    typeof sttStatusQuery.data?.error === 'string'
+      ? sttStatusQuery.data.error.trim()
+      : ''
 
   const appendTextToDraft = useCallback(
     (text: string, separator = ' ') => {
@@ -1818,9 +1847,13 @@ function ChatComposerComponent({
     ),
     onError: useCallback(
       (error: string) => {
-        toast(error || 'Voice transcription failed', { type: 'error' })
+        const hint =
+          remoteSttError && !useRemoteStt
+            ? `${error} Remote STT (${sttProvider}) is not ready: ${remoteSttError}`
+            : error || 'Voice transcription failed'
+        toast(hint, { type: 'error' })
       },
-      [],
+      [remoteSttError, sttProvider, useRemoteStt],
     ),
   })
 
@@ -1874,7 +1907,18 @@ function ChatComposerComponent({
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isLongPressRef = useRef(false)
   const skipMicClickRef = useRef(false)
+  const [micContextSecure, setMicContextSecure] = useState(true)
+  const [micBrowserSupported, setMicBrowserSupported] = useState(false)
+
+  useLayoutEffect(() => {
+    setMicContextSecure(isMicrophoneContextSecure())
+    setMicBrowserSupported(detectMicrophoneBrowserSupport())
+  }, [])
+
+  const micCaptureAvailable = voiceInput.isSupported || voiceRecorder.isSupported
+  const micBlockedByInsecureContext = !micContextSecure
   const handleMicPointerDown = useCallback(() => {
+    if (micBlockedByInsecureContext) return
     isLongPressRef.current = false
     // Start long-press timer for voice note recording (only if not already doing voice-to-text)
     if (!voiceInput.isListening && !voiceRecorder.isRecording) {
@@ -1883,7 +1927,7 @@ function ChatComposerComponent({
         voiceRecorder.start()
       }, 500)
     }
-  }, [voiceRecorder, voiceInput.isListening])
+  }, [micBlockedByInsecureContext, voiceRecorder, voiceInput.isListening])
   const handleMicPointerUp = useCallback(() => {
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current)
@@ -1899,6 +1943,10 @@ function ChatComposerComponent({
   }, [voiceRecorder])
 
   const handleMicClick = useCallback(() => {
+    if (micBlockedByInsecureContext) {
+      toast(INSECURE_MICROPHONE_MESSAGE, { type: 'error' })
+      return
+    }
     if (skipMicClickRef.current) {
       skipMicClickRef.current = false
       return
@@ -1917,7 +1965,7 @@ function ChatComposerComponent({
     }
     // Desktop Safari has no Web Speech API — tap records a voice note instead.
     voiceRecorder.start()
-  }, [voiceInput, voiceRecorder])
+  }, [micBlockedByInsecureContext, voiceInput, voiceRecorder])
 
   const handleAbort = useCallback(
     function handleAbort() {
@@ -1938,10 +1986,21 @@ function ChatComposerComponent({
     isCompacting,
   })
 
+  // Only show mic when the primary button would otherwise be disabled (empty
+  // draft, idle). Never replace stop/send/queue with the mic button.
   const showMicButton =
-    !isLoading &&
-    !hasComposerContent &&
-    (voiceInput.isSupported || voiceRecorder.isSupported)
+    primaryAction === 'disabled' &&
+    (micCaptureAvailable || micBrowserSupported)
+
+  const micTooltip = micBlockedByInsecureContext
+    ? 'Voice input needs HTTPS or localhost on this device'
+    : voiceRecorder.isRecording
+      ? `Recording… ${Math.round(voiceRecorder.durationMs / 1000)}s`
+      : voiceInput.isListening
+        ? 'Listening — tap to stop'
+        : voiceInput.isSupported
+          ? 'Tap: dictate · Hold: voice note'
+          : 'Tap to record a voice note'
 
   const handleOpenAttachmentPicker = useCallback(
     function handleOpenAttachmentPicker(
@@ -2374,20 +2433,25 @@ function ChatComposerComponent({
                     onPointerUp={handleMicPointerUp}
                     onPointerLeave={handleMicPointerUp}
                     aria-label={
-                      voiceRecorder.isRecording
-                        ? 'Recording voice note'
-                        : voiceInput.isListening
-                          ? 'Stop listening'
-                          : 'Voice input'
+                      micBlockedByInsecureContext
+                        ? 'Voice input unavailable on HTTP remote access'
+                        : voiceRecorder.isRecording
+                          ? 'Recording voice note'
+                          : voiceInput.isListening
+                            ? 'Stop listening'
+                            : 'Voice input'
                     }
+                    title={micTooltip}
                     disabled={disabled}
                     className={cn(
                       'size-9 rounded-full flex items-center justify-center relative transition-all duration-150 select-none',
-                      voiceRecorder.isRecording
-                        ? 'text-red-600 bg-red-100 animate-pulse'
-                        : voiceInput.isListening
-                          ? 'text-red-500 bg-red-50 animate-pulse'
-                          : 'text-primary-500 bg-neutral-100 dark:bg-white/10',
+                      micBlockedByInsecureContext
+                        ? 'text-primary-400 bg-neutral-100 opacity-60 dark:bg-white/10'
+                        : voiceRecorder.isRecording
+                          ? 'text-red-600 bg-red-100 animate-pulse'
+                          : voiceInput.isListening
+                            ? 'text-red-500 bg-red-50 animate-pulse'
+                            : 'text-primary-500 bg-neutral-100 dark:bg-white/10',
                     )}
                   >
                     <HugeiconsIcon
@@ -3109,17 +3173,7 @@ function ChatComposerComponent({
                   refreshToken={contextRefreshToken}
                 />
                 {showMicButton ? (
-                  <PromptInputAction
-                    tooltip={
-                      voiceRecorder.isRecording
-                        ? `Recording… ${Math.round(voiceRecorder.durationMs / 1000)}s`
-                        : voiceInput.isListening
-                          ? 'Listening — tap to stop'
-                          : voiceInput.isSupported
-                            ? 'Tap: dictate · Hold: voice note'
-                            : 'Tap to record a voice note'
-                    }
-                  >
+                  <PromptInputAction tooltip={micTooltip}>
                     <Button
                       onClick={handleMicClick}
                       onPointerDown={handleMicPointerDown}
@@ -3129,18 +3183,22 @@ function ChatComposerComponent({
                       variant="ghost"
                       className={cn(
                         'rounded-lg transition-colors select-none',
-                        voiceRecorder.isRecording
-                          ? 'text-red-600 bg-red-100 hover:bg-red-200 animate-pulse'
-                          : voiceInput.isListening
-                            ? 'text-red-500 bg-red-50 hover:bg-red-100 animate-pulse'
-                            : 'text-primary-500 hover:bg-primary-100 dark:hover:bg-primary-800 hover:text-primary-700',
+                        micBlockedByInsecureContext
+                          ? 'text-primary-400 opacity-60 hover:bg-transparent'
+                          : voiceRecorder.isRecording
+                            ? 'text-red-600 bg-red-100 hover:bg-red-200 animate-pulse'
+                            : voiceInput.isListening
+                              ? 'text-red-500 bg-red-50 hover:bg-red-100 animate-pulse'
+                              : 'text-primary-500 hover:bg-primary-100 dark:hover:bg-primary-800 hover:text-primary-700',
                       )}
                       aria-label={
-                        voiceRecorder.isRecording
-                          ? 'Recording voice note'
-                          : voiceInput.isListening
-                            ? 'Stop listening'
-                            : 'Voice input'
+                        micBlockedByInsecureContext
+                          ? 'Voice input unavailable on HTTP remote access'
+                          : voiceRecorder.isRecording
+                            ? 'Recording voice note'
+                            : voiceInput.isListening
+                              ? 'Stop listening'
+                              : 'Voice input'
                       }
                       disabled={disabled}
                     >

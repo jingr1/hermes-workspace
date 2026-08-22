@@ -33,8 +33,62 @@ function getNavigator(): NavigatorWithLegacyMedia | null {
   return navigator as NavigatorWithLegacyMedia
 }
 
-export function detectSpeechRecognitionSupport(): boolean {
+/** Browsers only expose getUserMedia on secure origins (HTTPS or localhost). */
+export function isMicrophoneContextSecure(): boolean {
   if (typeof window === 'undefined') return false
+  return window.isSecureContext
+}
+
+export const INSECURE_MICROPHONE_MESSAGE =
+  'Microphone requires HTTPS or localhost. Browsers block mic access on HTTP remote IPs (for example Tailscale). Open http://127.0.0.1:3000 on this Mac, or serve Hermes Workspace over HTTPS.'
+
+export function formatMicrophoneAccessError(error: unknown): string {
+  if (!isMicrophoneContextSecure()) {
+    return INSECURE_MICROPHONE_MESSAGE
+  }
+  if (error instanceof DOMException) {
+    if (error.name === 'NotAllowedError' || error.name === 'SecurityError') {
+      return 'Microphone blocked — allow it in browser site settings and macOS Privacy & Security → Microphone'
+    }
+    if (error.name === 'NotFoundError') {
+      return 'No microphone detected'
+    }
+    if (error.message?.trim()) return error.message
+    return error.name
+  }
+  if (typeof error === 'string') {
+    if (error === 'not-allowed') {
+      return 'Microphone blocked — allow it in browser site settings and macOS Privacy & Security → Microphone'
+    }
+    return error
+  }
+  if (error instanceof Error && error.message.trim()) return error.message
+  return 'Microphone access denied'
+}
+
+export function detectMicrophoneBrowserSupport(): boolean {
+  if (typeof window === 'undefined') return false
+  if (typeof MediaRecorder !== 'undefined') return true
+  const win = window as Window & {
+    SpeechRecognition?: unknown
+    webkitSpeechRecognition?: unknown
+  }
+  if (win.SpeechRecognition || win.webkitSpeechRecognition) return true
+  const nav = getNavigator()
+  if (!nav) return false
+  try {
+    if (typeof nav.mediaDevices?.getUserMedia === 'function') return true
+    if (typeof nav.webkitGetUserMedia === 'function') return true
+    if (typeof nav.getUserMedia === 'function') return true
+  } catch {
+    return false
+  }
+  return false
+}
+
+export function detectSpeechRecognitionSupport(): boolean {
+  if (!detectMicrophoneBrowserSupport()) return false
+  if (!isMicrophoneContextSecure()) return false
   const win = window as Window & {
     SpeechRecognition?: unknown
     webkitSpeechRecognition?: unknown
@@ -42,7 +96,16 @@ export function detectSpeechRecognitionSupport(): boolean {
   return Boolean(win.SpeechRecognition || win.webkitSpeechRecognition)
 }
 
+/** BCP-47 tag for Web Speech API; defaults to browser locale instead of en-US. */
+export function resolveSpeechRecognitionLang(): string {
+  const nav = getNavigator()
+  const browserLang = nav?.language?.trim()
+  if (browserLang) return browserLang
+  return 'en-US'
+}
+
 export function detectGetUserMediaSupport(): boolean {
+  if (!isMicrophoneContextSecure()) return false
   const nav = getNavigator()
   if (!nav) return false
   try {
@@ -56,7 +119,8 @@ export function detectGetUserMediaSupport(): boolean {
 }
 
 export function detectAudioRecordingSupport(): boolean {
-  if (typeof window === 'undefined') return false
+  if (!detectMicrophoneBrowserSupport()) return false
+  if (!isMicrophoneContextSecure()) return false
   if (typeof MediaRecorder === 'undefined') {
     return detectGetUserMediaSupport()
   }
@@ -66,6 +130,10 @@ export function detectAudioRecordingSupport(): boolean {
 }
 
 export async function requestAudioStream(): Promise<MediaStream> {
+  if (!isMicrophoneContextSecure()) {
+    throw new DOMException(INSECURE_MICROPHONE_MESSAGE, 'SecurityError')
+  }
+
   const nav = getNavigator()
   if (!nav) {
     throw new DOMException('Microphone APIs are unavailable', 'NotSupportedError')

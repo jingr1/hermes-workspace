@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, shell, session } = require('electron')
 const { join } = require('path')
 const fs = require('fs')
 const { existsSync } = fs
@@ -340,6 +340,33 @@ function startLocalServer() {
   })
 }
 
+function configureMediaPermissions() {
+  const allowAudioMedia = (details) => {
+    const mediaTypes = details?.mediaTypes
+    if (!Array.isArray(mediaTypes) || mediaTypes.length === 0) return true
+    return mediaTypes.includes('audio')
+  }
+
+  session.defaultSession.setPermissionRequestHandler(
+    (_webContents, permission, callback, details) => {
+      if (permission === 'media' && allowAudioMedia(details)) {
+        callback(true)
+        return
+      }
+      callback(false)
+    },
+  )
+
+  session.defaultSession.setPermissionCheckHandler(
+    (_webContents, permission, _requestingOrigin, details) => {
+      if (permission === 'media' && allowAudioMedia(details)) {
+        return true
+      }
+      return false
+    },
+  )
+}
+
 async function createWindow() {
   await startLocalServer()
 
@@ -399,6 +426,7 @@ ipcMain.handle('desktop:update-state', async () => updateState)
 
 app.whenReady().then(async () => {
   configureAutoUpdater()
+  configureMediaPermissions()
   await createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) void createWindow()
