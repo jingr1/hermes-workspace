@@ -122,6 +122,49 @@ describe('gateway-pool port assignment', () => {
     const mod = await loadMod()
     expect(mod.resolveProfileGatewayPort('architect')).toBe(8699)
   })
+
+  it('drops persisted ports when the profile directory no longer exists', async () => {
+    const home = makeHome()
+    addProfile(home, 'developer')
+    writeFileSync(
+      path.join(home, 'workspace', 'gateway-pool.json'),
+      JSON.stringify({
+        ports: {
+          default: 8642,
+          developer: 8652,
+          coder: 8644,
+          strategist: 8650,
+        },
+      }),
+    )
+
+    const mod = await loadMod()
+    expect(mod.listManagedProfileNames()).toEqual(['default', 'developer'])
+    expect(mod.resolveProfileGatewayPort('developer')).toBe(8652)
+
+    const persisted = JSON.parse(
+      readFileSync(path.join(home, 'workspace', 'gateway-pool.json'), 'utf-8'),
+    ) as { ports: Record<string, number> }
+    expect(persisted.ports.coder).toBeUndefined()
+    expect(persisted.ports.strategist).toBeUndefined()
+    expect(persisted.ports.developer).toBe(8652)
+  })
+
+  it('lists persisted ports for profiles that no longer exist on disk', async () => {
+    const home = makeHome()
+    addProfile(home, 'developer')
+    writeFileSync(
+      path.join(home, 'workspace', 'gateway-pool.json'),
+      JSON.stringify({
+        ports: { default: 8642, developer: 8652, designer: 8644 },
+      }),
+    )
+
+    const mod = await loadMod()
+    expect(mod.listPersistedOrphanProfilePorts()).toEqual([
+      { profile: 'designer', port: 8644 },
+    ])
+  })
 })
 
 describe('isGatewayPoolEnabled', () => {

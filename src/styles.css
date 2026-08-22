@@ -1611,6 +1611,10 @@ code {
       opacity 0.3s ease,
       border-radius 0.3s ease;
   }
+  body.nav-drawer-open [data-mobile-composer] {
+    visibility: hidden;
+    pointer-events: none;
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════════

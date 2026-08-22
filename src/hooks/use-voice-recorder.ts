@@ -1,6 +1,12 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useRef, useState } from 'react'
+import {
+  createAudioRecorder,
+  detectAudioRecordingSupport,
+  requestAudioStream,
+  startAudioRecorder,
+} from '@/lib/voice-capture-support'
 
 type RecorderState = 'idle' | 'recording' | 'processing'
 
@@ -21,14 +27,30 @@ type UseVoiceRecorderReturn = {
   stop: () => void
 }
 
+function formatVoiceRecorderError(error: unknown): string {
+  if (error instanceof DOMException) {
+    if (error.name === 'NotAllowedError' || error.name === 'SecurityError') {
+      return 'Microphone blocked — allow it in browser site settings and macOS Privacy & Security → Microphone'
+    }
+    if (error.name === 'NotFoundError') {
+      return 'No microphone detected'
+    }
+    return error.message || error.name
+  }
+  if (error instanceof Error) return error.message
+  return 'Microphone access denied'
+}
+
 export function useVoiceRecorder(
   options: UseVoiceRecorderOptions = {},
 ): UseVoiceRecorderReturn {
   const { maxDurationMs = 120_000, onRecorded, onError } = options
   const [state, setState] = useState<RecorderState>('idle')
   const [durationMs, setDurationMs] = useState(0)
+  const [isSupported, setIsSupported] = useState(false)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Array<Blob>>([])
+  const mimeTypeRef = useRef('audio/mp4')
   const startTimeRef = useRef(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const maxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -36,11 +58,9 @@ export function useVoiceRecorder(
   const callbacksRef = useRef({ onRecorded, onError })
   callbacksRef.current = { onRecorded, onError }
 
-  const isSupported =
-    typeof window !== 'undefined' &&
-    typeof navigator !== 'undefined' &&
-    Boolean(navigator.mediaDevices?.getUserMedia) &&
-    typeof MediaRecorder !== 'undefined'
+  useLayoutEffect(() => {
+    setIsSupported(detectAudioRecordingSupport())
+  }, [])
 
   const cleanup = useCallback(() => {
     if (timerRef.current) {
@@ -66,7 +86,7 @@ export function useVoiceRecorder(
   }, [cleanup])
 
   const start = useCallback(async () => {
-    if (!isSupported) {
+    if (!detectAudioRecordingSupport()) {
       callbacksRef.current.onError?.('Audio recording not supported')
       return
     }
@@ -79,16 +99,9 @@ export function useVoiceRecorder(
     cleanup()
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-
-      // Prefer webm/opus, fall back to whatever is available
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : MediaRecorder.isTypeSupported('audio/webm')
-          ? 'audio/webm'
-          : 'audio/mp4'
-
-      const recorder = new MediaRecorder(stream, { mimeType })
+      const stream = await requestAudioStream()
+      const { recorder, mimeType } = createAudioRecorder(stream)
+      mimeTypeRef.current = mimeType
       chunksRef.current = []
       startTimeRef.current = Date.now()
       setDurationMs(0)
@@ -101,7 +114,7 @@ export function useVoiceRecorder(
 
       recorder.onstop = () => {
         setState('processing')
-        const blob = new Blob(chunksRef.current, { type: mimeType })
+        const blob = new Blob(chunksRef.current, { type: mimeTypeRef.current })
         const duration = Date.now() - startTimeRef.current
         chunksRef.current = []
         recorderRef.current = null
@@ -119,7 +132,7 @@ export function useVoiceRecorder(
       }
 
       recorderRef.current = recorder
-      recorder.start(100) // collect chunks every 100ms
+      startAudioRecorder(recorder)
       setState('recording')
 
       // Duration counter
@@ -132,12 +145,10 @@ export function useVoiceRecorder(
         stop()
       }, maxDurationMs)
     } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : 'Microphone access denied'
-      callbacksRef.current.onError?.(msg)
+      callbacksRef.current.onError?.(formatVoiceRecorderError(err))
       setState('idle')
     }
-  }, [isSupported, cleanup, stop, maxDurationMs])
+  }, [cleanup, stop, maxDurationMs])
 
   return {
     state,

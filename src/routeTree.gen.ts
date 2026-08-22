@@ -90,6 +90,7 @@ import { Route as ApiMemoryRouteImport } from './routes/api/memory'
 import { Route as ApiMediaRouteImport } from './routes/api/media'
 import { Route as ApiMcpRouteImport } from './routes/api/mcp'
 import { Route as ApiLocalProvidersRouteImport } from './routes/api/local-providers'
+import { Route as ApiJobDeliveryTargetsRouteImport } from './routes/api/job-delivery-targets'
 import { Route as ApiIntegrationsRouteImport } from './routes/api/integrations'
 import { Route as ApiHistoryRouteImport } from './routes/api/history'
 import { Route as ApiHermesTasksRouteImport } from './routes/api/hermes-tasks'
@@ -593,6 +594,11 @@ const ApiMcpRoute = ApiMcpRouteImport.update({
 const ApiLocalProvidersRoute = ApiLocalProvidersRouteImport.update({
   id: '/api/local-providers',
   path: '/api/local-providers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiJobDeliveryTargetsRoute = ApiJobDeliveryTargetsRouteImport.update({
+  id: '/api/job-delivery-targets',
+  path: '/api/job-delivery-targets',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiIntegrationsRoute = ApiIntegrationsRouteImport.update({
@@ -1143,6 +1149,7 @@ export interface FileRoutesByFullPath {
   '/api/hermes-tasks': typeof ApiHermesTasksRouteWithChildren
   '/api/history': typeof ApiHistoryRoute
   '/api/integrations': typeof ApiIntegrationsRoute
+  '/api/job-delivery-targets': typeof ApiJobDeliveryTargetsRoute
   '/api/local-providers': typeof ApiLocalProvidersRoute
   '/api/mcp': typeof ApiMcpRouteWithChildren
   '/api/media': typeof ApiMediaRoute
@@ -1322,6 +1329,7 @@ export interface FileRoutesByTo {
   '/api/hermes-tasks': typeof ApiHermesTasksRouteWithChildren
   '/api/history': typeof ApiHistoryRoute
   '/api/integrations': typeof ApiIntegrationsRoute
+  '/api/job-delivery-targets': typeof ApiJobDeliveryTargetsRoute
   '/api/local-providers': typeof ApiLocalProvidersRoute
   '/api/mcp': typeof ApiMcpRouteWithChildren
   '/api/media': typeof ApiMediaRoute
@@ -1503,6 +1511,7 @@ export interface FileRoutesById {
   '/api/hermes-tasks': typeof ApiHermesTasksRouteWithChildren
   '/api/history': typeof ApiHistoryRoute
   '/api/integrations': typeof ApiIntegrationsRoute
+  '/api/job-delivery-targets': typeof ApiJobDeliveryTargetsRoute
   '/api/local-providers': typeof ApiLocalProvidersRoute
   '/api/mcp': typeof ApiMcpRouteWithChildren
   '/api/media': typeof ApiMediaRoute
@@ -1685,6 +1694,7 @@ export interface FileRouteTypes {
     | '/api/hermes-tasks'
     | '/api/history'
     | '/api/integrations'
+    | '/api/job-delivery-targets'
     | '/api/local-providers'
     | '/api/mcp'
     | '/api/media'
@@ -1864,6 +1874,7 @@ export interface FileRouteTypes {
     | '/api/hermes-tasks'
     | '/api/history'
     | '/api/integrations'
+    | '/api/job-delivery-targets'
     | '/api/local-providers'
     | '/api/mcp'
     | '/api/media'
@@ -2044,6 +2055,7 @@ export interface FileRouteTypes {
     | '/api/hermes-tasks'
     | '/api/history'
     | '/api/integrations'
+    | '/api/job-delivery-targets'
     | '/api/local-providers'
     | '/api/mcp'
     | '/api/media'
@@ -2225,6 +2237,7 @@ export interface RootRouteChildren {
   ApiHermesTasksRoute: typeof ApiHermesTasksRouteWithChildren
   ApiHistoryRoute: typeof ApiHistoryRoute
   ApiIntegrationsRoute: typeof ApiIntegrationsRoute
+  ApiJobDeliveryTargetsRoute: typeof ApiJobDeliveryTargetsRoute
   ApiLocalProvidersRoute: typeof ApiLocalProvidersRoute
   ApiMcpRoute: typeof ApiMcpRouteWithChildren
   ApiMediaRoute: typeof ApiMediaRoute
@@ -2887,6 +2900,13 @@ declare module '@tanstack/react-router' {
       path: '/api/local-providers'
       fullPath: '/api/local-providers'
       preLoaderRoute: typeof ApiLocalProvidersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/job-delivery-targets': {
+      id: '/api/job-delivery-targets'
+      path: '/api/job-delivery-targets'
+      fullPath: '/api/job-delivery-targets'
+      preLoaderRoute: typeof ApiJobDeliveryTargetsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/integrations': {
@@ -3860,6 +3880,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiHermesTasksRoute: ApiHermesTasksRouteWithChildren,
   ApiHistoryRoute: ApiHistoryRoute,
   ApiIntegrationsRoute: ApiIntegrationsRoute,
+  ApiJobDeliveryTargetsRoute: ApiJobDeliveryTargetsRoute,
   ApiLocalProvidersRoute: ApiLocalProvidersRoute,
   ApiMcpRoute: ApiMcpRouteWithChildren,
   ApiMediaRoute: ApiMediaRoute,

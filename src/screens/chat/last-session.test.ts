@@ -65,6 +65,9 @@ describe('last-session', () => {
 
     expect(resolveSessionForProfile(undefined, 'developer')).toBe('dev-chat')
     expect(resolveSessionForProfile([], 'developer')).toBe('dev-chat')
+    expect(
+      resolveSessionForProfile([], 'developer', { sessionsLoaded: true }),
+    ).toBe('new')
     expect(resolveSessionForProfile(undefined, 'default')).toBe('new')
   })
 })

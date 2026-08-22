@@ -3,6 +3,7 @@
  * LRU eviction when more than N profiles stay warm (see gateway-lifecycle.ts).
  * `default` is pinned resident; background starts never steal CLAUDE_API.
  */
+import { existsSync } from 'node:fs'
 import path from 'node:path'
 import {
   getActiveProfileName,
@@ -192,6 +193,17 @@ async function ensureProfileGatewayLocked(
 ): Promise<EnsureGatewayResult> {
   const name = (profileName || 'default').trim() || 'default'
   const hermesHome = resolveProfileHermesHome(name)
+  if (name !== PINNED_GATEWAY_PROFILE && !existsSync(hermesHome)) {
+    return {
+      ok: false,
+      error: `profile "${name}" does not exist`,
+      profile: name,
+      hermesHome,
+      port: resolveProfileGatewayPort(name),
+      url: gatewayUrlForPort(resolveProfileGatewayPort(name)),
+      started: false,
+    }
+  }
   const port = resolveProfileGatewayPort(name)
   const url = gatewayUrlForPort(port)
   await applyRouteIfActive(name, url)

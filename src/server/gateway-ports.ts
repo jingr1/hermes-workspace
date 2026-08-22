@@ -364,11 +364,29 @@ function ensurePortAssignments(): Record<string, number> {
     used.add(assigned)
   }
 
+  const managed = new Set(names)
   const changed =
     names.length !== Object.keys(persisted).length ||
-    names.some((name) => persisted[name] !== next[name])
+    names.some((name) => persisted[name] !== next[name]) ||
+    Object.keys(persisted).some((name) => !managed.has(name))
   if (changed) persistPorts(next)
   return next
+}
+
+/** Ports in gateway-pool.json for profiles that no longer exist on disk. */
+export function listPersistedOrphanProfilePorts(): Array<{
+  profile: string
+  port: number
+}> {
+  const persisted = loadPersistedPorts()
+  const managed = new Set(listManagedProfileNames())
+  const orphans: Array<{ profile: string; port: number }> = []
+  for (const [profile, port] of Object.entries(persisted)) {
+    if (managed.has(profile)) continue
+    const parsed = parsePort(port)
+    if (parsed) orphans.push({ profile, port: parsed })
+  }
+  return orphans
 }
 
 /**

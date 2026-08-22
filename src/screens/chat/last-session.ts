@@ -75,15 +75,19 @@ export function readLastSession(profileName?: string): string | null {
 export function resolveSessionForProfile(
   sessions: Array<{ friendlyId?: string }> | undefined,
   profileName: string,
+  options?: { sessionsLoaded?: boolean },
 ): string {
   const list = Array.isArray(sessions) ? sessions : []
   const profileLast = readStorage(profileLastSessionKey(profileName.trim()))
 
-  // Sessions not loaded yet — trust this profile's remembered id so switches
-  // don't bounce to "new". Do not fall back to the global last session here;
-  // that often belongs to a different profile.
-  if (list.length === 0) {
+  // Session list not fetched yet — trust remembered session for fast profile switch.
+  if (list.length === 0 && !options?.sessionsLoaded) {
     return profileLast || 'new'
+  }
+
+  // Fetched and confirmed empty — start fresh instead of a stale remembered id.
+  if (list.length === 0) {
+    return 'new'
   }
 
   const ids = new Set(

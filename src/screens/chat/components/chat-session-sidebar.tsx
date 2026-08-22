@@ -229,6 +229,7 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
         let sessions = queryClient.getQueryData<Array<SessionMeta>>(
           chatQueryKeys.sessionsForProfile(profileName),
         )
+        let sessionsLoaded = Boolean(sessions)
         if (!sessions) {
           try {
             sessions = await queryClient.fetchQuery({
@@ -236,11 +237,15 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
               queryFn: () => fetchSessions(profileName),
               staleTime: 60_000,
             })
+            sessionsLoaded = true
           } catch {
-            sessions = undefined
+            sessions = []
+            sessionsLoaded = true
           }
         }
-        const targetSession = resolveSessionForProfile(sessions, profileName)
+        const targetSession = resolveSessionForProfile(sessions, profileName, {
+          sessionsLoaded,
+        })
         prefetchSessionHistory(queryClient, profileName, targetSession)
         navigate({
           to: '/chat/$sessionKey',

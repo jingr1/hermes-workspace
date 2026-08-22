@@ -31,7 +31,13 @@ import {
   resumeJob,
   triggerJob,
   updateJob,
+  buildJobMutationPayload,
 } from '@/lib/jobs-api'
+import {
+  jobModelFieldsToCreatePayload,
+  jobModelFieldsToUpdatePayload,
+  type JobFormSubmitInput,
+} from './job-form-types'
 
 const QUERY_KEY = ['claude', 'jobs'] as const
 const PROFILES_QUERY_KEY = ['claude', 'job-profiles'] as const
@@ -353,7 +359,12 @@ export function JobsScreen() {
     },
   })
   const createMutation = useMutation({
-    mutationFn: createJob,
+    mutationFn: (input: JobFormSubmitInput) =>
+      createJob({
+        ...buildJobMutationPayload(input),
+        profile: input.profile,
+        ...jobModelFieldsToCreatePayload(input),
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: QUERY_KEY })
       toast('Job created')
@@ -368,16 +379,13 @@ export function JobsScreen() {
   const updateMutation = useMutation({
     mutationFn: async (payload: {
       jobId: string
-      updates: {
-        profile: string
-        name: string
-        schedule: string
-        prompt: string
-        deliver?: Array<string>
-        skills?: Array<string>
-        repeat?: number
-      }
-    }) => updateJob(payload.jobId, payload.updates),
+      updates: JobFormSubmitInput
+    }) =>
+      updateJob(payload.jobId, {
+        ...buildJobMutationPayload(payload.updates),
+        profile: payload.updates.profile,
+        ...jobModelFieldsToUpdatePayload(payload.updates),
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: QUERY_KEY })
       toast('Job updated')
@@ -403,15 +411,7 @@ export function JobsScreen() {
   }, [jobsQuery.data, search])
 
   const handleCreate = useCallback(
-    async (input: {
-      profile: string
-      name: string
-      schedule: string
-      prompt: string
-      deliver?: Array<string>
-      skills?: Array<string>
-      repeat?: number
-    }) => {
+    async (input: JobFormSubmitInput) => {
       await createMutation.mutateAsync(input)
     },
     [createMutation],

@@ -19,6 +19,7 @@ import {
   UserMultipleIcon,
 } from '@hugeicons/core-free-icons'
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 import { hapticTap } from '@/lib/haptics'
 import { getTheme, getThemeVariant, isDarkTheme, setTheme } from '@/lib/theme'
@@ -154,7 +155,12 @@ export function HamburgerTrigger({ className }: { className?: string }) {
 /** Mount once in WorkspaceShell — renders the drawer + backdrop */
 export function MobileHamburgerMenu() {
   const [open, setOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
   _setOpen = setOpen
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // Add/remove body class to push main content
   useEffect(() => {
@@ -173,8 +179,6 @@ export function MobileHamburgerMenu() {
   const visibleNavItems = MOBILE_HAMBURGER_NAV_ITEMS.filter(
     (item) => item.id !== 'echo-studio' || echoStudioEnabled,
   )
-  const isChatRoute =
-    pathname.startsWith('/chat') || pathname === '/new' || pathname === '/'
 
   function handleNav(to: string) {
     hapticTap()
@@ -182,39 +186,30 @@ export function MobileHamburgerMenu() {
     setOpen(false)
   }
 
-  return (
-    <>
-      {/* No floating button — each page has MobilePageHeader with HamburgerTrigger inline */}
+  if (!mounted) return null
 
-      {/* Push-style layout wrapper — sidebar pushes content right */}
-      <div
+  return createPortal(
+    <>
+      {/* Dim backdrop — portaled so it sits above shifted content / fixed composer */}
+      <button
+        type="button"
+        aria-label="Close menu"
+        onClick={() => setOpen(false)}
         className={cn(
-          'fixed inset-0 z-[95] md:hidden',
-          'transition-transform duration-300 ease-in-out',
-          open ? 'translate-x-0' : 'pointer-events-none',
+          'fixed inset-0 z-[95] bg-black/40 md:hidden transition-opacity duration-300',
+          open ? 'opacity-100' : 'pointer-events-none opacity-0',
         )}
-      >
-        {/* Main content overlay — dims and shifts right when sidebar is open */}
-        <div
-          className={cn(
-            'absolute inset-0 transition-all duration-300 ease-in-out',
-            open
-              ? 'translate-x-72 opacity-40 scale-[0.92] rounded-2xl overflow-hidden'
-              : 'translate-x-0 opacity-100 scale-100',
-          )}
-          onClick={() => open && setOpen(false)}
-          style={open ? { transformOrigin: 'left center' } : undefined}
-        />
-      </div>
+      />
 
       {/* Slide-over drawer */}
       <div
         className={cn(
           'fixed top-0 left-0 bottom-0 z-[96] w-72 md:hidden',
           'shadow-2xl',
-          'flex flex-col pt-[max(env(safe-area-inset-top,20px),20px)] pb-[max(env(safe-area-inset-bottom,20px),20px)]',
+          'flex min-h-0 flex-col',
+          'pt-[max(env(safe-area-inset-top,20px),20px)]',
           'transition-transform duration-300 ease-in-out',
-          open ? 'translate-x-0' : '-translate-x-full',
+          open ? 'translate-x-0' : '-translate-x-full pointer-events-none',
         )}
         style={{
           background: 'var(--color-surface, #fff)',
@@ -223,7 +218,7 @@ export function MobileHamburgerMenu() {
       >
         {/* Header */}
         <div
-          className="flex items-center justify-between px-4 pb-4"
+          className="flex shrink-0 items-center justify-between px-4 pb-4"
           style={{ borderBottom: '1px solid var(--color-border, #e5e7eb)' }}
         >
           <div className="flex items-center gap-2.5">
@@ -258,8 +253,8 @@ export function MobileHamburgerMenu() {
           </button>
         </div>
 
-        {/* Nav items */}
-        <nav className="flex flex-col gap-1 px-3 pt-4 flex-1">
+        {/* Nav items — scroll when the list is taller than the viewport */}
+        <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain px-3 pt-4">
           {visibleNavItems.map((item) => {
             const isActive = item.match(pathname)
             return (
@@ -298,7 +293,7 @@ export function MobileHamburgerMenu() {
 
         {/* Bottom — user profile + settings + theme toggle */}
         <div
-          className="px-3 pb-2 pt-3"
+          className="shrink-0 px-3 pt-3 pb-[max(env(safe-area-inset-bottom,12px),12px)]"
           style={{ borderTop: '1px solid var(--color-border, #e5e7eb)' }}
         >
           <div className="flex items-center gap-3 px-2">
@@ -381,6 +376,7 @@ export function MobileHamburgerMenu() {
           </div>
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   )
 }

@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   catalogFromConfig,
   listConfigReferencedProviders,
+  listConfiguredBuiltinProviders,
+  listModelCatalogProviders,
   mergeModelEntries,
+  modelsFromBuiltinPresets,
   modelsFromProviderCache,
 } from './models'
 
@@ -119,5 +122,36 @@ describe('provider models cache expansion', () => {
       'deepseek-v4-flash',
     ])
     expect(models.every((model) => model.provider === 'deepseek')).toBe(true)
+  })
+
+  it('includes configured builtin providers without config.yaml references', () => {
+    expect(
+      listModelCatalogProviders(
+        {
+          model: { provider: 'moonshot-coding-plan', default: 'kimi-for-coding' },
+          fallback_providers: [{ provider: 'deepseek', model: 'deepseek-v4-pro' }],
+        },
+        { NVIDIA_API_KEY: 'nvapi-test', DEEPSEEK_API_KEY: 'sk-test' },
+      ).sort(),
+    ).toEqual(['deepseek', 'moonshot-coding-plan', 'nvidia'].sort())
+
+    const models = mergeModelEntries(
+      modelsFromProviderCache(
+        {
+          nvidia: {
+            models: ['nvidia/nemotron-3-super-120b-a12b'],
+          },
+        },
+        listConfiguredBuiltinProviders({ NVIDIA_API_KEY: 'nvapi-test' }),
+      ),
+      modelsFromBuiltinPresets(['nvidia']),
+    )
+
+    expect(models.map((model) => model.id)).toContain(
+      'nvidia/nemotron-3-super-120b-a12b',
+    )
+    expect(models.map((model) => model.id)).toContain(
+      'nvidia/llama-3.3-nemotron-super-49b-v1',
+    )
   })
 })

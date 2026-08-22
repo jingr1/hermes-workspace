@@ -31,6 +31,10 @@ export type ClaudeJob = {
   profile?: string
   profile_name?: string
   jobId?: string
+  model?: string | null
+  provider?: string | null
+  model_snapshot?: string | null
+  provider_snapshot?: string | null
 }
 
 export type HermesJob = ClaudeJob
@@ -184,6 +188,8 @@ type JobMutationInput = {
   skills?: Array<string>
   repeat?: number
   profile?: string
+  model?: string
+  provider?: string
 }
 
 function serializeDeliveryTargets(deliver?: string | Array<string>): string | undefined {

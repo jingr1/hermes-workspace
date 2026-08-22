@@ -238,6 +238,10 @@ function normalizeCreateArgs(
       ? String(input.repeat)
       : null
   if (repeat) args.push('--repeat', repeat)
+  const model = readString(input.model)
+  const provider = readString(input.provider)
+  if (model) args.push('--model', model)
+  if (provider) args.push('--provider', provider)
   args.push(schedule, prompt)
   return args
 }
@@ -310,6 +314,12 @@ export function updateProfileCronJob(
       ? String(updates.repeat)
       : null
   if (repeat) args.push('--repeat', repeat)
+  if (Object.prototype.hasOwnProperty.call(updates, 'model')) {
+    args.push('--model', readString(updates.model) ?? '')
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, 'provider')) {
+    args.push('--provider', readString(updates.provider) ?? '')
+  }
   const output = execFileSync(resolveHermesBin(), args, {
     encoding: 'utf8',
     timeout: 30_000,

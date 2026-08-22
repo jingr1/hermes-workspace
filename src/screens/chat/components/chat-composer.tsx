@@ -1873,6 +1873,7 @@ function ChatComposerComponent({
   // Long-press detection for mic button
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isLongPressRef = useRef(false)
+  const skipMicClickRef = useRef(false)
   const handleMicPointerDown = useCallback(() => {
     isLongPressRef.current = false
     // Start long-press timer for voice note recording (only if not already doing voice-to-text)
@@ -1892,9 +1893,31 @@ function ChatComposerComponent({
       // Was a long press — stop voice note recording
       voiceRecorder.stop()
       isLongPressRef.current = false
+      skipMicClickRef.current = true
     }
     // Short taps are handled by onClick for voice-to-text toggle
   }, [voiceRecorder])
+
+  const handleMicClick = useCallback(() => {
+    if (skipMicClickRef.current) {
+      skipMicClickRef.current = false
+      return
+    }
+    if (voiceInput.isListening) {
+      voiceInput.stop()
+      return
+    }
+    if (voiceRecorder.isRecording) {
+      voiceRecorder.stop()
+      return
+    }
+    if (voiceInput.isSupported) {
+      voiceInput.start()
+      return
+    }
+    // Desktop Safari has no Web Speech API — tap records a voice note instead.
+    voiceRecorder.start()
+  }, [voiceInput, voiceRecorder])
 
   const handleAbort = useCallback(
     function handleAbort() {
@@ -2141,6 +2164,7 @@ function ChatComposerComponent({
 
   return (
     <div
+      data-mobile-composer={isMobileViewport && !embedded ? true : undefined}
       className={cn(
         'no-swipe pointer-events-auto touch-manipulation',
         isMobileViewport
@@ -2345,15 +2369,7 @@ function ChatComposerComponent({
                 {showMicButton ? (
                   <button
                     type="button"
-                    onClick={() => {
-                      if (voiceInput.isListening) {
-                        voiceInput.stop()
-                      } else if (voiceRecorder.isRecording) {
-                        voiceRecorder.stop()
-                      } else {
-                        voiceInput.start()
-                      }
-                    }}
+                    onClick={handleMicClick}
                     onPointerDown={handleMicPointerDown}
                     onPointerUp={handleMicPointerUp}
                     onPointerLeave={handleMicPointerUp}
@@ -3099,19 +3115,13 @@ function ChatComposerComponent({
                         ? `Recording… ${Math.round(voiceRecorder.durationMs / 1000)}s`
                         : voiceInput.isListening
                           ? 'Listening — tap to stop'
-                          : 'Tap: dictate · Hold: voice note'
+                          : voiceInput.isSupported
+                            ? 'Tap: dictate · Hold: voice note'
+                            : 'Tap to record a voice note'
                     }
                   >
                     <Button
-                      onClick={() => {
-                        if (voiceInput.isListening) {
-                          voiceInput.stop()
-                        } else if (voiceRecorder.isRecording) {
-                          voiceRecorder.stop()
-                        } else {
-                          voiceInput.start()
-                        }
-                      }}
+                      onClick={handleMicClick}
                       onPointerDown={handleMicPointerDown}
                       onPointerUp={handleMicPointerUp}
                       onPointerLeave={handleMicPointerUp}

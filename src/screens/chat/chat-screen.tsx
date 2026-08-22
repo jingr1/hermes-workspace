@@ -1933,12 +1933,20 @@ export function ChatScreen({
     if (!shouldRedirectToNew) return
     resetPendingSend()
     clearHistoryMessages(queryClient, activeFriendlyId, sessionKeyForHistory)
-    const latestSession = resolveSessionForProfile(sessions, activeProfileName)
-    if (latestSession === activeFriendlyId) return
-    writeLastSession(latestSession, activeProfileName)
+    const latestSession = resolveSessionForProfile(sessions, activeProfileName, {
+      sessionsLoaded: sessionsQuery.isSuccess,
+    })
+    const targetSession =
+      latestSession === activeFriendlyId &&
+      !sessionOwnedByProfile &&
+      sessionsQuery.isSuccess
+        ? 'new'
+        : latestSession
+    if (targetSession === activeFriendlyId) return
+    writeLastSession(targetSession, activeProfileName)
     navigate({
       to: '/chat/$sessionKey',
-      params: { sessionKey: latestSession },
+      params: { sessionKey: targetSession },
       replace: true,
     })
   }, [
@@ -2900,7 +2908,7 @@ export function ChatScreen({
                 : 'grid grid-cols-[auto_minmax(0,1fr)_auto_auto] grid-rows-[minmax(0,1fr)]',
         )}
       >
-        {hideUi || compact || isFocusMode || isMobile ? null : (
+        {compact || isFocusMode || isMobile ? null : (
           <ChatSessionSidebar
             sessions={sessions}
             sessionsLoading={sessionsLoading}

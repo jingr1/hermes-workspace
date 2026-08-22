@@ -1,6 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import {
+  createAudioRecorder,
+  detectAudioRecordingSupport,
+  detectSpeechRecognitionSupport,
+  requestAudioStream,
+  startAudioRecorder,
+} from '@/lib/voice-capture-support'
 
 type VoiceInputState = 'idle' | 'listening' | 'processing' | 'error'
 
@@ -33,26 +40,30 @@ function getSpeechRecognition(): SpeechRecognitionConstructor | null {
   return win.SpeechRecognition ?? win.webkitSpeechRecognition ?? null
 }
 
-function supportsRecorderTranscription() {
-  if (
-    typeof window === 'undefined' ||
-    typeof navigator === 'undefined' ||
-    typeof MediaRecorder === 'undefined'
-  ) {
-    return false
-  }
-  return 'mediaDevices' in navigator && 'getUserMedia' in navigator.mediaDevices
+/** Web Speech API does not always surface mic permission in site settings; preflight getUserMedia does. */
+async function ensureMicrophonePermission(): Promise<void> {
+  const stream = await requestAudioStream()
+  stream.getTracks().forEach((track) => track.stop())
 }
 
-function pickRecorderMimeType(): string {
-  if (typeof MediaRecorder === 'undefined') return 'audio/webm'
-  if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
-    return 'audio/webm;codecs=opus'
+function formatVoiceInputError(error: unknown): string {
+  if (error instanceof DOMException) {
+    if (error.name === 'NotAllowedError' || error.name === 'SecurityError') {
+      return 'Microphone blocked — allow it in browser site settings and macOS Privacy & Security → Microphone'
+    }
+    if (error.name === 'NotFoundError') {
+      return 'No microphone detected'
+    }
+    return error.message || error.name
   }
-  if (MediaRecorder.isTypeSupported('audio/webm')) {
-    return 'audio/webm'
+  if (typeof error === 'string') {
+    if (error === 'not-allowed') {
+      return 'Microphone blocked — allow it in browser site settings and macOS Privacy & Security → Microphone'
+    }
+    return error
   }
-  return 'audio/mp4'
+  if (error instanceof Error) return error.message
+  return 'Microphone access denied'
 }
 
 export function useVoiceInput(
@@ -71,13 +82,19 @@ export function useVoiceInput(
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const recordedChunksRef = useRef<Array<Blob>>([])
-  const recorderMimeTypeRef = useRef('audio/webm')
-  const isSupported = transcribe
-    ? supportsRecorderTranscription()
-    : typeof window !== 'undefined' && Boolean(getSpeechRecognition())
+  const recorderMimeTypeRef = useRef('audio/mp4')
+  const [isSupported, setIsSupported] = useState(false)
 
   const callbacksRef = useRef({ onResult, onInterim, onError, transcribe })
   callbacksRef.current = { onResult, onInterim, onError, transcribe }
+
+  useLayoutEffect(() => {
+    setIsSupported(
+      transcribe
+        ? detectAudioRecordingSupport()
+        : detectSpeechRecognitionSupport(),
+    )
+  }, [transcribe])
 
   const cleanupRecorder = useCallback(() => {
     const recorder = recorderRef.current
@@ -113,7 +130,7 @@ export function useVoiceInput(
 
   const start = useCallback(async () => {
     if (callbacksRef.current.transcribe) {
-      if (!supportsRecorderTranscription()) {
+      if (!detectAudioRecordingSupport()) {
         callbacksRef.current.onError?.('Audio recording not supported in this browser')
         setState('error')
         return
@@ -125,10 +142,9 @@ export function useVoiceInput(
       }
 
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-        const mimeType = pickRecorderMimeType()
+        const stream = await requestAudioStream()
+        const { recorder, mimeType } = createAudioRecorder(stream)
         recorderMimeTypeRef.current = mimeType
-        const recorder = new MediaRecorder(stream, { mimeType })
         recordedChunksRef.current = []
 
         recorder.onstart = () => {
@@ -177,13 +193,11 @@ export function useVoiceInput(
         }
 
         recorderRef.current = recorder
-        recorder.start(100)
+        startAudioRecorder(recorder)
         return
       } catch (error) {
         setState('error')
-        callbacksRef.current.onError?.(
-          error instanceof Error ? error.message : 'Microphone access denied',
-        )
+        callbacksRef.current.onError?.(formatVoiceInputError(error))
         return
       }
     }
@@ -191,9 +205,17 @@ export function useVoiceInput(
     const SpeechRecognition = getSpeechRecognition()
     if (!SpeechRecognition) {
       callbacksRef.current.onError?.(
-        'Speech recognition not supported in this browser',
+        'Live dictation is not supported in Safari. Hold the mic to record a voice note, or set STT to Groq/OpenAI in Settings.',
       )
       setState('error')
+      return
+    }
+
+    try {
+      await ensureMicrophonePermission()
+    } catch (error) {
+      setState('error')
+      callbacksRef.current.onError?.(formatVoiceInputError(error))
       return
     }
 
@@ -247,7 +269,7 @@ export function useVoiceInput(
         return
       }
       setState('error')
-      callbacksRef.current.onError?.(event.error)
+      callbacksRef.current.onError?.(formatVoiceInputError(event.error))
     }
 
     recognition.onend = () => {

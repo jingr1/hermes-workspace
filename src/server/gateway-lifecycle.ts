@@ -308,6 +308,48 @@ export function ensureGatewayLifecycleScheduler(): void {
   })
 
   void ensureDefaultResidentGateway()
+  void reconcileRemovedProfileGateways()
+}
+
+/** Stop gateways for profiles removed from disk but still listed in gateway-pool.json. */
+export async function reconcileRemovedProfileGateways(): Promise<string[]> {
+  if (!isGatewayPoolEnabled()) return []
+  const { listPersistedOrphanProfilePorts, resolveProfileGatewayPort } =
+    await import('./gateway-ports')
+  const { stopProfileGateway } = await import('./claude-agent')
+  const { pidListeningOnPort } = await import('./gateway-port-owner')
+
+  const orphans = listPersistedOrphanProfilePorts()
+  if (orphans.length === 0) return []
+
+  const stopped: string[] = []
+  for (const { profile, port } of orphans) {
+    stopProfileGateway(profile)
+    const pid = pidListeningOnPort(port)
+    if (pid) {
+      try {
+        process.kill(pid, 'SIGTERM')
+        stopped.push(profile)
+        console.log(
+          `[gateway-pool] stopped orphan gateway for removed profile ${profile} on :${port}`,
+        )
+      } catch (error) {
+        const errno = error as NodeJS.ErrnoException
+        if (errno.code !== 'ESRCH') {
+          console.warn(
+            `[gateway-pool] failed to stop orphan gateway for ${profile} on :${port}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          )
+        }
+      }
+    }
+    clearGatewayLease(profile)
+  }
+
+  // Rewrite gateway-pool.json without removed profiles.
+  resolveProfileGatewayPort(PINNED_GATEWAY_PROFILE)
+  return stopped
 }
 
 /** Evict before spawning a new resident gateway (capacity / idle). */

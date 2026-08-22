@@ -16,6 +16,7 @@ import {
   getDiscoveredModels,
 } from '../../server/local-provider-discovery'
 import { readHermesEnv } from '../../server/stt-transcription'
+import { BUILTIN_PROVIDER_PRESETS } from '../../server/provider-catalog'
 
 const CLAUDE_HOME = process.env.HERMES_HOME ?? process.env.CLAUDE_HOME ?? path.join(os.homedir(), '.hermes')
 const MODELS_PATH = path.join(CLAUDE_HOME, 'models.json')
@@ -296,6 +297,53 @@ export function listConfigReferencedProviders(
   return Array.from(out)
 }
 
+/** Builtin Hermes providers with a configured API key in ~/.hermes/.env */
+export function listConfiguredBuiltinProviders(
+  env: Record<string, string> = readHermesEnv(CLAUDE_HOME),
+): Array<string> {
+  const out: Array<string> = []
+  for (const [providerId, preset] of Object.entries(BUILTIN_PROVIDER_PRESETS)) {
+    const keyEnv = preset.key_env?.trim()
+    if (!keyEnv) continue
+    if (env[keyEnv]?.trim()) out.push(providerId)
+  }
+  return out
+}
+
+/** Config-referenced providers plus builtins that only need a .env API key. */
+export function listModelCatalogProviders(
+  config: Record<string, unknown>,
+  env: Record<string, string> = readHermesEnv(CLAUDE_HOME),
+): Array<string> {
+  return Array.from(
+    new Set([
+      ...listConfigReferencedProviders(config),
+      ...listConfiguredBuiltinProviders(env),
+    ]),
+  )
+}
+
+export function modelsFromBuiltinPresets(
+  providerIds: Array<string>,
+): Array<ModelEntry> {
+  const out: Array<ModelEntry> = []
+  for (const providerId of providerIds) {
+    const preset = BUILTIN_PROVIDER_PRESETS[providerId]
+    if (!preset?.models?.length) continue
+    for (const id of preset.models) {
+      const modelId = id.trim()
+      if (!modelId) continue
+      out.push({
+        id: modelId,
+        name: modelId,
+        provider: providerId,
+        source: 'builtin-preset',
+      })
+    }
+  }
+  return out
+}
+
 /**
  * Expand configured providers using Hermes' provider_models_cache.json.
  * Only providers referenced in config are included (keeps picker curated;
@@ -334,13 +382,21 @@ export function modelsFromProviderCache(
 
 function readCachedModelsForConfigProviders(): Array<ModelEntry> {
   try {
-    if (!fs.existsSync(CONFIG_PATH) || !fs.existsSync(PROVIDER_MODELS_CACHE_PATH))
-      return []
+    if (!fs.existsSync(CONFIG_PATH)) return []
     const config = asRecord(YAML.parse(fs.readFileSync(CONFIG_PATH, 'utf-8')))
-    const cache = asRecord(
-      JSON.parse(fs.readFileSync(PROVIDER_MODELS_CACHE_PATH, 'utf-8')),
+    const env = readHermesEnv(CLAUDE_HOME)
+    const providerIds = listModelCatalogProviders(config, env)
+    if (providerIds.length === 0) return []
+
+    const cache = fs.existsSync(PROVIDER_MODELS_CACHE_PATH)
+      ? asRecord(
+          JSON.parse(fs.readFileSync(PROVIDER_MODELS_CACHE_PATH, 'utf-8')),
+        )
+      : {}
+    return mergeModelEntries(
+      modelsFromProviderCache(cache, providerIds),
+      modelsFromBuiltinPresets(providerIds),
     )
-    return modelsFromProviderCache(cache, listConfigReferencedProviders(config))
   } catch {
     return []
   }
@@ -418,6 +474,17 @@ function readConfiguredLiveModelEndpoints(): Array<LiveModelEndpoint> {
         if (!providerId) continue
         pushEndpoint(providerId, block)
       }
+    }
+
+    // Builtin providers only need ~/.hermes/.env keys — no providers: block.
+    const hermesEnv = readHermesEnv(CLAUDE_HOME)
+    for (const providerId of listConfiguredBuiltinProviders(hermesEnv)) {
+      const preset = BUILTIN_PROVIDER_PRESETS[providerId]
+      if (!preset?.base_url) continue
+      pushEndpoint(providerId, {
+        base_url: preset.base_url,
+        key_env: preset.key_env,
+      })
     }
 
     return endpoints

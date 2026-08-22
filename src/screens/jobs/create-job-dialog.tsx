@@ -5,6 +5,11 @@ import { AnimatePresence, motion } from 'motion/react'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import type { JobProfileOption } from '@/lib/jobs-api'
+import { JobModelFields } from './job-model-fields'
+import { JobDeliveryFields } from './job-delivery-fields'
+import {
+  type JobFormSubmitInput,
+} from './job-form-types'
 
 const SCHEDULE_PRESETS = [
   { label: 'Every 15m', value: 'every 15m' },
@@ -15,22 +20,12 @@ const SCHEDULE_PRESETS = [
   { label: 'Weekly', value: '0 9 * * 1' },
 ] as const
 
-const DELIVERY_OPTIONS = ['local', 'telegram', 'discord'] as const
-
 type CreateJobDialogProps = {
   open: boolean
   isSubmitting?: boolean
   profiles: Array<JobProfileOption>
   onOpenChange: (open: boolean) => void
-  onSubmit: (input: {
-    profile: string
-    name: string
-    schedule: string
-    prompt: string
-    deliver?: Array<string>
-    skills?: Array<string>
-    repeat?: number
-  }) => void | Promise<void>
+  onSubmit: (input: JobFormSubmitInput) => void | Promise<void>
 }
 
 function getInitialState(profile = 'default') {
@@ -43,6 +38,9 @@ function getInitialState(profile = 'default') {
     deliver: ['local'] as Array<string>,
     repeatMode: 'unlimited' as 'unlimited' | 'limited',
     repeatCount: '1',
+    modelPin: 'inherit' as const,
+    provider: '',
+    model: '',
   }
 }
 
@@ -89,17 +87,11 @@ export function CreateJobDialog({
     }
   }, [activeProfile, open, profiles])
 
-  function toggleDelivery(target: string) {
-    setForm((current) => {
-      const nextDeliver = current.deliver.includes(target)
-        ? current.deliver.filter((item) => item !== target)
-        : [...current.deliver, target]
-
-      return {
-        ...current,
-        deliver: nextDeliver,
-      }
-    })
+  function toggleDelivery(nextDeliver: Array<string>) {
+    setForm((current) => ({
+      ...current,
+      deliver: nextDeliver,
+    }))
   }
 
   function handleFormSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -121,6 +113,9 @@ export function CreateJobDialog({
         form.repeatMode === 'limited'
           ? Math.max(1, Number.parseInt(form.repeatCount, 10) || 1)
           : undefined,
+      modelPin: form.modelPin,
+      provider: form.provider,
+      model: form.model,
     })
   }
 
@@ -323,6 +318,21 @@ export function CreateJobDialog({
                 />
               </section>
 
+              <JobModelFields
+                modelPin={form.modelPin}
+                provider={form.provider}
+                model={form.model}
+                onModelPinChange={(modelPin) =>
+                  setForm((current) => ({ ...current, modelPin }))
+                }
+                onProviderChange={(provider) =>
+                  setForm((current) => ({ ...current, provider }))
+                }
+                onModelChange={(model) =>
+                  setForm((current) => ({ ...current, model }))
+                }
+              />
+
               <section className="space-y-4">
                 <div>
                   <h3 className="text-sm font-medium">Options</h3>
@@ -360,45 +370,10 @@ export function CreateJobDialog({
                   </p>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Deliver to</label>
-                  <div className="flex flex-wrap gap-2">
-                    {DELIVERY_OPTIONS.map((option) => {
-                      const isActive = form.deliver.includes(option)
-                      const needsGateway =
-                        option === 'telegram' || option === 'discord'
-                      return (
-                        <button
-                          key={option}
-                          type="button"
-                          onClick={() => toggleDelivery(option)}
-                          title={
-                            needsGateway
-                              ? `Requires Hermes Agent gateway with ${option} configured`
-                              : undefined
-                          }
-                          className="rounded-full border px-3 py-1.5 text-xs font-medium capitalize transition-colors"
-                          style={{
-                            background: isActive
-                              ? 'var(--theme-accent)'
-                              : 'var(--theme-card)',
-                            borderColor: isActive
-                              ? 'var(--theme-accent)'
-                              : 'var(--theme-border)',
-                            color: isActive
-                              ? '#fff'
-                              : needsGateway
-                                ? 'var(--theme-muted)'
-                                : 'var(--theme-text)',
-                          }}
-                        >
-                          {option}
-                          {needsGateway ? ' ⚡' : ''}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
+                <JobDeliveryFields
+                  deliver={form.deliver}
+                  onDeliverChange={toggleDelivery}
+                />
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Repeat</label>
@@ -501,7 +476,9 @@ export function CreateJobDialog({
                   isSubmitting ||
                   !form.name.trim() ||
                   !form.schedule.trim() ||
-                  !form.prompt.trim()
+                  !form.prompt.trim() ||
+                  (form.modelPin === 'pinned' &&
+                    (!form.provider.trim() || !form.model.trim()))
                 }
                 className="rounded-xl px-4 py-2 text-sm font-medium text-white transition-opacity disabled:opacity-50"
                 style={{ background: 'var(--theme-accent)' }}
