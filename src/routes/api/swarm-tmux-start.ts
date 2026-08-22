@@ -7,8 +7,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { isAuthenticated } from '../../server/auth-middleware'
 import { getProfilesDir } from '../../server/claude-paths'
 import { rosterByWorkerId } from '../../server/swarm-roster'
-import { parseSwarmModelLabel } from '../../server/swarm-model-resolver'
-import { syncSwarmProfileModel } from '../../server/swarm-profile-config'
+import { resolveWorkerRuntimeModel } from '../../server/swarm-runtime-model'
 import { handoffPath, readHandoff } from '../../server/handoff'
 import {
   buildHermesTmuxShellCommand,
@@ -158,9 +157,10 @@ function startSession(
     : ''
   const hermesBin = resolveHermesBin()
   const ghToken = resolveGithubToken()
+  const runtimeModel = resolveWorkerRuntimeModel(workerId)
   const startCommand = transport === 'cli'
-    ? `${handoffEnv}${buildHermesTmuxShellCommand({ profilePath, hermesBin, ghToken })}`
-    : `${handoffEnv}${buildHermesTmuxTuiCommand({ profilePath, hermesBin, ghToken })}`
+    ? `${handoffEnv}${buildHermesTmuxShellCommand({ profilePath, hermesBin, ghToken, runtimeModel })}`
+    : `${handoffEnv}${buildHermesTmuxTuiCommand({ profilePath, hermesBin, ghToken, runtimeModel })}`
   return new Promise((resolve) => {
     const child = execFile(
       tmuxBin,
@@ -331,37 +331,20 @@ export const Route = createFileRoute('/api/swarm-tmux-start')({
           )
         }
 
-        // Sync the worker's profile config.yaml model section to
-        // roster's `model:` label before we (re)attach tmux. Hermes Agent
-        // reads config.yaml on every invocation, and the wrapper does not
-        // pass `--model`, so this is the only way the roster value is
-        // honored. Best-effort: unrecognised labels (typos, custom
-        // models) are left as-is so a worker never gets wedged. See #236.
-        const modelSync: {
-          attempted: boolean
-          changed: boolean
+        const runtimeModel = resolveWorkerRuntimeModel(workerId)
+        const runtimeModelInfo: {
           target?: string
-          previous?: string
+          injected: boolean
           error?: string
-        } = { attempted: false, changed: false }
-        try {
+        } = { injected: false }
+        if (runtimeModel) {
+          runtimeModelInfo.injected = true
+          runtimeModelInfo.target = `${runtimeModel.provider}/${runtimeModel.default}`
+        } else {
           const roster = rosterByWorkerId([workerId]).get(workerId)
-          const resolved = parseSwarmModelLabel(roster?.model ?? null)
-          if (resolved) {
-            modelSync.attempted = true
-            const result = syncSwarmProfileModel(profilePath, resolved)
-            if (result.ok) {
-              modelSync.changed = result.changed
-              modelSync.target = `${resolved.provider}/${resolved.default}`
-              if (result.previous) {
-                modelSync.previous = `${result.previous.provider}/${result.previous.default}`
-              }
-            } else if (!result.ok) {
-              modelSync.error = result.error
-            }
+          if (roster?.model?.trim()) {
+            runtimeModelInfo.error = `Unparseable swarm model label: ${roster.model}`
           }
-        } catch (err) {
-          modelSync.error = err instanceof Error ? err.message : String(err)
         }
 
         const sessionName = `swarm-${workerId}`
@@ -381,7 +364,7 @@ export const Route = createFileRoute('/api/swarm-tmux-start')({
             started: false,
             tmuxBin,
             transportMode,
-            modelSync,
+            runtimeModel: runtimeModelInfo,
           })
         }
         if (sessionExists) {

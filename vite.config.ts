@@ -583,7 +583,7 @@ const config = defineConfig(({ mode, command }) => {
             }
           })
 
-          // PATCH /api/swarm-roster — writes directly to swarm.yaml + profile config.
+          // PATCH /api/swarm-roster — writes directly to swarm.yaml.
           // Bypasses TanStack Start SSR (which hangs on PATCH in dev mode).
           server.middlewares.use(async (req, res, next) => {
             const path = req.url?.split('?')[0] ?? ''
@@ -629,38 +629,6 @@ const config = defineConfig(({ mode, command }) => {
               )
               if (idx < 0) throw new Error(`Worker ${workerId} not found in swarm roster`)
               workers[idx] = { ...workers[idx], ...patch }
-
-              // When model changes, sync to the worker's profile config.yaml.
-              // swarm.yaml model format: "provider/model-id" (e.g. "deepseek/deepseek-v4-pro")
-              // profile config format: { model: { provider, default, base_url? } }
-              if (patch.model && typeof patch.model === 'string') {
-                const profileDir = resolve(
-                  process.env.HERMES_HOME ?? join(os.homedir(), '.hermes'),
-                  'profiles',
-                  workerId,
-                )
-                const profileConfigPath = resolve(profileDir, 'config.yaml')
-                if (existsSync(profileConfigPath)) {
-                  try {
-                    const profileRaw = readFileSync(profileConfigPath, 'utf8')
-                    const profileConfig = yaml.parse(profileRaw) as Record<string, unknown>
-                    const modelStr = patch.model as string
-                    // Split on first '/' only: provider before, model-id after (may contain more slashes)
-                    const slashIdx = modelStr.indexOf('/')
-                    if (slashIdx > 0) {
-                      const newProvider = modelStr.slice(0, slashIdx)
-                      const newModelDefault = modelStr.slice(slashIdx + 1)
-                      if (!profileConfig.model) profileConfig.model = {}
-                      const modelConf = profileConfig.model as Record<string, unknown>
-                      modelConf.default = newModelDefault
-                      modelConf.provider = newProvider
-                      writeFileSync(profileConfigPath, yaml.stringify(profileConfig), 'utf8')
-                    }
-                  } catch {
-                    // Non-fatal: profile sync failure shouldn't block swarm.yaml save
-                  }
-                }
-              }
 
               writeFileSync(SWARM_ROSTER_PATH, yaml.stringify({ ...roster, workers }), 'utf8')
               res.statusCode = 200

@@ -12,8 +12,11 @@ import { appendSwarmMemoryEvent, buildSwarmStartupSnapshot } from '../../server/
 import { rosterByWorkerId, type SwarmRosterWorker } from '../../server/swarm-roster'
 import { publishSwarmCheckpointNotification } from '../../server/swarm-notifications'
 import { isSwarmDispatchWorkerId } from '../../lib/swarm-workers'
-import { ensureSwarmProfileConfig, syncSwarmProfileModel } from '../../server/swarm-profile-config'
-import { parseSwarmModelLabel } from '../../server/swarm-model-resolver'
+import { ensureSwarmProfileConfig } from '../../server/swarm-profile-config'
+import {
+  buildHermesChatQueryArgs,
+  resolveWorkerRuntimeModel,
+} from '../../server/swarm-runtime-model'
 import { buildHandoff, writeHandoff } from '../../server/handoff'
 import { harvestSwarmWorkers } from '../../server/swarm-harvest'
 import {
@@ -28,6 +31,8 @@ import {
   tmuxSessionHasPane,
   type TmuxTransportMode,
 } from '../../server/swarm-tmux-delivery'
+
+export { buildHermesChatQueryArgs } from '../../server/swarm-runtime-model'
 
 const HERMES_BIN_CANDIDATES = [
   process.env.HERMES_CLI_BIN,
@@ -895,18 +900,22 @@ async function startHermesTmuxSession(input: {
   hermesBin: string
   ghToken: string | null
   transport: TmuxTransportMode
+  workerId: string
 }): Promise<{ ok: true } | { ok: false; error: string }> {
+  const runtimeModel = resolveWorkerRuntimeModel(input.workerId)
   const execCommand = input.transport === 'cli'
     ? buildHermesTmuxShellCommand({
         profilePath: input.profilePath,
         hermesBin: input.hermesBin,
         ghToken: input.ghToken,
+        runtimeModel,
       })
     : buildHermesTmuxTuiCommand({
         profilePath: input.profilePath,
         hermesBin: input.hermesBin,
         ghToken: input.ghToken,
         useExec: true,
+        runtimeModel,
       })
   const started = await execFileAsync(input.tmuxBin, [
     'new-session',
@@ -962,12 +971,6 @@ export async function ensureLiveTmuxSession(
   const profilePath = getProfilePath(workerId)
   ensureSwarmProfileConfig(profilePath)
 
-  const roster = rosterByWorkerId([workerId]).get(workerId)
-  const resolvedModel = parseSwarmModelLabel(roster?.model ?? null)
-  if (resolvedModel) {
-    syncSwarmProfileModel(profilePath, resolvedModel)
-  }
-
   const cwd = resolveWorkerCwd(workerId)
   const hermesBin = resolveHermesBin()
   const ghToken = resolveGithubToken()
@@ -1000,6 +1003,7 @@ export async function ensureLiveTmuxSession(
     hermesBin,
     ghToken,
     transport,
+    workerId,
   })
   if (!started.ok) {
     return { ok: false, error: started.error }
@@ -1123,8 +1127,14 @@ async function sendPromptToLiveSession(workerId: string, prompt: string): Promis
   }
 }
 
-function buildSwarmRunScript(profilePath: string, hermesBin: string, instruction: string): string {
-  const args = buildHermesChatQueryArgs(instruction)
+function buildSwarmRunScript(
+  profilePath: string,
+  hermesBin: string,
+  instruction: string,
+  workerId: string,
+): string {
+  const runtimeModel = resolveWorkerRuntimeModel(workerId)
+  const args = buildHermesChatQueryArgs(instruction, runtimeModel)
   const quotedArgs = args.map((arg) => {
     if (/^[a-zA-Z0-9_./:@=-]+$/.test(arg)) return arg
     return `'${shellEscapeSingle(arg)}'`
@@ -1176,7 +1186,7 @@ async function sendPromptToCliSession(workerId: string, prompt: string): Promise
   const instruction = `Execute the task in ${taskFilePath} and return the required checkpoint format.`
   const hermesBin = resolveHermesBin()
   try {
-    writeFileSync(runScriptPath, buildSwarmRunScript(profilePath, hermesBin, instruction), 'utf8')
+    writeFileSync(runScriptPath, buildSwarmRunScript(profilePath, hermesBin, instruction, workerId), 'utf8')
   } catch (err) {
     return {
       workerId,
@@ -1238,26 +1248,6 @@ async function sendPromptToCliSession(workerId: string, prompt: string): Promise
     exitCode: 0,
     delivery: 'tmux-cli',
   }
-}
-
-export function buildHermesChatQueryArgs(prompt: string): string[] {
-  // `hermes chat -q` requires the query as the *immediate* next argv item.
-  // Keeping the prompt adjacent to -q prevents argparse from interpreting
-  // following flags (for example -Q) as a missing query and failing with:
-  // "argument -q/--query: expected one argument".
-  return [
-    'chat',
-    '-q',
-    prompt,
-    '-Q',
-    '--yolo',
-    '--ignore-rules',
-    '--accept-hooks',
-    '--max-turns',
-    '15',
-    '--source',
-    'swarm-dispatch',
-  ]
 }
 
 function runWorker(assignment: AssignmentRequest, timeoutMs: number, roster: SwarmRosterWorker | undefined, options?: { waitForCheckpoint?: boolean; checkpointPollMs?: number; missionId?: string | null; notifySessionKey?: string | null; deliveryMode?: SwarmDeliveryModeRequest }): Promise<WorkerResult> {
@@ -1384,7 +1374,7 @@ function runWorker(assignment: AssignmentRequest, timeoutMs: number, roster: Swa
 
     const useWrapper = existsSync(wrapperPath)
     const cmd = useWrapper ? wrapperPath : resolveHermesBin()
-    const args = buildHermesChatQueryArgs(prompt)
+    const args = buildHermesChatQueryArgs(prompt, resolveWorkerRuntimeModel(workerId))
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       HERMES_HOME: profilePath,

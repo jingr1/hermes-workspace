@@ -260,6 +260,19 @@ describe('buildHermesChatQueryArgs', () => {
     expect(args[2]).toBe(prompt)
     expect(args[3]).toBe('-Q')
   })
+
+  it('injects roster runtime model flags without changing prompt position', () => {
+    const prompt = 'Execute swarm task'
+    const args = buildHermesChatQueryArgs(prompt, {
+      provider: 'deepseek',
+      default: 'deepseek-v4-flash',
+    })
+    expect(args[2]).toBe(prompt)
+    expect(args).toContain('--model')
+    expect(args).toContain('deepseek-v4-flash')
+    expect(args).toContain('--provider')
+    expect(args).toContain('deepseek')
+  })
 })
 
 describe('buildWorkerPrompt', () => {

@@ -1,17 +1,9 @@
 /**
+ * @deprecated Swarm now injects roster models at dispatch/tmux-start time.
+ * Kept for tests and manual migration scripts — do not call from dispatch paths.
+ *
  * Patch a swarm worker's profile `config.yaml` so its `model.provider`
  * and `model.default` match the roster.
- *
- * Hermes Agent reads `~/.hermes/profiles/<workerId>/config.yaml` on every
- * `hermes` invocation. The wrapper at `~/.local/bin/<workerId>` invokes
- * `hermes chat --continue` with no `--model` flag, so the per-profile
- * config wins. Without a sync step, the roster's `model:` field is purely
- * cosmetic — the bug reported in #236.
- *
- * This helper is best-effort: if the config file is missing or malformed
- * it leaves things alone (don't wedge a worker because we couldn't write
- * a model line). It also no-ops when the existing model config already
- * matches, so re-running on a healthy profile is free.
  */
 
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
@@ -224,6 +216,7 @@ export function syncSwarmProfileIdentity(profilePath: string, worker: SwarmWorke
   }
 }
 
+/** @deprecated Use runtime injection via `swarm-runtime-model` instead. */
 export function syncSwarmProfileModel(
   profilePath: string,
   next: { provider: string; default: string },
