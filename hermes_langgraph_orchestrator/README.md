@@ -91,13 +91,13 @@ PYTHONPATH=~/hermes-workspace \
 ```text
 swarm.yaml                    ~/.hermes/profiles/<id>/           ~/.local/bin/
 (roster 真源)            →    config.yaml / SOUL.md / skills   →   orchestrator:plan 等 wrapper
-  model: provider/model-id     model.provider + model.default       hermes -p <profile>
+  model: provider/model-id     toolsets (Settings 管 model 默认)     hermes -p <profile>
   tools: [...]                 toolsets: [...]
   skills: [...]                skills/<skill>/SKILL.md
   mission / role               SOUL.md + memory/IDENTITY.md
 ```
 
-运行时还会由 dispatch / tmux-start 自动调用 `syncSwarmProfileModel()` 同步 **model**；但 toolsets、SOUL、IDENTITY、swarm skills 需手动跑同步脚本。
+运行时由 dispatch / tmux-start 通过 `swarm-runtime-model` 注入 roster **model**（不写 profile `config.yaml`）；toolsets、SOUL、IDENTITY、swarm skills 由 `sync-swarm-profiles.mjs` 同步。
 
 ### 一键同步
 
@@ -106,8 +106,9 @@ swarm.yaml                    ~/.hermes/profiles/<id>/           ~/.local/bin/
 ```bash
 cd ~/hermes-workspace
 
-# 1. 同步 config.yaml（model + toolsets）、SOUL.md、memory/IDENTITY.md、skills/swarm/ 下的角色技能
+# 1. 同步 config.yaml（toolsets）、SOUL.md、memory/IDENTITY.md、skills/swarm/ 下的角色技能
 #    以及 ~/.local/bin/<wrapper> 启动脚本（缺 wrapper 时 LangGraph 会卡在 ensure_sessions）
+#    注意：不写 config.yaml 的 model — Swarm model 由 swarm.yaml 运行时注入
 node scripts/sync-swarm-profiles.mjs
 
 # 2. 同步 autoresearch 技能与 wrapper（orchestrator:autoresearch-dispatch 等）
@@ -118,7 +119,6 @@ bash scripts/sync-autoresearch-skills.sh
 
 | 文件 | 来源字段 | 备注 |
 |------|----------|------|
-| `config.yaml` → `model.provider` / `model.default` | `model`（`provider/model-id`，见根目录 `swarm.yaml`） | |
 | `config.yaml` → `toolsets` | `tools` | **learning** 为合并（union），保留原有 `hermes-cli` 等 |
 | `config.yaml` → `kanban.orchestrator_profile` | orchestrator 固定为 `orchestrator` | |
 | `SOUL.md` | `name`, `role`, `mission`, … | **learning** 保留 `agents/learning/SOUL.md` 教学人格，仅追加 swarm 扩展段 |

@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 /**
  * Sync ~/.hermes/profiles/<workerId>/ from swarm.yaml roster fields.
- * Updates config.yaml (model + toolsets), SOUL.md, and memory/IDENTITY.md.
+ * Updates config.yaml (toolsets only), SOUL.md, and memory/IDENTITY.md.
+ *
+ * Does NOT write model.provider/model.default — Swarm model comes from
+ * swarm.yaml at dispatch/tmux-start via runtime injection (see swarm-runtime-model.ts).
  *
  * learning profile: preserves agents/learning/SOUL.md base persona and appends
  * swarm role extension; toolsets are merged (union), not replaced.
@@ -47,13 +50,6 @@ exec "\$HERMES_BIN" chat --tui
     installed.push(name)
   }
   return installed
-}
-
-function parseModel(label) {
-  if (!label) return null
-  const i = label.indexOf('/')
-  if (i <= 0) return null
-  return { provider: label.slice(0, i), default: label.slice(i + 1) }
 }
 
 function mergeToolsets(existing, swarmTools) {
@@ -270,10 +266,6 @@ for (const w of swarm.workers) {
   const configPath = path.join(profileDir, 'config.yaml')
   if (fs.existsSync(configPath)) {
     const cfg = yaml.parse(fs.readFileSync(configPath, 'utf8')) ?? {}
-    const model = parseModel(w.model)
-    if (model) {
-      cfg.model = { ...(cfg.model || {}), provider: model.provider, default: model.default }
-    }
     if (w.tools?.length) {
       const preserve =
         w.id === 'learning' ? ['hermes-cli', ...(cfg.toolsets ?? [])] : cfg.toolsets

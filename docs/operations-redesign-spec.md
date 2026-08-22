@@ -160,7 +160,7 @@ export type OperationsAgent = GatewayConfigAgent & {
 ### 4.3 后端实现复用
 
 - `src/server/profiles-browser.ts`：profile 读写、列表、skill 统计。
-- `src/server/swarm-profile-config.ts`：syncSwarmProfileModel / ensureSwarmProfileConfig 可复用于 provider/model 同步。
+- `src/server/swarm-profile-config.ts`：`ensureSwarmProfileConfig` 用于 profile 引导；Swarm model 由 `swarm-runtime-model.ts` 运行时注入，不再写 config。
 - `src/routes/api/profiles/skills.ts`：skill 列表代理。
 - MCP 部分可借鉴 `src/screens/mcp/hooks/use-mcp-servers.ts` 的逻辑，做成按 profile 范围的读写。
 

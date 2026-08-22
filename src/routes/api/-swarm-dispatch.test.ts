@@ -190,7 +190,7 @@ describe('checkpoint filtering', () => {
 })
 
 describe('buildHermesTmuxLaunchCommand', () => {
-  it('keeps the tmux shell alive so startup failures leave readable output', () => {
+  it('delegates to buildHermesTmuxTuiCommand (exec hermes chat --tui)', () => {
     const command = buildHermesTmuxLaunchCommand({
       profilePath: '/tmp/hermes profiles/swarm1',
       hermesBin: '/opt/homebrew/bin/hermes',
@@ -198,9 +198,8 @@ describe('buildHermesTmuxLaunchCommand', () => {
     })
 
     expect(command).toContain("HERMES_HOME='/tmp/hermes profiles/swarm1'")
-    expect(command).toContain("'/opt/homebrew/bin/hermes' chat --tui")
-    expect(command).toContain('[Hermes worker exited with status %s]')
-    expect(command).not.toContain('exec ')
+    expect(command).toContain("exec '/opt/homebrew/bin/hermes' chat --tui")
+    expect(command).toContain("GH_TOKEN='ghp_te...3456'")
   })
 })
 

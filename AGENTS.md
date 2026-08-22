@@ -42,7 +42,7 @@ Canonical contracts: [`docs/swarm/HANDOFF-PROTOCOL.md`](docs/swarm/HANDOFF-PROTO
 
 ## Operating rules
 
-- Keep `swarm.yaml`, profile `config.yaml`, profile skills, and wrappers aligned when changing a worker.
+- Keep `swarm.yaml` (model, tools, skills, mission) aligned with profile toolsets, skills, SOUL, and wrappers when changing a worker. **Do not** sync `swarm.yaml` `model` into profile `config.yaml` — Swarm uses runtime injection (`swarm-runtime-model.ts`); profile `model` is Settings / Web Chat only.
 - **GBrain ≡ llm-wiki** in this workspace: the `gbrain` skill/MCP is not deployed locally. Brain-first lookup uses the Hermes builtin `llm-wiki` skill against `WIKI_PATH` (default `~/wiki`), plus swarm mission memory under `memory/swarm/`.
 - **Brain-first order** (before web search): ① read `$WIKI_PATH/SCHEMA.md` + `index.md` + recent `log.md`; ② grep `memory/swarm/` and dispatch handoffs; ③ `session_search` for prior sessions; ④ external `web` / `arxiv` only when local context is insufficient.
 - **Knowledge layering:** `~/wiki` holds durable domain knowledge; `memory/swarm/missions/<missionId>/` holds archived mission artifacts; `memory/swarm/<worker>/` holds in-progress drafts; `memory/handoffs/swarm/` holds latest checkpoints; `learning` ingests reusable conclusions into the wiki after missions complete (see `docs/swarm/LEARNING-WIKI-INGEST.md`).

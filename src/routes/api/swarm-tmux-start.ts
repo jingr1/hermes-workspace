@@ -395,7 +395,7 @@ export const Route = createFileRoute('/api/swarm-tmux-start')({
           tmuxBin,
           transportMode,
           cwd,
-          modelSync,
+          runtimeModel: runtimeModelInfo,
         })
       },
     },
