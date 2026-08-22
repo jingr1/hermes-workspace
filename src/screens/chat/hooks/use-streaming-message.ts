@@ -3,6 +3,7 @@ import type { ChatAttachment, ChatMessage } from '../types'
 import { readResolvedSessionHeaders } from '@/lib/send-stream-session-headers'
 import { useChatStore } from '@/stores/chat-store'
 import { pushActivity } from '@/components/inspector/activity-store'
+import { readCachedActiveProfile } from './use-profiles'
 
 /**
  * Determine whether a stream-resolved session key change should trigger
@@ -1057,6 +1058,48 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
     }
   }, [resetActiveStreamState, transitionToHandoff])
 
+  const handoffActiveStreamForProfileSwitch = useCallback(async () => {
+    const phase = lifecyclePhaseRef.current
+    if (
+      finishedRef.current ||
+      phase === 'idle' ||
+      phase === 'complete' ||
+      phase === 'error'
+    ) {
+      return false
+    }
+    if (phase === 'handoff' && !eventSourceRef.current) {
+      return false
+    }
+
+    const runId = activeRunIdRef.current
+    const sessionKey = activeSessionKeyRef.current
+    const profileName = readCachedActiveProfile() ?? 'default'
+
+    if (runId && sessionKey) {
+      try {
+        await fetch('/api/runs/detach', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ runId, sessionKey, profileName }),
+        })
+      } catch {
+        // Best-effort — server may still abort if detach did not land in time.
+      }
+    }
+
+    transitionToHandoff()
+    if (eventSourceRef.current) {
+      eventSourceRef.current.abort()
+      eventSourceRef.current = null
+    }
+    finishedRef.current = false
+    if (sessionKey) {
+      useChatStore.getState().setSessionWaiting(sessionKey, runId)
+    }
+    return true
+  }, [transitionToHandoff])
+
   const resetStreaming = useCallback(() => {
     cancelStreaming()
     setState({
@@ -1071,6 +1114,7 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
     ...state,
     startStreaming,
     cancelStreaming,
+    handoffActiveStreamForProfileSwitch,
     resetStreaming,
   }
 }

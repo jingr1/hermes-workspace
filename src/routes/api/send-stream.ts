@@ -16,6 +16,13 @@ import {
   setRunThinking,
   upsertRunToolCall,
 } from '../../server/run-store'
+import {
+  clearRunDetached,
+} from '../../server/stream-handoff-registry'
+import {
+  evaluateClientDisconnect,
+  shouldAbortUpstreamOnStreamClose,
+} from '../../server/stream-client-disconnect'
 import { getChatMode } from '../../server/gateway-capabilities'
 import { appendLocalMessage, ensureLocalSession, getLocalMessages, touchLocalSession } from '../../server/local-session-store'
 import { getDiscoveredModels, getLocalProviderDef } from '../../server/local-provider-discovery'
@@ -390,11 +397,12 @@ export const Route = createFileRoute('/api/send-stream')({
         let streamTimeoutTimer: ReturnType<typeof setTimeout> | null = null
         let heartbeatTimer: ReturnType<typeof setInterval> | null = null
         const abortController = new AbortController()
-        // Close out the SSE stream — stop enqueueing, clear timers, and
-        // abort the upstream Hermes gateway request so the agent stops
-        // processing.  Does NOT touch run status (persistActiveRun etc.).
-        // The abort path (request.signal / handleAbort) owns run cleanup.
-        let closeStream = () => {
+        let keepUpstreamAlive = false
+        let detachedHandoff = false
+        // Close the browser SSE leg. When keepUpstreamAlive is true (profile
+        // handoff), the upstream Hermes gateway request continues in this
+        // handler until run.completed / error.
+        let closeStream = (options?: { abortUpstream?: boolean }) => {
           if (streamClosed) return
           streamClosed = true
           if (heartbeatTimer) {
@@ -409,23 +417,41 @@ export const Route = createFileRoute('/api/send-stream')({
             clearTimeout(streamTimeoutTimer)
             streamTimeoutTimer = null
           }
-          abortController.abort()
+          if (
+            shouldAbortUpstreamOnStreamClose({
+              explicitAbort: options?.abortUpstream,
+              keepUpstreamAlive,
+              detachedHandoff,
+            })
+          ) {
+            abortController.abort()
+          }
         }
 
-        // When the client hits Stop / navigates away / closes the tab, the
-        // request.signal fires abort.  Stop the upstream agent (closeStream)
-        // and clean up run tracking so we don't burn API credits on an orphan.
-        function handleAbort() {
-          if (activeRunId && !streamClosed) {
+        function handleClientDisconnect() {
+          const evaluation = evaluateClientDisconnect({
+            activeRunId,
+            streamClosed,
+          })
+          keepUpstreamAlive = evaluation.keepUpstreamAlive
+          detachedHandoff = evaluation.detachedHandoff
+          if (evaluation.shouldPersistHandoff) {
             persistActiveRun((runSessionKey, activeId) =>
               markRunStatus(runSessionKey, activeId, 'handoff'),
             )
-            unregisterActiveSendRun(activeRunId)
+          } else if (evaluation.runIdToUnregister) {
+            unregisterActiveSendRun(evaluation.runIdToUnregister)
             activeRunId = null
           }
           closeStream()
         }
-        request.signal.addEventListener('abort', () => handleAbort(), { once: true })
+
+        // When the client hits Stop / navigates away / closes the tab, the
+        // request.signal fires abort. Detached profile handoffs keep upstream
+        // alive; explicit stops abort the agent.
+        request.signal.addEventListener('abort', () => handleClientDisconnect(), {
+          once: true,
+        })
 
         const persistRunStarted = (
           runId: string | undefined,
@@ -489,7 +515,7 @@ export const Route = createFileRoute('/api/send-stream')({
               enqueueRaw(': keepalive\n\n')
             }, 10_000)
 
-            closeStream = () => {
+            closeStream = (options?: { abortUpstream?: boolean }) => {
               if (streamClosed) return
               streamClosed = true
               if (heartbeatTimer) {
@@ -504,11 +530,19 @@ export const Route = createFileRoute('/api/send-stream')({
                 clearTimeout(streamTimeoutTimer)
                 streamTimeoutTimer = null
               }
-              if (activeRunId) {
+              if (activeRunId && !detachedHandoff) {
                 unregisterActiveSendRun(activeRunId)
                 activeRunId = null
               }
-              abortController.abort()
+              if (
+                shouldAbortUpstreamOnStreamClose({
+                  explicitAbort: options?.abortUpstream,
+                  keepUpstreamAlive,
+                  detachedHandoff,
+                })
+              ) {
+                abortController.abort()
+              }
               try {
                 controller.close()
               } catch {
@@ -734,6 +768,7 @@ export const Route = createFileRoute('/api/send-stream')({
                       persistActiveRun((runSessionKey, activeId) =>
                         markRunStatus(runSessionKey, activeId, 'complete'),
                       )
+                      clearRunDetached(runId)
                       sendEvent('done', {
                         state: 'complete',
                         sessionKey: portableSessionKey,
@@ -849,6 +884,7 @@ export const Route = createFileRoute('/api/send-stream')({
                   persistActiveRun((runSessionKey, activeId) =>
                     markRunStatus(runSessionKey, activeId, 'complete'),
                   )
+                  clearRunDetached(runId)
                   sendEvent('done', {
                     state: 'complete',
                     sessionKey: portableSessionKey,
@@ -1488,6 +1524,7 @@ export const Route = createFileRoute('/api/send-stream')({
                       persistActiveRun((runSessionKey, activeId) =>
                         markRunStatus(runSessionKey, activeId, 'complete'),
                       )
+                      if (runId) clearRunDetached(runId)
                       sendEvent('done', translated)
                       skipPublish || publishChatEvent('done', translated)
                       closeStream()
@@ -1525,17 +1562,7 @@ export const Route = createFileRoute('/api/send-stream')({
             }
           },
           cancel() {
-            // User clicked Stop, navigated away, or browser closed the tab.
-            // Mark the stream complete, persist the run as 'handoff' so
-            // session history reflects the interruption, then delegate to
-            // closeStream() for timer/controller cleanup.  Delegate instead
-            // of duplicating cleanup logic to keep the two paths in sync.
-            if (activeRunId && !streamClosed) {
-              persistActiveRun((runSessionKey, activeId) =>
-                markRunStatus(runSessionKey, activeId, 'handoff'),
-              )
-            }
-            closeStream()
+            handleClientDisconnect()
           },
         })
 

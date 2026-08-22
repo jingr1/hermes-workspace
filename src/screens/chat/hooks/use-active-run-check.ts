@@ -1,13 +1,9 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
+import {
+  isActiveRunStatus,
+  type ActiveRunStatus,
+} from '@/lib/active-run-status'
 import { useChatStore } from '../../../stores/chat-store'
-
-type ActiveRunStatus =
-  | 'accepted'
-  | 'active'
-  | 'handoff'
-  | 'stalled'
-  | 'complete'
-  | 'error'
 
 type ActiveRunResponse = {
   ok: boolean
@@ -16,17 +12,9 @@ type ActiveRunResponse = {
     status: ActiveRunStatus
     sessionKey: string
     startedAt: number
+    updatedAt?: number
   } | null
 }
-
-const ACTIVE_STATUSES: ReadonlySet<string> = new Set([
-  'accepted',
-  'active',
-  // NOTE: 'handoff' is deliberately excluded. A handoff run means the
-  // SSE client disconnected — the browser has no active stream. Keeping
-  // the waiting state alive for handoff runs causes ghost "Thinking"
-  // indicators on session reopen for runs that completed hours ago.
-])
 
 const ACTIVE_RUN_CHECK_TIMEOUT_MS = 2000
 
@@ -96,7 +84,13 @@ export function useActiveRunCheck({
         if (!data.ok) return finishCheck()
 
         const store = useChatStore.getState()
-        if (data.run && ACTIVE_STATUSES.has(data.run.status)) {
+        if (
+          data.run &&
+          isActiveRunStatus(
+            data.run.status,
+            data.run.updatedAt ?? data.run.startedAt,
+          )
+        ) {
           store.setSessionWaiting(sessionKey, data.run.runId)
         } else if (store.isSessionWaiting(sessionKey)) {
           // Server says run is done but we still have stale waiting state

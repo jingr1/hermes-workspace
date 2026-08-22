@@ -21,12 +21,15 @@ import {
 } from './utils'
 import {
   advanceStickyStreamingText,
+  buildChatNavKey,
   createOptimisticMessage,
   createResponseWaitSnapshot,
   isTerminalActiveRunStatus,
   shouldCancelStreamOnSessionNav,
   shouldClearWaitingForAssistantMessage,
+  shouldHandoffStreamOnProfileNav,
 } from './chat-screen-utils'
+import { registerStreamHandoffHandler } from '@/lib/stream-handoff-bridge'
 import {
   appendHistoryMessage,
   chatQueryKeys,
@@ -580,7 +583,8 @@ export function ChatScreen({
   const { renameSession, renaming: renamingSessionTitle } = useRenameSession()
   const sseConnectionState = useChatStore((s) => s.connectionState)
 
-  const { activeProfileName, isReady: profilesReady } = useProfiles()
+  const { activeProfileName, workspaceProfileName, isReady: profilesReady } =
+    useProfiles()
 
   const {
     sessionsQuery,
@@ -1189,6 +1193,7 @@ export function ChatScreen({
     streamingMessageId: localStreamingMessageId,
     startStreaming,
     cancelStreaming,
+    handoffActiveStreamForProfileSwitch,
   } = useStreamingMessage({
     pinMainSession:
       activeFriendlyId === 'main' &&
@@ -1352,11 +1357,29 @@ export function ChatScreen({
   // wanted in either session).
   const navCancelKeyRef = useRef<string | null>(null)
   useEffect(() => {
-    const navKey = `${activeCanonicalKey ?? ''}::${isNewChat ? 'new' : activeFriendlyId}`
+    registerStreamHandoffHandler(handoffActiveStreamForProfileSwitch)
+    return () => registerStreamHandoffHandler(null)
+  }, [handoffActiveStreamForProfileSwitch])
+
+  useEffect(() => {
+    const navKey = buildChatNavKey({
+      profileName: workspaceProfileName,
+      canonicalSessionKey: activeCanonicalKey ?? '',
+      friendlyId: activeFriendlyId,
+      isNewChat,
+    })
     const activeSend = activeSendRef.current
+    const previousNavKey = navCancelKeyRef.current
+
     if (
+      shouldHandoffStreamOnProfileNav(previousNavKey, navKey) &&
+      (localIsStreaming || waitingForResponse)
+    ) {
+      // Sidebar should have handoff'd already; this is a safety net.
+      void handoffActiveStreamForProfileSwitch()
+    } else if (
       shouldCancelStreamOnSessionNav({
-        previousNavKey: navCancelKeyRef.current,
+        previousNavKey,
         nextNavKey: navKey,
         nextFriendlyId: isNewChat ? 'new' : activeFriendlyId,
         activeSendKey: activeSend?.sessionKey || activeSend?.friendlyId,
@@ -1365,7 +1388,16 @@ export function ChatScreen({
       cancelStreaming()
     }
     navCancelKeyRef.current = navKey
-  }, [activeCanonicalKey, activeFriendlyId, isNewChat, cancelStreaming])
+  }, [
+    activeCanonicalKey,
+    activeFriendlyId,
+    cancelStreaming,
+    handoffActiveStreamForProfileSwitch,
+    isNewChat,
+    localIsStreaming,
+    waitingForResponse,
+    workspaceProfileName,
+  ])
 
   const activeIsRealtimeStreaming = isPortableMode
     ? localIsStreaming

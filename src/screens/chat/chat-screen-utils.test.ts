@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest'
 
 import {
   advanceStickyStreamingText,
+  buildChatNavKey,
   createResponseWaitSnapshot,
   isTerminalActiveRunStatus,
+  profileNameFromNavKey,
   shouldCancelStreamOnSessionNav,
   shouldClearWaitingForAssistantMessage,
+  shouldHandoffStreamOnProfileNav,
 } from './chat-screen-utils'
 
 describe('advanceStickyStreamingText', () => {
@@ -110,6 +113,37 @@ describe('shouldCancelStreamOnSessionNav', () => {
         activeSendKey: 'session-a',
       }),
     ).toBe(true)
+  })
+})
+
+describe('profile stream handoff navigation', () => {
+  it('builds nav keys with profile prefix', () => {
+    expect(
+      buildChatNavKey({
+        profileName: 'developer',
+        canonicalSessionKey: 'thread-1',
+        friendlyId: 'thread-1',
+        isNewChat: false,
+      }),
+    ).toBe('developer::thread-1::thread-1')
+  })
+
+  it('detects profile-only navigation for handoff', () => {
+    const prev = buildChatNavKey({
+      profileName: 'developer',
+      canonicalSessionKey: 'a',
+      friendlyId: 'a',
+      isNewChat: false,
+    })
+    const next = buildChatNavKey({
+      profileName: 'architect',
+      canonicalSessionKey: 'b',
+      friendlyId: 'b',
+      isNewChat: false,
+    })
+    expect(shouldHandoffStreamOnProfileNav(prev, next)).toBe(true)
+    expect(shouldHandoffStreamOnProfileNav(prev, prev)).toBe(false)
+    expect(profileNameFromNavKey(prev)).toBe('developer')
   })
 })
 

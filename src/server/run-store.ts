@@ -1,7 +1,15 @@
 import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
+import {
+  ACTIVE_RUN_STATUSES,
+  isActiveRunStatus,
+  type ActiveRunStatus,
+} from '../lib/active-run-status'
 import { getHermesRoot } from './claude-paths'
+
+export { ACTIVE_RUN_STATUSES, isActiveRunStatus }
+export type { ActiveRunStatus }
 
 export type PersistedRunToolCall = {
   id: string
@@ -23,7 +31,7 @@ export type PersistedRunState = {
   runId: string
   sessionKey: string
   friendlyId: string
-  status: 'accepted' | 'active' | 'handoff' | 'stalled' | 'complete' | 'error'
+  status: ActiveRunStatus
   createdAt: number
   updatedAt: number
   lastEventAt: number
@@ -211,13 +219,6 @@ export async function markRunStatus(
   }))
 }
 
-// A run that hasn't been touched in this long is considered orphaned (e.g.
-// the agent process crashed, the network dropped silently, or the user
-// navigated away during a `handoff` that never resolved). Treating these as
-// "active" makes every chat re-open show a phantom "Thinking…" indicator
-// until the 120s client-side failsafe clears it.
-const STALE_RUN_THRESHOLD_MS = 5 * 60 * 1000
-
 async function readRunsInDir(dir: string): Promise<Array<PersistedRunState>> {
   const files = (await readdir(dir)).filter((name) => name.endsWith('.json'))
   if (files.length === 0) return []
@@ -241,8 +242,7 @@ export async function getActiveRunForSession(
     const runs = await readRunsInDir(sessionDir(sessionKey))
     const now = Date.now()
     const candidates = runs
-      .filter((run) => !['complete', 'error'].includes(run.status))
-      .filter((run) => now - run.updatedAt < STALE_RUN_THRESHOLD_MS)
+      .filter((run) => isActiveRunStatus(run.status, run.updatedAt, now))
       .sort((a, b) => b.updatedAt - a.updatedAt)
     return candidates[0] ?? null
   } catch {

@@ -10,6 +10,7 @@ import { useRenameSession } from '../hooks/use-rename-session'
 import { useDeleteSession } from '../hooks/use-delete-session'
 import { chatQueryKeys, fetchHistory, fetchSessions } from '../chat-queries'
 import { resolveSessionForProfile, writeLastSession } from '../last-session'
+import { requestStreamHandoffIfActive } from '@/lib/stream-handoff-bridge'
 import { SidebarSessions } from './sidebar/sidebar-sessions'
 import { SessionDeleteDialog } from './sidebar/session-delete-dialog'
 import type { SessionMeta } from '../types'
@@ -216,13 +217,15 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
     (profileName: string) => {
       if (profileName === activeProfileName) return
 
-      writeLastSession(activeFriendlyId, activeProfileName)
-      setActiveProfileOptimistic(queryClient, profileName)
-      preloadWorkspaceFolders(profileName)
-      activateProfile(profileName)
-
-      // Prefer warm cache; if miss, fetch before navigating so we don't land on "new".
       void (async () => {
+        await requestStreamHandoffIfActive()
+
+        writeLastSession(activeFriendlyId, activeProfileName)
+        setActiveProfileOptimistic(queryClient, profileName)
+        preloadWorkspaceFolders(profileName)
+        activateProfile(profileName)
+
+        // Prefer warm cache; if miss, fetch before navigating so we don't land on "new".
         let sessions = queryClient.getQueryData<Array<SessionMeta>>(
           chatQueryKeys.sessionsForProfile(profileName),
         )

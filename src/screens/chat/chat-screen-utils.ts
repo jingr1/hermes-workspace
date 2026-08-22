@@ -142,3 +142,30 @@ export function shouldCancelStreamOnSessionNav(params: {
 
   return true
 }
+
+export function buildChatNavKey(input: {
+  profileName: string
+  canonicalSessionKey: string
+  friendlyId: string
+  isNewChat: boolean
+}): string {
+  const friendly = input.isNewChat ? 'new' : input.friendlyId
+  return `${input.profileName}::${input.canonicalSessionKey ?? ''}::${friendly}`
+}
+
+export function profileNameFromNavKey(navKey: string): string {
+  const idx = navKey.indexOf('::')
+  return idx === -1 ? '' : navKey.slice(0, idx)
+}
+
+/** Profile switch should hand off the in-flight stream instead of aborting it. */
+export function shouldHandoffStreamOnProfileNav(
+  previousNavKey: string | null,
+  nextNavKey: string,
+): boolean {
+  if (!previousNavKey || previousNavKey === nextNavKey) return false
+  const prevProfile = profileNameFromNavKey(previousNavKey)
+  const nextProfile = profileNameFromNavKey(nextNavKey)
+  if (!prevProfile || !nextProfile) return false
+  return prevProfile !== nextProfile
+}
