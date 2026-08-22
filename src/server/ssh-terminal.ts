@@ -368,7 +368,9 @@ function insertTreeEntry(
         name,
         path: entryPath,
         type: isLeaf ? type : 'folder',
-        children: isLeaf && type === 'file' ? undefined : [],
+        // Leaf folders stay unloaded (undefined) so UI can lazy-fetch.
+        // Intermediate folders get an array as we walk into them.
+        children: isLeaf ? undefined : [],
       }
       siblings.push(node)
     }
@@ -414,7 +416,7 @@ function parseSshLsEntries(
       name,
       path: relative || name,
       type: isDir ? 'folder' : 'file',
-      children: isDir ? [] : undefined,
+      // Shallow ls: folders are unloadable until expanded (omit children).
     })
   }
   return sortRemoteEntries(entries)

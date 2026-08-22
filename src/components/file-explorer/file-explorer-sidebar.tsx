@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   ArrowRight01Icon,
@@ -141,8 +141,12 @@ export function FileExplorerSidebar({
   const [promptState, setPromptState] = useState<PromptState | null>(null)
   const [promptValue, setPromptValue] = useState('')
   const [previewPath, setPreviewPath] = useState<string | null>(null)
+  /** Rendered tree: shallow first, then replaced by background depth-3 prefetch. */
+  const [entries, setEntries] = useState<Array<FileEntry>>([])
   const uploadTargetRef = useRef<string>('')
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
+  const deepPrefetchKeyRef = useRef<string | null>(null)
+  const queryClient = useQueryClient()
   const workspaceQuery = useActiveWorkspace()
   const { workspaceProfileName } = useProfiles()
   const workspacePath = workspaceQuery.data?.path ?? ''
@@ -153,30 +157,105 @@ export function FileExplorerSidebar({
   // Only treat as pending when we have nothing to show yet. Background
   // refetches (isFetching) used to keep the sidebar stuck on "Loading...".
   const workspacePending = !workspaceQuery.data && workspaceQuery.isPending
-
+  const treeQueryKey = useMemo(
+    () => ['files', 'tree', workspaceProfileName, workspacePath] as const,
+    [workspaceProfileName, workspacePath],
+  )
+  // Phase 1: top-level only — paint ASAP.
   const filesQuery = useQuery({
-    queryKey: ['files', 'tree', workspaceProfileName, workspacePath],
-    queryFn: () => fetchFileTree(workspaceProfileName, 1) as Promise<Array<FileEntry>>,
+    queryKey: treeQueryKey,
+    queryFn: () =>
+      fetchFileTree(workspaceProfileName, 0) as Promise<Array<FileEntry>>,
     enabled: Boolean(workspaceQuery.data) && Boolean(workspacePath),
     staleTime: 30_000,
     retry: false,
   })
-  const entries = filesQuery.data ?? []
   const loading =
     workspacePending ||
-    (Boolean(workspacePath) && !filesQuery.data && filesQuery.isPending)
+    (Boolean(workspacePath) &&
+      (filesQuery.isPending ||
+        // Profile/workspace switch clears local entries before the new tree
+        // lands; treat that gap as loading, not "empty".
+        (entries.length === 0 && filesQuery.isFetching) ||
+        (entries.length === 0 && filesQuery.data === undefined)))
   const error =
     filesQuery.error instanceof Error ? filesQuery.error.message : null
+  const showEmpty =
+    Boolean(workspacePath) &&
+    !loading &&
+    !error &&
+    entries.length === 0 &&
+    filesQuery.isFetched &&
+    !filesQuery.isFetching
+
+  useEffect(() => {
+    setEntries((filesQuery.data as Array<FileEntry> | undefined) ?? [])
+  }, [filesQuery.data])
+
+  // Phase 2: immediately prefetch 3 levels in the background (no click fetches).
+  useEffect(() => {
+    if (!filesQuery.data || !workspacePath) return
+    const key = `${workspaceProfileName}:${workspacePath}`
+    if (deepPrefetchKeyRef.current === key) return
+    deepPrefetchKeyRef.current = key
+    let cancelled = false
+    void fetchFileTree(workspaceProfileName, 3)
+      .then((deep) => {
+        if (cancelled) return
+        const next = deep as Array<FileEntry>
+        setEntries(next)
+        queryClient.setQueryData(treeQueryKey, next)
+      })
+      .catch(() => {
+        // Keep shallow tree if deep prefetch fails.
+        if (!cancelled && deepPrefetchKeyRef.current === key) {
+          deepPrefetchKeyRef.current = null
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [
+    filesQuery.data,
+    workspacePath,
+    workspaceProfileName,
+    queryClient,
+    treeQueryKey,
+  ])
 
   const refresh = useCallback(async () => {
-    await filesQuery.refetch()
-  }, [filesQuery])
+    deepPrefetchKeyRef.current = null
+    const result = await filesQuery.refetch()
+    const shallow = (result.data as Array<FileEntry> | undefined) ?? []
+    setEntries(shallow)
+    const key = `${workspaceProfileName}:${workspacePath}`
+    deepPrefetchKeyRef.current = key
+    try {
+      const deep = await fetchFileTree(workspaceProfileName, 3)
+      const next = deep as Array<FileEntry>
+      setEntries(next)
+      queryClient.setQueryData(treeQueryKey, next)
+    } catch {
+      deepPrefetchKeyRef.current = null
+    }
+  }, [
+    filesQuery,
+    workspaceProfileName,
+    workspacePath,
+    queryClient,
+    treeQueryKey,
+  ])
 
   useEffect(() => {
     setExpanded(new Set())
     setPreviewPath(null)
     setContextMenu(null)
-  }, [workspacePath, workspaceProfileName])
+    deepPrefetchKeyRef.current = null
+    // Prefer cached tree for the new key; never flash an empty state while
+    // the query is still pending/fetching (see `loading` / `showEmpty`).
+    const cached = queryClient.getQueryData(treeQueryKey)
+    setEntries(Array.isArray(cached) ? (cached as Array<FileEntry>) : [])
+  }, [workspacePath, workspaceProfileName, queryClient, treeQueryKey])
 
   useEffect(() => {
     if (!contextMenu) return
@@ -509,7 +588,7 @@ export function FileExplorerSidebar({
                 Retry
               </Button>
             </div>
-          ) : entries.length === 0 ? (
+          ) : showEmpty ? (
             <div className="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center">
               <div className="flex size-10 items-center justify-center rounded-xl border border-primary-200 bg-primary-100/60">
                 <HugeiconsIcon

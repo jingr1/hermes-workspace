@@ -53,11 +53,13 @@ export async function fetchActiveWorkspace(
 export async function fetchFileTree(
   profileName: string,
   maxDepth = 1,
+  dirPath = '',
 ): Promise<Array<FileTreeEntry>> {
-  const url = withProfileQuery(
-    `/api/files?action=list&maxDepth=${maxDepth}`,
-    profileName,
-  )
+  const params = new URLSearchParams()
+  params.set('action', 'list')
+  params.set('maxDepth', String(maxDepth))
+  if (dirPath) params.set('path', dirPath)
+  const url = withProfileQuery(`/api/files?${params.toString()}`, profileName)
   const response = await fetch(url)
   const data = (await response.json().catch(() => null)) as {
     entries?: Array<FileTreeEntry>
@@ -67,6 +69,26 @@ export async function fetchFileTree(
     throw new Error(data?.error || `Failed to load files (${response.status})`)
   }
   return Array.isArray(data?.entries) ? data.entries : []
+}
+
+/** Merge lazily loaded folder children into an existing tree. */
+export function patchFileTreeChildren(
+  entries: Array<FileTreeEntry>,
+  folderPath: string,
+  children: Array<FileTreeEntry>,
+): Array<FileTreeEntry> {
+  return entries.map((entry) => {
+    if (entry.path === folderPath) {
+      return { ...entry, children }
+    }
+    if (entry.children?.length) {
+      return {
+        ...entry,
+        children: patchFileTreeChildren(entry.children, folderPath, children),
+      }
+    }
+    return entry
+  })
 }
 
 export type ActivateProfileResponse = {
@@ -92,7 +114,7 @@ export function seedWorkspaceQueries(
   if (catalog.path) {
     void queryClient.prefetchQuery({
       queryKey: ['files', 'tree', profileName, catalog.path],
-      queryFn: () => fetchFileTree(profileName, 1),
+      queryFn: () => fetchFileTree(profileName, 0),
       staleTime: 30_000,
     })
   }

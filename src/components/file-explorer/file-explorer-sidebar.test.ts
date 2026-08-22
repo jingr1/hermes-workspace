@@ -12,7 +12,19 @@ describe('file explorer workspace refresh', () => {
   it('reloads the tree when the active workspace path changes', () => {
     expect(sidebarSource).toContain('useActiveWorkspace')
     expect(sidebarSource).toContain('workspacePath')
-    expect(sidebarSource).toContain('void refresh()')
+    expect(sidebarSource).toContain('filesQuery.refetch')
+  })
+
+  it('paints top-level then prefetches depth 3 in the background', () => {
+    expect(sidebarSource).toContain('fetchFileTree(workspaceProfileName, 0)')
+    expect(sidebarSource).toContain('fetchFileTree(workspaceProfileName, 3)')
+    expect(sidebarSource).not.toContain('loadFolderChildren')
+    expect(sidebarSource).not.toContain('patchFileTreeChildren')
+  })
+
+  it('shows loading instead of empty while the tree is fetching', () => {
+    expect(sidebarSource).toContain('showEmpty')
+    expect(sidebarSource).toContain('entries.length === 0 && filesQuery.isFetching')
   })
 
   it('docks on the right by default with a left border', () => {

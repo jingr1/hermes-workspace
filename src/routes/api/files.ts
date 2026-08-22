@@ -204,15 +204,27 @@ async function readDirectory(
     try {
       const stats = await fs.stat(fullPath)
       if (entry.isDirectory()) {
-        const children = await readDirectory(fullPath, depth + 1, options)
-        mapped.push({
-          name: entry.name,
-          path: relativePath,
-          type: 'folder',
-          size: stats.size,
-          modifiedAt: stats.mtime.toISOString(),
-          children,
-        })
+        // At the requested depth limit, list the folder itself but omit
+        // children so clients can lazy-load on expand (undefined ≠ empty []).
+        if (depth >= options.maxDepth) {
+          mapped.push({
+            name: entry.name,
+            path: relativePath,
+            type: 'folder',
+            size: stats.size,
+            modifiedAt: stats.mtime.toISOString(),
+          })
+        } else {
+          const children = await readDirectory(fullPath, depth + 1, options)
+          mapped.push({
+            name: entry.name,
+            path: relativePath,
+            type: 'folder',
+            size: stats.size,
+            modifiedAt: stats.mtime.toISOString(),
+            children,
+          })
+        }
       } else {
         mapped.push({
           name: entry.name,
