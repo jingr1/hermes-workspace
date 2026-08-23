@@ -5,6 +5,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.4.0] — 2026-08-23
+
+### Added
+- **Mobile voice input with local STT** — record on phone, transcribe via Mac faster-whisper (`stt.provider: local`); HTTPS/Tailscale remote access support
+- **STT status + transcribe API** — `/api/stt-status` and `/api/transcribe` with local Whisper, Groq, and OpenAI providers
+- **LangGraph orchestrator** — workflow-driven routing, checkpoints, and human-gate integration
+- **Swarm orchestration upgrades** — checkpoint sync, stream handoff, worker runtime state, profile gateway pool
+- **Workspace folder management** — caching, preload, and sidebar file explorer improvements
+- **Provider catalog + OAuth modals** — Codex and Anthropic login flows; expanded provider management
+- **Context usage tracking** — composer and chat session context bar
+- **Job delivery targets API** — multi-target cron delivery support
+- **better-sqlite3** — SQLite handling for workspace data paths
+
+### Changed
+- **Chat composer** — mic/stop button mutual exclusion, mobile touch handling, remote streaming abort fixes
+- **Swarm configuration** — runtime model handling and profile sync improvements
+- **Markdown rendering** — KaTeX math, enhanced code block handling
+
+### Fixed
+- Mobile microphone permissions and insecure-context detection over Tailscale HTTPS
+- Chat streaming tab-switch and new-chat state blocking
+- Gateway capability probing and profile-scoped config reads for split-host deployments
+
+## [2.3.0] — 2026-06-05
+
+### Added
+- HermesWorld v1 embed, Echo Studio Labs scaffold, Agent Bus panel, and overnight shakedown fixes (see git history for full list)
+
 ### Changed
 - **`docker compose up` now pulls pre-built images by default** (#82) — `nousresearch/hermes-agent:latest` for the gateway and `ghcr.io/outsourc-e/hermes-workspace:latest` for the UI. Agent state persists in the `claude-data` named volume. Adds `docker-compose.dev.yml` overlay for building from source.
 
