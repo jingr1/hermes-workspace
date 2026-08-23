@@ -10,6 +10,16 @@ orchestrator → researcher → architect → (developer | writer) → architect
 
 Dispatch still goes through `POST /api/swarm-dispatch` (see [DISPATCH-GUIDE.md](./DISPATCH-GUIDE.md)). This document defines **what each stage may produce**, **what it must not do**, and **how challenges escalate**.
 
+## Mission 正文路径（canonical）
+
+所有 mission 交付物写入：
+
+```text
+hermes-workspace/memory/swarm/missions/<missionId>/<workerId>/
+```
+
+同目录下可放 `escalations/`、`challenges/` 等子目录。`output/` 为历史遗留目录，平台不再验收其中的新文件。
+
 Related: [ESCALATION-GUIDE.md](./ESCALATION-GUIDE.md) · [LEARNING-WIKI-INGEST.md](./LEARNING-WIKI-INGEST.md) · [AUTORESEARCH-GUIDE.md](./AUTORESEARCH-GUIDE.md)
 
 ---
@@ -80,7 +90,7 @@ Related: [ESCALATION-GUIDE.md](./ESCALATION-GUIDE.md) · [LEARNING-WIKI-INGEST.m
 ### 输出路径
 
 ```text
-hermes-workspace/output/researcher/{topic}-report.md
+hermes-workspace/memory/swarm/missions/<missionId>/researcher/{topic}-report.md
 ```
 
 ### 输出格式
@@ -153,9 +163,9 @@ executor: developer | writer
 ### 输出路径
 
 ```text
-hermes-workspace/output/architect/{topic}-strategy.md   # 方向：wedge / bets / kill criteria
-hermes-workspace/output/architect/{topic}-spec.md       # 技术规格（executor: developer）
-hermes-workspace/output/architect/{topic}-content-brief.md  # 内容规格（executor: writer）
+hermes-workspace/memory/swarm/missions/<missionId>/architect/{topic}-strategy.md   # 方向：wedge / bets / kill criteria
+hermes-workspace/memory/swarm/missions/<missionId>/architect/{topic}-spec.md       # 技术规格（executor: developer）
+hermes-workspace/memory/swarm/missions/<missionId>/architect/{topic}-content-brief.md  # 内容规格（executor: writer）
 ```
 
 可合并为一份文档的不同章节；但 **当前步骤只派发一个 executor**，对应消费面必须清晰。
@@ -268,12 +278,12 @@ hermes-workspace/output/architect/{topic}-content-brief.md  # 内容规格（exe
 
 ### 输入
 
-- `output/architect/{topic}-spec.md`（及 strategy 中与实现相关的约束）
+- `memory/swarm/missions/<missionId>/architect/{topic}-spec.md`（及 strategy 中与实现相关的约束）
 
 ### 输出路径
 
 ```text
-hermes-workspace/output/developer/{topic}-*
+hermes-workspace/memory/swarm/missions/<missionId>/developer/{topic}-*
 ```
 
 ### Checkpoint 期望
@@ -294,13 +304,13 @@ hermes-workspace/output/developer/{topic}-*
 
 ### 输入
 
-- `output/architect/{topic}-content-brief.md`
+- `memory/swarm/missions/<missionId>/architect/{topic}-content-brief.md`
 - 相关 researcher 事实（只引用，不改写事实含义）
 
 ### 输出路径
 
 ```text
-hermes-workspace/output/writer/{topic}-*
+hermes-workspace/memory/swarm/missions/<missionId>/writer/{topic}-*
 ```
 
 ### Checkpoint 期望
@@ -354,10 +364,10 @@ hermes-workspace/output/writer/{topic}-*
 
 | 下游 | 可质疑上游 | 质疑文件路径 |
 |------|-----------|-------------|
-| Architect | Researcher | `output/architect/challenges/{fact-id}.md` |
-| Developer | Architect | `output/developer/challenges/{spec-id}.md` |
-| Writer | Architect | `output/writer/challenges/{brief-id}.md` |
-| Learning | Architect / Orchestrator | `output/learning/challenges/{mission-id}.md`（仅限摄入冲突 / 归档缺失） |
+| Architect | Researcher | `memory/swarm/missions/<missionId>/architect/challenges/{fact-id}.md` |
+| Developer | Architect | `memory/swarm/missions/<missionId>/developer/challenges/{spec-id}.md` |
+| Writer | Architect | `memory/swarm/missions/<missionId>/writer/challenges/{brief-id}.md` |
+| Learning | Architect / Orchestrator | `memory/swarm/missions/<missionId>/learning/challenges/{mission-id}.md`（仅限摄入冲突 / 归档缺失） |
 
 Writer 若发现**事实**错误，经 architect 退回 researcher，不自己改事实层。
 

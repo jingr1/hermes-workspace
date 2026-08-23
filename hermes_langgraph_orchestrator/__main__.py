@@ -130,6 +130,10 @@ async def main():
     mission_id = args.mission_id or f"mission-{int(time.time())}"
     goal = args.goal or "调研并交付可验证的实现（默认 RADW：research → architect → developer|writer）"
 
+    from hermes_langgraph_orchestrator.mission_artifacts import rewrite_legacy_output_paths
+
+    goal = rewrite_legacy_output_paths(goal, mission_id)
+
     swarm_url = (
         args.swarm_url.strip()
         or os.environ.get("HERMES_WORKSPACE_URL", "").strip()

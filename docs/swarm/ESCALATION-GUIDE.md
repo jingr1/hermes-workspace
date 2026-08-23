@@ -36,7 +36,7 @@ Decision recorded → Workers notified → Continue flow
 
 ## Escalation File Format
 
-Save to: `output/{downstream-role}/escalations/{topic}-{id}.md`
+Save to: `memory/swarm/missions/<missionId>/{downstream-role}/escalations/{topic}-{id}.md`
 
 Valid `{downstream-role}` values: `architect`, `developer`, `writer`, `learning` (rarely), or `orchestrator` if the control plane opens the file on behalf of a worker.
 

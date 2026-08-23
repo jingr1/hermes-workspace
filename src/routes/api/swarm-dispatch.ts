@@ -20,6 +20,11 @@ import {
 import { buildHandoff, writeHandoff } from '../../server/handoff'
 import { harvestSwarmWorkers } from '../../server/swarm-harvest'
 import {
+  buildMissionArtifactInstructions,
+  ensureSwarmMissionArtifactDirs,
+  rewriteLegacyOutputPathsInText,
+} from '../../server/swarm-mission-artifacts'
+import {
   buildHermesTmuxShellCommand,
   buildHermesTmuxTuiCommand,
   resolveTmuxTransportMode,
@@ -571,10 +576,19 @@ export function buildWorkerPrompt(input: {
     lines.push(snapshotSection)
     lines.push('')
   }
+  const missionId = input.missionId?.trim() || null
+  const taskText = missionId
+    ? rewriteLegacyOutputPathsInText(input.task, missionId)
+    : input.task
   lines.push(
     '## Assigned Task',
-    input.task,
+    taskText,
     '',
+  )
+  if (missionId) {
+    lines.push(buildMissionArtifactInstructions(missionId, input.workerId), '')
+  }
+  lines.push(
     '## Operating Rules',
     '- Work in your persistent Hermes worker session and preserve your profile context.',
     `- The Worker Startup Memory Snapshot above is your authoritative starting context. If you have filesystem tools, also read \`~/.\u0068\u0065\u0072\u006d\u0065\u0073/profiles/${input.workerId}/MEMORY.md\`, \`SOUL.md\`, \`USER.md\`, and \`memory/IDENTITY.md\` for full detail.`,
@@ -597,6 +611,9 @@ export function buildWorkerPrompt(input: {
 }
 
 function markDispatchStarted(workerId: string, task: string, missionId?: string | null, assignmentId?: string | null, notifySessionKey?: string | null): void {
+  if (missionId) {
+    ensureSwarmMissionArtifactDirs(missionId, workerId)
+  }
   const controlMessage = `Dispatched task: ${task.slice(0, 180)}`
   writeRuntimePatch(workerId, {
     state: 'executing',

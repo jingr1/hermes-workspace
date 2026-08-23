@@ -24,6 +24,7 @@ from pathlib import Path
 # their cwd differs from the source worker's cwd.
 _HANDOFF_DIR = Path(__file__).resolve().parents[1] / "memory" / "handoffs" / "swarm"
 
+from .mission_artifacts import artifact_path_instructions, rewrite_legacy_output_paths
 from .state import (
     DispatchDecision,
     OrchestratorState,
@@ -664,6 +665,27 @@ def _infer_architect_review_outcome(
     return classification
 
 
+def _mission_memory_root() -> str:
+    return os.environ.get("HERMES_SWARM_MEMORY_ROOT") or os.path.expanduser("~/hermes-workspace")
+
+
+def _rewrite_mission_text(state: OrchestratorState, text: str) -> str:
+    mission_id = (state.get("mission_id") or "").strip()
+    if not mission_id or not text:
+        return text
+    return rewrite_legacy_output_paths(text, mission_id)
+
+
+def _append_artifact_instructions(state: OrchestratorState, worker_id: str, task: str) -> str:
+    mission_id = (state.get("mission_id") or "").strip()
+    if not mission_id:
+        return task
+    block = artifact_path_instructions(
+        mission_id, worker_id, memory_root=_mission_memory_root()
+    )
+    return f"{task}\n\n{block}"
+
+
 def _build_task_for_transition(
     source_id: str,
     target_id: str,
@@ -679,22 +701,26 @@ def _build_task_for_transition(
     exactly what the target worker should do next.  This avoids vague prompts
     like "Continue researcher's work."
     """
-    mission_goal = state.get("mission_goal", "")
-    result = (checkpoint.get("result") or "").strip()
-    files = (checkpoint.get("files_changed") or "").strip() or "none"
+    mission_goal = _rewrite_mission_text(state, state.get("mission_goal", ""))
+    result = _rewrite_mission_text(state, (checkpoint.get("result") or "").strip())
+    files = _rewrite_mission_text(state, (checkpoint.get("files_changed") or "").strip() or "none")
     commands = (checkpoint.get("commands_run") or "").strip() or "none"
-    next_action = (checkpoint.get("next_action") or "").strip()
+    next_action = _rewrite_mission_text(state, (checkpoint.get("next_action") or "").strip())
     reason = (decision.reason or f"{source_id} finished; hand off to {target_id}").strip()
 
     if decision.action == "retry":
-        return (
-            f"## Mission\n{mission_goal}\n\n"
-            f"## Retry context\n"
-            f"You ({source_id}) were previously blocked. The orchestrator has approved a retry.\n"
-            f"Blocker: {classification.blocker_summary or 'unknown'}\n"
-            f"Blocker type: {classification.blocker_type or 'unknown'}\n\n"
-            f"## Your task\n"
-            f"{_transition_instructions(source_id, target_id, classification, decision, state)}"
+        return _append_artifact_instructions(
+            state,
+            source_id,
+            (
+                f"## Mission\n{mission_goal}\n\n"
+                f"## Retry context\n"
+                f"You ({source_id}) were previously blocked. The orchestrator has approved a retry.\n"
+                f"Blocker: {classification.blocker_summary or 'unknown'}\n"
+                f"Blocker type: {classification.blocker_type or 'unknown'}\n\n"
+                f"## Your task\n"
+                f"{_transition_instructions(source_id, target_id, classification, decision, state)}"
+            ),
         )
 
     handoff = _read_handoff(source_id)
@@ -736,7 +762,7 @@ def _build_task_for_transition(
             "Return the required checkpoint format (STATE, FILES_CHANGED, COMMANDS_RUN, RESULT, BLOCKER, NEXT_ACTION).",
         ]
     )
-    return "\n".join(lines)
+    return _append_artifact_instructions(state, target_id, "\n".join(lines))
 
 
 # ============================================================
@@ -782,6 +808,7 @@ async def init_mission(state: OrchestratorState) -> dict:
 
     # Seed initial assignments from workflow entry if none provided.
     assignments = state.get("langgraph_assignments", []) or []
+    mission_goal = _rewrite_mission_text(state, state.get("mission_goal", ""))
     if not assignments:
         entry = workflow_spec.entry
         if entry not in roster_ids:
@@ -792,9 +819,17 @@ async def init_mission(state: OrchestratorState) -> dict:
         assignments = [
             {
                 "worker_id": entry,
-                "task": state.get("mission_goal", ""),
+                "task": mission_goal,
                 "reason": f"workflow entry: {entry}",
             }
+        ]
+    else:
+        assignments = [
+            {
+                **assignment,
+                "task": _rewrite_mission_text(state, assignment.get("task", "")),
+            }
+            for assignment in assignments
         ]
 
     log(
@@ -802,6 +837,7 @@ async def init_mission(state: OrchestratorState) -> dict:
         f"roster={len(roster_ids)} workers, entry_assignments={len(assignments)}"
     )
     return {
+        "mission_goal": mission_goal,
         "roster_snapshot": sorted(roster_ids),
         "workflow_path": workflow_path,
         "workflow_spec": workflow_spec,

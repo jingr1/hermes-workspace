@@ -16,7 +16,31 @@ from typing import Any
 
 from langgraph.types import Command
 
+from .mission_artifacts import artifact_path_instructions, rewrite_legacy_output_paths
 from .state import OrchestratorState
+
+
+def _mission_memory_root() -> str:
+    import os
+
+    return os.environ.get("HERMES_SWARM_MEMORY_ROOT") or os.path.expanduser("~/hermes-workspace")
+
+
+def _rewrite_mission_text(state: OrchestratorState, text: str) -> str:
+    mission_id = (state.get("mission_id") or "").strip()
+    if not mission_id or not text:
+        return text
+    return rewrite_legacy_output_paths(text, mission_id)
+
+
+def _append_artifact_instructions(state: OrchestratorState, worker_id: str, task: str) -> str:
+    mission_id = (state.get("mission_id") or "").strip()
+    if not mission_id:
+        return task
+    block = artifact_path_instructions(
+        mission_id, worker_id, memory_root=_mission_memory_root()
+    )
+    return f"{task}\n\n{block}"
 
 
 def _serialize(value: Any) -> Any:
@@ -64,11 +88,11 @@ def build_human_gate_assignments(
         verdict = classification.verdict or "BLOCKED"
 
     target_id = (target_worker_id or source_id or "unknown").strip()
-    mission_goal = state.get("mission_goal", "")
+    mission_goal = _rewrite_mission_text(state, state.get("mission_goal", ""))
     note = (human_note or "").strip()
-    result = (checkpoint.get("result") or "").strip()
-    next_action = (checkpoint.get("next_action") or "").strip()
-    files = (checkpoint.get("files_changed") or "").strip() or "none"
+    result = _rewrite_mission_text(state, (checkpoint.get("result") or "").strip())
+    next_action = _rewrite_mission_text(state, (checkpoint.get("next_action") or "").strip())
+    files = _rewrite_mission_text(state, (checkpoint.get("files_changed") or "").strip() or "none")
 
     note_block = f"\n\n## 人工补充说明\n{note}" if note else ""
     choice_label = {"primary": "选项一", "secondary": "选项二", "custom": "自定义"}.get(
@@ -112,7 +136,14 @@ def build_human_gate_assignments(
         task = "".join(context_lines)
         reason = f"human gate {choice_label}: {source_id} → {target_id}"
 
-    return [{"worker_id": target_id, "task": task, "reason": reason, "action": "human"}]
+    return [
+        {
+            "worker_id": target_id,
+            "task": _append_artifact_instructions(state, target_id, task),
+            "reason": reason,
+            "action": "human",
+        }
+    ]
 
 
 def build_resume_command(

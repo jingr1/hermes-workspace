@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { dirname, join } from 'node:path'
 import { SWARM_CANONICAL_REPO } from './swarm-environment'
 import type { ParsedSwarmCheckpoint } from './swarm-checkpoints'
+import { applyArtifactPathPolicy } from './swarm-mission-artifacts'
 
 export type SwarmMissionAssignmentState = 'queued' | 'dispatched' | 'checkpointed' | 'blocked' | 'needs_input' | 'reviewing' | 'done' | 'cancelled'
 export type SwarmMissionState = 'planning' | 'dispatching' | 'executing' | 'reviewing' | 'blocked' | 'complete' | 'cancelled'
@@ -291,23 +292,24 @@ export function recordMissionCheckpoint(input: {
   if (assignment.checkpoint?.raw === input.checkpoint.raw) {
     return Object.assign(mission, { _completed: mission.state === 'complete' })
   }
-  assignment.checkpoint = input.checkpoint
+  const checkpoint = applyArtifactPathPolicy(input.checkpoint, input.missionId, input.workerId)
+  assignment.checkpoint = checkpoint
   assignment.completedAt = now()
-  assignment.state = input.checkpoint.stateLabel === 'BLOCKED'
+  assignment.state = checkpoint.stateLabel === 'BLOCKED'
     ? 'blocked'
-    : input.checkpoint.stateLabel === 'NEEDS_INPUT'
+    : checkpoint.stateLabel === 'NEEDS_INPUT'
       ? 'needs_input'
-      : input.checkpoint.stateLabel === 'IN_PROGRESS'
+      : checkpoint.stateLabel === 'IN_PROGRESS'
         ? 'dispatched'
         : 'checkpointed'
   const report = reportFromCheckpoint({
     missionId: mission.id,
     assignmentId: assignment.id,
     workerId: input.workerId,
-    checkpoint: input.checkpoint,
+    checkpoint,
     source: input.source,
   })
-  mission.events.push(event('checkpoint', `${input.workerId} checkpointed: ${input.checkpoint.stateLabel}`, {
+  mission.events.push(event('checkpoint', `${input.workerId} checkpointed: ${checkpoint.stateLabel}`, {
     workerId: input.workerId,
     assignmentId: assignment.id,
     data: report,
