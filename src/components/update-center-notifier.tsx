@@ -55,6 +55,16 @@ type ApplyUpdateResult = {
   restartRequired?: boolean
   status?: ProductUpdateStatus
   releaseNotes?: Array<ReleaseNoteSection>
+  workerRestart?: {
+    workerIds: Array<string>
+    results: Array<{
+      workerId: string
+      wasRunning: boolean
+      stopped: boolean
+      started: boolean
+      error?: string
+    }>
+  }
   error?: string
 }
 
@@ -212,10 +222,18 @@ export function UpdateCenterNotifier() {
         : null
       if (stored) setNotes(stored)
       await queryClient.invalidateQueries({ queryKey: ['update-status-v2'] })
-      toast(`${product.label} updated. Restart may be required.`, {
-        type: 'success',
-        duration: 7000,
-      })
+      const restartedWorkers = result.workerRestart?.results.filter((item) => item.started).map((item) => item.workerId) ?? []
+      if (product.id === 'agent' && restartedWorkers.length > 0) {
+        toast(
+          `${product.label} updated. Restarted swarm workers: ${restartedWorkers.join(', ')}.`,
+          { type: 'success', duration: 9000 },
+        )
+      } else {
+        toast(`${product.label} updated. Restart may be required.`, {
+          type: 'success',
+          duration: 7000,
+        })
+      }
     } catch (err) {
       setPhases((prev) => ({ ...prev, [product.id]: 'error' }))
       setErrors((prev) => ({

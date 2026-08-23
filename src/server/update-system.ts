@@ -8,6 +8,11 @@ import {
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import {
+  formatSwarmWorkerRestartSummary,
+  restartActiveSwarmWorkers,
+  type RestartActiveSwarmWorkersResult,
+} from './swarm-tmux-restart'
 
 type ProductId = 'workspace' | 'agent'
 type InstallKind = 'git' | 'desktop' | 'docker' | 'unknown'
@@ -67,6 +72,7 @@ export type ApplyUpdateResult = {
   restartRequired: boolean
   status: ProductUpdateStatus
   releaseNotes: Array<ReleaseNoteSection>
+  workerRestart?: RestartActiveSwarmWorkersResult
   error?: string
 }
 
@@ -617,7 +623,7 @@ export function applyWorkspaceUpdate(): ApplyUpdateResult {
   }
 }
 
-export function applyAgentUpdate(): ApplyUpdateResult {
+export async function applyAgentUpdate(): Promise<ApplyUpdateResult> {
   const before = readAgentUpdateStatus()
   if (!before.canUpdate || !before.repoPath) {
     return {
@@ -654,6 +660,52 @@ export function applyAgentUpdate(): ApplyUpdateResult {
   output.push(syncRepoToRemote(before.repoPath, remoteRef))
 
   const after = readAgentUpdateStatus()
+  const codeChanged = Boolean(before.currentHead && after.currentHead && before.currentHead !== after.currentHead)
+  let workerRestart: RestartActiveSwarmWorkersResult | undefined
+
+  if (codeChanged && before.repoPath) {
+    const venvPip = join(before.repoPath, 'venv', 'bin', 'pip3')
+    if (existsSync(venvPip)) {
+      try {
+        output.push(
+          execOrThrow(venvPip, ['install', '-e', '.'], {
+            cwd: before.repoPath,
+            timeout: 180_000,
+          }),
+        )
+      } catch (error) {
+        output.push(
+          `pip install -e . failed: ${error instanceof Error ? error.message : String(error)}`,
+        )
+      }
+    }
+
+    const syncScript = join(process.cwd(), 'scripts', 'sync-swarm-profiles.mjs')
+    if (existsSync(syncScript)) {
+      try {
+        output.push(
+          execOrThrow('node', [syncScript], {
+            cwd: process.cwd(),
+            timeout: 120_000,
+          }),
+        )
+      } catch (error) {
+        output.push(
+          `sync-swarm-profiles failed: ${error instanceof Error ? error.message : String(error)}`,
+        )
+      }
+    }
+
+    try {
+      workerRestart = await restartActiveSwarmWorkers()
+      output.push(formatSwarmWorkerRestartSummary(workerRestart))
+    } catch (error) {
+      output.push(
+        `swarm worker restart failed: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
+  }
+
   const releaseNotes = [
     {
       product: 'agent' as const,
@@ -672,8 +724,9 @@ export function applyAgentUpdate(): ApplyUpdateResult {
     ok: true,
     product: 'agent',
     output: output.filter(Boolean).join('\n'),
-    restartRequired: before.currentHead !== after.currentHead,
+    restartRequired: codeChanged,
     status: after,
     releaseNotes,
+    workerRestart,
   }
 }

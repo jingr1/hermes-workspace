@@ -49,6 +49,7 @@ import { Route as ApiSystemMetricsRouteImport } from './routes/api/system-metric
 import { Route as ApiSwarmTmuxStopRouteImport } from './routes/api/swarm-tmux-stop'
 import { Route as ApiSwarmTmuxStartRouteImport } from './routes/api/swarm-tmux-start'
 import { Route as ApiSwarmTmuxScrollRouteImport } from './routes/api/swarm-tmux-scroll'
+import { Route as ApiSwarmTmuxRestartActiveRouteImport } from './routes/api/swarm-tmux-restart-active'
 import { Route as ApiSwarmRuntimeRouteImport } from './routes/api/swarm-runtime'
 import { Route as ApiSwarmRosterRouteImport } from './routes/api/swarm-roster'
 import { Route as ApiSwarmReportsRouteImport } from './routes/api/swarm-reports'
@@ -390,6 +391,12 @@ const ApiSwarmTmuxScrollRoute = ApiSwarmTmuxScrollRouteImport.update({
   path: '/api/swarm-tmux-scroll',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiSwarmTmuxRestartActiveRoute =
+  ApiSwarmTmuxRestartActiveRouteImport.update({
+    id: '/api/swarm-tmux-restart-active',
+    path: '/api/swarm-tmux-restart-active',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiSwarmRuntimeRoute = ApiSwarmRuntimeRouteImport.update({
   id: '/api/swarm-runtime',
   path: '/api/swarm-runtime',
@@ -1198,6 +1205,7 @@ export interface FileRoutesByFullPath {
   '/api/swarm-reports': typeof ApiSwarmReportsRoute
   '/api/swarm-roster': typeof ApiSwarmRosterRoute
   '/api/swarm-runtime': typeof ApiSwarmRuntimeRouteWithChildren
+  '/api/swarm-tmux-restart-active': typeof ApiSwarmTmuxRestartActiveRoute
   '/api/swarm-tmux-scroll': typeof ApiSwarmTmuxScrollRoute
   '/api/swarm-tmux-start': typeof ApiSwarmTmuxStartRoute
   '/api/swarm-tmux-stop': typeof ApiSwarmTmuxStopRoute
@@ -1379,6 +1387,7 @@ export interface FileRoutesByTo {
   '/api/swarm-reports': typeof ApiSwarmReportsRoute
   '/api/swarm-roster': typeof ApiSwarmRosterRoute
   '/api/swarm-runtime': typeof ApiSwarmRuntimeRouteWithChildren
+  '/api/swarm-tmux-restart-active': typeof ApiSwarmTmuxRestartActiveRoute
   '/api/swarm-tmux-scroll': typeof ApiSwarmTmuxScrollRoute
   '/api/swarm-tmux-start': typeof ApiSwarmTmuxStartRoute
   '/api/swarm-tmux-stop': typeof ApiSwarmTmuxStopRoute
@@ -1562,6 +1571,7 @@ export interface FileRoutesById {
   '/api/swarm-reports': typeof ApiSwarmReportsRoute
   '/api/swarm-roster': typeof ApiSwarmRosterRoute
   '/api/swarm-runtime': typeof ApiSwarmRuntimeRouteWithChildren
+  '/api/swarm-tmux-restart-active': typeof ApiSwarmTmuxRestartActiveRoute
   '/api/swarm-tmux-scroll': typeof ApiSwarmTmuxScrollRoute
   '/api/swarm-tmux-start': typeof ApiSwarmTmuxStartRoute
   '/api/swarm-tmux-stop': typeof ApiSwarmTmuxStopRoute
@@ -1746,6 +1756,7 @@ export interface FileRouteTypes {
     | '/api/swarm-reports'
     | '/api/swarm-roster'
     | '/api/swarm-runtime'
+    | '/api/swarm-tmux-restart-active'
     | '/api/swarm-tmux-scroll'
     | '/api/swarm-tmux-start'
     | '/api/swarm-tmux-stop'
@@ -1927,6 +1938,7 @@ export interface FileRouteTypes {
     | '/api/swarm-reports'
     | '/api/swarm-roster'
     | '/api/swarm-runtime'
+    | '/api/swarm-tmux-restart-active'
     | '/api/swarm-tmux-scroll'
     | '/api/swarm-tmux-start'
     | '/api/swarm-tmux-stop'
@@ -2109,6 +2121,7 @@ export interface FileRouteTypes {
     | '/api/swarm-reports'
     | '/api/swarm-roster'
     | '/api/swarm-runtime'
+    | '/api/swarm-tmux-restart-active'
     | '/api/swarm-tmux-scroll'
     | '/api/swarm-tmux-start'
     | '/api/swarm-tmux-stop'
@@ -2292,6 +2305,7 @@ export interface RootRouteChildren {
   ApiSwarmReportsRoute: typeof ApiSwarmReportsRoute
   ApiSwarmRosterRoute: typeof ApiSwarmRosterRoute
   ApiSwarmRuntimeRoute: typeof ApiSwarmRuntimeRouteWithChildren
+  ApiSwarmTmuxRestartActiveRoute: typeof ApiSwarmTmuxRestartActiveRoute
   ApiSwarmTmuxScrollRoute: typeof ApiSwarmTmuxScrollRoute
   ApiSwarmTmuxStartRoute: typeof ApiSwarmTmuxStartRoute
   ApiSwarmTmuxStopRoute: typeof ApiSwarmTmuxStopRoute
@@ -2626,6 +2640,13 @@ declare module '@tanstack/react-router' {
       path: '/api/swarm-tmux-scroll'
       fullPath: '/api/swarm-tmux-scroll'
       preLoaderRoute: typeof ApiSwarmTmuxScrollRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/swarm-tmux-restart-active': {
+      id: '/api/swarm-tmux-restart-active'
+      path: '/api/swarm-tmux-restart-active'
+      fullPath: '/api/swarm-tmux-restart-active'
+      preLoaderRoute: typeof ApiSwarmTmuxRestartActiveRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/swarm-runtime': {
@@ -3943,6 +3964,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSwarmReportsRoute: ApiSwarmReportsRoute,
   ApiSwarmRosterRoute: ApiSwarmRosterRoute,
   ApiSwarmRuntimeRoute: ApiSwarmRuntimeRouteWithChildren,
+  ApiSwarmTmuxRestartActiveRoute: ApiSwarmTmuxRestartActiveRoute,
   ApiSwarmTmuxScrollRoute: ApiSwarmTmuxScrollRoute,
   ApiSwarmTmuxStartRoute: ApiSwarmTmuxStartRoute,
   ApiSwarmTmuxStopRoute: ApiSwarmTmuxStopRoute,

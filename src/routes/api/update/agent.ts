@@ -22,7 +22,7 @@ export const Route = createFileRoute('/api/update/agent')({
           return rateLimitResponse()
         }
         try {
-          const result = applyAgentUpdate()
+          const result = await applyAgentUpdate()
           return json(result, { status: result.ok ? 200 : 409 })
         } catch (err) {
           return json(
