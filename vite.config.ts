@@ -539,6 +539,7 @@ const config = defineConfig(({ mode, command }) => {
             )
             res.setHeader('X-Content-Type-Options', 'nosniff')
             res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+            res.setHeader('Permissions-Policy', 'microphone=(self), camera=()')
             next()
           })
           server.middlewares.use(async (req, res, next) => {

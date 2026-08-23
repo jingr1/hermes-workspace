@@ -68,6 +68,7 @@ const APP_CSP_HEADERS = [
 
 const ALWAYS_HEADERS = {
   'Content-Security-Policy': APP_CSP_HEADERS,
+  'Permissions-Policy': 'microphone=(self), camera=()',
   // Tighten later if/when CSP moves to nonce-based — the dash prefix
   // makes adding/removing trivial without searching the codebase.
   'X-Content-Type-Options': 'nosniff',

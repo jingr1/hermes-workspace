@@ -42,13 +42,37 @@ export function isMicrophoneContextSecure(): boolean {
 export const INSECURE_MICROPHONE_MESSAGE =
   'Microphone requires HTTPS or localhost. Browsers block mic access on HTTP remote IPs (for example Tailscale). Open http://127.0.0.1:3000 on this Mac, or serve Hermes Workspace over HTTPS.'
 
+type MicrophonePlatform = 'ios' | 'android' | 'macos' | 'desktop'
+
+export function detectMicrophonePlatform(): MicrophonePlatform {
+  const nav = getNavigator()
+  const ua = nav?.userAgent ?? ''
+  if (/iPhone|iPad|iPod/i.test(ua)) return 'ios'
+  if (/Android/i.test(ua)) return 'android'
+  if (/Macintosh|Mac OS X/i.test(ua)) return 'macos'
+  return 'desktop'
+}
+
+export function microphonePermissionHelpMessage(): string {
+  switch (detectMicrophonePlatform()) {
+    case 'ios':
+      return 'Microphone blocked — on iPhone: Settings → Safari → Microphone → Allow, then reload this page. If you denied the popup earlier, also check Settings → Privacy & Security → Microphone → Safari.'
+    case 'android':
+      return 'Microphone blocked — in Chrome tap the lock icon (left of the URL) → Microphone → Allow, then reload. If still blocked: Android Settings → Apps → Chrome → Permissions → Microphone → Allow.'
+    case 'macos':
+      return 'Microphone blocked — allow it in the browser site settings and System Settings → Privacy & Security → Microphone.'
+    default:
+      return 'Microphone blocked — allow it in your browser site settings and system privacy settings for the microphone.'
+  }
+}
+
 export function formatMicrophoneAccessError(error: unknown): string {
   if (!isMicrophoneContextSecure()) {
     return INSECURE_MICROPHONE_MESSAGE
   }
   if (error instanceof DOMException) {
     if (error.name === 'NotAllowedError' || error.name === 'SecurityError') {
-      return 'Microphone blocked — allow it in browser site settings and macOS Privacy & Security → Microphone'
+      return microphonePermissionHelpMessage()
     }
     if (error.name === 'NotFoundError') {
       return 'No microphone detected'
@@ -57,13 +81,31 @@ export function formatMicrophoneAccessError(error: unknown): string {
     return error.name
   }
   if (typeof error === 'string') {
-    if (error === 'not-allowed') {
-      return 'Microphone blocked — allow it in browser site settings and macOS Privacy & Security → Microphone'
-    }
-    return error
+    return formatSpeechRecognitionError(error)
   }
   if (error instanceof Error && error.message.trim()) return error.message
   return 'Microphone access denied'
+}
+
+/** Web Speech API error codes (Chrome/Android/iOS). */
+export function formatSpeechRecognitionError(error: string): string {
+  switch (error) {
+    case 'not-allowed':
+    case 'service-not-allowed':
+      return detectMicrophonePlatform() === 'android'
+        ? 'Speech recognition blocked — tap the lock icon next to the URL → Microphone → Allow, then reload this page. If it already says Allow, force-close Chrome and reopen, or check Android Settings → Apps → Chrome → Permissions → Microphone.'
+        : microphonePermissionHelpMessage()
+    case 'audio-capture':
+      return microphonePermissionHelpMessage()
+    case 'network':
+      return 'Speech recognition needs internet access. Chrome sends audio to Google — check your network or VPN.'
+    case 'no-speech':
+      return 'No speech detected. Try speaking closer to the microphone.'
+    case 'aborted':
+      return 'Speech recognition was interrupted.'
+    default:
+      return error.trim() || 'Speech recognition failed'
+  }
 }
 
 export function detectMicrophoneBrowserSupport(): boolean {
@@ -102,6 +144,12 @@ export function resolveSpeechRecognitionLang(): string {
   const browserLang = nav?.language?.trim()
   if (browserLang) return browserLang
   return 'en-US'
+}
+
+/** Touch-first devices (phones/tablets). Used to avoid long-press record timers that lose iOS user activation. */
+export function isCoarsePointerDevice(): boolean {
+  if (typeof window === 'undefined') return false
+  return window.matchMedia('(pointer: coarse)').matches
 }
 
 export function detectGetUserMediaSupport(): boolean {
@@ -154,6 +202,35 @@ export async function requestAudioStream(): Promise<MediaStream> {
     'Microphone APIs are unavailable in this browser',
     'NotSupportedError',
   )
+}
+
+/**
+ * Mobile browsers require getUserMedia to be requested inside the user-gesture
+ * handler (pointerdown/touchstart). Call this synchronously on pointerdown,
+ * then await resolveAudioStream() in the async record pipeline.
+ */
+let primedAudioStreamPromise: Promise<MediaStream> | null = null
+
+export function primeAudioStreamFromUserGesture(): void {
+  if (!detectGetUserMediaSupport()) return
+  primedAudioStreamPromise = requestAudioStream()
+}
+
+export function clearPrimedAudioStream(): void {
+  primedAudioStreamPromise = null
+}
+
+/** Stop tracks held open for Web Speech API (Android needs an active capture). */
+export function releaseHeldAudioStream(stream: MediaStream | null | undefined): void {
+  if (!stream) return
+  stream.getTracks().forEach((track) => track.stop())
+}
+
+export async function resolveAudioStream(): Promise<MediaStream> {
+  const primed = primedAudioStreamPromise
+  primedAudioStreamPromise = null
+  if (primed) return primed
+  return requestAudioStream()
 }
 
 export function createAudioRecorder(stream: MediaStream): {

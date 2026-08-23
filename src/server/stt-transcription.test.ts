@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   extractTranscriptionText,
   parseEnvText,
+  resolveHermesAgentPython,
   resolveTranscriptionTarget,
 } from './stt-transcription'
 
@@ -28,12 +29,42 @@ describe('stt transcription helpers', () => {
 
     expect(result).toEqual({
       ok: true,
+      kind: 'remote',
       provider: 'groq',
       model: 'whisper-large-v3',
       language: 'fr',
       apiKey: 'groq-secret',
       baseUrl: 'https://api.groq.com/openai/v1',
     })
+  })
+
+  it('resolves local transcription when Hermes python is available', () => {
+    const pythonPath = resolveHermesAgentPython(
+      process.env.HERMES_HOME || `${process.env.HOME}/.hermes`,
+    )
+    if (!pythonPath) {
+      return
+    }
+
+    const result = resolveTranscriptionTarget(
+      {
+        stt: {
+          provider: 'local',
+          local: { model: 'base', language: 'zh' },
+        },
+      },
+      { HERMES_HOME: process.env.HERMES_HOME || `${process.env.HOME}/.hermes` },
+      {},
+    )
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.kind).toBe('local')
+      expect(result.provider).toBe('local')
+      expect(result.model).toBe('base')
+      expect(result.language).toBe('zh')
+      expect(result.pythonPath).toBe(pythonPath)
+    }
   })
 
   it('returns an actionable error when Groq is configured without a key', () => {
@@ -51,6 +82,7 @@ describe('stt transcription helpers', () => {
 
   it('extracts text from OpenAI and choice-based transcription payloads', () => {
     expect(extractTranscriptionText({ text: 'bonjour' })).toBe('bonjour')
+    expect(extractTranscriptionText({ transcript: 'nihao' })).toBe('nihao')
     expect(
       extractTranscriptionText({
         choices: [{ message: { content: 'hola' } }],

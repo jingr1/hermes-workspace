@@ -3,11 +3,17 @@ import {
   detectAudioRecordingSupport,
   detectMicrophoneBrowserSupport,
   detectGetUserMediaSupport,
+  detectMicrophonePlatform,
   detectSpeechRecognitionSupport,
   formatMicrophoneAccessError,
+  formatSpeechRecognitionError,
   INSECURE_MICROPHONE_MESSAGE,
+  isCoarsePointerDevice,
   isMicrophoneContextSecure,
+  microphonePermissionHelpMessage,
+  primeAudioStreamFromUserGesture,
   requestAudioStream,
+  resolveAudioStream,
   resolveSpeechRecognitionLang,
 } from './voice-capture-support'
 
@@ -100,5 +106,48 @@ describe('voice capture support', () => {
   it('falls back to en-US when browser locale is missing', () => {
     vi.stubGlobal('navigator', {})
     expect(resolveSpeechRecognitionLang()).toBe('en-US')
+  })
+
+  it('detects coarse pointer touch devices', () => {
+    vi.stubGlobal('window', {
+      matchMedia: vi.fn(() => ({ matches: true })),
+    })
+    expect(isCoarsePointerDevice()).toBe(true)
+  })
+
+  it('returns iOS-specific microphone permission help', () => {
+    stubSecureWindow()
+    vi.stubGlobal('navigator', {
+      userAgent:
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
+    })
+    expect(detectMicrophonePlatform()).toBe('ios')
+    expect(microphonePermissionHelpMessage()).toContain('iPhone')
+    expect(
+      formatMicrophoneAccessError(
+        new DOMException('Permission denied', 'NotAllowedError'),
+      ),
+    ).toContain('Settings → Safari → Microphone')
+  })
+
+  it('explains network failures for speech recognition', () => {
+    expect(formatSpeechRecognitionError('network')).toContain('internet access')
+  })
+
+  it('reuses a primed getUserMedia promise from a user gesture', async () => {
+    stubSecureWindow()
+    const stream = { getTracks: () => [] } as MediaStream
+    const getUserMedia = vi.fn().mockResolvedValue(stream)
+    vi.stubGlobal('navigator', {
+      mediaDevices: { getUserMedia },
+    })
+    vi.stubGlobal('MediaRecorder', function MediaRecorder() {})
+
+    primeAudioStreamFromUserGesture()
+    expect(getUserMedia).toHaveBeenCalledTimes(1)
+
+    const resolved = await resolveAudioStream()
+    expect(resolved).toBe(stream)
+    expect(getUserMedia).toHaveBeenCalledTimes(1)
   })
 })

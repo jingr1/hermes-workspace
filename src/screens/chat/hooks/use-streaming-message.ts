@@ -1040,23 +1040,32 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
     ],
   )
 
-  const cancelStreaming = useCallback(() => {
-    if (
-      lifecyclePhaseRef.current === 'accepted' ||
-      lifecyclePhaseRef.current === 'active' ||
-      lifecyclePhaseRef.current === 'handoff'
-    ) {
-      transitionToHandoff()
-    }
-    if (eventSourceRef.current) {
-      eventSourceRef.current.abort()
-      eventSourceRef.current = null
-    }
-    finishedRef.current = lifecyclePhaseRef.current !== 'handoff'
-    if (lifecyclePhaseRef.current !== 'handoff') {
-      resetActiveStreamState()
-    }
-  }, [resetActiveStreamState, transitionToHandoff])
+  const cancelStreaming = useCallback(
+    (options?: { userStop?: boolean }) => {
+      const userStop = options?.userStop === true
+      if (
+        !userStop &&
+        (lifecyclePhaseRef.current === 'accepted' ||
+          lifecyclePhaseRef.current === 'active' ||
+          lifecyclePhaseRef.current === 'handoff')
+      ) {
+        transitionToHandoff()
+      }
+      if (eventSourceRef.current) {
+        eventSourceRef.current.abort()
+        eventSourceRef.current = null
+      }
+      if (userStop && activeRunIdRef.current) {
+        unregisterSendStreamRun(activeRunIdRef.current)
+        activeRunIdRef.current = null
+      }
+      finishedRef.current = userStop || lifecyclePhaseRef.current !== 'handoff'
+      if (userStop || lifecyclePhaseRef.current !== 'handoff') {
+        resetActiveStreamState()
+      }
+    },
+    [resetActiveStreamState, transitionToHandoff],
+  )
 
   const handoffActiveStreamForProfileSwitch = useCallback(async () => {
     const phase = lifecyclePhaseRef.current

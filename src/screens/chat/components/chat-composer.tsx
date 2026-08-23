@@ -71,8 +71,11 @@ import { useVoiceInput } from '@/hooks/use-voice-input'
 import { useVoiceRecorder } from '@/hooks/use-voice-recorder'
 import {
   detectMicrophoneBrowserSupport,
+  detectSpeechRecognitionSupport,
   INSECURE_MICROPHONE_MESSAGE,
+  isCoarsePointerDevice,
   isMicrophoneContextSecure,
+  primeAudioStreamFromUserGesture,
 } from '@/lib/voice-capture-support'
 import { toast } from '@/components/ui/toast'
 import {
@@ -1809,12 +1812,10 @@ function ChatComposerComponent({
     [persistDraft],
   )
 
+  const dictationDraftRef = useRef('')
+
   const transcribeVoiceBlob = useCallback(
     async (blob: Blob) => {
-      if (!useRemoteStt) {
-        throw new Error('Remote STT is not enabled for this profile.')
-      }
-
       const form = new FormData()
       const extension = blob.type.includes('mp4') ? 'mp4' : 'webm'
       form.set('file', blob, `voice-input.${extension}`)
@@ -1833,7 +1834,7 @@ function ChatComposerComponent({
       }
       return typeof payload.text === 'string' ? payload.text : ''
     },
-    [useRemoteStt],
+    [],
   )
 
   // Voice input (tap = speech-to-text)
@@ -1841,15 +1842,30 @@ function ChatComposerComponent({
     transcribe: useRemoteStt ? transcribeVoiceBlob : undefined,
     onResult: useCallback(
       (text: string) => {
-        appendTextToDraft(text)
+        const normalized = text.trim()
+        if (!normalized) return
+        const base = dictationDraftRef.current
+        const next = base ? `${base} ${normalized}` : normalized
+        setValue(next)
+        persistDraft(next)
+        dictationDraftRef.current = next.trim()
       },
-      [appendTextToDraft],
+      [persistDraft],
+    ),
+    onInterim: useCallback(
+      (text: string) => {
+        const base = dictationDraftRef.current
+        const next = base ? `${base} ${text}` : text
+        setValue(next)
+        persistDraft(next)
+      },
+      [persistDraft],
     ),
     onError: useCallback(
       (error: string) => {
         const hint =
           remoteSttError && !useRemoteStt
-            ? `${error} Remote STT (${sttProvider}) is not ready: ${remoteSttError}`
+            ? `${error} ${sttProvider === 'local' ? 'Local STT' : `Remote STT (${sttProvider})`} is not ready: ${remoteSttError}`
             : error || 'Voice transcription failed'
         toast(hint, { type: 'error' })
       },
@@ -1917,32 +1933,10 @@ function ChatComposerComponent({
 
   const micCaptureAvailable = voiceInput.isSupported || voiceRecorder.isSupported
   const micBlockedByInsecureContext = !micContextSecure
-  const handleMicPointerDown = useCallback(() => {
-    if (micBlockedByInsecureContext) return
-    isLongPressRef.current = false
-    // Start long-press timer for voice note recording (only if not already doing voice-to-text)
-    if (!voiceInput.isListening && !voiceRecorder.isRecording) {
-      longPressTimerRef.current = setTimeout(() => {
-        isLongPressRef.current = true
-        voiceRecorder.start()
-      }, 500)
-    }
-  }, [micBlockedByInsecureContext, voiceRecorder, voiceInput.isListening])
-  const handleMicPointerUp = useCallback(() => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current)
-      longPressTimerRef.current = null
-    }
-    if (isLongPressRef.current) {
-      // Was a long press — stop voice note recording
-      voiceRecorder.stop()
-      isLongPressRef.current = false
-      skipMicClickRef.current = true
-    }
-    // Short taps are handled by onClick for voice-to-text toggle
-  }, [voiceRecorder])
+  const micUsesLongPress = !isMobileViewport && !isCoarsePointerDevice()
+  const touchMicHandledRef = useRef(false)
 
-  const handleMicClick = useCallback(() => {
+  const handleMicActivate = useCallback(() => {
     if (micBlockedByInsecureContext) {
       toast(INSECURE_MICROPHONE_MESSAGE, { type: 'error' })
       return
@@ -1953,19 +1947,113 @@ function ChatComposerComponent({
     }
     if (voiceInput.isListening) {
       voiceInput.stop()
+      dictationDraftRef.current = ''
       return
     }
     if (voiceRecorder.isRecording) {
       voiceRecorder.stop()
       return
     }
-    if (voiceInput.isSupported) {
+
+    dictationDraftRef.current = value.trim()
+
+    if (useRemoteStt && voiceInput.isSupported) {
       voiceInput.start()
       return
     }
-    // Desktop Safari has no Web Speech API — tap records a voice note instead.
-    voiceRecorder.start()
-  }, [micBlockedByInsecureContext, voiceInput, voiceRecorder])
+
+    if (sttProvider === 'local' && !useRemoteStt) {
+      toast(
+        remoteSttError ||
+          'Local STT needs faster-whisper on the Mac. Run `hermes doctor` to install it.',
+        { type: 'error' },
+      )
+      return
+    }
+
+    if (detectSpeechRecognitionSupport()) {
+      voiceInput.start()
+      return
+    }
+
+    if (voiceRecorder.isSupported) {
+      voiceRecorder.start()
+      return
+    }
+
+    const hint =
+      remoteSttError && !useRemoteStt
+        ? sttProvider === 'local'
+          ? `Local STT is not ready: ${remoteSttError}`
+          : `Voice input needs OpenAI/Groq STT: ${remoteSttError}`
+        : 'Voice input is not supported in this browser'
+    toast(hint, { type: 'error' })
+  }, [
+    micBlockedByInsecureContext,
+    remoteSttError,
+    sttProvider,
+    useRemoteStt,
+    voiceInput,
+    voiceRecorder,
+  ])
+
+  const handleMicPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      if (micBlockedByInsecureContext) return
+
+      if (event.pointerType === 'touch' || isCoarsePointerDevice()) {
+        touchMicHandledRef.current = true
+        if (voiceInput.isListening || voiceRecorder.isRecording) {
+          handleMicActivate()
+          return
+        }
+        primeAudioStreamFromUserGesture()
+        handleMicActivate()
+        return
+      }
+
+      if (!micUsesLongPress) return
+      isLongPressRef.current = false
+      if (!voiceInput.isListening && !voiceRecorder.isRecording) {
+        longPressTimerRef.current = setTimeout(() => {
+          isLongPressRef.current = true
+          primeAudioStreamFromUserGesture()
+          voiceRecorder.start()
+        }, 500)
+      }
+    },
+    [
+      handleMicActivate,
+      micBlockedByInsecureContext,
+      micUsesLongPress,
+      useRemoteStt,
+      voiceRecorder,
+      voiceInput.isListening,
+    ],
+  )
+  const handleMicPointerUp = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+    if (isLongPressRef.current) {
+      voiceRecorder.stop()
+      isLongPressRef.current = false
+      skipMicClickRef.current = true
+    }
+  }, [voiceRecorder])
+
+  const handleMicClick = useCallback(
+    (event?: React.MouseEvent<HTMLButtonElement>) => {
+      if (touchMicHandledRef.current) {
+        touchMicHandledRef.current = false
+        event?.preventDefault()
+        return
+      }
+      handleMicActivate()
+    },
+    [handleMicActivate],
+  )
 
   const handleAbort = useCallback(
     function handleAbort() {
@@ -1997,10 +2085,22 @@ function ChatComposerComponent({
     : voiceRecorder.isRecording
       ? `Recording… ${Math.round(voiceRecorder.durationMs / 1000)}s`
       : voiceInput.isListening
-        ? 'Listening — tap to stop'
-        : voiceInput.isSupported
-          ? 'Tap: dictate · Hold: voice note'
-          : 'Tap to record a voice note'
+        ? useRemoteStt
+          ? sttProvider === 'local'
+            ? 'Recording — tap again to transcribe on Mac'
+            : 'Recording — tap again to transcribe'
+          : 'Listening — tap to stop'
+        : useRemoteStt
+          ? isMobileViewport
+            ? sttProvider === 'local'
+              ? 'Tap to record · tap again to transcribe on Mac'
+              : 'Tap to record · tap again to transcribe'
+            : 'Tap: dictate · Hold: voice note'
+          : detectSpeechRecognitionSupport()
+            ? isMobileViewport
+              ? 'Tap to dictate · tap again to stop'
+              : 'Tap: dictate · Hold: voice note'
+            : 'Tap to record a voice note'
 
   const handleOpenAttachmentPicker = useCallback(
     function handleOpenAttachmentPicker(
@@ -2420,7 +2520,7 @@ function ChatComposerComponent({
               />
 
               {/* Right side: context / stop / send / mic */}
-              <div className="flex shrink-0 items-center gap-1">
+              <div className="relative z-[2] flex shrink-0 items-center gap-1">
                 <ContextIndicator
                   sessionId={sessionKey}
                   refreshToken={contextRefreshToken}
@@ -2444,7 +2544,7 @@ function ChatComposerComponent({
                     title={micTooltip}
                     disabled={disabled}
                     className={cn(
-                      'size-9 rounded-full flex items-center justify-center relative transition-all duration-150 select-none',
+                      'size-9 rounded-full flex items-center justify-center relative transition-all duration-150 select-none touch-manipulation',
                       micBlockedByInsecureContext
                         ? 'text-primary-400 bg-neutral-100 opacity-60 dark:bg-white/10'
                         : voiceRecorder.isRecording
@@ -3182,7 +3282,7 @@ function ChatComposerComponent({
                       size="icon-sm"
                       variant="ghost"
                       className={cn(
-                        'rounded-lg transition-colors select-none',
+                        'rounded-lg transition-colors select-none touch-manipulation',
                         micBlockedByInsecureContext
                           ? 'text-primary-400 opacity-60 hover:bg-transparent'
                           : voiceRecorder.isRecording

@@ -2,11 +2,16 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
+  clearPrimedAudioStream,
   createAudioRecorder,
   detectAudioRecordingSupport,
+  detectGetUserMediaSupport,
   detectSpeechRecognitionSupport,
   formatMicrophoneAccessError,
-  requestAudioStream,
+  formatSpeechRecognitionError,
+  isCoarsePointerDevice,
+  releaseHeldAudioStream,
+  resolveAudioStream,
   resolveSpeechRecognitionLang,
   startAudioRecorder,
 } from '@/lib/voice-capture-support'
@@ -42,12 +47,6 @@ function getSpeechRecognition(): SpeechRecognitionConstructor | null {
   return win.SpeechRecognition ?? win.webkitSpeechRecognition ?? null
 }
 
-/** Web Speech API does not always surface mic permission in site settings; preflight getUserMedia does. */
-async function ensureMicrophonePermission(): Promise<void> {
-  const stream = await requestAudioStream()
-  stream.getTracks().forEach((track) => track.stop())
-}
-
 function formatVoiceInputError(error: unknown): string {
   return formatMicrophoneAccessError(error)
 }
@@ -70,15 +69,47 @@ export function useVoiceInput(
   const recordedChunksRef = useRef<Array<Blob>>([])
   const recorderMimeTypeRef = useRef('audio/mp4')
   const [isSupported, setIsSupported] = useState(false)
+  const startInFlightRef = useRef(false)
+  const speechStartTokenRef = useRef(0)
+  const listenTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const speechStreamRef = useRef<MediaStream | null>(null)
+
+  const releaseSpeechStream = useCallback(() => {
+    releaseHeldAudioStream(speechStreamRef.current)
+    speechStreamRef.current = null
+  }, [])
 
   const callbacksRef = useRef({ onResult, onInterim, onError, transcribe })
   callbacksRef.current = { onResult, onInterim, onError, transcribe }
+
+  const clearListenTimeout = useCallback(() => {
+    if (listenTimeoutRef.current) {
+      clearTimeout(listenTimeoutRef.current)
+      listenTimeoutRef.current = null
+    }
+  }, [])
+
+  const resetSpeechRecognition = useCallback(() => {
+    const recognition = recognitionRef.current
+    recognitionRef.current = null
+    if (!recognition) return
+    try {
+      recognition.stop()
+    } catch {
+      /* */
+    }
+    try {
+      recognition.abort?.()
+    } catch {
+      /* */
+    }
+  }, [])
 
   useLayoutEffect(() => {
     setIsSupported(
       transcribe
         ? detectAudioRecordingSupport()
-        : detectSpeechRecognitionSupport() || detectAudioRecordingSupport(),
+        : detectSpeechRecognitionSupport(),
     )
   }, [transcribe])
 
@@ -92,6 +123,12 @@ export function useVoiceInput(
   }, [])
 
   const stop = useCallback(() => {
+    startInFlightRef.current = false
+    speechStartTokenRef.current += 1
+    clearListenTimeout()
+    clearPrimedAudioStream()
+    releaseSpeechStream()
+
     if (callbacksRef.current.transcribe) {
       const recorder = recorderRef.current
       if (!recorder || recorder.state === 'inactive') {
@@ -104,17 +141,21 @@ export function useVoiceInput(
       return
     }
 
-    const recognition = recognitionRef.current
-    if (!recognition) return
-    try {
-      recognition.stop()
-    } catch {
-      // already stopped
-    }
+    resetSpeechRecognition()
     setState('idle')
-  }, [cleanupRecorder])
+  }, [cleanupRecorder, clearListenTimeout, releaseSpeechStream, resetSpeechRecognition])
+
+  const armListenTimeout = useCallback(() => {
+    clearListenTimeout()
+    listenTimeoutRef.current = setTimeout(() => {
+      listenTimeoutRef.current = null
+      stop()
+    }, 60_000)
+  }, [clearListenTimeout, stop])
 
   const start = useCallback(async () => {
+    if (startInFlightRef.current) return
+
     if (callbacksRef.current.transcribe) {
       if (!detectAudioRecordingSupport()) {
         callbacksRef.current.onError?.('Audio recording not supported in this browser')
@@ -127,8 +168,15 @@ export function useVoiceInput(
         cleanupRecorder()
       }
 
+      // Create the getUserMedia promise immediately so mobile Chrome keeps
+      // the user-gesture grant even across await boundaries.
+      startInFlightRef.current = true
+      setState('listening')
+      armListenTimeout()
+      const streamPromise = resolveAudioStream()
+
       try {
-        const stream = await requestAudioStream()
+        const stream = await streamPromise
         const { recorder, mimeType } = createAudioRecorder(stream)
         recorderMimeTypeRef.current = mimeType
         recordedChunksRef.current = []
@@ -182,14 +230,22 @@ export function useVoiceInput(
         startAudioRecorder(recorder)
         return
       } catch (error) {
+        startInFlightRef.current = false
+        clearListenTimeout()
         setState('error')
         callbacksRef.current.onError?.(formatVoiceInputError(error))
         return
       }
     }
 
+    startInFlightRef.current = true
+    setState('listening')
+    armListenTimeout()
+
     const SpeechRecognition = getSpeechRecognition()
     if (!SpeechRecognition) {
+      startInFlightRef.current = false
+      clearListenTimeout()
       callbacksRef.current.onError?.(
         'Live dictation is not supported in Safari. Hold the mic to record a voice note, or set STT to Groq/OpenAI in Settings.',
       )
@@ -197,75 +253,119 @@ export function useVoiceInput(
       return
     }
 
-    try {
-      await ensureMicrophonePermission()
-    } catch (error) {
-      setState('error')
-      callbacksRef.current.onError?.(formatVoiceInputError(error))
-      return
-    }
+    const mobile = isCoarsePointerDevice()
 
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop()
-      } catch {
-        /* */
+    const beginRecognition = () => {
+      if (!startInFlightRef.current || recognitionRef.current) return
+
+      const recognition = new SpeechRecognition()
+      recognition.lang = lang
+      recognition.interimResults = interim
+      // Keep listening until the user taps stop — required for reliable Android UX.
+      recognition.continuous = true
+      recognition.maxAlternatives = 1
+
+      recognition.onstart = () => {
+        startInFlightRef.current = false
+        setState('listening')
+        setTranscript('')
+        armListenTimeout()
       }
-    }
 
-    const recognition = new SpeechRecognition()
-    recognition.lang = lang
-    recognition.interimResults = interim
-    recognition.continuous = true
-    recognition.maxAlternatives = 1
+      recognition.onresult = (event: any) => {
+        let finalText = ''
+        let interimText = ''
 
-    recognition.onstart = () => {
-      setState('listening')
-      setTranscript('')
-    }
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i]
+          if (!result?.[0]) continue
+          const text = result[0].transcript
+          if (result.isFinal) {
+            finalText += text
+          } else {
+            interimText += text
+          }
+        }
 
-    recognition.onresult = (event: any) => {
-      let finalText = ''
-      let interimText = ''
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i]
-        if (!result?.[0]) continue
-        const text = result[0].transcript
-        if (result.isFinal) {
-          finalText += text
-        } else {
-          interimText += text
+        if (finalText) {
+          setTranscript((prev) => `${prev}${finalText}`)
+          callbacksRef.current.onResult?.(finalText)
+        }
+        if (interimText) {
+          callbacksRef.current.onInterim?.(interimText)
         }
       }
 
-      if (finalText) {
-        setTranscript(finalText)
-        callbacksRef.current.onResult?.(finalText)
+      recognition.onerror = (event: any) => {
+        startInFlightRef.current = false
+        clearListenTimeout()
+        releaseSpeechStream()
+        if (event.error === 'aborted' || event.error === 'no-speech') {
+          setState('idle')
+          recognitionRef.current = null
+          return
+        }
+        setState('error')
+        callbacksRef.current.onError?.(formatSpeechRecognitionError(event.error))
+        recognitionRef.current = null
       }
-      if (interimText) {
-        setTranscript(interimText)
-        callbacksRef.current.onInterim?.(interimText)
-      }
-    }
 
-    recognition.onerror = (event: any) => {
-      if (event.error === 'aborted' || event.error === 'no-speech') {
+      recognition.onend = () => {
+        startInFlightRef.current = false
+        clearListenTimeout()
+        releaseSpeechStream()
         setState('idle')
-        return
+        recognitionRef.current = null
       }
-      setState('error')
-      callbacksRef.current.onError?.(formatVoiceInputError(event.error))
+
+      resetSpeechRecognition()
+
+      recognitionRef.current = recognition
+      try {
+        recognition.start()
+      } catch (error) {
+        startInFlightRef.current = false
+        clearListenTimeout()
+        setState('error')
+        callbacksRef.current.onError?.(formatVoiceInputError(error))
+        recognitionRef.current = null
+      }
     }
 
-    recognition.onend = () => {
-      setState('idle')
-      recognitionRef.current = null
+    // Android Chrome: request mic via getUserMedia in the pointerdown gesture,
+    // keep the capture open, then start SpeechRecognition in the same activation chain.
+    if (mobile && detectGetUserMediaSupport()) {
+      const startToken = speechStartTokenRef.current
+      const streamPromise = resolveAudioStream()
+
+      const attachStreamAndStart = (stream: MediaStream) => {
+        if (startToken !== speechStartTokenRef.current) {
+          releaseHeldAudioStream(stream)
+          return
+        }
+        releaseSpeechStream()
+        speechStreamRef.current = stream
+        beginRecognition()
+      }
+
+      void streamPromise
+        .then(attachStreamAndStart)
+        .catch((error) => {
+          if (startToken !== speechStartTokenRef.current) return
+          startInFlightRef.current = false
+          clearListenTimeout()
+          releaseSpeechStream()
+          setState('error')
+          callbacksRef.current.onError?.(formatVoiceInputError(error))
+        })
+
+      // If mic was already allowed, start immediately in the gesture turn.
+      beginRecognition()
+      return
     }
 
-    recognitionRef.current = recognition
-    recognition.start()
-  }, [cleanupRecorder, interim, lang])
+    beginRecognition()
+  }, [armListenTimeout, cleanupRecorder, clearListenTimeout, interim, lang, releaseSpeechStream, resetSpeechRecognition, stop])
 
   const toggle = useCallback(() => {
     if (state === 'listening') {
@@ -277,13 +377,9 @@ export function useVoiceInput(
 
   useEffect(() => {
     return () => {
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.stop()
-        } catch {
-          /* */
-        }
-      }
+      clearListenTimeout()
+      resetSpeechRecognition()
+      releaseSpeechStream()
       if (recorderRef.current) {
         try {
           recorderRef.current.stop()
@@ -293,7 +389,7 @@ export function useVoiceInput(
       }
       cleanupRecorder()
     }
-  }, [cleanupRecorder])
+  }, [cleanupRecorder, clearListenTimeout, releaseSpeechStream, resetSpeechRecognition])
 
   return {
     state,

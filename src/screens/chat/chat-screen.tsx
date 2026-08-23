@@ -2701,6 +2701,8 @@ export function ChatScreen({
   )
 
   const handleAbortStreaming = useCallback(() => {
+    if (isMobile) hapticTap()
+
     const activeSend = activeSendRef.current
     if (activeSend?.clientId) {
       updateHistoryMessageByClientIdEverywhere(
@@ -2713,11 +2715,17 @@ export function ChatScreen({
       )
     }
     activeSendRef.current = null
-    cancelStreaming()
+    cancelStreaming({ userStop: true })
+    clearCompletedStreaming()
     setSending(false)
-    setPendingGeneration(false)
-    setWaitingForResponse(false)
-  }, [cancelStreaming, queryClient])
+    streamFinish()
+  }, [
+    cancelStreaming,
+    clearCompletedStreaming,
+    isMobile,
+    queryClient,
+    streamFinish,
+  ])
 
   const runPaletteSlashCommand = useCallback(
     (command: string) => {

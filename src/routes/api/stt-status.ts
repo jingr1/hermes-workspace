@@ -1,7 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../server/auth-middleware'
-import { getConfig } from '../../server/claude-api'
+import {
+  readHermesConfigFiles,
+  resolveHermesConfigPaths,
+} from '../../server/hermes-config-store'
 import { resolveTranscriptionTarget } from '../../server/stt-transcription'
 
 export const Route = createFileRoute('/api/stt-status')({
@@ -12,7 +15,8 @@ export const Route = createFileRoute('/api/stt-status')({
           return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
         }
 
-        const config = await getConfig()
+        const paths = resolveHermesConfigPaths()
+        const { config } = readHermesConfigFiles(paths)
         const stt =
           config.stt && typeof config.stt === 'object' && !Array.isArray(config.stt)
             ? (config.stt as Record<string, unknown>)

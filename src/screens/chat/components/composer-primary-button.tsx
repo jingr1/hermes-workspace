@@ -2,7 +2,7 @@
 
 import { ArrowUp02Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { memo } from 'react'
+import { memo, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import {
   type ComposerPrimaryAction,
@@ -25,8 +25,9 @@ function ComposerPrimaryButtonComponent({
   const label = composerPrimaryActionLabel(action)
   const sizeClass = compact ? 'size-9' : 'size-[34px]'
   const iconSize = compact ? 18 : 16
+  const touchHandledRef = useRef(false)
 
-  const handleClick = () => {
+  const activate = () => {
     if (isDisabled) return
     if (isStop) {
       onStop()
@@ -35,15 +36,33 @@ function ComposerPrimaryButtonComponent({
     onSend()
   }
 
+  const handlePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (isDisabled || event.pointerType !== 'touch') return
+    event.preventDefault()
+    event.stopPropagation()
+    touchHandledRef.current = true
+    activate()
+  }
+
+  const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation()
+    if (touchHandledRef.current) {
+      touchHandledRef.current = false
+      return
+    }
+    activate()
+  }
+
   return (
     <button
       type="button"
       onClick={handleClick}
+      onPointerDown={handlePointerDown}
       disabled={isDisabled}
       aria-label={label}
       title={label}
       className={cn(
-        'inline-flex shrink-0 items-center justify-center rounded-full border-0 text-white transition-all duration-150',
+        'relative z-[1] inline-flex shrink-0 touch-manipulation items-center justify-center rounded-full border-0 text-white transition-all duration-150',
         sizeClass,
         isStop
           ? 'bg-red-500 shadow-[0_2px_10px_rgba(0,0,0,0.18)] hover:brightness-110 active:scale-95'

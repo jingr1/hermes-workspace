@@ -2,15 +2,18 @@ import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../server/auth-middleware'
 import {
+  readHermesConfigFiles,
+  resolveHermesConfigPaths,
+} from '../../server/hermes-config-store'
+import {
   getClientIp,
   rateLimit,
   rateLimitResponse,
   safeErrorMessage,
 } from '../../server/rate-limit'
-import { getConfig } from '../../server/claude-api'
 import {
-  extractTranscriptionText,
   resolveTranscriptionTarget,
+  transcribeUploadedAudio,
 } from '../../server/stt-transcription'
 
 const MAX_AUDIO_UPLOAD_BYTES = 25 * 1024 * 1024
@@ -52,49 +55,17 @@ export const Route = createFileRoute('/api/transcribe')({
             )
           }
 
-          const config = await getConfig()
+          const paths = resolveHermesConfigPaths()
+          const { config } = readHermesConfigFiles(paths)
           const target = resolveTranscriptionTarget(config)
           if (target.ok === false) {
             return json({ ok: false, error: target.error }, { status: 400 })
           }
 
-          const upstreamForm = new FormData()
-          upstreamForm.set('file', file, file.name || 'voice-note.webm')
-          upstreamForm.set('model', target.model)
-          if (target.language) {
-            upstreamForm.set('language', target.language)
-          }
-
-          const upstream = await fetch(`${target.baseUrl}/audio/transcriptions`, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${target.apiKey}`,
-            },
-            body: upstreamForm,
-          })
-
-          const raw = await upstream.text()
-          if (!upstream.ok) {
-            return json(
-              {
-                ok: false,
-                error: raw || `Transcription request failed (${upstream.status}).`,
-              },
-              { status: upstream.status },
-            )
-          }
-
-          let parsed: unknown = { text: raw }
-          try {
-            parsed = raw ? JSON.parse(raw) : {}
-          } catch {
-            parsed = { text: raw }
-          }
-
-          const text = extractTranscriptionText(parsed)
+          const text = await transcribeUploadedAudio(file, target)
           if (!text) {
             return json(
-              { ok: false, error: 'Transcription provider returned no text.' },
+              { ok: false, error: 'Transcription returned no text.' },
               { status: 502 },
             )
           }

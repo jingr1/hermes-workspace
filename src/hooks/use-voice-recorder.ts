@@ -6,6 +6,7 @@ import {
   detectAudioRecordingSupport,
   formatMicrophoneAccessError,
   requestAudioStream,
+  resolveAudioStream,
   startAudioRecorder,
 } from '@/lib/voice-capture-support'
 
@@ -89,8 +90,10 @@ export function useVoiceRecorder(
     }
     cleanup()
 
+    const streamPromise = resolveAudioStream()
+
     try {
-      const stream = await requestAudioStream()
+      const stream = await streamPromise
       const { recorder, mimeType } = createAudioRecorder(stream)
       mimeTypeRef.current = mimeType
       chunksRef.current = []
