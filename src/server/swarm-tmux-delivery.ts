@@ -97,6 +97,14 @@ const SHELL_COMMANDS = /^(bash|sh|zsh|fish|dash|login)$/i
 const BRACKETED_PASTE_START = '\x1b[200~'
 const BRACKETED_PASTE_END = '\x1b[201~'
 
+/** Use the default tmux server for Swarm I/O — never inherit TMUX from a hosting session. */
+function tmuxExecEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env }
+  delete env.TMUX
+  delete env.TMUX_PANE
+  return env
+}
+
 /** Explicit first-pane target. Bare session names can fail with "can't find pane". */
 export function tmuxPaneTarget(sessionName: string): string {
   return sessionName.includes(':') ? sessionName : `${sessionName}:0.0`
@@ -129,7 +137,13 @@ export async function tmuxPasteWithBracketedPaste(
   const bufferName = `swarm-bp-${process.pid}-${Date.now().toString(36)}`
   const loaded = await execFileAsync(tmuxBin, ['load-buffer', '-b', bufferName, '-'], 8_000, wrapped)
   if (!loaded.ok) throw new Error(`load-buffer failed: ${loaded.error}`)
-  const pasted = await execFileAsync(tmuxBin, ['paste-buffer', '-d', '-b', bufferName, '-t', target])
+  let pasted = await execFileAsync(tmuxBin, ['paste-buffer', '-d', '-b', bufferName, '-t', target])
+  if (!pasted.ok && /no buffer/i.test(pasted.error)) {
+    // Rare race or tmux-server mismatch — reload once and retry paste.
+    const reloaded = await execFileAsync(tmuxBin, ['load-buffer', '-b', bufferName, '-'], 8_000, wrapped)
+    if (!reloaded.ok) throw new Error(`load-buffer failed: ${reloaded.error}`)
+    pasted = await execFileAsync(tmuxBin, ['paste-buffer', '-d', '-b', bufferName, '-t', target])
+  }
   if (!pasted.ok) throw new Error(`paste-buffer failed: ${pasted.error}`)
 }
 
@@ -140,7 +154,7 @@ export async function tmuxSendLiteralEscape(
   sequence: string,
 ): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    const child = execFile(tmuxBin, ['send-keys', '-t', sessionName, '-l', sequence], (err) => {
+    const child = execFile(tmuxBin, ['send-keys', '-t', sessionName, '-l', sequence], { env: tmuxExecEnv() }, (err) => {
       if (err) reject(err)
       else resolve()
     })
@@ -156,7 +170,7 @@ function execFileAsync(
   input?: string,
 ): Promise<{ ok: true; stdout: string } | { ok: false; error: string }> {
   return new Promise((resolve) => {
-    const child = execFile(file, args, { timeout: timeoutMs }, (err, stdout, stderr) => {
+    const child = execFile(file, args, { timeout: timeoutMs, env: tmuxExecEnv() }, (err, stdout, stderr) => {
       if (err) {
         resolve({ ok: false, error: stderr || err.message })
         return

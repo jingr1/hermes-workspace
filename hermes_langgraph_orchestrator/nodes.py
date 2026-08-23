@@ -909,14 +909,17 @@ def _try_rule_classify(cp: WorkerCheckpoint) -> WorkerClassification | None:
         metadata["deliverable_type"] = "document"
     elif metadata.get("executor") == "developer" and "deliverable_type" not in metadata:
         metadata["deliverable_type"] = "code"
-    # Gate H
-    for line in raw.splitlines():
-        compact = line.lower().replace("_", "").replace(" ", "")
-        if compact.startswith("hardenoutcome:") or "harden_outcome:" in line.lower():
-            value = line.split(":", 1)[1].strip().lower()
-            if value in {"pass", "fail"}:
-                metadata["harden_outcome"] = value
-                break
+    # Gate H — only for post-implementation architect review, not initial design.
+    if metadata.get("deliverable_type"):
+        review_outcome = ""
+    else:
+        for line in raw.splitlines():
+            compact = line.lower().replace("_", "").replace(" ", "")
+            if compact.startswith("hardenoutcome:") or "harden_outcome:" in line.lower():
+                value = line.split(":", 1)[1].strip().lower()
+                if value in {"pass", "fail"}:
+                    metadata["harden_outcome"] = value
+                    break
 
     blocker_type = ""
     if state_label == "BLOCKED":

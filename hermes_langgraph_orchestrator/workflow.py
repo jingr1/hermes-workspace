@@ -241,6 +241,19 @@ def route_by_workflow(
     roster_ids = set(state.get("roster_snapshot", []))
     counts = transition_counts if transition_counts is not None else dict(state.get("transition_counts") or {})
 
+    # Gate H applies only after developer/writer has run. Stale review checkpoints
+    # left in tmux must not terminate the mission during initial architect design.
+    dispatched_workers = set(state.get("dispatched_workers", []) or [])
+    if (
+        classification.worker_id == "architect"
+        and classification.verdict == "DONE"
+        and "developer" not in dispatched_workers
+        and "writer" not in dispatched_workers
+    ):
+        classification.review_outcome = ""
+        if classification.metadata:
+            classification.metadata.pop("harden_outcome", None)
+
     # Gate H: workflows that declare harden_outcome on approved transitions require
     # HARDEN_OUTCOME after REVIEW_OUTCOME=approved (missing → human, not silent ship).
     if (

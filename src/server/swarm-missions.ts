@@ -133,7 +133,15 @@ function inferReviewRequired(task: string, rationale?: string | null): boolean {
   return /\b(code|patch(?:es|ed|ing)?|implement(?:ation|ed|ing)?|pr|benchmarks?)\b/i.test(`${task} ${rationale ?? ''}`)
 }
 
-const TERMINAL_ASSIGNMENT_STATES = new Set<SwarmMissionAssignmentState>(['done', 'cancelled'])
+const TERMINAL_ASSIGNMENT_STATES = new Set<SwarmMissionAssignmentState>([
+  'done',
+  'cancelled',
+  // checkpointed/blocked/needs_input are terminal for dispatch purposes: a worker
+  // may receive a new assignment on re-dispatch without inheriting stale checkpoints.
+  'checkpointed',
+  'blocked',
+  'needs_input',
+])
 
 function isTerminalAssignment(assignment: SwarmMissionAssignment): boolean {
   return TERMINAL_ASSIGNMENT_STATES.has(assignment.state)
