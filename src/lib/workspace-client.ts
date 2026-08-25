@@ -111,6 +111,7 @@ export function seedWorkspaceQueries(
     ['workspace', 'composer-context', profileName],
     catalog,
   )
+  // Phase-1 shallow tree (depth 0) — matches FileExplorerSidebar layered load.
   if (catalog.path) {
     void queryClient.prefetchQuery({
       queryKey: ['files', 'tree', profileName, catalog.path],
@@ -127,4 +128,12 @@ export async function prefetchProfileWorkspace(
 ): Promise<void> {
   const resolved = catalog ?? (await fetchWorkspaceCatalog(profileName))
   seedWorkspaceQueries(queryClient, profileName, resolved)
+  if (!resolved.path) return
+  // Await so callers that kick this off early actually warm the cache
+  // before the nested-lazy explorer mounts.
+  await queryClient.prefetchQuery({
+    queryKey: ['files', 'tree', profileName, resolved.path],
+    queryFn: () => fetchFileTree(profileName, 0),
+    staleTime: 30_000,
+  })
 }

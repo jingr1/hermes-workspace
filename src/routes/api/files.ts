@@ -15,7 +15,7 @@ import {
   requireJsonContentType,
   safeErrorMessage,
 } from '../../server/rate-limit'
-import { loadWorkspaceCatalog } from './workspace'
+import { resolveActiveWorkspacePath } from './workspace'
 import {
   deleteSshPath,
   listSshFileTree,
@@ -51,11 +51,7 @@ type FileEntry = {
  * that resolves to an absolute path outside the root. See #121.
  */
 async function getWorkspaceRoot(profileName?: string): Promise<string> {
-  const catalog = await loadWorkspaceCatalog(profileName)
-  if (!catalog.isValid || !catalog.path) {
-    throw new Error('No valid workspace selected')
-  }
-  return catalog.path
+  return resolveActiveWorkspacePath(profileName)
 }
 
 function getRemoteSshContext(profileName?: string) {

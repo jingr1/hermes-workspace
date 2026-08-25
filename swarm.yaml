@@ -5,7 +5,7 @@ workers:
     role: Swarm Orchestrator / Greenlight Gate
     specialty: mission routing, task decomposition, handoffs, proof contracts, human
       approval gates
-    model: moonshot-coding-plan/kimi-for-coding
+    model: tokenx/Kimi-K2.7-Code
     mission: Decompose missions into safe, proof-bearing work and route to the right
       specialist while preserving human greenlight control.
     profile: orchestrator
@@ -67,7 +67,7 @@ workers:
     role: Fact-Finding Research
     specialty: establish facts — competitive analysis, data validation, source
       tracing; wiki-first lookup (llm-wiki)
-    model: moonshot-coding-plan/kimi-for-coding
+    model: tokenx/Kimi-K2.7-Code
     mission: Produce evidence-backed factual research with brain-first context,
       external verification, explicit uncertainty, and full source trails. Do
       not make strategy judgments, recommendations, or direction choices — those
@@ -125,7 +125,7 @@ workers:
       selection); direction decisions (hypothesis stack, kill criteria,
       milestones); executor lane selection (developer | writer); review of
       implementation and content against design intent
-    model: moonshot-coding-plan/kimi-for-coding
+    model: tokenx/Kimi-K2.7-Code
     mission: Translate upstream strategy into decision-grade technical designs with
       explicit interfaces, data models, and tech choices. Own technical
       direction — hypothesis stack, kill criteria, and milestones. After the
@@ -136,8 +136,8 @@ workers:
       content) under a new architect decision. Review the chosen executor's
       output for design-intent fidelity and challenge researcher findings when
       evidence is weak. Do not collect primary facts (researcher), write
-      implementation code (developer), author audience deliverables (writer),
-      or make business strategy beyond the technical scope.
+      implementation code (developer), author audience deliverables (writer), or
+      make business strategy beyond the technical scope.
     profile: architect
     modes:
       - design
@@ -197,13 +197,12 @@ workers:
     role: Implementation & Testing Agent
     specialty: implement from approved design specs — feature code, tests, build
       verification
-    model: moonshot-coding-plan/kimi-for-coding
+    model: tokenx/Kimi-K2.7-Code
     mission: Implement approved technical specifications with tests,
       evidence-bearing checkpoints, and verified builds when architect sets
-      executor=developer. Hand off to architect for design-intent review. Do
-      not run in parallel with writer on the same mission step, change
-      architecture, make design decisions, or skip tests — escalate spec gaps
-      to architect.
+      executor=developer. Hand off to architect for design-intent review. Do not
+      run in parallel with writer on the same mission step, change architecture,
+      make design decisions, or skip tests — escalate spec gaps to architect.
     profile: developer
     modes:
       - implement
@@ -256,14 +255,13 @@ workers:
     role: Content & Visual Deliverables Agent
     specialty: produce visual and narrative deliverables from approved specs —
       slides, HTML, video scripts, social copy, documents
-    model: moonshot-coding-plan/kimi-for-coding
+    model: tokenx/Kimi-K2.7-Code
     mission: Transform approved designs and research into polished, audience-ready
       deliverables when architect sets executor=writer. Follow the architect's
       specifications for structure, tone, and format. Hand off to architect for
       quality and intent review. Do not run in parallel with developer on the
-      same mission step, make architecture decisions, change technical facts,
-      or skip accessibility/brand constraints — escalate content gaps to
-      architect.
+      same mission step, make architecture decisions, change technical facts, or
+      skip accessibility/brand constraints — escalate content gaps to architect.
     profile: writer
     modes:
       - author
@@ -325,7 +323,7 @@ workers:
     name: Learning
     role: Retrospective / Documentation
     specialty: mission retrospectives, documentation, knowledge capture
-    model: moonshot-coding-plan/kimi-for-coding
+    model: tokenx/Kimi-K2.7-Code
     mission: Capture mission outcomes, lessons learned, and durable documentation
       after implementation and review complete.
     profile: learning

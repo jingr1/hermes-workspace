@@ -201,6 +201,13 @@ export function useProfiles() {
     queryClient,
   ])
 
+  // Kick off workspace + files as soon as we know the profile (cached name is
+  // enough). Don't wait for activate / folders — that was starving the explorer.
+  useEffect(() => {
+    if (!workspaceProfileName || activateMutation.isPending) return
+    void prefetchProfileWorkspace(queryClient, workspaceProfileName)
+  }, [workspaceProfileName, activateMutation.isPending, queryClient])
+
   const activeProfile = profilesQuery.data?.profiles?.find(
     (profile) => profile.name === activeProfileName,
   )
