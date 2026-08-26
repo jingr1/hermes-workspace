@@ -18,13 +18,18 @@ describe('file explorer workspace refresh', () => {
   it('paints top-level then prefetches depth 3 in the background', () => {
     expect(sidebarSource).toContain('fetchFileTree(workspaceProfileName, 0)')
     expect(sidebarSource).toContain('fetchFileTree(workspaceProfileName, 3)')
+    expect(sidebarSource).toContain('fileTreeQueryKey(workspaceProfileName, workspacePath, 0)')
+    expect(sidebarSource).toContain('fileTreeQueryKey(workspaceProfileName, workspacePath, 3)')
+    expect(sidebarSource).toContain('deepQuery.data ?? filesQuery.data')
     expect(sidebarSource).not.toContain('loadFolderChildren')
     expect(sidebarSource).not.toContain('patchFileTreeChildren')
   })
 
   it('shows loading instead of empty while the tree is fetching', () => {
     expect(sidebarSource).toContain('showEmpty')
-    expect(sidebarSource).toContain('entries.length === 0 && filesQuery.isFetching')
+    expect(sidebarSource).toContain(
+      'filesQuery.isFetching || deepQuery.isFetching',
+    )
   })
 
   it('docks on the right by default with a left border', () => {

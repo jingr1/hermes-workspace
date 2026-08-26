@@ -50,6 +50,15 @@ export async function fetchActiveWorkspace(
   }
 }
 
+/** Query key includes maxDepth so shallow prefetch cannot overwrite a deep tree. */
+export function fileTreeQueryKey(
+  profileName: string,
+  workspacePath: string,
+  maxDepth: number,
+) {
+  return ['files', 'tree', profileName, workspacePath, maxDepth] as const
+}
+
 export async function fetchFileTree(
   profileName: string,
   maxDepth = 1,
@@ -111,11 +120,18 @@ export function seedWorkspaceQueries(
     ['workspace', 'composer-context', profileName],
     catalog,
   )
-  // Phase-1 shallow tree (depth 0) — matches FileExplorerSidebar layered load.
+  // Phase-1 shallow tree (depth 0) — depth is part of the key so this never
+  // clobbers a depth-3 cache entry used by the explorer.
   if (catalog.path) {
     void queryClient.prefetchQuery({
-      queryKey: ['files', 'tree', profileName, catalog.path],
+      queryKey: fileTreeQueryKey(profileName, catalog.path, 0),
       queryFn: () => fetchFileTree(profileName, 0),
+      staleTime: 30_000,
+    })
+    // Kick deep tree early; explorer prefers this when ready.
+    void queryClient.prefetchQuery({
+      queryKey: fileTreeQueryKey(profileName, catalog.path, 3),
+      queryFn: () => fetchFileTree(profileName, 3),
       staleTime: 30_000,
     })
   }
@@ -129,10 +145,9 @@ export async function prefetchProfileWorkspace(
   const resolved = catalog ?? (await fetchWorkspaceCatalog(profileName))
   seedWorkspaceQueries(queryClient, profileName, resolved)
   if (!resolved.path) return
-  // Await so callers that kick this off early actually warm the cache
-  // before the nested-lazy explorer mounts.
+  // Await shallow so first paint is warm before nested-lazy explorer mounts.
   await queryClient.prefetchQuery({
-    queryKey: ['files', 'tree', profileName, resolved.path],
+    queryKey: fileTreeQueryKey(profileName, resolved.path, 0),
     queryFn: () => fetchFileTree(profileName, 0),
     staleTime: 30_000,
   })

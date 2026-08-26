@@ -1,5 +1,3 @@
-// Module-level local model override — set by composer when user picks a local model
-// Avoids prop threading. Reset when switching back to cloud models.
 import {
   lazy,
   Suspense,
@@ -106,15 +104,6 @@ import { SEARCH_MODAL_EVENTS } from '@/hooks/use-search-modal'
 import { SIDEBAR_TOGGLE_EVENT } from '@/hooks/use-global-shortcuts'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { TerminalPanel } from '@/components/terminal-panel'
-
-const FileExplorerSidebar = lazy(async () => {
-  const module = await import('@/components/file-explorer')
-  return { default: module.FileExplorerSidebar }
-})
-const AgentViewPanel = lazy(async () => {
-  const module = await import('@/components/agent-view/agent-view-panel')
-  return { default: module.AgentViewPanel }
-})
 import { useTerminalPanelStore } from '@/stores/terminal-panel-store'
 import { useModelSuggestions } from '@/hooks/use-model-suggestions'
 import { ModelSuggestionToast } from '@/components/model-suggestion-toast'
@@ -131,10 +120,30 @@ import { useResearchCard } from '@/hooks/use-research-card'
 // MOBILE_TAB_BAR_OFFSET removed — tab bar always hidden in chat
 import { useTapDebug } from '@/hooks/use-tap-debug'
 import { useChatMode } from '@/hooks/use-chat-mode'
-import {  useChatActivityStore } from '@/stores/chat-activity-store'
+import { useChatActivityStore } from '@/stores/chat-activity-store'
+import { _localModelOverride } from '@/screens/chat/local-model-override'
 
-export let _localModelOverride = ''
-export function setLocalModelOverride(model: string) { _localModelOverride = model }
+const FileExplorerSidebar = lazy(async () => {
+  const module = await import('@/components/file-explorer')
+  return { default: module.FileExplorerSidebar }
+})
+const loadAgentViewPanel = () =>
+  import('@/components/agent-view/agent-view-panel').then((module) => ({
+    default: module.AgentViewPanel,
+  }))
+// Retry once — Vite HMR/program reload can briefly fail dynamic imports.
+const AgentViewPanel = lazy(() =>
+  loadAgentViewPanel().catch(
+    () =>
+      new Promise<Awaited<ReturnType<typeof loadAgentViewPanel>>>((resolve) => {
+        window.setTimeout(() => {
+          resolve(loadAgentViewPanel())
+        }, 250)
+      }),
+  ),
+)
+// Warm the chunk early so opening chat does not race a cold transform.
+void import('@/components/agent-view/agent-view-panel')
 
 type ChatScreenProps = {
   activeFriendlyId: string
