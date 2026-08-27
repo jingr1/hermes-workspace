@@ -126,6 +126,11 @@ function activeProfileHome(): string {
 let hermesStateRootsCache: { roots: Array<string>; at: number } | null = null
 const HERMES_STATE_ROOTS_TTL_MS = 5_000
 
+/** Test hook: flush the cached state roots (tests swap HERMES_HOME per case). */
+export function __resetHermesStateRootsForTests(): void {
+  hermesStateRootsCache = null
+}
+
 function hermesStateRoots(): Array<string> {
   const now = Date.now()
   if (

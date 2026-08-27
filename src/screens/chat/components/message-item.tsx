@@ -2483,14 +2483,6 @@ function MessageItemComponent({
         : section,
     )
   }, [inlineToolSections, effectiveIsStreaming])
-  const inlineRenderPlan = useMemo(
-    () => buildInlineToolRenderPlan(message, finalToolSections),
-    [message, finalToolSections],
-  )
-  const compactInlineRenderPlan = useMemo(
-    () => compactInlineToolRenderPlan(inlineRenderPlan),
-    [inlineRenderPlan],
-  )
   const hasToolCalls = finalToolSections.length > 0
   const shouldRenderMessageBubble =
     hasText ||
@@ -2606,32 +2598,17 @@ function MessageItemComponent({
         !isUser && isNew && 'animate-[message-fade-in_0.4s_ease-out]',
       )}
     >
-      {/* Grouped tool card above the assistant bubble. Only show once there
-          is real assistant text in the bubble. While streaming with no text,
-          the legacy ThinkingBubble in chat-message-list owns the visual and
-          renders its own branched TuiActivityCard so we don't double up.
-          When done streaming, show a compact tool-count chip instead of
-          the full expandable card. */}
-      {!isUser &&
-      finalToolSections.length > 0 &&
-      (hasText || !effectiveIsStreaming) ? (
+      {/* Completed turns: compact tool-count chip above the bubble. Streaming
+          activity renders AFTER the bubble (below) so assistant narration stays
+          chronological — hoist-above made planning text look pinned under WORKING. */}
+      {!isUser && !effectiveIsStreaming && finalToolSections.length > 0 ? (
         <div className="w-full max-w-[var(--chat-content-max-width)] flex">
           <div className="w-6 shrink-0" aria-hidden />
           <div className="min-w-0 flex-1">
-            {effectiveIsStreaming ? (
-              <TuiActivityCard
-                toolSections={finalToolSections}
-                thinking={null}
-                isStreaming={effectiveIsStreaming}
-                expandAll={expandAllToolSections}
-                formatLabel={formatToolDisplayLabel}
-                formatArg={keyArgLabel}
-              />
-            ) : (
-              <span className="inline-block text-[11px] text-primary-400 dark:text-primary-500 py-0.5 opacity-60">
-                {finalToolSections.length} tool{finalToolSections.length !== 1 ? 's' : ''} used
-              </span>
-            )}
+            <span className="inline-block text-[11px] text-primary-400 dark:text-primary-500 py-0.5 opacity-60">
+              {finalToolSections.length} tool
+              {finalToolSections.length !== 1 ? 's' : ''} used
+            </span>
           </div>
         </div>
       ) : null}
@@ -2870,6 +2847,26 @@ function MessageItemComponent({
           </div>
         </Message>
       )}
+      {/* Streaming: WORKING card under the text bubble. While there is no text
+          yet, chat-message-list ThinkingBubble owns the branched card. */}
+      {!isUser &&
+      effectiveIsStreaming &&
+      finalToolSections.length > 0 &&
+      hasText ? (
+        <div className="w-full max-w-[var(--chat-content-max-width)] flex">
+          <div className="w-6 shrink-0" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <TuiActivityCard
+              toolSections={finalToolSections}
+              thinking={thinking}
+              isStreaming={effectiveIsStreaming}
+              expandAll={expandAllToolSections}
+              formatLabel={formatToolDisplayLabel}
+              formatArg={keyArgLabel}
+            />
+          </div>
+        </div>
+      ) : null}
       {/* Bottom thinking bubble handles empty streaming states; avoid duplicate in-thread working copy. */}
       {hasAssistantMetadata ? (
         <div className="flex flex-wrap justify-end gap-x-2 gap-y-0.5 pl-10 pr-1 mt-0.5 font-mono text-[10px] tabular-nums text-primary-400 leading-relaxed">

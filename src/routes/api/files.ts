@@ -22,14 +22,27 @@ import {
   mkdirSshPath,
   readSshFile,
   readSshTerminalConfig,
+  remotePathIsDirectory,
   renameSshPath,
   writeSshFile,
+  zipSshFolder,
 } from '../../server/ssh-terminal'
+import {
+  openLocalPathInEditor,
+  openRemoteSshPathInEditor,
+  revealLocalPath,
+} from '../../server/workspace-os-open'
+import {
+  MAX_FOLDER_ZIP_BYTES,
+  MAX_FOLDER_ZIP_FILES,
+  zipLocalFolder,
+} from '../../server/workspace-zip'
 import {
   readProfileQueryParam,
   remoteWorkspaceContextForScope,
   workspaceProfileScope,
 } from '../../server/workspace-profile'
+import { ensureRemoteWorkspacePath } from '../../server/workspace-remote'
 
 const execFileAsync = promisify(execFile)
 
@@ -299,6 +312,26 @@ function getMimeType(filePath: string) {
       return 'text/javascript; charset=utf-8'
     case '.csv':
       return 'text/csv; charset=utf-8'
+    case '.mp3':
+      return 'audio/mpeg'
+    case '.wav':
+      return 'audio/wav'
+    case '.ogg':
+      return 'audio/ogg'
+    case '.m4a':
+      return 'audio/mp4'
+    case '.aac':
+      return 'audio/aac'
+    case '.flac':
+      return 'audio/flac'
+    case '.mp4':
+      return 'video/mp4'
+    case '.webm':
+      return 'video/webm'
+    case '.mov':
+      return 'video/quicktime'
+    case '.mkv':
+      return 'video/x-matroska'
     default:
       return 'application/octet-stream'
   }
@@ -346,6 +379,56 @@ export const Route = createFileRoute('/api/files')({
                     : path.posix.join(workspaceRoot, inputPath),
                 )
               : workspaceRoot
+
+            if (action === 'abspath') {
+              const abs = inputPath.trim()
+                ? path.posix.normalize(
+                    inputPath.startsWith('/')
+                      ? inputPath
+                      : path.posix.join(workspaceRoot, inputPath),
+                  )
+                : workspaceRoot
+              return json({
+                ok: true,
+                path: abs,
+                remote: true,
+              })
+            }
+
+            if (action === 'download-folder') {
+              try {
+                const zipBuf = await zipSshFolder({
+                  config: remote.config,
+                  workspaceRoot,
+                  folderPath: resolvedPath,
+                  maxFiles: MAX_FOLDER_ZIP_FILES,
+                  maxBytes: MAX_FOLDER_ZIP_BYTES,
+                })
+                const zipName = `${path.posix.basename(resolvedPath) || 'workspace'}.zip`
+                return new Response(new Uint8Array(zipBuf), {
+                  headers: {
+                    'Content-Type': 'application/zip',
+                    'Content-Disposition': `attachment; filename="${zipName}"`,
+                    'Cache-Control': 'no-store',
+                  },
+                })
+              } catch (err) {
+                const code =
+                  err && typeof err === 'object' && 'code' in err
+                    ? String((err as { code?: string }).code || '')
+                    : ''
+                if (code === 'MAX_FILES' || code === 'MAX_BYTES') {
+                  return json(
+                    { error: safeErrorMessage(err) },
+                    { status: 413 },
+                  )
+                }
+                return json(
+                  { error: safeErrorMessage(err) },
+                  { status: 500 },
+                )
+              }
+            }
 
             if (action === 'read') {
               const buffer = await readSshFile({
@@ -416,6 +499,40 @@ export const Route = createFileRoute('/api/files')({
 
           const resolvedPath = ensureWorkspacePath(inputPath, workspaceRoot)
 
+          if (action === 'abspath') {
+            return json({
+              ok: true,
+              path: resolvedPath,
+              remote: false,
+            })
+          }
+
+          if (action === 'download-folder') {
+            try {
+              const zipBuf = await zipLocalFolder(resolvedPath)
+              const zipName = `${path.basename(resolvedPath) || 'workspace'}.zip`
+              return new Response(zipBuf, {
+                headers: {
+                  'Content-Type': 'application/zip',
+                  'Content-Disposition': `attachment; filename="${zipName}"`,
+                  'Cache-Control': 'no-store',
+                },
+              })
+            } catch (err) {
+              const code =
+                err && typeof err === 'object' && 'code' in err
+                  ? String((err as { code?: string }).code || '')
+                  : ''
+              if (code === 'MAX_FILES' || code === 'MAX_BYTES') {
+                return json(
+                  { error: safeErrorMessage(err) },
+                  { status: 413 },
+                )
+              }
+              throw err
+            }
+          }
+
           if (action === 'read') {
             const buffer = await fs.readFile(resolvedPath)
             if (isImageFile(resolvedPath)) {
@@ -474,8 +591,9 @@ export const Route = createFileRoute('/api/files')({
         }
 
         try {
-          const workspaceRoot = await getWorkspaceRoot()
-          const remote = getRemoteSshContext()
+          const profile = readProfileQueryParam(request)
+          const workspaceRoot = await getWorkspaceRoot(profile)
+          const remote = getRemoteSshContext(profile)
           const contentType = request.headers.get('content-type') || ''
           if (!contentType.includes('multipart/form-data')) {
             const csrfCheck = requireJsonContentType(request)
@@ -490,12 +608,23 @@ export const Route = createFileRoute('/api/files')({
               }
               const file = form.get('file')
               const targetPath = String(form.get('path') || '')
+              const relativePath = String(form.get('relativePath') || '').replace(
+                /^[/\\]+/,
+                '',
+              )
               if (!(file instanceof File)) {
                 return json({ error: 'Missing file' }, { status: 400 })
               }
-              const destination = targetPath.endsWith('/')
-                ? path.posix.join(targetPath, path.posix.basename(file.name))
-                : targetPath || path.posix.join(workspaceRoot, file.name)
+              let destination: string
+              if (relativePath) {
+                destination = targetPath
+                  ? path.posix.join(targetPath, relativePath)
+                  : relativePath
+              } else {
+                destination = targetPath.endsWith('/')
+                  ? path.posix.join(targetPath, path.posix.basename(file.name))
+                  : targetPath || path.posix.join(workspaceRoot, file.name)
+              }
               const buffer = Buffer.from(await file.arrayBuffer())
               await writeSshFile({
                 config: remote.config,
@@ -519,6 +648,40 @@ export const Route = createFileRoute('/api/files')({
               unknown
             >
             const action = typeof body.action === 'string' ? body.action : 'write'
+            if (action === 'reveal') {
+              const abs = ensureRemoteWorkspacePath(
+                String(body.path || ''),
+                workspaceRoot,
+              )
+              return json({
+                ok: true,
+                mode: 'clipboard',
+                path: abs,
+                remote: true,
+              })
+            }
+            if (action === 'open-vscode') {
+              const abs = ensureRemoteWorkspacePath(
+                String(body.path || ''),
+                workspaceRoot,
+              )
+              const isDirectory = await remotePathIsDirectory({
+                config: remote.config,
+                workspaceRoot,
+                targetPath: abs,
+              })
+              await openRemoteSshPathInEditor({
+                host: remote.ssh.host,
+                user: remote.ssh.user,
+                remotePath: abs,
+                isDirectory,
+              })
+              return json({
+                ok: true,
+                path: toRemoteRelative(abs, workspaceRoot),
+                remote: true,
+              })
+            }
             if (action === 'mkdir') {
               const dirPath = String(body.path || '')
               await mkdirSshPath({
@@ -564,6 +727,10 @@ export const Route = createFileRoute('/api/files')({
             }
             const file = form.get('file')
             const targetPath = String(form.get('path') || '')
+            const relativePath = String(form.get('relativePath') || '').replace(
+              /^[/\\]+/,
+              '',
+            )
             if (!(file instanceof File)) {
               return json({ error: 'Missing file' }, { status: 400 })
             }
@@ -571,11 +738,19 @@ export const Route = createFileRoute('/api/files')({
               targetPath,
               workspaceRoot,
             )
-            const isDir = (await fs.stat(resolvedTarget)).isDirectory()
-            const destination = isDir
-              ? path.join(resolvedTarget, path.basename(file.name))
-              : resolvedTarget
-            ensureWorkspacePath(destination, workspaceRoot)
+            let destination: string
+            if (relativePath) {
+              destination = ensureWorkspacePath(
+                path.join(toRelative(resolvedTarget, workspaceRoot), relativePath),
+                workspaceRoot,
+              )
+            } else {
+              const isDir = (await fs.stat(resolvedTarget)).isDirectory()
+              destination = isDir
+                ? path.join(resolvedTarget, path.basename(file.name))
+                : resolvedTarget
+              ensureWorkspacePath(destination, workspaceRoot)
+            }
             await fs.mkdir(path.dirname(destination), { recursive: true })
             const buffer = Buffer.from(await file.arrayBuffer())
             await fs.writeFile(destination, buffer)
@@ -590,6 +765,30 @@ export const Route = createFileRoute('/api/files')({
             unknown
           >
           const action = typeof body.action === 'string' ? body.action : 'write'
+
+          if (action === 'reveal') {
+            const targetPath = ensureWorkspacePath(
+              String(body.path || ''),
+              workspaceRoot,
+            )
+            await revealLocalPath(targetPath)
+            return json({
+              ok: true,
+              path: toRelative(targetPath, workspaceRoot),
+            })
+          }
+
+          if (action === 'open-vscode') {
+            const targetPath = ensureWorkspacePath(
+              String(body.path || ''),
+              workspaceRoot,
+            )
+            await openLocalPathInEditor(targetPath)
+            return json({
+              ok: true,
+              path: toRelative(targetPath, workspaceRoot),
+            })
+          }
 
           if (action === 'mkdir') {
             const dirPath = ensureWorkspacePath(

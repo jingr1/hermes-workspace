@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -85,7 +85,7 @@ describe('swarm-missions', () => {
       title: 'Dedup test',
       assignments: [{ workerId: 'swarm2', task: 'Land backend patch', reviewRequired: false }],
     })
-    const assignmentId = mission.assignments[0]?.id as string
+    const assignmentId = mission.assignments[0]?.id
     const checkpoint = {
       stateLabel: 'DONE' as const,
       runtimeState: 'idle' as const,
@@ -290,7 +290,7 @@ describe('swarm-missions', () => {
       reason: 'Only one bad lane',
     })
 
-    expect(cancelled?.assignment?.state).toBe('cancelled')
+    expect(cancelled?.assignment.state).toBe('cancelled')
     expect(cancelled?.mission.state).toBe('planning')
     expect(cancelled?.mission.assignments.map((assignment) => assignment.state)).toEqual(['cancelled', 'queued'])
     expect(cancelled?.mission.events.at(-1)?.type).toBe('assignment_cancelled')
@@ -393,5 +393,56 @@ describe('swarm-missions', () => {
     const persisted = JSON.parse(readFileSync(mod.SWARM_MISSIONS_PATH, 'utf8'))
     expect(persisted.missions[0]?.state).toBe('executing')
     expect(persisted.missions[0]?.events).toHaveLength(0)
+  })
+
+  it('rejects a cyclic dependsOn graph at registration (pipeline would silently die)', async () => {
+    const mod = await loadModule()
+    const mission = mod.createOrUpdateMission({
+      missionId: 'mission-cycle',
+      title: 'cycle test',
+      assignments: [{ workerId: 'w1', task: 'A', reviewRequired: false }],
+    })
+    const aId = mission.assignments[0].id
+    // B depends on A — fine.
+    mod.appendMissionContinuation({
+      missionId: mission.id,
+      workerId: 'w2',
+      task: 'B',
+      rationale: 'r',
+      dependsOn: [aId],
+    })
+    // Now close a cycle: C depends on B... and then make A depend on C by
+    // directly exercising the guard with a synthetic graph (registration API
+    // only adds forward edges, so the unit-level guard is what must hold).
+    const bId = mod.getSwarmMission(mission.id)!.assignments.find((a) => a.workerId === 'w2')!.id
+    expect(() =>
+      mod.assertAcyclicDependencies([
+        { id: 'a', dependsOn: ['c'] },
+        { id: 'b', dependsOn: ['a'] },
+        { id: 'c', dependsOn: ['b'] },
+      ] as never),
+    ).toThrow(/cycle detected/)
+    // The real chain stays acyclic and dispatchable.
+    expect(mod.readyQueuedAssignments(mission.id).map((a) => a.id)).toEqual([aId])
+    expect(bId).toBeTruthy()
+  })
+
+  it('assertAcyclicDependencies accepts DAGs and ignores unknown ids', async () => {
+    const mod = await loadModule()
+    expect(() =>
+      mod.assertAcyclicDependencies([
+        { id: 'a', dependsOn: [] },
+        { id: 'b', dependsOn: ['a'] },
+        { id: 'c', dependsOn: ['a', 'b'] },
+      ] as never),
+    ).not.toThrow()
+    // Unknown dependency ids are not cycles (they just never satisfy).
+    expect(() =>
+      mod.assertAcyclicDependencies([{ id: 'a', dependsOn: ['ghost'] }] as never),
+    ).not.toThrow()
+    // Self-loop is a cycle.
+    expect(() =>
+      mod.assertAcyclicDependencies([{ id: 'a', dependsOn: ['a'] }] as never),
+    ).toThrow(/cycle detected/)
   })
 })

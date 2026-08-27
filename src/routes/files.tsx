@@ -5,7 +5,6 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import {
   Download01Icon,
   ExternalLink,
-  Folder01Icon,
 } from '@hugeicons/core-free-icons'
 import { Markdown } from '@/components/prompt-kit/markdown'
 import {
@@ -262,15 +261,6 @@ function FilesRoute() {
       <div className="flex h-full min-h-0 overflow-hidden">
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <header className="flex items-center gap-3 border-b border-primary-200 px-3 py-2 md:px-4 md:py-3">
-            <button
-              type="button"
-              onClick={() => setFileExplorerCollapsed((prev) => !prev)}
-              className="rounded-lg p-1.5 text-primary-600 hover:bg-primary-100 transition-colors"
-              aria-label={fileExplorerCollapsed ? 'Show files' : 'Hide files'}
-              title={fileExplorerCollapsed ? 'Show files' : 'Hide files'}
-            >
-              <HugeiconsIcon icon={Folder01Icon} size={20} strokeWidth={1.5} />
-            </button>
             <div className="min-w-0 flex-1">
               {loaded ? (
                 <>

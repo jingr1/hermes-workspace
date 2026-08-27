@@ -23,11 +23,36 @@ export type FileTreeEntry = {
   children?: Array<FileTreeEntry>
 }
 
-function withProfileQuery(basePath: string, profileName: string): string {
+export function withProfileQuery(basePath: string, profileName: string): string {
+  if (!profileName.trim()) return basePath
   const query = new URLSearchParams()
   query.set('profile', profileName)
   const join = basePath.includes('?') ? '&' : '?'
   return `${basePath}${join}${query.toString()}`
+}
+
+/** Build a files API URL that works for local and SSH workspaces. */
+export function buildFilesApiUrl(
+  action:
+    | 'list'
+    | 'read'
+    | 'download'
+    | 'view'
+    | 'abspath'
+    | 'download-folder',
+  filePath: string,
+  profileName: string,
+  extra?: Record<string, string>,
+): string {
+  const params = new URLSearchParams()
+  params.set('action', action)
+  if (filePath) params.set('path', filePath)
+  if (extra) {
+    for (const [key, value] of Object.entries(extra)) {
+      if (value) params.set(key, value)
+    }
+  }
+  return withProfileQuery(`/api/files?${params.toString()}`, profileName)
 }
 
 export async function fetchWorkspaceCatalog(

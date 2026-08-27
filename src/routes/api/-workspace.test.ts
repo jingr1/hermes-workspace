@@ -2,7 +2,7 @@ import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs/promises'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { loadWorkspaceCatalog, saveWorkspaceSelection } from './workspace'
+import { invalidateWorkspaceCatalogCache, loadWorkspaceCatalog, saveWorkspaceSelection } from './workspace'
 import {
   WorkspaceFolderAccessError,
   listWorkspaceFolders,
@@ -25,6 +25,9 @@ beforeEach(async () => {
   delete process.env.CLAUDE_WORKSPACE_DIR
   delete process.env.HERMES_WEBUI_DEFAULT_WORKSPACE
   await fs.mkdir(process.env.HERMES_HOME, { recursive: true })
+  // The catalog is cached module-side with a TTL keyed by profile only (not
+  // by HERMES_HOME); each test swaps HERMES_HOME, so flush the cache.
+  invalidateWorkspaceCatalogCache()
 })
 
 afterEach(async () => {

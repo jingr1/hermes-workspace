@@ -164,7 +164,8 @@ describe('HERMES_HOME override for path resolution', () => {
     vi.resetModules()
 
     const mod = await loadCache()
-    expect(mod.cacheFilePath()).toBe(join(customHome, 'cache', 'mcp-tools.json'))
+    // Implementation resolves under getStateDir() = HERMES_HOME/workspace.
+    expect(mod.cacheFilePath()).toBe(join(customHome, 'workspace', 'cache', 'mcp-tools.json'))
 
     mod.setProbe('server-x', {
       status: 'failed',

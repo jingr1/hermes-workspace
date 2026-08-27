@@ -1,0 +1,27 @@
+version: 1
+# Pipeline templates (plan «流水线模板：pipelines.yaml»).
+# Templates define STRUCTURE only — stages, owning agent, dependsOn edges,
+# review placement. Content is generated per-task by stage-brief.ts.
+# P2a: only workspaceMode: canonical is supported (worktree lands in P2b).
+pipelines:
+  - id: default-build
+    name: 需求到交付
+    workspaceMode: canonical
+    stages:
+      - key: research
+        agent: researcher
+        dependsOn: []
+      - key: spec
+        agent: architect
+        dependsOn: [research]
+      - key: build
+        agent: developer
+        dependsOn: [spec]
+      - key: review
+        agent: architect
+        kind: review
+        reworkTarget: build
+        dependsOn: [build]
+      - key: retro
+        agent: learning
+        dependsOn: [review]

@@ -38,8 +38,8 @@ function computeCacheHitPercent(
   if (typeof explicit === 'number' && Number.isFinite(explicit)) {
     return Math.min(100, Math.max(0, Math.round(explicit)))
   }
+  if (cacheRead <= 0 || cacheWrite <= 0) return null
   const promptTotal = cacheRead + cacheWrite
-  if (promptTotal <= 0) return null
   return Math.min(100, Math.round((cacheRead / promptTotal) * 100))
 }
 
@@ -64,9 +64,11 @@ function ContextIndicatorComponent({
       if (!data.ok) return
 
       const maxTokens = Number(data.maxTokens) || 0
+      // Server already applies compression.threshold from Hermes config; 0.5
+      // matches the Hermes default only as a last-resort client fallback.
       const thresholdTokens =
         Number(data.thresholdTokens) ||
-        (maxTokens > 0 ? Math.floor(maxTokens * 0.75) : 0)
+        (maxTokens > 0 ? Math.floor(maxTokens * 0.5) : 0)
 
       setCtx({
         contextPercent: Number(data.contextPercent) || 0,
@@ -103,7 +105,7 @@ function ContextIndicatorComponent({
     void refresh()
   }, [refresh, refreshToken])
 
-  if (ctx.maxTokens <= 0 && ctx.usedTokens <= 0 && !ctx.model) return null
+  if (ctx.maxTokens <= 0) return null
 
   const rawPct = Math.round(ctx.contextPercent)
   const pct = Math.min(100, Math.max(0, rawPct))
@@ -132,8 +134,10 @@ function ContextIndicatorComponent({
       : null
 
   const cacheText =
-    ctx.cacheHitPercent != null
-      ? `Cache: ${ctx.cacheHitPercent}% hit (${formatTokens(ctx.cacheReadTokens)} read / ${formatTokens(ctx.cacheWriteTokens)} write)`
+    ctx.cacheReadTokens > 0 || ctx.cacheWriteTokens > 0
+      ? ctx.cacheHitPercent != null
+        ? `Cache: ${ctx.cacheHitPercent}% hit (${formatTokens(ctx.cacheReadTokens)} read / ${formatTokens(ctx.cacheWriteTokens)} write)`
+        : `Cache: ${formatTokens(ctx.cacheReadTokens)} read / ${formatTokens(ctx.cacheWriteTokens)} write`
       : null
 
   const ariaLabel = [usageText, tokensText, thresholdText, cacheText]
