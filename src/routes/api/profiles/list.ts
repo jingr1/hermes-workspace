@@ -29,8 +29,7 @@ export const Route = createFileRoute('/api/profiles/list')({
             return json({ profiles, activeProfile })
           }
 
-          const { profiles, activeProfile } =
-            await listProfilesWithFallback()
+          const { profiles, activeProfile } = await listProfilesWithFallback()
           if (!isGatewayPoolEnabled()) {
             return json({ profiles, activeProfile })
           }

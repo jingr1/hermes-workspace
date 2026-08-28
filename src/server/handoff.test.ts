@@ -1,13 +1,20 @@
 import { rm } from 'node:fs/promises'
 import { afterEach, describe, expect, it } from 'vitest'
-import { buildHandoff, handoffDirectory, readHandoff, writeHandoff } from './handoff'
+import {
+  buildHandoff,
+  handoffDirectory,
+  readHandoff,
+  writeHandoff,
+} from './handoff'
 import type { ParsedSwarmCheckpoint } from './swarm-checkpoints'
 
 const TEST_WORKER = 'test-handoff-worker'
 
 describe('handoff', () => {
   afterEach(async () => {
-    await rm(`${handoffDirectory()}/${TEST_WORKER}-latest.json`, { force: true })
+    await rm(`${handoffDirectory()}/${TEST_WORKER}-latest.json`, {
+      force: true,
+    })
     await rm(`${handoffDirectory()}/${TEST_WORKER}-latest.md`, { force: true })
   })
 
@@ -16,7 +23,8 @@ describe('handoff', () => {
       stateLabel: 'DONE',
       runtimeState: 'idle',
       checkpointStatus: 'done',
-      filesChanged: '- `/home/ramon.jing/hermes-workspace/src/server/handoff.ts` — new handoff module',
+      filesChanged:
+        '- `/home/ramon.jing/hermes-workspace/src/server/handoff.ts` — new handoff module',
       commandsRun: '- `pnpm test`\n- `git status`',
       result: 'Implemented structured handoff builder.',
       blocker: null,
@@ -35,7 +43,9 @@ describe('handoff', () => {
     expect(handoff.assignmentId).toBe('assignment-abc')
     expect(handoff.state).toBe('DONE')
     expect(handoff.result).toBe('Implemented structured handoff builder.')
-    expect(handoff.filesChanged).toContain('/home/ramon.jing/hermes-workspace/src/server/handoff.ts')
+    expect(handoff.filesChanged).toContain(
+      '/home/ramon.jing/hermes-workspace/src/server/handoff.ts',
+    )
     expect(handoff.commandsRun).toEqual(['pnpm test', 'git status'])
     expect(handoff.nextAction).toBe('Route to architect for review.')
     expect(handoff.sourceCheckpoint.raw).toBe('STATE: DONE')

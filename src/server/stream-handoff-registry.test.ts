@@ -18,13 +18,13 @@ describe('stream-handoff-registry', () => {
 
   it('resolves detach handoff only for registered runs', () => {
     clearRunDetached('run-b')
-    expect(
-      resolveClientDisconnectAction({ runId: 'run-b' }),
-    ).toBe('abort_upstream')
+    expect(resolveClientDisconnectAction({ runId: 'run-b' })).toBe(
+      'abort_upstream',
+    )
     markRunDetached('run-b')
-    expect(
-      resolveClientDisconnectAction({ runId: 'run-b' }),
-    ).toBe('detach_handoff')
+    expect(resolveClientDisconnectAction({ runId: 'run-b' })).toBe(
+      'detach_handoff',
+    )
     clearRunDetached('run-b')
   })
 })

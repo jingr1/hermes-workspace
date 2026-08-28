@@ -18,7 +18,10 @@ export const Route = createFileRoute('/api/conductor-stop')({
         if (csrfCheck) return csrfCheck
 
         try {
-          const body = (await request.json().catch(() => ({}))) as Record<string, unknown>
+          const body = (await request.json().catch(() => ({}))) as Record<
+            string,
+            unknown
+          >
           const sessionKeys = Array.isArray(body.sessionKeys)
             ? body.sessionKeys.filter(
                 (value): value is string =>
@@ -45,7 +48,13 @@ export const Route = createFileRoute('/api/conductor-stop')({
               })
               if (cancelled) {
                 cancelledNativeMissions += 1
-                for (const workerId of Array.from(new Set(cancelled.mission.assignments.map((assignment) => assignment.workerId)))) {
+                for (const workerId of Array.from(
+                  new Set(
+                    cancelled.mission.assignments.map(
+                      (assignment) => assignment.workerId,
+                    ),
+                  ),
+                )) {
                   try {
                     resetSwarmWorkerRuntime(workerId, {
                       actor: 'conductor-stop',
@@ -60,7 +69,6 @@ export const Route = createFileRoute('/api/conductor-stop')({
             } catch {
               // Fall through to dashboard cleanup.
             }
-
           }
 
           for (const sessionKey of sessionKeys) {
@@ -72,7 +80,12 @@ export const Route = createFileRoute('/api/conductor-stop')({
             }
           }
 
-          return json({ ok: true, deleted, stoppedMissions, cancelledNativeMissions })
+          return json({
+            ok: true,
+            deleted,
+            stoppedMissions,
+            cancelledNativeMissions,
+          })
         } catch (error) {
           return json(
             {

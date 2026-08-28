@@ -1,10 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../server/auth-middleware'
-import {
-  BEARER_TOKEN,
-  CLAUDE_API,
-} from '../../../server/gateway-capabilities'
+import { BEARER_TOKEN, CLAUDE_API } from '../../../server/gateway-capabilities'
 
 function authHeaders(): Record<string, string> {
   return BEARER_TOKEN ? { Authorization: `Bearer ${BEARER_TOKEN}` } : {}

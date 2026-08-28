@@ -9,7 +9,13 @@ type Props = {
   onSuccess: () => void
 }
 
-type Status = 'loading' | 'waiting' | 'submitting' | 'approved' | 'expired' | 'error'
+type Status =
+  | 'loading'
+  | 'waiting'
+  | 'submitting'
+  | 'approved'
+  | 'expired'
+  | 'error'
 
 export function AnthropicLoginModal({ open, onClose, onSuccess }: Props) {
   const [status, setStatus] = useState<Status>('loading')
@@ -37,7 +43,8 @@ export function AnthropicLoginModal({ open, onClose, onSuccess }: Props) {
         authorization_url?: string
         error?: string
       }
-      if (!res.ok || !data.ok) throw new Error(data.error || 'Could not start Claude login')
+      if (!res.ok || !data.ok)
+        throw new Error(data.error || 'Could not start Claude login')
       setAuthUrl(data.authorization_url || '')
       setSessionId(data.session_id || '')
       setStatus('waiting')
@@ -58,9 +65,16 @@ export function AnthropicLoginModal({ open, onClose, onSuccess }: Props) {
       const res = await fetch('/api/auth/anthropic', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'submit', session_id: sessionId, code: code.trim() }),
+        body: JSON.stringify({
+          action: 'submit',
+          session_id: sessionId,
+          code: code.trim(),
+        }),
       })
-      const data = (await res.json()) as { status: string; error: string | null }
+      const data = (await res.json()) as {
+        status: string
+        error: string | null
+      }
       if (closedRef.current) return
       if (data.status === 'approved') {
         setStatus('approved')
@@ -93,7 +107,9 @@ export function AnthropicLoginModal({ open, onClose, onSuccess }: Props) {
   const copyLink = async () => {
     try {
       await navigator.clipboard.writeText(authUrl)
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   return (
@@ -116,12 +132,20 @@ export function AnthropicLoginModal({ open, onClose, onSuccess }: Props) {
           </div>
         ) : status === 'waiting' || status === 'submitting' ? (
           <div className="space-y-4">
-            <p className="text-center text-sm" style={{ color: 'var(--theme-muted)' }}>
-              Authorize Claude in the browser window. After authorizing, paste the authorization
-              code below and click Submit.
+            <p
+              className="text-center text-sm"
+              style={{ color: 'var(--theme-muted)' }}
+            >
+              Authorize Claude in the browser window. After authorizing, paste
+              the authorization code below and click Submit.
             </p>
             <div className="flex gap-2">
-              <Button className="flex-1" onClick={() => window.open(authUrl, '_blank', 'noopener,noreferrer')}>
+              <Button
+                className="flex-1"
+                onClick={() =>
+                  window.open(authUrl, '_blank', 'noopener,noreferrer')
+                }
+              >
                 Open authorization page
               </Button>
               <Button variant="outline" onClick={() => void copyLink()}>
@@ -171,7 +195,9 @@ export function AnthropicLoginModal({ open, onClose, onSuccess }: Props) {
           </div>
         ) : status === 'expired' ? (
           <div className="flex min-h-[140px] flex-col items-center justify-center gap-3">
-            <p className="text-sm text-red-400">Authorization expired. Please try again.</p>
+            <p className="text-sm text-red-400">
+              Authorization expired. Please try again.
+            </p>
             <Button size="sm" onClick={() => void startLogin()}>
               Retry
             </Button>

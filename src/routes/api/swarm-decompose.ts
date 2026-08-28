@@ -2,7 +2,10 @@ import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../server/auth-middleware'
 import { isSwarmDispatchWorkerId } from '../../lib/swarm-workers'
-import { ensureGatewayProbed, getResolvedUrls } from '../../server/gateway-capabilities'
+import {
+  ensureGatewayProbed,
+  getResolvedUrls,
+} from '../../server/gateway-capabilities'
 import { getBearerToken } from '../../server/openai-compat-api'
 
 type DecomposeRequest = {
@@ -41,7 +44,11 @@ Rules:
 - Keep rationale short (one sentence).
 `
 
-async function callOrchestrator(prompt: string, workers: WorkerHint[], model: string): Promise<{ assignments: RouteAssignment[]; unassigned: string[] }>{
+async function callOrchestrator(
+  prompt: string,
+  workers: WorkerHint[],
+  model: string,
+): Promise<{ assignments: RouteAssignment[]; unassigned: string[] }> {
   const rosterText = workers
     .map((worker) => {
       const parts = [
@@ -50,9 +57,13 @@ async function callOrchestrator(prompt: string, workers: WorkerHint[], model: st
         worker.specialty ? `specialty=${worker.specialty}` : '',
         worker.mission ? `mission=${worker.mission}` : '',
         worker.skills?.length ? `skills=${worker.skills.join(',')}` : '',
-        worker.capabilities?.length ? `capabilities=${worker.capabilities.join(',')}` : '',
+        worker.capabilities?.length
+          ? `capabilities=${worker.capabilities.join(',')}`
+          : '',
         worker.notes ? `notes=${worker.notes}` : '',
-      ].filter(Boolean).join('; ')
+      ]
+        .filter(Boolean)
+        .join('; ')
       return `- ${worker.id}${parts ? ` — ${parts}` : ''}`
     })
     .join('\n')
@@ -84,7 +95,9 @@ async function callOrchestrator(prompt: string, workers: WorkerHint[], model: st
     const text = await res.text().catch(() => '')
     throw new Error(`Orchestrator HTTP ${res.status}: ${text.slice(0, 240)}`)
   }
-  const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> }
+  const data = (await res.json()) as {
+    choices?: Array<{ message?: { content?: string } }>
+  }
   const raw = data.choices?.[0]?.message?.content?.trim() ?? ''
   if (!raw) throw new Error('Orchestrator returned empty content')
 
@@ -92,14 +105,18 @@ async function callOrchestrator(prompt: string, workers: WorkerHint[], model: st
   const start = raw.indexOf('{')
   const end = raw.lastIndexOf('}')
   if (start === -1 || end === -1 || end <= start) {
-    throw new Error(`Orchestrator did not return JSON. Snippet: ${raw.slice(0, 240)}`)
+    throw new Error(
+      `Orchestrator did not return JSON. Snippet: ${raw.slice(0, 240)}`,
+    )
   }
   const slice = raw.slice(start, end + 1)
   let parsed: unknown
   try {
     parsed = JSON.parse(slice)
   } catch (error) {
-    throw new Error(`Orchestrator returned invalid JSON: ${(error as Error).message}`)
+    throw new Error(
+      `Orchestrator returned invalid JSON: ${(error as Error).message}`,
+    )
   }
 
   const obj = parsed as { assignments?: unknown; unassigned?: unknown }
@@ -109,9 +126,11 @@ async function callOrchestrator(prompt: string, workers: WorkerHint[], model: st
   for (const entry of assignmentsRaw) {
     if (!entry || typeof entry !== 'object') continue
     const item = entry as Record<string, unknown>
-    const workerId = typeof item.workerId === 'string' ? item.workerId.trim() : ''
+    const workerId =
+      typeof item.workerId === 'string' ? item.workerId.trim() : ''
     const task = typeof item.task === 'string' ? item.task.trim() : ''
-    const rationale = typeof item.rationale === 'string' ? item.rationale.trim() : ''
+    const rationale =
+      typeof item.rationale === 'string' ? item.rationale.trim() : ''
     if (!workerId || !task) continue
     if (!validIds.has(workerId)) continue
     assignments.push({ workerId, task, rationale })
@@ -124,9 +143,17 @@ async function callOrchestrator(prompt: string, workers: WorkerHint[], model: st
   return { assignments, unassigned }
 }
 
-
 function scoreWorker(prompt: string, worker: WorkerHint): number {
-  const text = [worker.id, worker.role, worker.model, worker.specialty, worker.mission, ...(worker.skills ?? []), ...(worker.capabilities ?? []), worker.notes]
+  const text = [
+    worker.id,
+    worker.role,
+    worker.model,
+    worker.specialty,
+    worker.mission,
+    ...(worker.skills ?? []),
+    ...(worker.capabilities ?? []),
+    worker.notes,
+  ]
     .filter(Boolean)
     .join(' ')
     .toLowerCase()
@@ -136,35 +163,98 @@ function scoreWorker(prompt: string, worker: WorkerHint): number {
   // Bilingual keyword rules: [prompt regex, terms to look for in worker text]
   const pairs: Array<[RegExp, Array<string>]> = [
     // Research / investigation (English + Chinese)
-    [/research|investigate|investigation|survey|literature|source|synth|options|tradeoff|现状|调研|研究|调查|文献|综述|分析/i, [
-      'research', 'researcher', 'analysis', 'analyst', 'investigate', 'survey', 'source', 'wiki', 'fact',
-      '调研', '研究', '调查', '文献', '综述', '分析',
-    ]],
+    [
+      /research|investigate|investigation|survey|literature|source|synth|options|tradeoff|现状|调研|研究|调查|文献|综述|分析/i,
+      [
+        'research',
+        'researcher',
+        'analysis',
+        'analyst',
+        'investigate',
+        'survey',
+        'source',
+        'wiki',
+        'fact',
+        '调研',
+        '研究',
+        '调查',
+        '文献',
+        '综述',
+        '分析',
+      ],
+    ],
     // Implementation / coding
-    [/build|implement|code|patch|ui|frontend|backend|api|fix|开发|实现|编写|修复|代码|前端|后端/i, [
-      'builder', 'implementation', 'developer', 'ui', 'backend', 'frontend', 'runtime', 'debugging', 'testing',
-      '开发', '实现', '编写', '代码', '前端', '后端',
-    ]],
+    [
+      /build|implement|code|patch|ui|frontend|backend|api|fix|开发|实现|编写|修复|代码|前端|后端/i,
+      [
+        'builder',
+        'implementation',
+        'developer',
+        'ui',
+        'backend',
+        'frontend',
+        'runtime',
+        'debugging',
+        'testing',
+        '开发',
+        '实现',
+        '编写',
+        '代码',
+        '前端',
+        '后端',
+      ],
+    ],
     // Review / quality / testing
-    [/review|test|verify|quality|regression|gate|验证|测试|审查|审核|质检/i, [
-      'reviewer', 'review', 'pr', 'issues', 'github', 'test', 'verify', 'quality',
-      '验证', '测试', '审查', '审核',
-    ]],
+    [
+      /review|test|verify|quality|regression|gate|验证|测试|审查|审核|质检/i,
+      [
+        'reviewer',
+        'review',
+        'pr',
+        'issues',
+        'github',
+        'test',
+        'verify',
+        'quality',
+        '验证',
+        '测试',
+        '审查',
+        '审核',
+      ],
+    ],
     // Architecture / design
-    [/architecture|architect|design|spec|structure|架构|设计|规范|结构/i, [
-      'architect', 'architecture', 'design', 'specification', 'technical-direction',
-      '架构', '设计', '规范',
-    ]],
+    [
+      /architecture|architect|design|spec|structure|架构|设计|规范|结构/i,
+      [
+        'architect',
+        'architecture',
+        'design',
+        'specification',
+        'technical-direction',
+        '架构',
+        '设计',
+        '规范',
+      ],
+    ],
     // Operations / runtime / infra
-    [/ops|health|runtime|tmux|gateway|deploy|运维|运行|部署|监控/i, [
-      'ops', 'runtime', 'backend', 'deploy',
-      '运维', '运行', '部署',
-    ]],
+    [
+      /ops|health|runtime|tmux|gateway|deploy|运维|运行|部署|监控/i,
+      ['ops', 'runtime', 'backend', 'deploy', '运维', '运行', '部署'],
+    ],
     // Documentation / handoff
-    [/docs|handoff|spec|readme|document|文档|手册|记录|回顾/i, [
-      'docs', 'scribe', 'documentation', 'retrospective', 'knowledge-capture',
-      '文档', '记录', '回顾',
-    ]],
+    [
+      /docs|handoff|spec|readme|document|文档|手册|记录|回顾/i,
+      [
+        'docs',
+        'scribe',
+        'documentation',
+        'retrospective',
+        'knowledge-capture',
+        '文档',
+        '记录',
+        '回顾',
+      ],
+    ],
   ]
   for (const [pattern, terms] of pairs) {
     if (!pattern.test(lower)) continue
@@ -174,22 +264,32 @@ function scoreWorker(prompt: string, worker: WorkerHint): number {
   }
 
   // Direct id-based bonus when the prompt language clearly signals a single role.
-  if (/调研|研究|调查|文献|综述/i.test(lower) && worker.id === 'researcher') score += 10
-  if (/开发|实现|代码|编写|修复/i.test(lower) && worker.id === 'developer') score += 10
+  if (/调研|研究|调查|文献|综述/i.test(lower) && worker.id === 'researcher')
+    score += 10
+  if (/开发|实现|代码|编写|修复/i.test(lower) && worker.id === 'developer')
+    score += 10
   if (/架构|设计|规范/i.test(lower) && worker.id === 'architect') score += 10
-  if (/测试|验证|审查|审核/i.test(lower) && worker.id === 'architect') score += 6
-  if (/文档|记录|回顾|总结/i.test(lower) && worker.id === 'learning') score += 10
-  if (/运维|运行|部署|监控/i.test(lower) && worker.id === 'developer') score += 6
+  if (/测试|验证|审查|审核/i.test(lower) && worker.id === 'architect')
+    score += 6
+  if (/文档|记录|回顾|总结/i.test(lower) && worker.id === 'learning')
+    score += 10
+  if (/运维|运行|部署|监控/i.test(lower) && worker.id === 'developer')
+    score += 6
 
   if (text.includes('swarm-worker-core')) score += 1
   return score
 }
 
-function heuristicAssignments(prompt: string, workers: WorkerHint[]): { assignments: RouteAssignment[]; unassigned: string[] } {
+function heuristicAssignments(
+  prompt: string,
+  workers: WorkerHint[],
+): { assignments: RouteAssignment[]; unassigned: string[] } {
   const ranked = [...workers]
     .map((worker) => ({ worker, score: scoreWorker(prompt, worker) }))
     .sort((a, b) => b.score - a.score || a.worker.id.localeCompare(b.worker.id))
-  const selected = ranked.filter((row) => row.score > 0).slice(0, Math.min(3, workers.length))
+  const selected = ranked
+    .filter((row) => row.score > 0)
+    .slice(0, Math.min(3, workers.length))
   if (selected.length > 0) {
     return {
       assignments: selected.map(({ worker }) => ({
@@ -204,16 +304,23 @@ function heuristicAssignments(prompt: string, workers: WorkerHint[]): { assignme
   const orchestrator = workers.find((worker) => worker.id === 'orchestrator')
   if (orchestrator) {
     return {
-      assignments: [{
-        workerId: orchestrator.id,
-        task: `No confident automatic decomposition was possible for this mission. Decompose the mission into focused sub-tasks, route each to the most appropriate worker in the swarm, and ensure every assigned worker returns the required checkpoint format. Mission: ${prompt}`,
-        rationale: 'Orchestrator escalation: automatic decomposition produced no confident matches.',
-      }],
-      unassigned: ['Model decomposition failed or produced no confident matches; escalated to orchestrator for manual routing.'],
+      assignments: [
+        {
+          workerId: orchestrator.id,
+          task: `No confident automatic decomposition was possible for this mission. Decompose the mission into focused sub-tasks, route each to the most appropriate worker in the swarm, and ensure every assigned worker returns the required checkpoint format. Mission: ${prompt}`,
+          rationale:
+            'Orchestrator escalation: automatic decomposition produced no confident matches.',
+        },
+      ],
+      unassigned: [
+        'Model decomposition failed or produced no confident matches; escalated to orchestrator for manual routing.',
+      ],
     }
   }
   // No orchestrator in roster: this is a configuration error. Do not dispatch blindly.
-  throw new Error('No confident decomposition matches and no orchestrator available to escalate.')
+  throw new Error(
+    'No confident decomposition matches and no orchestrator available to escalate.',
+  )
 }
 
 export const Route = createFileRoute('/api/swarm-decompose')({
@@ -225,11 +332,16 @@ export const Route = createFileRoute('/api/swarm-decompose')({
         }
         await ensureGatewayProbed()
         let body: DecomposeRequest
-        try { body = await request.json() as DecomposeRequest } catch { return json({ error: 'Invalid JSON body' }, { status: 400 }) }
+        try {
+          body = (await request.json()) as DecomposeRequest
+        } catch {
+          return json({ error: 'Invalid JSON body' }, { status: 400 })
+        }
 
         const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : ''
         if (!prompt) return json({ error: 'prompt required' }, { status: 400 })
-        if (prompt.length > 16_000) return json({ error: 'prompt too long' }, { status: 400 })
+        if (prompt.length > 16_000)
+          return json({ error: 'prompt too long' }, { status: 400 })
 
         const workersRaw = Array.isArray(body.workers) ? body.workers : []
         const workers: WorkerHint[] = []
@@ -242,16 +354,29 @@ export const Route = createFileRoute('/api/swarm-decompose')({
             id,
             role: typeof obj.role === 'string' ? obj.role : undefined,
             model: typeof obj.model === 'string' ? obj.model : undefined,
-            specialty: typeof obj.specialty === 'string' ? obj.specialty : undefined,
+            specialty:
+              typeof obj.specialty === 'string' ? obj.specialty : undefined,
             mission: typeof obj.mission === 'string' ? obj.mission : undefined,
-            skills: Array.isArray(obj.skills) ? obj.skills.filter((value): value is string => typeof value === 'string') : undefined,
-            capabilities: Array.isArray(obj.capabilities) ? obj.capabilities.filter((value): value is string => typeof value === 'string') : undefined,
+            skills: Array.isArray(obj.skills)
+              ? obj.skills.filter(
+                  (value): value is string => typeof value === 'string',
+                )
+              : undefined,
+            capabilities: Array.isArray(obj.capabilities)
+              ? obj.capabilities.filter(
+                  (value): value is string => typeof value === 'string',
+                )
+              : undefined,
             notes: typeof obj.notes === 'string' ? obj.notes : undefined,
           })
         }
-        if (workers.length === 0) return json({ error: 'workers[] required' }, { status: 400 })
+        if (workers.length === 0)
+          return json({ error: 'workers[] required' }, { status: 400 })
 
-        const requestedModel = typeof body.model === 'string' && body.model.trim() ? body.model.trim() : (process.env.CLAUDE_DEFAULT_MODEL ?? 'claude-opus-4-7')
+        const requestedModel =
+          typeof body.model === 'string' && body.model.trim()
+            ? body.model.trim()
+            : (process.env.CLAUDE_DEFAULT_MODEL ?? 'claude-opus-4-7')
 
         try {
           const result = await callOrchestrator(prompt, workers, requestedModel)
@@ -263,7 +388,8 @@ export const Route = createFileRoute('/api/swarm-decompose')({
           })
         } catch (error) {
           const fallback = heuristicAssignments(prompt, workers)
-          const warningText = error instanceof Error ? error.message : 'decompose failed'
+          const warningText =
+            error instanceof Error ? error.message : 'decompose failed'
           return json({
             ok: true,
             fallback: true,

@@ -7,17 +7,17 @@
 Hermes 内置 provider（如 `deepseek`、`anthropic`、`openrouter`）在 **hermes-agent 代码** 中注册：
 
 - 认证与 endpoint：`hermes_cli/auth.py` → `PROVIDER_REGISTRY`
-- 运行时行为：``plugins/model-providers/<name>/``
+- 运行时行为：`plugins/model-providers/<name>/`
 - 模型目录：`hermes_cli/models.py` → `_PROVIDER_MODELS`
 
 因此 **不需要** 也不应该在 `config.yaml` 的 `providers:` 段重复定义它们。
 
 ## 两类 Provider
 
-| 类型 | 示例 | Workspace 写入 config.yaml | 写入 .env |
-|------|------|---------------------------|-----------|
-| **Builtin** | deepseek, anthropic, openrouter | ❌ 不写 `providers.<id>` | ✅ `DEEPSEEK_API_KEY` 等 |
-| **Custom** | tokenx, 自建网关 | ✅ `providers.<id>` + `custom_providers` | ✅ 对应 key_env |
+| 类型        | 示例                            | Workspace 写入 config.yaml               | 写入 .env                |
+| ----------- | ------------------------------- | ---------------------------------------- | ------------------------ |
+| **Builtin** | deepseek, anthropic, openrouter | ❌ 不写 `providers.<id>`                 | ✅ `DEEPSEEK_API_KEY` 等 |
+| **Custom**  | tokenx, 自建网关                | ✅ `providers.<id>` + `custom_providers` | ✅ 对应 key_env          |
 
 ### Builtin 最小运行时配置
 
@@ -53,13 +53,13 @@ custom_providers:
 
 ## Workspace 实现
 
-| 组件 | 职责 |
-|------|------|
-| `BUILTIN_PROVIDER_PRESETS` | Catalog UI 元数据（name、key_env、展示用 models） |
-| `provider-catalog.json` | 记录已配置的 catalog 条目与 key 状态 |
-| `upsertCatalogKey(builtin)` | 写 `.env` + catalog JSON；**不**写 `providers:` |
-| `upsertCatalogProvider(custom)` | 写 catalog + 同步所有 profile 的 `providers:` / `custom_providers` |
-| `pruneRedundantBuiltinProvidersFromProfiles()` | 清理历史遗留的冗余 `providers.<builtin>` 块 |
+| 组件                                           | 职责                                                               |
+| ---------------------------------------------- | ------------------------------------------------------------------ |
+| `BUILTIN_PROVIDER_PRESETS`                     | Catalog UI 元数据（name、key_env、展示用 models）                  |
+| `provider-catalog.json`                        | 记录已配置的 catalog 条目与 key 状态                               |
+| `upsertCatalogKey(builtin)`                    | 写 `.env` + catalog JSON；**不**写 `providers:`                    |
+| `upsertCatalogProvider(custom)`                | 写 catalog + 同步所有 profile 的 `providers:` / `custom_providers` |
+| `pruneRedundantBuiltinProvidersFromProfiles()` | 清理历史遗留的冗余 `providers.<builtin>` 块                        |
 
 ### 何时保留 `providers.<builtin>`
 

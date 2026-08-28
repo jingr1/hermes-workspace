@@ -18,7 +18,12 @@ import * as path from 'node:path'
 import { promisify } from 'node:util'
 import { getClaudeRoot } from '../claude-paths'
 import { publishChatEvent } from '../chat-event-bus'
-import { killProcessGroup, lookupPid, registerPid, unregisterPid } from './pid-registry'
+import {
+  killProcessGroup,
+  lookupPid,
+  registerPid,
+  unregisterPid,
+} from './pid-registry'
 import type {
   AgentProbeResult,
   AgentRunInput,
@@ -57,7 +62,9 @@ export class ClaudeCodeAdapter implements AgentRuntimeAdapter {
   async probe(): Promise<AgentProbeResult> {
     const command = this.decl.command ?? 'claude'
     try {
-      const { stdout } = await execFileAsync(command, ['--version'], { timeout: 5_000 })
+      const { stdout } = await execFileAsync(command, ['--version'], {
+        timeout: 5_000,
+      })
       return { available: true, version: stdout.trim() }
     } catch (error) {
       return {
@@ -67,7 +74,9 @@ export class ClaudeCodeAdapter implements AgentRuntimeAdapter {
     }
   }
 
-  async startRun(input: AgentRunInput & { mcp: McpHandshake }): Promise<{ runId: string }> {
+  async startRun(
+    input: AgentRunInput & { mcp: McpHandshake },
+  ): Promise<{ runId: string }> {
     const command = this.decl.command ?? 'claude'
     const runRoot = path.join(getClaudeRoot(), 'agent-runs', input.runId)
     fs.mkdirSync(runRoot, { recursive: true })
@@ -100,7 +109,12 @@ export class ClaudeCodeAdapter implements AgentRuntimeAdapter {
       ...input.env,
     }
 
-    const args = [...(this.decl.args ?? ['-p']), '--mcp-config', mcpConfigPath, input.task]
+    const args = [
+      ...(this.decl.args ?? ['-p']),
+      '--mcp-config',
+      mcpConfigPath,
+      input.task,
+    ]
 
     const child = spawn(command, args, {
       cwd: input.cwd ?? process.cwd(),
@@ -135,7 +149,11 @@ export class ClaudeCodeAdapter implements AgentRuntimeAdapter {
 
     child.stdout.on('data', (data: Buffer) => {
       fs.writeSync(logFd, data)
-      push(run, { type: 'text_delta', runId: input.runId, text: data.toString() })
+      push(run, {
+        type: 'text_delta',
+        runId: input.runId,
+        text: data.toString(),
+      })
     })
     child.stderr.on('data', (data: Buffer) => {
       fs.writeSync(logFd, data)

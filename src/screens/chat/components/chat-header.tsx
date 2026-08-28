@@ -291,7 +291,6 @@ function ChatHeaderComponent({
           </button>
 
           <div className="flex-1" />
-
         </div>
       </div>
     )

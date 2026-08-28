@@ -80,7 +80,9 @@ export const Route = createFileRoute('/api/profiles/provider-catalog')({
               body.value || body.key_value || '',
               body.id || body.providerId,
             )
-            const builtin = isBuiltinCatalogProvider(body.id || body.providerId || '')
+            const builtin = isBuiltinCatalogProvider(
+              body.id || body.providerId || '',
+            )
             return json({
               ok: true,
               catalog,

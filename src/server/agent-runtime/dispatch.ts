@@ -15,15 +15,26 @@
  * task_runs AND writes the mission checkpoint via the onRunTerminal hook
  * registered from this module (avoids a circular import mcp → dispatch).
  */
-import { getSwarmMission, markMissionAssignmentDispatched } from '../swarm-missions'
+import {
+  getSwarmMission,
+  markMissionAssignmentDispatched,
+} from '../swarm-missions'
 import { issueRunToken } from '../mcp/run-tokens'
 import { createCollabId } from '../collab-db'
 import { getAgentRuntimeRouter } from '../agent-runtime/router'
 import { publishChatEvent } from '../chat-event-bus'
+import { getProject } from '../task-pipeline/projects'
+import {
+  ensureMissionWorktree,
+  ensureRemoteMissionWorktree,
+  pushBranchToRemote,
+} from '../git-ops'
+import { countRunningRunsForAgent } from '../mcp/task-runs'
+import { detectExecutionFromProfile, getProfileSshHost } from './agents-config'
 
 export type DispatchResult =
   | { ok: true; runId: string; assignmentId: string }
-  | { ok: false; error: string }
+  | { ok: false; error: string; needsHuman?: boolean }
 
 const WRITE_ALLOWLIST = ['task_get', 'task_start', 'task_complete']
 
@@ -75,41 +86,128 @@ export async function dispatchAssignment(input: {
   roomId?: string | null
 }): Promise<DispatchResult> {
   const mission = getSwarmMission(input.missionId)
-  if (!mission) return { ok: false, error: `Mission not found: ${input.missionId}` }
-  const assignment = mission.assignments.find((a) => a.id === input.assignmentId)
-  if (!assignment) return { ok: false, error: `Assignment not found: ${input.assignmentId}` }
+  if (!mission)
+    return { ok: false, error: `Mission not found: ${input.missionId}` }
+  const assignment = mission.assignments.find(
+    (a) => a.id === input.assignmentId,
+  )
+  if (!assignment)
+    return { ok: false, error: `Assignment not found: ${input.assignmentId}` }
   if (assignment.state !== 'queued') {
-    return { ok: false, error: `Assignment ${assignment.id} is ${assignment.state}, not queued` }
+    return {
+      ok: false,
+      error: `Assignment ${assignment.id} is ${assignment.state}, not queued`,
+    }
+  }
+
+  const router = getAgentRuntimeRouter()
+
+  // P2b capability routing: if stage declares `requires`, pick an agent that
+  // has all required capabilities and is not overloaded. If none available,
+  // surface a human gate.
+  const stageRequires = assignment.requires ?? []
+  if (stageRequires.length > 0 && !input.agentId) {
+    const candidates = router.registry.agents
+      .filter(
+        (a) =>
+          a.runtime !== 'hermes' && // managed CLI adapters only for worktree-capable routing
+          stageRequires.every((req) => a.capabilities.includes(req)),
+      )
+      .map((a) => ({ ...a, load: countRunningRunsForAgent(a.id) }))
+      .filter((a) => a.load < (a.maxConcurrentTasks ?? 1))
+      .sort((a, b) => a.load - b.load)
+    if (candidates.length === 0) {
+      return {
+        ok: false,
+        error: `No available agent has required capabilities: ${stageRequires.join(', ')}`,
+        needsHuman: true,
+      }
+    }
+    // Load-aware selection: pick the least-loaded candidate.
+    const chosen = candidates[0]
+    // Update the assignment worker so downstream state matches.
+    assignment.workerId = chosen.id
   }
 
   const agentId = input.agentId ?? assignment.workerId
-  const router = getAgentRuntimeRouter()
   const adapter = router.getAdapter(agentId)
-  if (!adapter) return { ok: false, error: `No agent declared in agents.yaml: ${agentId}` }
-  // DELIBERATE rejection (architect decision, P1.4 review):
-  // hermes dispatch stays with the existing swarm-dispatch route (tmux /
-  // send-stream path) — that is its source of truth. Wrapping it in an
-  // AgentRuntimeAdapter shell is pure code relocation with no protocol
-  // validation value, so it is intentionally NOT done in P1. The natural
-  // moment for the shell is P4 (group-chat auto-handoff), when hermes
-  // agents need the unified streamEvents/interrupt surface to join rooms.
+  if (!adapter)
+    return {
+      ok: false,
+      error: `No agent declared in agents.yaml: ${assignment.workerId}`,
+    }
   if (adapter.kind === 'hermes') {
-    return { ok: false, error: 'hermes runtime is dispatched via the existing swarm-dispatch path' }
+    return {
+      ok: false,
+      error:
+        'hermes runtime is dispatched via the existing swarm-dispatch path',
+    }
+  }
+
+  let cwd = input.cwd
+  let baseRef: string | undefined
+  // P2b: resolve worktree / ssh locality for worktree-mode missions.
+  if (mission.workspaceMode === 'worktree' && mission.projectId) {
+    const project = getProject(mission.projectId)
+    if (!project)
+      return { ok: false, error: `Project not found: ${mission.projectId}` }
+    const agentDecl = router.registry.byId.get(agentId)
+    const locality = agentDecl?.execution === 'ssh' ? 'ssh' : 'local'
+    if (locality === 'ssh') {
+      const profileHost = agentDecl?.profile
+        ? getProfileSshHost(agentDecl.profile)
+        : null
+      const host = profileHost ?? project.remotes[0]?.host
+      if (!host)
+        return { ok: false, error: `ssh locality agent ${agentId} has no host` }
+      const { baseRef: localBase } = await ensureMissionWorktree(
+        project,
+        mission.id,
+      )
+      await pushBranchToRemote(project, host, mission.id)
+      const { ctx: remoteCtx } = await ensureRemoteMissionWorktree(
+        project,
+        host,
+        mission.id,
+        localBase,
+      )
+      cwd = remoteCtx.cwd
+      baseRef = localBase
+    } else {
+      const { ctx, baseRef: ref } = await ensureMissionWorktree(
+        project,
+        mission.id,
+      )
+      cwd = ctx.cwd
+      baseRef = ref
+    }
   }
 
   const runId = createCollabId('run')
 
-  // Step 1: JSON CAS queued → dispatched.
+  // Step 1: JSON CAS queued → dispatched.  Persist capability-routed workerId.
   const dispatched = markMissionAssignmentDispatched({
     missionId: mission.id,
     workerId: assignment.workerId,
     task: assignment.task,
+    assignmentId: assignment.id,
     source: 'agent-runtime',
     author: 'dispatcher',
+    overrideWorkerId: assignment.workerId,
   })
-  if (!dispatched) return { ok: false, error: 'Failed to CAS assignment to dispatched' }
+  if (!dispatched)
+    return { ok: false, error: 'Failed to CAS assignment to dispatched' }
 
   // Step 2: issue the per-run write token (bound to this runId).
+  const tokenContext: Record<string, string> | undefined =
+    mission.workspaceMode === 'worktree' && mission.projectId && cwd
+      ? {
+          projectId: mission.projectId,
+          worktreePath: cwd,
+          baseRef: baseRef ?? '',
+          branch: `swarm/mission-${mission.id}`,
+        }
+      : undefined
   const { token } = issueRunToken({
     kind: 'run_write',
     runId,
@@ -118,6 +216,7 @@ export async function dispatchAssignment(input: {
     taskId: mission.id, // token.taskId carries missionId (see RunToken doc)
     roomId: input.roomId ?? null,
     toolAllowlist: WRITE_ALLOWLIST,
+    context: tokenContext,
   })
 
   // Step 3: the task_runs row is created by the agent's own task_start MCP
@@ -131,7 +230,7 @@ export async function dispatchAssignment(input: {
       runId,
       agentId,
       task: assignment.task,
-      cwd: input.cwd,
+      cwd,
       roomId: input.roomId ?? null,
       taskId: mission.id,
       mcp: {
@@ -141,7 +240,10 @@ export async function dispatchAssignment(input: {
       },
     })
   } catch (error) {
-    return { ok: false, error: `spawn failed: ${error instanceof Error ? error.message : String(error)}` }
+    return {
+      ok: false,
+      error: `spawn failed: ${error instanceof Error ? error.message : String(error)}`,
+    }
   }
 
   publishChatEvent('agent_dispatched', {

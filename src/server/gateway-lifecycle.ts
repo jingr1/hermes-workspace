@@ -9,12 +9,8 @@
  * Idle TTL is off by default. Set HERMES_GATEWAY_IDLE_TTL (seconds) to
  * opt back into time-based eviction.
  */
-import {
-  getActiveProfileName,
-} from './profiles-browser'
-import {
-  stopProfileGateway,
-} from './claude-agent'
+import { getActiveProfileName } from './profiles-browser'
+import { stopProfileGateway } from './claude-agent'
 import {
   isGatewayPoolEnabled,
   listManagedProfileNames,
@@ -56,12 +52,18 @@ function currentEvictGeneration(): number {
 }
 
 function getEvictTimer(): ReturnType<typeof setInterval> | null {
-  const holder = globalThis as Record<symbol, ReturnType<typeof setInterval> | undefined>
+  const holder = globalThis as Record<
+    symbol,
+    ReturnType<typeof setInterval> | undefined
+  >
   return holder[EVICT_TIMER_KEY] ?? null
 }
 
 function setEvictTimer(timer: ReturnType<typeof setInterval> | null): void {
-  const holder = globalThis as Record<symbol, ReturnType<typeof setInterval> | null>
+  const holder = globalThis as Record<
+    symbol,
+    ReturnType<typeof setInterval> | null
+  >
   const previous = holder[EVICT_TIMER_KEY]
   if (previous && previous !== timer) {
     clearInterval(previous)
@@ -123,7 +125,9 @@ export function clearGatewayLease(profileName: string): void {
 }
 
 export function normalizeGatewayProfileName(profileName: string): string {
-  return (profileName || PINNED_GATEWAY_PROFILE).trim() || PINNED_GATEWAY_PROFILE
+  return (
+    (profileName || PINNED_GATEWAY_PROFILE).trim() || PINNED_GATEWAY_PROFILE
+  )
 }
 
 export function isPinnedGatewayProfile(profileName: string): boolean {
@@ -299,7 +303,8 @@ export function ensureGatewayLifecycleScheduler(): void {
   }
   setEvictTimer(timer)
 
-  const hot = (import.meta as { hot?: { dispose: (cb: () => void) => void } }).hot
+  const hot = (import.meta as { hot?: { dispose: (cb: () => void) => void } })
+    .hot
   hot?.dispose(() => {
     if (currentEvictGeneration() === generation) {
       bumpEvictGeneration()
@@ -353,7 +358,9 @@ export async function reconcileRemovedProfileGateways(): Promise<string[]> {
 }
 
 /** Evict before spawning a new resident gateway (capacity / idle). */
-export async function evictBeforeGatewayStart(profileName: string): Promise<void> {
+export async function evictBeforeGatewayStart(
+  profileName: string,
+): Promise<void> {
   if (!isGatewayPoolEnabled()) return
   await runEvictionCycle({ incomingProfile: profileName })
 }

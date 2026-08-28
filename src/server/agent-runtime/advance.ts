@@ -39,19 +39,37 @@
  * git mergeSiblings) belong to 模块 1 and are NOT in this file — this is the
  * minimal end-to-end spine validated in P1 步骤 3.
  */
+import * as path from 'node:path'
 import {
   getSwarmMission,
   readyQueuedAssignments,
   recordMissionAssignmentBlocked,
   recordMissionCheckpoint,
+  setAssignmentBaseRef,
+  setAssignmentHeadSha,
 } from '../swarm-missions'
-import {  setOnRunTerminalHook } from '../mcp/mcp-handler'
+import { setOnRunTerminalHook } from '../mcp/mcp-handler'
+import { getTaskRun } from '../mcp/task-runs'
+import {
+  filesChangedBetween,
+  localGitContext,
+  mergeSiblings,
+  pullArtifacts,
+  resolveHead,
+} from '../git-ops'
+import { getProject } from '../task-pipeline/projects'
 import { publishChatEvent } from '../chat-event-bus'
-import type {RunTerminalEvent} from '../mcp/mcp-handler';
+import { getAgentRuntimeRouter } from '../agent-runtime/router'
+import { applyReviewVerdict } from '../task-pipeline/review'
+import { getProfileSshHost } from './agents-config'
+import type { RunTerminalEvent } from '../mcp/mcp-handler'
 
 export type AdvanceHooks = {
   /** Called with each newly-ready assignment after a terminal event. */
-  dispatchNext?: (input: { missionId: string; assignmentId: string }) => void | Promise<void>
+  dispatchNext?: (input: {
+    missionId: string
+    assignmentId: string
+  }) => void | Promise<void>
 }
 
 let installed = false
@@ -64,7 +82,7 @@ let installed = false
  */
 let advanceQueue: Promise<void> = Promise.resolve()
 
-function enqueueAdvance<T>(fn: () => T): Promise<T> {
+function enqueueAdvance<T>(fn: () => T | Promise<T>): Promise<T> {
   const run = advanceQueue.then(fn)
   // Keep the chain alive even if one section throws.
   advanceQueue = run.then(
@@ -76,9 +94,30 @@ function enqueueAdvance<T>(fn: () => T): Promise<T> {
   return run
 }
 
-function handleRunTerminalSync(event: RunTerminalEvent, hooks?: AdvanceHooks): void {
+async function handleRunTerminal(
+  event: RunTerminalEvent,
+  hooks?: AdvanceHooks,
+): Promise<void> {
   const mission = getSwarmMission(event.missionId)
   if (!mission) return
+
+  const run = getTaskRun(event.runId)
+  let headSha: string | null = event.headSha ?? null
+  let filesChanged: Array<string> | null = null
+
+  // P2b: capture git state for worktree-mode runs.
+  if (run && run.baseRef && run.worktreePath) {
+    const project = run.projectId ? getProject(run.projectId) : null
+    if (project) {
+      try {
+        const ctx = localGitContext(project, path.basename(run.worktreePath))
+        headSha = await resolveHead(ctx)
+        filesChanged = await filesChangedBetween(ctx, run.baseRef, headSha)
+      } catch (error) {
+        console.error('[advance] failed to read git state', error)
+      }
+    }
+  }
 
   if (event.status === 'blocked' || event.status === 'needs_input') {
     recordMissionAssignmentBlocked({
@@ -97,7 +136,7 @@ function handleRunTerminalSync(event: RunTerminalEvent, hooks?: AdvanceHooks): v
         stateLabel: 'DONE',
         checkpointStatus: 'done',
         runtimeState: 'idle',
-        filesChanged: null,
+        filesChanged: filesChanged ? filesChanged.join(', ') : null,
         commandsRun: null,
         result: event.summary,
         blocker: null,
@@ -108,6 +147,79 @@ function handleRunTerminalSync(event: RunTerminalEvent, hooks?: AdvanceHooks): v
       source: 'mcp',
     })
   }
+
+  // P2b: stamp git refs onto the assignment for diff API / merge downstream.
+  if (run?.baseRef) {
+    const assignment = mission.assignments.find(
+      (a) => a.id === event.assignmentId,
+    )
+    if (assignment) {
+      // Fan-in convergence may have already set a merged baseRef before
+      // dispatching this assignment; do not overwrite it with the stale
+      // token-context baseRef.
+      if (!assignment.baseRef) {
+        setAssignmentBaseRef(mission.id, assignment.id, run.baseRef)
+      }
+      if (headSha) {
+        setAssignmentHeadSha(mission.id, assignment.id, headSha)
+      }
+    }
+  }
+
+  // P2b: pull artifacts from ssh-locality runs back to the local memory tree.
+  if (
+    mission.workspaceMode === 'worktree' &&
+    mission.projectId &&
+    event.status !== 'cancelled'
+  ) {
+    const project = getProject(mission.projectId)
+    if (project) {
+      const router = getAgentRuntimeRouter()
+      const decl = router.registry.byId.get(event.agentId)
+      if (decl?.execution === 'ssh') {
+        const host =
+          (decl.profile ? getProfileSshHost(decl.profile) : null) ??
+          project.remotes[0]?.host
+        if (host) {
+          try {
+            await pullArtifacts(project, host, mission.id, event.agentId)
+          } catch (error) {
+            console.error('[advance] failed to pull artifacts', error)
+          }
+        }
+      }
+    }
+  }
+
+  // P2a/P2b: review-stage verdict. If the checkpoint text contains
+  // REVIEW_OUTCOME, apply the review/rework logic before computing ready
+  // assignments so approved releases downstream and changes_requested requeues
+  // the build stage.
+  if (event.status === 'done') {
+    const missionAfterCheckpoint = getSwarmMission(event.missionId) ?? mission
+    const assignment = missionAfterCheckpoint.assignments.find(
+      (a) => a.id === event.assignmentId,
+    )
+    const rawCheckpoint = assignment?.checkpoint?.raw ?? event.summary ?? ''
+    if (rawCheckpoint.includes('REVIEW_OUTCOME')) {
+      const reviewResult = applyReviewVerdict({
+        missionId: event.missionId,
+        reviewAssignmentId: event.assignmentId,
+        rawCheckpoint,
+        reviewerId: event.agentId,
+      })
+      if (!reviewResult.ok) {
+        console.error('[advance] review verdict failed', reviewResult.error)
+      } else if (reviewResult.action === 'needs_human') {
+        publishChatEvent('assignment_blocked', {
+          missionId: event.missionId,
+          assignmentId: event.assignmentId,
+          reason: reviewResult.reason,
+        })
+      }
+    }
+  }
+
   // failed/cancelled: leave the assignment dispatched; P2a reconcile
   // decides between requeue and blocked (needs crash forensics).
 
@@ -120,13 +232,77 @@ function handleRunTerminalSync(event: RunTerminalEvent, hooks?: AdvanceHooks): v
 
   // Dispatch follow-on stages whose dependsOn are now satisfied.
   const ready = readyQueuedAssignments(event.missionId)
+  // Re-read the mission after checkpoint/baseRef/headSha updates so fan-in
+  // merge sees persisted upstream heads, not the pre-write snapshot.
+  const missionAfter = getSwarmMission(event.missionId) ?? mission
   for (const next of ready) {
+    // P2b: fan-in convergence. If the ready assignment has multiple upstream
+    // dependencies, merge their head commits into the mission integration
+    // branch before dispatching downstream.
+    if (
+      missionAfter.workspaceMode === 'worktree' &&
+      missionAfter.projectId &&
+      next.dependsOn.length > 1
+    ) {
+      const project = getProject(missionAfter.projectId)
+      if (project) {
+        const upstreamHeads = next.dependsOn
+          .map(
+            (depId) =>
+              missionAfter.assignments.find((a) => a.id === depId)?.headSha,
+          )
+          .filter((sha): sha is string => Boolean(sha))
+        if (upstreamHeads.length > 1) {
+          try {
+            const mergeResult = await mergeSiblings(
+              project,
+              mission.id,
+              upstreamHeads,
+            )
+            if (!mergeResult.ok) {
+              recordMissionAssignmentBlocked({
+                missionId: event.missionId,
+                assignmentId: next.id,
+                workerId: next.workerId,
+                reason: `Merge conflict at fan-in: ${mergeResult.conflicts.join(', ')}`,
+                source: 'advance',
+              })
+              publishChatEvent('assignment_blocked', {
+                missionId: event.missionId,
+                assignmentId: next.id,
+                reason: `Merge conflict: ${mergeResult.conflicts.join(', ')}`,
+              })
+              continue
+            }
+            next.baseRef =
+              mergeResult.mergedHead ?? upstreamHeads[upstreamHeads.length - 1]
+            setAssignmentBaseRef(mission.id, next.id, next.baseRef)
+          } catch (error) {
+            console.error('[advance] fan-in merge failed', error)
+            recordMissionAssignmentBlocked({
+              missionId: event.missionId,
+              assignmentId: next.id,
+              workerId: next.workerId,
+              reason: `Fan-in merge failed: ${error instanceof Error ? error.message : String(error)}`,
+              source: 'advance',
+            })
+            continue
+          }
+        } else if (upstreamHeads.length === 1) {
+          next.baseRef = upstreamHeads[0]
+        }
+      }
+    }
+
     publishChatEvent('assignment_ready', {
       missionId: event.missionId,
       assignmentId: next.id,
       workerId: next.workerId,
     })
-    void hooks?.dispatchNext?.({ missionId: event.missionId, assignmentId: next.id })
+    void hooks?.dispatchNext?.({
+      missionId: event.missionId,
+      assignmentId: next.id,
+    })
   }
 }
 
@@ -139,7 +315,7 @@ export function installAdvanceBridge(hooks?: AdvanceHooks): () => void {
   // fires synchronously from task_complete; enqueueing preserves ordering
   // and snapshot isolation across concurrent terminal events.
   setOnRunTerminalHook((event) => {
-    void enqueueAdvance(() => handleRunTerminalSync(event, hooks))
+    void enqueueAdvance(() => handleRunTerminal(event, hooks))
   })
   installed = true
   return () => {

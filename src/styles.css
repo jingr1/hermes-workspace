@@ -33,17 +33,52 @@
   /* Accent ramp follows Tailwind's 50=lightest → 950=darkest convention,
      derived from the live theme accent; 400/500/600 defer to the theme
      vars the remap blocks target. */
-  --color-accent-50: color-mix(in srgb, var(--theme-accent, #8a8f98) 10%, white);
-  --color-accent-100: color-mix(in srgb, var(--theme-accent, #8a8f98) 20%, white);
-  --color-accent-200: color-mix(in srgb, var(--theme-accent, #8a8f98) 35%, white);
-  --color-accent-300: color-mix(in srgb, var(--theme-accent, #8a8f98) 55%, white);
-  --color-accent-400: var(--theme-accent-secondary, var(--theme-accent, #8a8f98));
+  --color-accent-50: color-mix(
+    in srgb,
+    var(--theme-accent, #8a8f98) 10%,
+    white
+  );
+  --color-accent-100: color-mix(
+    in srgb,
+    var(--theme-accent, #8a8f98) 20%,
+    white
+  );
+  --color-accent-200: color-mix(
+    in srgb,
+    var(--theme-accent, #8a8f98) 35%,
+    white
+  );
+  --color-accent-300: color-mix(
+    in srgb,
+    var(--theme-accent, #8a8f98) 55%,
+    white
+  );
+  --color-accent-400: var(
+    --theme-accent-secondary,
+    var(--theme-accent, #8a8f98)
+  );
   --color-accent-500: var(--theme-accent, #8a8f98);
   --color-accent-600: var(--theme-accent, #8a8f98);
-  --color-accent-700: color-mix(in srgb, var(--theme-accent, #8a8f98) 70%, black);
-  --color-accent-800: color-mix(in srgb, var(--theme-accent, #8a8f98) 55%, black);
-  --color-accent-900: color-mix(in srgb, var(--theme-accent, #8a8f98) 40%, black);
-  --color-accent-950: color-mix(in srgb, var(--theme-accent, #8a8f98) 25%, black);
+  --color-accent-700: color-mix(
+    in srgb,
+    var(--theme-accent, #8a8f98) 70%,
+    black
+  );
+  --color-accent-800: color-mix(
+    in srgb,
+    var(--theme-accent, #8a8f98) 55%,
+    black
+  );
+  --color-accent-900: color-mix(
+    in srgb,
+    var(--theme-accent, #8a8f98) 40%,
+    black
+  );
+  --color-accent-950: color-mix(
+    in srgb,
+    var(--theme-accent, #8a8f98) 25%,
+    black
+  );
 }
 
 :root {
@@ -233,7 +268,9 @@
 }
 
 :root {
-  --interface-font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --interface-font-family:
+    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    sans-serif;
   --interface-density-scale: 1;
   /* Chat markdown semantics — WebUI uses distinct colors for strong / em / inline code */
   --md-strong: var(--color-primary-950);
@@ -244,15 +281,20 @@
 }
 
 [data-interface-font='inter'] {
-  --interface-font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --interface-font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', sans-serif;
 }
 
 [data-interface-font='serif'] {
-  --interface-font-family: ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
+  --interface-font-family:
+    ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
 }
 
 [data-interface-font='mono'] {
-  --interface-font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  --interface-font-family:
+    'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    'Liberation Mono', monospace;
 }
 
 [data-interface-density='compact'] {
@@ -306,15 +348,245 @@ body {
   font-size: 1.1em;
 }
 
-.code-block .shiki {
-  background: transparent !important;
-  margin: 0;
+.code-block {
+  min-width: 0;
+  overflow: hidden;
+  margin: 0.5rem 0;
+  border: 1px solid var(--code-border, var(--theme-border-subtle, rgba(128, 128, 128, 0.25)));
+  border-radius: 10px;
+  background: var(--code-bg, var(--theme-panel, #111));
 }
 
-.code-block .shiki code {
+.code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--code-border, var(--theme-border-subtle, rgba(128, 128, 128, 0.2)));
+  background: color-mix(in srgb, var(--code-bg, #111) 90%, var(--theme-text, #ccc) 10%);
+}
+
+.code-block-lang {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--theme-muted, rgba(255, 255, 255, 0.55));
+}
+
+.code-block-lang::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.45;
+}
+
+.code-block-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.code-block-action {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--theme-muted, rgba(255, 255, 255, 0.55));
+}
+
+.code-block-action:hover {
+  color: var(--theme-text, #eee);
+}
+
+.code-block-body {
+  display: flex;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.code-block-lines {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 14px 10px 14px 12px;
+  list-style: none;
+  border-right: 1px solid var(--code-border, var(--theme-border-subtle, rgba(128, 128, 128, 0.2)));
+  background: color-mix(in srgb, var(--code-bg, #111) 82%, var(--theme-text, #ccc) 18%);
+  color: var(--theme-muted, rgba(255, 255, 255, 0.45));
+  font-size: 0.75rem;
+  line-height: 1.6;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.code-block-pre,
+.code-block code {
+  margin: 0;
+  background: transparent !important;
+  text-shadow: none;
+}
+
+.code-block-pre {
+  min-width: 0;
+  flex: 1;
+  overflow-x: auto;
+  padding: 14px 16px;
+  color: var(--code-foreground, var(--theme-text, #ccc));
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  white-space: pre;
+}
+
+.code-block-pre--single {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.code-block code {
   display: block;
-  font-size: 0.875rem;
-  line-height: 1.5;
+  font-size: inherit;
+  line-height: inherit;
+  white-space: inherit;
+}
+
+/* prism-tomorrow token palette (matches WebUI), scoped to code blocks */
+.code-block .token.comment,
+.code-block .token.block-comment,
+.code-block .token.prolog,
+.code-block .token.doctype,
+.code-block .token.cdata {
+  color: #999;
+}
+
+.code-block .token.punctuation {
+  color: #ccc;
+}
+
+.code-block .token.tag,
+.code-block .token.attr-name,
+.code-block .token.namespace,
+.code-block .token.deleted {
+  color: #e2777a;
+}
+
+.code-block .token.function-name {
+  color: #6196cc;
+}
+
+.code-block .token.boolean,
+.code-block .token.number,
+.code-block .token.function {
+  color: #f08d49;
+}
+
+.code-block .token.property,
+.code-block .token.class-name,
+.code-block .token.constant,
+.code-block .token.symbol {
+  color: #f8c555;
+}
+
+.code-block .token.selector,
+.code-block .token.important,
+.code-block .token.atrule,
+.code-block .token.keyword,
+.code-block .token.builtin {
+  color: #cc99cd;
+}
+
+.code-block .token.string,
+.code-block .token.char,
+.code-block .token.attr-value,
+.code-block .token.regex,
+.code-block .token.variable {
+  color: #7ec699;
+}
+
+.code-block .token.operator,
+.code-block .token.entity,
+.code-block .token.url {
+  color: #67cdcc;
+}
+
+.code-block .token.important,
+.code-block .token.bold {
+  font-weight: bold;
+}
+
+.code-block .token.italic {
+  font-style: italic;
+}
+
+.code-block .token.entity {
+  cursor: help;
+}
+
+.code-block .token.inserted {
+  color: #7ec699;
+}
+
+/* Light themes: WebUI light-mode Prism overrides */
+[data-theme$='-light'] .code-block .token.comment,
+[data-theme$='-light'] .code-block .token.prolog,
+[data-theme$='-light'] .code-block .token.doctype,
+[data-theme$='-light'] .code-block .token.cdata {
+  color: #7a7060;
+  font-style: italic;
+}
+
+[data-theme$='-light'] .code-block .token.punctuation {
+  color: #5a4e44;
+}
+
+[data-theme$='-light'] .code-block .token.property,
+[data-theme$='-light'] .code-block .token.tag,
+[data-theme$='-light'] .code-block .token.boolean,
+[data-theme$='-light'] .code-block .token.number,
+[data-theme$='-light'] .code-block .token.constant,
+[data-theme$='-light'] .code-block .token.symbol,
+[data-theme$='-light'] .code-block .token.deleted {
+  color: #a0290a;
+}
+
+[data-theme$='-light'] .code-block .token.selector,
+[data-theme$='-light'] .code-block .token.attr-name,
+[data-theme$='-light'] .code-block .token.string,
+[data-theme$='-light'] .code-block .token.char,
+[data-theme$='-light'] .code-block .token.builtin,
+[data-theme$='-light'] .code-block .token.inserted {
+  color: #276b30;
+}
+
+[data-theme$='-light'] .code-block .token.operator,
+[data-theme$='-light'] .code-block .token.entity,
+[data-theme$='-light'] .code-block .token.url,
+[data-theme$='-light'] .code-block .language-css .token.string,
+[data-theme$='-light'] .code-block .style .token.string {
+  color: #5a3e8a;
+}
+
+[data-theme$='-light'] .code-block .token.atrule,
+[data-theme$='-light'] .code-block .token.attr-value,
+[data-theme$='-light'] .code-block .token.keyword {
+  color: #2d6fa3;
+}
+
+[data-theme$='-light'] .code-block .token.function,
+[data-theme$='-light'] .code-block .token.class-name {
+  color: #7a3a00;
+}
+
+[data-theme$='-light'] .code-block .token.regex,
+[data-theme$='-light'] .code-block .token.important,
+[data-theme$='-light'] .code-block .token.variable {
+  color: #8a4a00;
 }
 
 code {
@@ -841,6 +1113,7 @@ code {
   --tool-card-muted: rgba(216, 255, 227, 0.56);
   --code-bg: #010602;
   --code-border: rgba(0, 255, 65, 0.18);
+  --code-foreground: #d8ffe3;
   --theme-input: #07130a;
 }
 

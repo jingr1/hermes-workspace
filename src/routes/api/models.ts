@@ -18,7 +18,10 @@ import {
 import { readHermesEnv } from '../../server/stt-transcription'
 import { BUILTIN_PROVIDER_PRESETS } from '../../server/provider-catalog'
 
-const CLAUDE_HOME = process.env.HERMES_HOME ?? process.env.CLAUDE_HOME ?? path.join(os.homedir(), '.hermes')
+const CLAUDE_HOME =
+  process.env.HERMES_HOME ??
+  process.env.CLAUDE_HOME ??
+  path.join(os.homedir(), '.hermes')
 const MODELS_PATH = path.join(CLAUDE_HOME, 'models.json')
 const CONFIG_PATH = path.join(CLAUDE_HOME, 'config.yaml')
 const AUTH_PATH = path.join(CLAUDE_HOME, 'auth.json')
@@ -73,7 +76,9 @@ function normalizeModel(entry: unknown): ModelEntry | null {
   }
 }
 
-export function mergeModelEntries(...sources: Array<Array<ModelEntry>>): Array<ModelEntry> {
+export function mergeModelEntries(
+  ...sources: Array<Array<ModelEntry>>
+): Array<ModelEntry> {
   const merged: Array<ModelEntry> = []
   const seen = new Set<string>()
 
@@ -133,19 +138,33 @@ type LiveModelCacheEntry = {
 
 const liveModelCache = new Map<string, LiveModelCacheEntry>()
 
-function readStreamTimeouts(): { streamAcceptedTimeoutMs: number; streamHandoffTimeoutMs: number } {
+function readStreamTimeouts(): {
+  streamAcceptedTimeoutMs: number
+  streamHandoffTimeoutMs: number
+} {
   let acceptedS = DEFAULT_ACCEPTED_TIMEOUT_S
   let handoffS = DEFAULT_HANDOFF_TIMEOUT_S
   try {
     if (fs.existsSync(CONFIG_PATH)) {
       const parsed = YAML.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'))
       const ws =
-        parsed && typeof parsed === 'object' && typeof (parsed as Record<string, unknown>).workspace === 'object'
-          ? ((parsed as Record<string, unknown>).workspace as Record<string, unknown>)
+        parsed &&
+        typeof parsed === 'object' &&
+        typeof (parsed as Record<string, unknown>).workspace === 'object'
+          ? ((parsed as Record<string, unknown>).workspace as Record<
+              string,
+              unknown
+            >)
           : {}
-      if (typeof ws.stream_accepted_timeout === 'number' && ws.stream_accepted_timeout > 0)
+      if (
+        typeof ws.stream_accepted_timeout === 'number' &&
+        ws.stream_accepted_timeout > 0
+      )
         acceptedS = ws.stream_accepted_timeout
-      if (typeof ws.stream_handoff_timeout === 'number' && ws.stream_handoff_timeout > 0)
+      if (
+        typeof ws.stream_handoff_timeout === 'number' &&
+        ws.stream_handoff_timeout > 0
+      )
         handoffS = ws.stream_handoff_timeout
     }
   } catch {
@@ -154,8 +173,14 @@ function readStreamTimeouts(): { streamAcceptedTimeoutMs: number; streamHandoffT
   const envAccepted = parseInt(process.env.STREAM_ACCEPTED_TIMEOUT_MS ?? '', 10)
   const envHandoff = parseInt(process.env.STREAM_HANDOFF_TIMEOUT_MS ?? '', 10)
   return {
-    streamAcceptedTimeoutMs: Number.isFinite(envAccepted) && envAccepted > 0 ? envAccepted : acceptedS * 1000,
-    streamHandoffTimeoutMs: Number.isFinite(envHandoff) && envHandoff > 0 ? envHandoff : handoffS * 1000,
+    streamAcceptedTimeoutMs:
+      Number.isFinite(envAccepted) && envAccepted > 0
+        ? envAccepted
+        : acceptedS * 1000,
+    streamHandoffTimeoutMs:
+      Number.isFinite(envHandoff) && envHandoff > 0
+        ? envHandoff
+        : handoffS * 1000,
   }
 }
 
@@ -447,7 +472,12 @@ function readConfiguredLiveModelEndpoints(): Array<LiveModelEndpoint> {
     }
 
     const modelBlock = asRecord(config.model)
-    pushEndpoint(readString(modelBlock.provider) || readString(config.provider) || 'configured', modelBlock)
+    pushEndpoint(
+      readString(modelBlock.provider) ||
+        readString(config.provider) ||
+        'configured',
+      modelBlock,
+    )
 
     const providers = asRecord(config.providers)
     for (const [providerId, value] of Object.entries(providers)) {
@@ -460,7 +490,10 @@ function readConfiguredLiveModelEndpoints(): Array<LiveModelEndpoint> {
     if (Array.isArray(customProviders)) {
       for (const entry of customProviders) {
         const block = asRecord(entry)
-        const providerId = readString(block.name) || readString(block.id) || readString(block.provider)
+        const providerId =
+          readString(block.name) ||
+          readString(block.id) ||
+          readString(block.provider)
         if (!providerId) continue
         pushEndpoint(providerId, block)
       }
@@ -515,7 +548,10 @@ async function fetchConfiguredLiveModels(): Promise<Array<ModelEntry>> {
         signal: AbortSignal.timeout(3_000),
       })
       const contentType = response.headers.get('content-type') ?? ''
-      if (response.ok && contentType.toLowerCase().includes('application/json')) {
+      if (
+        response.ok &&
+        contentType.toLowerCase().includes('application/json')
+      ) {
         const payload = asRecord(await response.json())
         const rawModels = Array.isArray(payload.data)
           ? payload.data
@@ -612,7 +648,9 @@ function collectModelsFromProviderBlock(
  * Build the configured model catalog from a parsed Hermes config object.
  * Exported for unit tests.
  */
-export function catalogFromConfig(config: Record<string, unknown>): Array<ModelEntry> {
+export function catalogFromConfig(
+  config: Record<string, unknown>,
+): Array<ModelEntry> {
   const out: Array<ModelEntry> = []
   const seen = new Set<string>()
 
@@ -663,9 +701,7 @@ export function catalogFromConfig(config: Record<string, unknown>): Array<ModelE
     if (!aliasId) continue
     const targetStr = typeof target === 'string' ? target.trim() : ''
     const provider =
-      targetStr && targetStr.includes('/')
-        ? targetStr.split('/')[0]
-        : 'alias'
+      targetStr && targetStr.includes('/') ? targetStr.split('/')[0] : 'alias'
     pushEntry({
       id: aliasId,
       name: targetStr ? `${aliasId} → ${targetStr}` : aliasId,
@@ -765,7 +801,10 @@ export const Route = createFileRoute('/api/models')({
           if (getGatewayCapabilities().models) {
             const hermesModels = await fetchClaudeModels()
             models = mergeModelEntries(models, hermesModels)
-            source = source === 'models.json' ? 'models.json+hermes-agent' : 'hermes-agent'
+            source =
+              source === 'models.json'
+                ? 'models.json+hermes-agent'
+                : 'hermes-agent'
           }
 
           // Merge live OpenAI-compatible catalogs from base_url entries that

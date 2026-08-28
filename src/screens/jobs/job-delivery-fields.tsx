@@ -71,7 +71,8 @@ export function JobDeliveryFields({
   const unknownTargets = useMemo(
     () =>
       deliver.filter(
-        (target) => !(targetsQuery.data ?? []).some((entry) => entry.id === target),
+        (target) =>
+          !(targetsQuery.data ?? []).some((entry) => entry.id === target),
       ),
     [deliver, targetsQuery.data],
   )
@@ -115,7 +116,10 @@ export function JobDeliveryFields({
 
       {platforms.length > 0 ? (
         <div className="space-y-2">
-          <p className="text-xs font-medium" style={{ color: 'var(--theme-muted)' }}>
+          <p
+            className="text-xs font-medium"
+            style={{ color: 'var(--theme-muted)' }}
+          >
             Platforms
           </p>
           <div className="flex flex-wrap gap-2">
@@ -133,7 +137,10 @@ export function JobDeliveryFields({
 
       {unknownTargets.length > 0 ? (
         <div className="space-y-2">
-          <p className="text-xs font-medium" style={{ color: 'var(--theme-muted)' }}>
+          <p
+            className="text-xs font-medium"
+            style={{ color: 'var(--theme-muted)' }}
+          >
             Current custom targets
           </p>
           <div className="flex flex-wrap gap-2">

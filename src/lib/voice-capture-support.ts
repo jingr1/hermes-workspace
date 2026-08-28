@@ -184,7 +184,10 @@ export async function requestAudioStream(): Promise<MediaStream> {
 
   const nav = getNavigator()
   if (!nav) {
-    throw new DOMException('Microphone APIs are unavailable', 'NotSupportedError')
+    throw new DOMException(
+      'Microphone APIs are unavailable',
+      'NotSupportedError',
+    )
   }
 
   if (typeof nav.mediaDevices?.getUserMedia === 'function') {
@@ -221,7 +224,9 @@ export function clearPrimedAudioStream(): void {
 }
 
 /** Stop tracks held open for Web Speech API (Android needs an active capture). */
-export function releaseHeldAudioStream(stream: MediaStream | null | undefined): void {
+export function releaseHeldAudioStream(
+  stream: MediaStream | null | undefined,
+): void {
   if (!stream) return
   stream.getTracks().forEach((track) => track.stop())
 }

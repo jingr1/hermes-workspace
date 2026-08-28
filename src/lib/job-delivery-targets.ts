@@ -6,7 +6,9 @@ export type JobDeliveryTarget = {
   requiresGateway?: boolean
 }
 
-export async function fetchJobDeliveryTargets(): Promise<Array<JobDeliveryTarget>> {
+export async function fetchJobDeliveryTargets(): Promise<
+  Array<JobDeliveryTarget>
+> {
   const response = await fetch('/api/job-delivery-targets')
   if (!response.ok) {
     throw new Error(`Failed to fetch delivery targets (${response.status})`)

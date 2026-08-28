@@ -418,15 +418,9 @@ export const Route = createFileRoute('/api/files')({
                     ? String((err as { code?: string }).code || '')
                     : ''
                 if (code === 'MAX_FILES' || code === 'MAX_BYTES') {
-                  return json(
-                    { error: safeErrorMessage(err) },
-                    { status: 413 },
-                  )
+                  return json({ error: safeErrorMessage(err) }, { status: 413 })
                 }
-                return json(
-                  { error: safeErrorMessage(err) },
-                  { status: 500 },
-                )
+                return json({ error: safeErrorMessage(err) }, { status: 500 })
               }
             }
 
@@ -524,10 +518,7 @@ export const Route = createFileRoute('/api/files')({
                   ? String((err as { code?: string }).code || '')
                   : ''
               if (code === 'MAX_FILES' || code === 'MAX_BYTES') {
-                return json(
-                  { error: safeErrorMessage(err) },
-                  { status: 413 },
-                )
+                return json({ error: safeErrorMessage(err) }, { status: 413 })
               }
               throw err
             }
@@ -604,14 +595,16 @@ export const Route = createFileRoute('/api/files')({
               const form = await request.formData()
               const action = String(form.get('action') || 'upload')
               if (action !== 'upload') {
-                return json({ error: 'Invalid upload request' }, { status: 400 })
+                return json(
+                  { error: 'Invalid upload request' },
+                  { status: 400 },
+                )
               }
               const file = form.get('file')
               const targetPath = String(form.get('path') || '')
-              const relativePath = String(form.get('relativePath') || '').replace(
-                /^[/\\]+/,
-                '',
-              )
+              const relativePath = String(
+                form.get('relativePath') || '',
+              ).replace(/^[/\\]+/, '')
               if (!(file instanceof File)) {
                 return json({ error: 'Missing file' }, { status: 400 })
               }
@@ -647,7 +640,8 @@ export const Route = createFileRoute('/api/files')({
               string,
               unknown
             >
-            const action = typeof body.action === 'string' ? body.action : 'write'
+            const action =
+              typeof body.action === 'string' ? body.action : 'write'
             if (action === 'reveal') {
               const abs = ensureRemoteWorkspacePath(
                 String(body.path || ''),
@@ -702,7 +696,10 @@ export const Route = createFileRoute('/api/files')({
             }
             if (action === 'delete') {
               if (!requireLocalOrAuth(request)) {
-                return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
+                return json(
+                  { ok: false, error: 'Unauthorized' },
+                  { status: 401 },
+                )
               }
               await deleteSshPath({
                 config: remote.config,
@@ -741,7 +738,10 @@ export const Route = createFileRoute('/api/files')({
             let destination: string
             if (relativePath) {
               destination = ensureWorkspacePath(
-                path.join(toRelative(resolvedTarget, workspaceRoot), relativePath),
+                path.join(
+                  toRelative(resolvedTarget, workspaceRoot),
+                  relativePath,
+                ),
                 workspaceRoot,
               )
             } else {

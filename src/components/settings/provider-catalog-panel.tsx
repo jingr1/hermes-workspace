@@ -98,7 +98,11 @@ export function ProviderCatalogPanel({
   ) => {
     setSaving(true)
     try {
-      const data = await postCatalog({ action: 'upsert-provider', id, ...patch })
+      const data = await postCatalog({
+        action: 'upsert-provider',
+        id,
+        ...patch,
+      })
       if (data.catalog) onCatalog(data.catalog)
       flash(data.message || 'Saved')
     } catch (error) {
@@ -131,16 +135,22 @@ export function ProviderCatalogPanel({
 
   return (
     <div
-      className={embedded ? 'space-y-4 border-t pt-4' : 'space-y-4 rounded-xl p-4'}
+      className={
+        embedded ? 'space-y-4 border-t pt-4' : 'space-y-4 rounded-xl p-4'
+      }
       style={embedded ? { borderColor: 'var(--theme-border)' } : panelStyle}
     >
       <div>
-        <p className="text-sm font-semibold" style={{ color: 'var(--theme-text)' }}>
+        <p
+          className="text-sm font-semibold"
+          style={{ color: 'var(--theme-text)' }}
+        >
           Add custom provider
         </p>
         <p className="mt-1 text-xs leading-relaxed" style={mutedStyle}>
-          Add a named OpenAI-compatible gateway. It appears in the provider card grid above
-          and is copied into every profile with URL, key, and model list.
+          Add a named OpenAI-compatible gateway. It appears in the provider card
+          grid above and is copied into every profile with URL, key, and model
+          list.
         </p>
       </div>
 

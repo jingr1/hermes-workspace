@@ -5,7 +5,11 @@ import { Add01Icon, UserGroupIcon } from '@hugeicons/core-free-icons'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
-import { setActiveProfileOptimistic, useGatewayPoolStatus, useProfiles } from '../hooks/use-profiles'
+import {
+  setActiveProfileOptimistic,
+  useGatewayPoolStatus,
+  useProfiles,
+} from '../hooks/use-profiles'
 import { useRenameSession } from '../hooks/use-rename-session'
 import { useDeleteSession } from '../hooks/use-delete-session'
 import { chatQueryKeys, fetchHistory, fetchSessions } from '../chat-queries'
@@ -40,17 +44,11 @@ const SIDEBAR_MAX_WIDTH = 420
 const PROFILE_MIN_HEIGHT = 220
 const SESSION_MIN_HEIGHT = 180
 
-function profileMeta(profile: {
-  model?: string
-  provider?: string
-}): string {
+function profileMeta(profile: { model?: string; provider?: string }): string {
   const model = typeof profile.model === 'string' ? profile.model.trim() : ''
   const provider =
     typeof profile.provider === 'string' ? profile.provider.trim() : ''
-  return [
-    model ? `${model}` : '',
-    provider ? `${provider}` : '',
-  ]
+  return [model ? `${model}` : '', provider ? `${provider}` : '']
     .filter(Boolean)
     .join(' · ')
 }
@@ -95,10 +93,7 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
   } = useProfiles()
   const gatewayPoolQuery = useGatewayPoolStatus()
   const gatewayByName = useMemo(() => {
-    const map = new Map<
-      string,
-      { state?: string; port?: number }
-    >()
+    const map = new Map<string, { state?: string; port?: number }>()
     for (const entry of gatewayPoolQuery.data?.gateways ?? []) {
       map.set(entry.profile, entry)
     }
@@ -126,7 +121,10 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
     setDeleteSessionKey(session.key)
     setDeleteFriendlyId(session.friendlyId)
     setDeleteSessionTitle(
-      session.label || session.title || session.derivedTitle || session.friendlyId,
+      session.label ||
+        session.title ||
+        session.derivedTitle ||
+        session.friendlyId,
     )
     setDeleteDialogOpen(true)
   }, [])
@@ -253,7 +251,13 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
         })
       })()
     },
-    [activateProfile, activeFriendlyId, activeProfileName, queryClient, navigate],
+    [
+      activateProfile,
+      activeFriendlyId,
+      activeProfileName,
+      queryClient,
+      navigate,
+    ],
   )
 
   const startSidebarResize = useCallback(
@@ -267,7 +271,10 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
       const onMove = (moveEvent: MouseEvent) => {
         const nextWidth = Math.min(
           SIDEBAR_MAX_WIDTH,
-          Math.max(SIDEBAR_MIN_WIDTH, startWidth + (moveEvent.clientX - startX)),
+          Math.max(
+            SIDEBAR_MIN_WIDTH,
+            startWidth + (moveEvent.clientX - startX),
+          ),
         )
         setSidebarWidth(nextWidth)
       }
@@ -284,35 +291,42 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
     [sidebarWidth],
   )
 
-  const startSectionResize = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    event.preventDefault()
-    const startY = event.clientY
-    const startHeight = profilesHeight
-    const containerHeight = sidebarRef.current?.clientHeight ?? window.innerHeight
-    const maxHeight = Math.max(
-      PROFILE_MIN_HEIGHT,
-      containerHeight - SESSION_MIN_HEIGHT - 40,
-    )
-    const previousUserSelect = document.body.style.userSelect
-    document.body.style.userSelect = 'none'
-
-    const onMove = (moveEvent: MouseEvent) => {
-      const nextHeight = Math.min(
-        maxHeight,
-        Math.max(PROFILE_MIN_HEIGHT, startHeight + (moveEvent.clientY - startY)),
+  const startSectionResize = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      event.preventDefault()
+      const startY = event.clientY
+      const startHeight = profilesHeight
+      const containerHeight =
+        sidebarRef.current?.clientHeight ?? window.innerHeight
+      const maxHeight = Math.max(
+        PROFILE_MIN_HEIGHT,
+        containerHeight - SESSION_MIN_HEIGHT - 40,
       )
-      setProfilesHeight(nextHeight)
-    }
+      const previousUserSelect = document.body.style.userSelect
+      document.body.style.userSelect = 'none'
 
-    const onUp = () => {
-      document.body.style.userSelect = previousUserSelect
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
+      const onMove = (moveEvent: MouseEvent) => {
+        const nextHeight = Math.min(
+          maxHeight,
+          Math.max(
+            PROFILE_MIN_HEIGHT,
+            startHeight + (moveEvent.clientY - startY),
+          ),
+        )
+        setProfilesHeight(nextHeight)
+      }
 
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }, [profilesHeight])
+      const onUp = () => {
+        document.body.style.userSelect = previousUserSelect
+        window.removeEventListener('mousemove', onMove)
+        window.removeEventListener('mouseup', onUp)
+      }
+
+      window.addEventListener('mousemove', onMove)
+      window.addEventListener('mouseup', onUp)
+    },
+    [profilesHeight],
+  )
 
   return (
     <aside
@@ -343,9 +357,13 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
         </div>
 
         {profilesLoading && profiles.length === 0 ? (
-          <div className="px-3 py-2 text-xs text-primary-500">Loading profiles…</div>
+          <div className="px-3 py-2 text-xs text-primary-500">
+            Loading profiles…
+          </div>
         ) : profilesError ? (
-          <div className="px-3 py-2 text-xs text-red-500">Failed to load profiles.</div>
+          <div className="px-3 py-2 text-xs text-red-500">
+            Failed to load profiles.
+          </div>
         ) : (
           <ScrollAreaRoot className="min-h-0 flex-1 px-2 pb-2">
             <ScrollAreaViewport>
@@ -378,13 +396,17 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
                         <span
                           className={cn(
                             'size-1.5 shrink-0 rounded-full',
-                            gatewayHealthy ? 'bg-emerald-400' : 'bg-neutral-500',
+                            gatewayHealthy
+                              ? 'bg-emerald-400'
+                              : 'bg-neutral-500',
                           )}
                           aria-hidden="true"
                         />
                         <span className="truncate">{profile.name}</span>
                         {isActive ? (
-                          <span className="shrink-0 text-[9px] text-primary-700">active</span>
+                          <span className="shrink-0 text-[9px] text-primary-700">
+                            active
+                          </span>
                         ) : null}
                       </span>
                       <span className="flex items-center gap-1.5">

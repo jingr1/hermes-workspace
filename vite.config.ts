@@ -1,7 +1,13 @@
 import { URL, fileURLToPath } from 'node:url'
 import { execSync, spawn } from 'node:child_process'
 import type { ChildProcess } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs'
 import net from 'node:net'
 import { resolve, join } from 'node:path'
 import os from 'node:os'
@@ -46,7 +52,9 @@ const config = defineConfig(({ mode, command }) => {
     ).trim()
     let remote = false
     try {
-      const host = new URL(explicitUrl || 'http://127.0.0.1:8642').hostname.toLowerCase()
+      const host = new URL(
+        explicitUrl || 'http://127.0.0.1:8642',
+      ).hostname.toLowerCase()
       remote =
         Boolean(explicitUrl) &&
         host !== '127.0.0.1' &&
@@ -64,9 +72,8 @@ const config = defineConfig(({ mode, command }) => {
     }
 
     try {
-      const { ensureActiveProfileGateway } = await import(
-        './src/server/gateway-pool'
-      )
+      const { ensureActiveProfileGateway } =
+        await import('./src/server/gateway-pool')
       const result = await ensureActiveProfileGateway()
       claudeAgentStarted = true
       if (result.ok) {
@@ -358,6 +365,7 @@ const config = defineConfig(({ mode, command }) => {
         'xterm',
         'xterm-addon-fit',
         'xterm-addon-web-links',
+        'prismjs',
       ],
       exclude: [
         'playwright',
@@ -365,11 +373,7 @@ const config = defineConfig(({ mode, command }) => {
         'playwright-extra',
         'puppeteer-extra-plugin-stealth',
       ],
-      needsInterop: [
-        'xterm',
-        'xterm-addon-fit',
-        'xterm-addon-web-links',
-      ],
+      needsInterop: ['xterm', 'xterm-addon-fit', 'xterm-addon-web-links'],
     },
     server: {
       // Cross-origin isolation is only needed for HermesWorld / Playground (SharedArrayBuffer).
@@ -479,7 +483,10 @@ const config = defineConfig(({ mode, command }) => {
         apply: 'serve',
         configureServer(server) {
           server.middlewares.use((_req, res, next) => {
-            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+            res.setHeader(
+              'Cache-Control',
+              'no-store, no-cache, must-revalidate, max-age=0',
+            )
             res.setHeader('Pragma', 'no-cache')
             res.setHeader('Expires', '0')
             next()
@@ -527,7 +534,7 @@ const config = defineConfig(({ mode, command }) => {
                 "base-uri 'self'",
                 "object-src 'none'",
                 "form-action 'self'",
-                "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+                "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net",
                 "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net",
                 "img-src 'self' data: blob: https:",
                 "font-src 'self' data: https://fonts.gstatic.com",
@@ -593,7 +600,8 @@ const config = defineConfig(({ mode, command }) => {
               return
             }
             const chunks: Buffer[] = []
-            for await (const chunk of req as AsyncIterable<Buffer>) chunks.push(chunk)
+            for await (const chunk of req as AsyncIterable<Buffer>)
+              chunks.push(chunk)
             let body: { workerId?: string; patch?: Record<string, unknown> }
             try {
               body = JSON.parse(Buffer.concat(chunks).toString())
@@ -603,45 +611,70 @@ const config = defineConfig(({ mode, command }) => {
               res.end(JSON.stringify({ ok: false, error: 'Invalid JSON' }))
               return
             }
-            const workerId = typeof body.workerId === 'string' ? body.workerId.trim() : ''
+            const workerId =
+              typeof body.workerId === 'string' ? body.workerId.trim() : ''
             if (!workerId) {
               res.statusCode = 400
               res.setHeader('content-type', 'application/json')
               res.end(JSON.stringify({ ok: false, error: 'workerId required' }))
               return
             }
-            const patch = body.patch && typeof body.patch === 'object' && !Array.isArray(body.patch)
-              ? body.patch
-              : {}
+            const patch =
+              body.patch &&
+              typeof body.patch === 'object' &&
+              !Array.isArray(body.patch)
+                ? body.patch
+                : {}
             if (Object.keys(patch).length === 0) {
               res.statusCode = 400
               res.setHeader('content-type', 'application/json')
-              res.end(JSON.stringify({ ok: false, error: 'patch object required' }))
+              res.end(
+                JSON.stringify({ ok: false, error: 'patch object required' }),
+              )
               return
             }
             try {
               const SWARM_ROSTER_PATH = resolve(process.cwd(), 'swarm.yaml')
-              if (!existsSync(SWARM_ROSTER_PATH)) throw new Error(`swarm.yaml not found at ${SWARM_ROSTER_PATH}`)
+              if (!existsSync(SWARM_ROSTER_PATH))
+                throw new Error(`swarm.yaml not found at ${SWARM_ROSTER_PATH}`)
               const raw = readFileSync(SWARM_ROSTER_PATH, 'utf8')
-              const roster = yaml.parse(raw) as { version?: number; workers?: Array<Record<string, unknown>> }
+              const roster = yaml.parse(raw) as {
+                version?: number
+                workers?: Array<Record<string, unknown>>
+              }
               const workers = roster.workers ?? []
               const idx = workers.findIndex(
-                (w) => (w.id as string)?.toLowerCase() === workerId.toLowerCase(),
+                (w) =>
+                  (w.id as string)?.toLowerCase() === workerId.toLowerCase(),
               )
-              if (idx < 0) throw new Error(`Worker ${workerId} not found in swarm roster`)
+              if (idx < 0)
+                throw new Error(`Worker ${workerId} not found in swarm roster`)
               workers[idx] = { ...workers[idx], ...patch }
 
-              writeFileSync(SWARM_ROSTER_PATH, yaml.stringify({ ...roster, workers }), 'utf8')
+              writeFileSync(
+                SWARM_ROSTER_PATH,
+                yaml.stringify({ ...roster, workers }),
+                'utf8',
+              )
               res.statusCode = 200
               res.setHeader('content-type', 'application/json')
-              res.end(JSON.stringify({ ok: true, path: SWARM_ROSTER_PATH, savedAt: Date.now() }))
+              res.end(
+                JSON.stringify({
+                  ok: true,
+                  path: SWARM_ROSTER_PATH,
+                  savedAt: Date.now(),
+                }),
+              )
             } catch (err) {
               res.statusCode = 400
               res.setHeader('content-type', 'application/json')
               res.end(
                 JSON.stringify({
                   ok: false,
-                  error: err instanceof Error ? err.message : 'Failed to patch swarm roster',
+                  error:
+                    err instanceof Error
+                      ? err.message
+                      : 'Failed to patch swarm roster',
                 }),
               )
             }
@@ -672,7 +705,10 @@ const config = defineConfig(({ mode, command }) => {
           // per-route = selective enforcement (PATCH/POST/API routes get a deadline).
           server.middlewares.use(async (req, res, next) => {
             const { socket } = req
-            if (!socket) { next(); return }
+            if (!socket) {
+              next()
+              return
+            }
             const method = req.method?.toUpperCase() ?? 'GET'
             const path = req.url?.split('?')[0] ?? ''
             // SSE and long-running swarm routes need no socket timeout.

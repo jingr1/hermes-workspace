@@ -78,9 +78,12 @@ export const Route = createFileRoute('/api/claude-jobs')({
           )
         }
         const params = url.searchParams.toString()
-        const res = await fetch(`${CLAUDE_API}/api/jobs${params ? `?${params}` : ''}`, {
-          headers: authHeaders(),
-        })
+        const res = await fetch(
+          `${CLAUDE_API}/api/jobs${params ? `?${params}` : ''}`,
+          {
+            headers: authHeaders(),
+          },
+        )
         return jobsResponse(res)
       },
       POST: async ({ request }) => {

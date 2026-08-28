@@ -11,13 +11,18 @@ function cleanString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
-export function parseHumanGateResumeBody(body: Record<string, unknown>): LanggraphHumanGatePayload | null {
+export function parseHumanGateResumeBody(
+  body: Record<string, unknown>,
+): LanggraphHumanGatePayload | null {
   const choiceRaw = cleanString(body.choice)
   const choice: HumanGateChoice =
-    choiceRaw === 'primary' || choiceRaw === 'secondary' || choiceRaw === 'custom'
+    choiceRaw === 'primary' ||
+    choiceRaw === 'secondary' ||
+    choiceRaw === 'custom'
       ? choiceRaw
       : 'primary'
-  const humanNote = typeof body.humanNote === 'string' ? body.humanNote.trim() : ''
+  const humanNote =
+    typeof body.humanNote === 'string' ? body.humanNote.trim() : ''
   const targetWorkerId = cleanString(body.targetWorkerId) ?? ''
   if (!humanNote && choice === 'custom') {
     return null
@@ -43,7 +48,9 @@ export function langgraphEnvWithHumanGate(
     delete next.HERMES_LANGGRAPH_RESUME_TARGET
   }
   if (payload.continueWaitMinutes !== undefined) {
-    next.HERMES_LANGGRAPH_CONTINUE_WAIT_MINUTES = String(payload.continueWaitMinutes)
+    next.HERMES_LANGGRAPH_CONTINUE_WAIT_MINUTES = String(
+      payload.continueWaitMinutes,
+    )
   } else {
     delete next.HERMES_LANGGRAPH_CONTINUE_WAIT_MINUTES
   }

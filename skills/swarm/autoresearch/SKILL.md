@@ -30,10 +30,10 @@ Required: `goal`, `scope`, `mutable_target`, `locked_eval`, `metric`, `direction
 
 ## Role skills
 
-| Role | Skill | Action |
-|---|---|---|
+| Role           | Skill                                           | Action                                                            |
+| -------------- | ----------------------------------------------- | ----------------------------------------------------------------- |
 | `orchestrator` | `autoresearch-orchestrate`, `autoresearch-plan` | **`orchestrator:autoresearch`** — wizard/plan/contract → dispatch |
-| `orchestrator` | same | `orchestrator:autoresearch-dispatch` — contract-only dispatch |
-| `architect` | `autoresearch-execute` | Run loop on spec/skill/prompt targets |
-| `developer` | `autoresearch-execute` | Run loop on code/test targets |
-| `researcher` | — | May supply facts; does **not** run autoresearch |
+| `orchestrator` | same                                            | `orchestrator:autoresearch-dispatch` — contract-only dispatch     |
+| `architect`    | `autoresearch-execute`                          | Run loop on spec/skill/prompt targets                             |
+| `developer`    | `autoresearch-execute`                          | Run loop on code/test targets                                     |
+| `researcher`   | —                                               | May supply facts; does **not** run autoresearch                   |

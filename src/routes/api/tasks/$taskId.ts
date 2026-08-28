@@ -14,11 +14,13 @@ export const Route = createFileRoute('/api/tasks/$taskId')({
   server: {
     handlers: {
       GET: async ({ request, params }) => {
-        if (!isAuthenticated(request)) return json({ error: 'Unauthorized' }, { status: 401 })
+        if (!isAuthenticated(request))
+          return json({ error: 'Unauthorized' }, { status: 401 })
         const taskId = params.taskId
         const cards = await listKanbanCards()
         const card = cards.find((c) => c.id === taskId)
-        if (!card) return json({ error: `Task not found: ${taskId}` }, { status: 404 })
+        if (!card)
+          return json({ error: `Task not found: ${taskId}` }, { status: 404 })
 
         const mission = card.missionId ? getSwarmMission(card.missionId) : null
         if (!mission) {
@@ -31,7 +33,11 @@ export const Route = createFileRoute('/api/tasks/$taskId')({
         if (existsSync(dbPath)) {
           const db = openSqliteDatabase(dbPath, true)
           try {
-            runs = db.prepare('SELECT * FROM task_runs WHERE mission_id = ? ORDER BY started_at').all(mission.id)
+            runs = db
+              .prepare(
+                'SELECT * FROM task_runs WHERE mission_id = ? ORDER BY started_at',
+              )
+              .all(mission.id)
           } finally {
             db.close()
           }

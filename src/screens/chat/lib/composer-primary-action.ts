@@ -1,8 +1,4 @@
-export type ComposerPrimaryAction =
-  | 'send'
-  | 'stop'
-  | 'queue'
-  | 'disabled'
+export type ComposerPrimaryAction = 'send' | 'stop' | 'queue' | 'disabled'
 
 export function getComposerPrimaryAction(options: {
   disabled: boolean
@@ -25,7 +21,9 @@ export function getComposerPrimaryAction(options: {
   return 'send'
 }
 
-export function composerPrimaryActionLabel(action: ComposerPrimaryAction): string {
+export function composerPrimaryActionLabel(
+  action: ComposerPrimaryAction,
+): string {
   switch (action) {
     case 'stop':
       return 'Stop generation'

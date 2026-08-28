@@ -59,7 +59,9 @@ export function ModelProviderScopePanel({
           profile?: { config?: Record<string, unknown> }
         }
         if (!profileRes.ok) {
-          throw new Error(data.error || `Failed to load profile (${profileRes.status})`)
+          throw new Error(
+            data.error || `Failed to load profile (${profileRes.status})`,
+          )
         }
         const mp = readModelProviderFromConfig(data.profile?.config)
         setInitialProvider(mp.provider)
@@ -69,7 +71,9 @@ export function ModelProviderScopePanel({
         setLoaded(true)
       } catch (error) {
         setLoadError(
-          error instanceof Error ? error.message : 'Failed to load configuration',
+          error instanceof Error
+            ? error.message
+            : 'Failed to load configuration',
         )
         setLoaded(true)
       }
@@ -96,12 +100,18 @@ export function ModelProviderScopePanel({
         }}
       >
         <div>
-          <p className="text-sm font-semibold" style={{ color: 'var(--theme-text)' }}>
+          <p
+            className="text-sm font-semibold"
+            style={{ color: 'var(--theme-text)' }}
+          >
             Provider configuration
           </p>
-          <p className="mt-1 text-xs leading-relaxed" style={{ color: 'var(--theme-muted)' }}>
-            Built-in providers and custom_providers share this card grid. URL, keys, and OAuth are
-            copied into every profile.
+          <p
+            className="mt-1 text-xs leading-relaxed"
+            style={{ color: 'var(--theme-muted)' }}
+          >
+            Built-in providers and custom_providers share this card grid. URL,
+            keys, and OAuth are copied into every profile.
           </p>
         </div>
 
@@ -110,7 +120,11 @@ export function ModelProviderScopePanel({
           configureOnly
           extraProviders={catalogProviders}
           onSaveExtraProvider={async (id, patch) => {
-            const data = await postCatalog({ action: 'upsert-provider', id, ...patch })
+            const data = await postCatalog({
+              action: 'upsert-provider',
+              id,
+              ...patch,
+            })
             if (data.catalog) setCatalog(data.catalog)
             return data.message || 'Provider saved'
           }}
@@ -134,7 +148,11 @@ export function ModelProviderScopePanel({
           }}
         />
 
-        <ProviderCatalogPanel catalog={catalog} onCatalog={setCatalog} embedded />
+        <ProviderCatalogPanel
+          catalog={catalog}
+          onCatalog={setCatalog}
+          embedded
+        />
       </div>
 
       <ProfileModelSelector
@@ -152,7 +170,11 @@ export function ModelProviderScopePanel({
         message={selectMessage}
         onProfileChange={setScope}
         onSaveDefault={async (providerId, modelId) => {
-          const message = await saveProfileModelProvider(scope, providerId, modelId)
+          const message = await saveProfileModelProvider(
+            scope,
+            providerId,
+            modelId,
+          )
           setInitialProvider(providerId)
           setInitialModel(modelId)
           onApplied?.(providerId, modelId)

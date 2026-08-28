@@ -18,7 +18,11 @@ describe('swarm-mission-artifacts', () => {
 
   it('detects legacy output paths', () => {
     expect(isLegacyOutputArtifactPath('output/researcher/report.md')).toBe(true)
-    expect(isLegacyOutputArtifactPath('memory/swarm/missions/lg-test/researcher/report.md')).toBe(false)
+    expect(
+      isLegacyOutputArtifactPath(
+        'memory/swarm/missions/lg-test/researcher/report.md',
+      ),
+    ).toBe(false)
   })
 
   it('rewrites output paths in dispatch text', () => {
@@ -42,7 +46,9 @@ describe('swarm-mission-artifacts', () => {
     expect(checkpointUsesLegacyOutputPaths('output/researcher/a.md')).toBe(true)
     // Absolute path under the current canonical repo's legacy root.
     expect(
-      checkpointUsesLegacyOutputPaths(`${SWARM_LEGACY_OUTPUT_ROOT}/researcher/a.md`),
+      checkpointUsesLegacyOutputPaths(
+        `${SWARM_LEGACY_OUTPUT_ROOT}/researcher/a.md`,
+      ),
     ).toBe(true)
   })
 
@@ -59,7 +65,11 @@ describe('swarm-mission-artifacts', () => {
       reviewOutcome: null,
       raw: 'STATE: DONE',
     }
-    const adjusted = applyArtifactPathPolicy(checkpoint, 'lg-test', 'researcher')
+    const adjusted = applyArtifactPathPolicy(
+      checkpoint,
+      'lg-test',
+      'researcher',
+    )
     expect(adjusted.stateLabel).toBe('BLOCKED')
     expect(adjusted.blocker).toContain('legacy output/')
   })

@@ -22,12 +22,15 @@ Those belong to **architect** and **orchestrator**.
 Architect may challenge findings in review (`research_only.yaml` loop). Researcher responds with evidence, citations, and factual corrections — not reframed strategy.
 
 ## Tools
+
 web, browser, terminal, file, vision, session_search, skills, todo
 
 ## Skills
+
 researcher-core, llm-wiki, browser-harness, gstack-for-hermes, researcher-quick, arxiv, youtube-content, polymarket
 
 ## MCP servers
+
 none (brain-first via `llm-wiki` skill + `WIKI_PATH`)
 
 ## Mode

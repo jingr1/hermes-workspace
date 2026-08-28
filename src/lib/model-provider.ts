@@ -45,7 +45,9 @@ export async function saveProfileModelProvider(
   const data = await readJson(res)
   if (!res.ok) {
     throw new Error(
-      typeof data.error === 'string' ? data.error : `Failed to save (${res.status})`,
+      typeof data.error === 'string'
+        ? data.error
+        : `Failed to save (${res.status})`,
     )
   }
   return `Default model updated for profile ${name.trim() || 'default'}.`
@@ -63,7 +65,9 @@ export async function saveAllProfilesModelProvider(
   const data = await readJson(res)
   if (!res.ok) {
     throw new Error(
-      typeof data.error === 'string' ? data.error : `Failed to save (${res.status})`,
+      typeof data.error === 'string'
+        ? data.error
+        : `Failed to save (${res.status})`,
     )
   }
   return typeof data.message === 'string'

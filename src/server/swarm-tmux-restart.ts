@@ -22,7 +22,9 @@ export type RestartActiveSwarmWorkersResult = {
   results: Array<SwarmWorkerRestartResult>
 }
 
-export function workerIdFromSwarmSessionName(sessionName: string): string | null {
+export function workerIdFromSwarmSessionName(
+  sessionName: string,
+): string | null {
   if (!sessionName.startsWith(SWARM_SESSION_PREFIX)) return null
   const workerId = sessionName.slice(SWARM_SESSION_PREFIX.length)
   return /^[a-z0-9][a-z0-9_-]{0,63}$/i.test(workerId) ? workerId : null
@@ -48,9 +50,14 @@ export async function listActiveSwarmWorkerIds(): Promise<Array<string>> {
   }
 }
 
-async function tmuxHasSession(tmuxBin: string, sessionName: string): Promise<boolean> {
+async function tmuxHasSession(
+  tmuxBin: string,
+  sessionName: string,
+): Promise<boolean> {
   try {
-    await execFileAsync(tmuxBin, ['has-session', '-t', sessionName], { timeout: 5_000 })
+    await execFileAsync(tmuxBin, ['has-session', '-t', sessionName], {
+      timeout: 5_000,
+    })
     return true
   } catch {
     return false
@@ -62,7 +69,11 @@ export async function stopSwarmWorkerTmux(
 ): Promise<{ ok: boolean; wasRunning: boolean; error?: string }> {
   const tmuxBin = resolveTmuxBin()
   if (!tmuxBin) {
-    return { ok: false, wasRunning: false, error: 'tmux not installed on this host' }
+    return {
+      ok: false,
+      wasRunning: false,
+      error: 'tmux not installed on this host',
+    }
   }
 
   const sessionName = `${SWARM_SESSION_PREFIX}${workerId}`
@@ -72,7 +83,9 @@ export async function stopSwarmWorkerTmux(
   }
 
   try {
-    await execFileAsync(tmuxBin, ['kill-session', '-t', sessionName], { timeout: 5_000 })
+    await execFileAsync(tmuxBin, ['kill-session', '-t', sessionName], {
+      timeout: 5_000,
+    })
   } catch (error) {
     return {
       ok: false,
@@ -156,5 +169,7 @@ export function formatSwarmWorkerRestartSummary(
     }
     return `✗ ${item.workerId}: ${item.error ?? 'restart failed'}`
   })
-  return ['Restarted swarm workers after Hermes Agent update:', ...lines].join('\n')
+  return ['Restarted swarm workers after Hermes Agent update:', ...lines].join(
+    '\n',
+  )
 }

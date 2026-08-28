@@ -2,15 +2,26 @@ import { useCallback, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { Add01Icon, Chat01Icon, UserGroupIcon } from '@hugeicons/core-free-icons'
+import {
+  Add01Icon,
+  Chat01Icon,
+  UserGroupIcon,
+} from '@hugeicons/core-free-icons'
 import type { SessionMeta } from '@/screens/chat/types'
 import {
   setActiveProfileOptimistic,
   useGatewayPoolStatus,
   useProfiles,
 } from '@/screens/chat/hooks/use-profiles'
-import { chatQueryKeys, fetchHistory, fetchSessions } from '@/screens/chat/chat-queries'
-import { resolveSessionForProfile, writeLastSession } from '@/screens/chat/last-session'
+import {
+  chatQueryKeys,
+  fetchHistory,
+  fetchSessions,
+} from '@/screens/chat/chat-queries'
+import {
+  resolveSessionForProfile,
+  writeLastSession,
+} from '@/screens/chat/last-session'
 import { requestStreamHandoffIfActive } from '@/lib/stream-handoff-bridge'
 import { preloadWorkspaceFolders } from '@/components/workspace-folder-picker'
 import { cn } from '@/lib/utils'
@@ -40,10 +51,7 @@ function getSessionTitle(session: SessionMeta): string {
   return `Session ${session.friendlyId.slice(0, 8)}`
 }
 
-function profileMeta(profile: {
-  model?: string
-  provider?: string
-}): string {
+function profileMeta(profile: { model?: string; provider?: string }): string {
   const model = typeof profile.model === 'string' ? profile.model.trim() : ''
   const provider =
     typeof profile.provider === 'string' ? profile.provider.trim() : ''
@@ -150,9 +158,13 @@ export function MobileSessionsPanel({
             sessionsLoaded = true
           }
         }
-        const targetSession = resolveSessionForProfile(profileSessions, profileName, {
-          sessionsLoaded,
-        })
+        const targetSession = resolveSessionForProfile(
+          profileSessions,
+          profileName,
+          {
+            sessionsLoaded,
+          },
+        )
         prefetchSessionHistory(queryClient, profileName, targetSession)
         onClose()
         navigate({
@@ -220,7 +232,11 @@ export function MobileSessionsPanel({
                 className="inline-flex size-7 items-center justify-center rounded-lg text-primary-500 transition-colors hover:bg-primary-100"
                 title="Manage profiles"
               >
-                <HugeiconsIcon icon={UserGroupIcon} size={14} strokeWidth={1.5} />
+                <HugeiconsIcon
+                  icon={UserGroupIcon}
+                  size={14}
+                  strokeWidth={1.5}
+                />
               </Link>
             </div>
 
@@ -263,7 +279,9 @@ export function MobileSessionsPanel({
                           <span
                             className={cn(
                               'size-1.5 shrink-0 rounded-full',
-                              gatewayHealthy ? 'bg-emerald-400' : 'bg-neutral-500',
+                              gatewayHealthy
+                                ? 'bg-emerald-400'
+                                : 'bg-neutral-500',
                             )}
                             aria-hidden="true"
                           />
@@ -305,7 +323,11 @@ export function MobileSessionsPanel({
             <div className="flex-1 overflow-y-auto p-2">
               {sessions.length === 0 ? (
                 <div className="flex h-full flex-col items-center justify-center gap-2 px-3 text-center text-primary-500">
-                  <HugeiconsIcon icon={Chat01Icon} size={24} strokeWidth={1.6} />
+                  <HugeiconsIcon
+                    icon={Chat01Icon}
+                    size={24}
+                    strokeWidth={1.6}
+                  />
                   <p className="text-sm">No sessions yet.</p>
                   <p className="text-xs text-primary-400">
                     Start a conversation to see it here.

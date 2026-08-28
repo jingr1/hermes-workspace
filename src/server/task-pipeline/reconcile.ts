@@ -19,7 +19,7 @@
  * old run's tokens first, then CAS the new attempt.
  */
 import { existsSync } from 'node:fs'
-import { createCollabId, getCollabDbPath, insertCollabRow  } from '../collab-db'
+import { createCollabId, getCollabDbPath, insertCollabRow } from '../collab-db'
 import { openSqliteDatabase } from '../sqlite-helper'
 import { completeTaskRun } from '../mcp/task-runs'
 import { revokeRunTokensForRun } from '../mcp/run-tokens'
@@ -37,9 +37,20 @@ import {
 import { publishChatEvent } from '../chat-event-bus'
 
 export type ReconcileFinding =
-  | { kind: 'crash_orphan'; runId: string; missionId: string; assignmentId: string }
+  | {
+      kind: 'crash_orphan'
+      runId: string
+      missionId: string
+      assignmentId: string
+    }
   | { kind: 'dispatch_incomplete'; missionId: string; assignmentId: string }
-  | { kind: 'process_dead'; runId: string; missionId: string; assignmentId: string; pid: number }
+  | {
+      kind: 'process_dead'
+      runId: string
+      missionId: string
+      assignmentId: string
+      pid: number
+    }
   | { kind: 'reattached'; runId: string; pid: number }
 
 export type ReconcileReport = {
@@ -61,7 +72,9 @@ function listRunningRuns(dbPath: string): Array<RunningRow> {
   const db = openSqliteDatabase(dbPath, true)
   try {
     return db
-      .prepare("SELECT id, mission_id, assignment_id, agent_id, room_id FROM task_runs WHERE status = 'running'")
+      .prepare(
+        "SELECT id, mission_id, assignment_id, agent_id, room_id FROM task_runs WHERE status = 'running'",
+      )
       .all() as unknown as Array<RunningRow>
   } finally {
     db.close()
@@ -77,18 +90,22 @@ function openPendingTurn(input: {
   reason: string
   dbPath: string
 }): void {
-  insertCollabRow('pending_turns', {
-    id: createCollabId('pt'),
-    room_id: input.roomId,
-    task_id: input.taskId,
-    assignment_id: input.assignmentId,
-    requested_by: 'reconcile',
-    target_participant_id: input.targetParticipantId,
-    kind: input.kind,
-    reason: input.reason,
-    status: 'pending',
-    created_at: Date.now(),
-  }, input.dbPath)
+  insertCollabRow(
+    'pending_turns',
+    {
+      id: createCollabId('pt'),
+      room_id: input.roomId,
+      task_id: input.taskId,
+      assignment_id: input.assignmentId,
+      requested_by: 'reconcile',
+      target_participant_id: input.targetParticipantId,
+      kind: input.kind,
+      reason: input.reason,
+      status: 'pending',
+      created_at: Date.now(),
+    },
+    input.dbPath,
+  )
 }
 
 export function reconcileOnBoot(input?: { dbPath?: string }): ReconcileReport {
@@ -98,7 +115,10 @@ export function reconcileOnBoot(input?: { dbPath?: string }): ReconcileReport {
   const pidEntries = new Map(listPids().map((e) => [e.runId, e]))
 
   const missions = listSwarmMissions(500)
-  const assignmentIndex = new Map<string, { missionId: string; state: string }>()
+  const assignmentIndex = new Map<
+    string,
+    { missionId: string; state: string }
+  >()
   for (const mission of missions) {
     for (const a of mission.assignments) {
       assignmentIndex.set(a.id, { missionId: mission.id, state: a.state })
@@ -113,7 +133,12 @@ export function reconcileOnBoot(input?: { dbPath?: string }): ReconcileReport {
 
     if (asg && asg.state === 'queued') {
       // crash_orphan: run row exists but the pipeline never dispatched.
-      completeTaskRun({ runId: run.id, status: 'failed', summary: 'crash_orphan: running row with queued assignment', dbPath })
+      completeTaskRun({
+        runId: run.id,
+        status: 'failed',
+        summary: 'crash_orphan: running row with queued assignment',
+        dbPath,
+      })
       revokeRunTokensForRun(run.id, dbPath)
       if (pidEntry && alive) killProcessGroup(pidEntry.pid, 'SIGKILL')
       if (pidEntry) unregisterPid(run.id)
@@ -123,10 +148,16 @@ export function reconcileOnBoot(input?: { dbPath?: string }): ReconcileReport {
         assignmentId: run.assignment_id,
         targetParticipantId: run.agent_id,
         kind: 'blocked',
-        reason: 'crash_orphan: run row present but assignment never dispatched; manual review required before re-dispatch',
+        reason:
+          'crash_orphan: run row present but assignment never dispatched; manual review required before re-dispatch',
         dbPath,
       })
-      findings.push({ kind: 'crash_orphan', runId: run.id, missionId: run.mission_id, assignmentId: run.assignment_id })
+      findings.push({
+        kind: 'crash_orphan',
+        runId: run.id,
+        missionId: run.mission_id,
+        assignmentId: run.assignment_id,
+      })
       continue
     }
 
@@ -137,14 +168,20 @@ export function reconcileOnBoot(input?: { dbPath?: string }): ReconcileReport {
         findings.push({ kind: 'reattached', runId: run.id, pid: pidEntry!.pid })
       } else {
         // Process dead: fail the run, block the assignment, human decides.
-        completeTaskRun({ runId: run.id, status: 'failed', summary: 'process group dead at boot', dbPath })
+        completeTaskRun({
+          runId: run.id,
+          status: 'failed',
+          summary: 'process group dead at boot',
+          dbPath,
+        })
         revokeRunTokensForRun(run.id, dbPath)
         if (pidEntry) unregisterPid(run.id)
         recordMissionAssignmentBlocked({
           missionId: run.mission_id,
           assignmentId: run.assignment_id,
           workerId: run.agent_id,
-          reason: 'process died while server was down; not auto re-dispatched (unknown half-done worktree state)',
+          reason:
+            'process died while server was down; not auto re-dispatched (unknown half-done worktree state)',
           source: 'reconcile',
         })
         openPendingTurn({
@@ -153,15 +190,27 @@ export function reconcileOnBoot(input?: { dbPath?: string }): ReconcileReport {
           assignmentId: run.assignment_id,
           targetParticipantId: run.agent_id,
           kind: 'blocked',
-          reason: 'process_dead at boot; assignment blocked pending human decision',
+          reason:
+            'process_dead at boot; assignment blocked pending human decision',
           dbPath,
         })
-        findings.push({ kind: 'process_dead', runId: run.id, missionId: run.mission_id, assignmentId: run.assignment_id, pid: pidEntry?.pid ?? -1 })
+        findings.push({
+          kind: 'process_dead',
+          runId: run.id,
+          missionId: run.mission_id,
+          assignmentId: run.assignment_id,
+          pid: pidEntry?.pid ?? -1,
+        })
       }
       continue
     }
     // running row whose assignment is terminal/unknown: fail the run quietly.
-    completeTaskRun({ runId: run.id, status: 'failed', summary: 'orphaned running row (assignment terminal or unknown)', dbPath })
+    completeTaskRun({
+      runId: run.id,
+      status: 'failed',
+      summary: 'orphaned running row (assignment terminal or unknown)',
+      dbPath,
+    })
     revokeRunTokensForRun(run.id, dbPath)
     if (pidEntry && alive) killProcessGroup(pidEntry.pid, 'SIGKILL')
     if (pidEntry) unregisterPid(run.id)
@@ -179,9 +228,14 @@ export function reconcileOnBoot(input?: { dbPath?: string }): ReconcileReport {
       requeueMissionAssignment({
         missionId: mission.id,
         assignmentId: a.id,
-        reason: 'dispatch_incomplete: assignment dispatched but no task_runs row (server crashed before spawn)',
+        reason:
+          'dispatch_incomplete: assignment dispatched but no task_runs row (server crashed before spawn)',
       })
-      findings.push({ kind: 'dispatch_incomplete', missionId: mission.id, assignmentId: a.id })
+      findings.push({
+        kind: 'dispatch_incomplete',
+        missionId: mission.id,
+        assignmentId: a.id,
+      })
     }
   }
 

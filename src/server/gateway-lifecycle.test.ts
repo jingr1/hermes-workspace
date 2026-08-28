@@ -147,7 +147,11 @@ describe('selectEvictionCandidates', () => {
   it('keeps default plus active even when they exceed maxResident', () => {
     const victims = selectEvictionCandidates(
       [
-        { profile: PINNED_GATEWAY_PROFILE, lastUsedAt: now - 999_999, startedAt: 0 },
+        {
+          profile: PINNED_GATEWAY_PROFILE,
+          lastUsedAt: now - 999_999,
+          startedAt: 0,
+        },
         { profile: 'researcher', lastUsedAt: now - 999_999, startedAt: 0 },
       ],
       {

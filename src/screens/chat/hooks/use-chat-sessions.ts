@@ -126,12 +126,7 @@ export function useChatSessions({
       const bTs = b.updatedAt ?? 0
       return bTs - aTs
     })
-  }, [
-    activeFriendlyId,
-    forcedSessionKey,
-    sessionsQuery.data,
-    storedTitles,
-  ])
+  }, [activeFriendlyId, forcedSessionKey, sessionsQuery.data, storedTitles])
 
   const activeSession = useMemo(() => {
     return sessions.find((session) => session.friendlyId === activeFriendlyId)

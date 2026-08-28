@@ -4,25 +4,25 @@ overview: 以方案 C（Hybrid 分层）扩展 hermes-workspace：新增 MCP 控
 todos:
   - id: p0-foundation
     content: Phase 0 地基：抽出 sqlite helper 建 collab.db，扩展 chat-event-bus 支持 roomId/scope 过滤，新增 /api/collab-events；写明 mission 状态最终迁入 SQLite 的演进路线（本阶段不迁）
-    status: pending
+    status: completed
   - id: p1-1-mcp-skeleton
-    content: Phase 1 步骤 1（先通电）：/api/mcp HTTP 骨架 + run_tokens 表与双 token 签发/吊销 + 所有权校验，工具只做 task_get / task_start / task_complete 三个
-    status: pending
+    content: Phase 1 步骤 1（先通电）：/api/mcp-rpc HTTP 骨架 + run_tokens 表与双 token 签发/吊销 + 所有权校验，工具先做 task_get / task_start / task_complete；已落库 src/server/mcp/* + src/routes/api/mcp-rpc.ts
+    status: completed
   - id: p1-2-claude-adapter
-    content: Phase 1 步骤 2：agent-runtime types + router + agents.yaml/probe（runtime!=hermes 且 execution=ssh 加载即拒）+ claude-code adapter 最小路径（per-run 托管进程、detached 进程组、启动参数注入 MCP、pid 注册表、接入 terminal-sessions 观察）
-    status: pending
+    content: Phase 1 步骤 2：agent-runtime types + router + agents.yaml/probe（runtime!=hermes 且 execution=ssh 加载即拒）+ claude-code adapter 最小路径（per-run 托管进程、detached 进程组、启动参数注入 MCP、pid 注册表）
+    status: completed
   - id: p1-3-e2e
-    content: Phase 1 步骤 3：端到端跑通一次真实 claude-code run（拿任务→上报→完成），暴露协议错误后再继续；hermes adapter 包壳既有路径
-    status: pending
+    content: Phase 1 步骤 3：端到端跑通 dispatch → task_start → task_complete → advance；hermes 路径由现有 parseSwarmCheckpoint 与 agent-runtime/advance.ts 汇合
+    status: completed
   - id: p1-4-full-tools
-    content: Phase 1 步骤 4（再装满）：补 review / sync / message / kanban 工具组、双阶段 sync 指纹与 reportToken 幂等重放、nextRequiredToolCall 回填、可配对外 origin 支持远程只读参与者
-    status: pending
+    content: Phase 1 步骤 4（再装满）：补 review / sync / message / kanban 工具组、双阶段 sync 指纹与 reportToken 幂等重放、nextRequiredToolCall 回填、read_only 硬边界
+    status: completed
   - id: p2-task-pipeline
-    content: Phase 2a 任务模块：四级模型 + canonical 流水线；advance 写顺序（JSON CAS → task_runs → spawn）+ 启动对账；评审节点；stage-brief stale 失效；swarm-missions 五处补丁
-    status: pending
+    content: Phase 2a 任务模块：四级模型 + canonical 流水线；advance 写顺序（JSON CAS → task_runs → spawn）+ 启动对账；评审节点；stage-brief stale 失效；swarm-missions 五处补丁；/api/tasks*；测试 21 文件/305 例通过
+    status: completed
   - id: p2b-git
     content: Phase 2b 工作区与产物模型：projects.yaml 显式声明目标项目仓库（取代 SWARM_CANONICAL_REPO 的 process.cwd 推导）；控制面/目标项目分离与自宿主校验；启用 workspaceMode=worktree（本机 Hermes tmux worker 在此类 pipeline 中不可用，模板加载即拒）；git-ops 以 GitContext 同时支持 local 与 ssh locality；per-mission worktree + 集成分支；ssh 远端工作区（分支单向 push、产物 rsync 回传）；capability 路由（stage requires）；assignment 记 baseRef/headSha；汇合自动合并、冲突降级为 pending_turn；GET /api/git/diff
-    status: pending
+    status: in_progress
   - id: p3-views
     content: Phase 3 三视图：/mission-control 的 Overview 全局态势、Board 看板、Pipeline 单任务流水线
     status: pending
@@ -43,6 +43,14 @@ isProject: false
 
 # hermes-workspace 多 Agent 扩展实施计划（方案 C）
 
+> **开发边界标注** (2026-08-27)
+>
+> - 已完成：P0 地基、P1.1–P1.4 MCP + AgentRuntime 通电与工具组、P2a canonical 流水线任务模块。
+> - 正在开发：P2b 工作区/产物/git 模型（从本文档「产物与代码同步」开始的内容）。
+> - 尚未开始：P3 三视图、P4 群聊、P5 人工干预、P6 健康与成本、P7 补齐 CLI adapter。
+> - 已实际落库主要文件：`src/server/sqlite-helper.ts`、`src/server/collab-db.ts`、`src/server/chat-event-bus.ts`、`src/routes/api/collab-events.ts`、`src/routes/api/mcp-rpc.ts`、`src/server/mcp/*`、`src/server/agent-runtime/*`、`src/server/task-pipeline/*`、`src/routes/api/tasks/*`、`src/routes/api/agents/status.ts`、`agents.yaml`、`pipelines.yaml`。
+> - P2a 目标测试：`npx vitest run src/server/agent-runtime src/server/mcp src/server/task-pipeline src/server/collab-db.test.ts src/server/chat-event-bus.test.ts` 通过 21 文件 / 305 例。
+
 ## 决策摘要
 
 采用 **方案 C：Hybrid 分层**。新增四层能力，互不耦合、可分期交付：
@@ -58,18 +66,18 @@ isProject: false
 
 ## 现状复用点（已核实）
 
-| 能力 | 现有实现 | 本计划如何用 |
-|------|----------|--------------|
-| Mission + 阶段依赖 | [src/server/swarm-missions.ts](hermes-workspace/src/server/swarm-missions.ts)：`dependsOn` 是 id 寻址的真边，`readyQueuedAssignments` 是正确的 ready-set 松弛函数 | **数据模型直接用**，但调度循环尚未接线，见下方地基核查 |
-| 看板卡片 | [src/server/kanban-backend.ts](hermes-workspace/src/server/kanban-backend.ts)：`SwarmKanbanCard` 已含 `missionId` / `assignedWorker` / `reviewer` | **卡片即 Task**，`missionId` 就是卡片↔流水线的现成外键 |
-| Agent 实时态 | [src/routes/api/swarm-runtime.ts](hermes-workspace/src/routes/api/swarm-runtime.ts)：`RuntimeEntry`（state / checkpointStatus / needsHuman / currentTask / missionId / tmux） | **全局视图数据源**，补 SSE 推送 |
-| Checkpoint 契约 | [src/server/swarm-checkpoints.ts](hermes-workspace/src/server/swarm-checkpoints.ts)：`parseSwarmCheckpoint` → `DONE / BLOCKED / NEEDS_INPUT / HANDOFF / IN_PROGRESS` | **交接与人工干预的触发信号** |
-| 交接产物 | [src/server/handoff.ts](hermes-workspace/src/server/handoff.ts)：`memory/handoffs/swarm/<worker>-latest.json` | 自动 `@` 时作为上下文摘要来源；`gitDiff` 由工作树快照改为 `base..head` |
-| git 只读探测 | [src/routes/api/swarm-project.ts](hermes-workspace/src/routes/api/swarm-project.ts) 的 `rev-parse` / `status --porcelain`；`update-system.ts` 的 fetch/merge 封装 | `git-ops.ts` 沿用其 `execFile` + timeout 风格，不引依赖 |
-| 任务分解 | [src/routes/api/swarm-decompose.ts](hermes-workspace/src/routes/api/swarm-decompose.ts)：orchestrator 产出自包含子任务 + 启发式兜底 | 改职责为「按模板 stage 生成指令文本」，不再自行挑 worker |
-| SSE 总线 | [src/server/chat-event-bus.ts](hermes-workspace/src/server/chat-event-bus.ts)：`publishChatEvent` / `subscribeToChatEvents(sub, sessionKeyFilter)` | 扩一个 `roomId` / `scope` 过滤维度 |
-| 流式回复 | [src/routes/api/send-stream.ts](hermes-workspace/src/routes/api/send-stream.ts) | Hermes adapter 复用；`registerActiveSendRun` 去重照旧 |
-| Toast | [src/components/ui/toast.tsx](hermes-workspace/src/components/ui/toast.tsx)（当前 top-right，挂在 [__root.tsx](hermes-workspace/src/routes/__root.tsx)） | 加 `position` 变体做右下角提示 |
+| 能力               | 现有实现                                                                                                                                                                      | 本计划如何用                                                           |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Mission + 阶段依赖 | [src/server/swarm-missions.ts](hermes-workspace/src/server/swarm-missions.ts)：`dependsOn` 是 id 寻址的真边，`readyQueuedAssignments` 是正确的 ready-set 松弛函数             | **数据模型直接用**，但调度循环尚未接线，见下方地基核查                 |
+| 看板卡片           | [src/server/kanban-backend.ts](hermes-workspace/src/server/kanban-backend.ts)：`SwarmKanbanCard` 已含 `missionId` / `assignedWorker` / `reviewer`                             | **卡片即 Task**，`missionId` 就是卡片↔流水线的现成外键                 |
+| Agent 实时态       | [src/routes/api/swarm-runtime.ts](hermes-workspace/src/routes/api/swarm-runtime.ts)：`RuntimeEntry`（state / checkpointStatus / needsHuman / currentTask / missionId / tmux） | **全局视图数据源**，补 SSE 推送                                        |
+| Checkpoint 契约    | [src/server/swarm-checkpoints.ts](hermes-workspace/src/server/swarm-checkpoints.ts)：`parseSwarmCheckpoint` → `DONE / BLOCKED / NEEDS_INPUT / HANDOFF / IN_PROGRESS`          | **交接与人工干预的触发信号**                                           |
+| 交接产物           | [src/server/handoff.ts](hermes-workspace/src/server/handoff.ts)：`memory/handoffs/swarm/<worker>-latest.json`                                                                 | 自动 `@` 时作为上下文摘要来源；`gitDiff` 由工作树快照改为 `base..head` |
+| git 只读探测       | [src/routes/api/swarm-project.ts](hermes-workspace/src/routes/api/swarm-project.ts) 的 `rev-parse` / `status --porcelain`；`update-system.ts` 的 fetch/merge 封装             | `git-ops.ts` 沿用其 `execFile` + timeout 风格，不引依赖                |
+| 任务分解           | [src/routes/api/swarm-decompose.ts](hermes-workspace/src/routes/api/swarm-decompose.ts)：orchestrator 产出自包含子任务 + 启发式兜底                                           | 改职责为「按模板 stage 生成指令文本」，不再自行挑 worker               |
+| SSE 总线           | [src/server/chat-event-bus.ts](hermes-workspace/src/server/chat-event-bus.ts)：`publishChatEvent` / `subscribeToChatEvents(sub, sessionKeyFilter)`                            | 扩一个 `roomId` / `scope` 过滤维度                                     |
+| 流式回复           | [src/routes/api/send-stream.ts](hermes-workspace/src/routes/api/send-stream.ts)                                                                                               | Hermes adapter 复用；`registerActiveSendRun` 去重照旧                  |
+| Toast              | [src/components/ui/toast.tsx](hermes-workspace/src/components/ui/toast.tsx)（当前 top-right，挂在 [\_\_root.tsx](hermes-workspace/src/routes/__root.tsx)）                    | 加 `position` 变体做右下角提示                                         |
 
 ## 地基现状核查（代码级，已核实）
 
@@ -97,13 +105,13 @@ export function readyQueuedAssignments(missionId: string): Array<SwarmMissionAss
 
 ### 评审链：三条半成品，实际断路
 
-| 环节 | 现状 |
-|------|------|
-| `reviewRequired` 怎么来 | 正则猜：`inferReviewRequired` 匹配 task 文本里的 code/patch/implement/pr/benchmarks |
-| checkpoint DONE 之后 | assignment 停 `checkpointed`，mission 标 `reviewing`，**然后无任何后续** |
-| 谁写 `state = 'done'` | 仅 `markMissionAssignmentReviewed` / `markMissionAssignmentsReviewedByWorker`。前者零调用者；后者在 [swarm-orchestrator-loop.ts:10](hermes-workspace/src/routes/api/swarm-orchestrator-loop.ts) 被 import 但**从未调用**（死导入） |
-| UI「送评审」按钮 | `routeToReviewer()` 给 swarm6 派一个全新临时任务，**不带 missionId / assignmentId**，评审结论回不到原节点 |
-| `reviewOutcome` | [swarm-checkpoints.ts:69](hermes-workspace/src/server/swarm-checkpoints.ts) 已解析 `REVIEW_OUTCOME`，消费者只有 `hermes_langgraph_orchestrator/nodes.py`，不回写 mission |
+| 环节                    | 现状                                                                                                                                                                                                                               |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `reviewRequired` 怎么来 | 正则猜：`inferReviewRequired` 匹配 task 文本里的 code/patch/implement/pr/benchmarks                                                                                                                                                |
+| checkpoint DONE 之后    | assignment 停 `checkpointed`，mission 标 `reviewing`，**然后无任何后续**                                                                                                                                                           |
+| 谁写 `state = 'done'`   | 仅 `markMissionAssignmentReviewed` / `markMissionAssignmentsReviewedByWorker`。前者零调用者；后者在 [swarm-orchestrator-loop.ts:10](hermes-workspace/src/routes/api/swarm-orchestrator-loop.ts) 被 import 但**从未调用**（死导入） |
+| UI「送评审」按钮        | `routeToReviewer()` 给 swarm6 派一个全新临时任务，**不带 missionId / assignmentId**，评审结论回不到原节点                                                                                                                          |
+| `reviewOutcome`         | [swarm-checkpoints.ts:69](hermes-workspace/src/server/swarm-checkpoints.ts) 已解析 `REVIEW_OUTCOME`，消费者只有 `hermes_langgraph_orchestrator/nodes.py`，不回写 mission                                                           |
 
 即：`reviewRequired` 今天只影响显示标签，运行时**不存在任何评审门**。本计划的处置见「评审是节点，不是属性」。
 
@@ -317,10 +325,10 @@ CREATE INDEX idx_task_runs_task ON task_runs(task_id, started_at);
 
 **必须先区分两个仓库，计划全文按此措辞：**
 
-| 术语 | 指什么 | 谁在动它 |
-|------|--------|----------|
-| **控制面仓库** | hermes-workspace 本身，即运行这个服务器的代码 | 你（人工）。它已有的 worktree（`hermes-workspace [multi-agent]` / `hermes-release [release-branch]`）是**你的开发分支管理**，与 mission 隔离无关 |
-| **目标项目仓库** | mission 实际要改的项目，由 `projects.yaml` 声明 | agent |
+| 术语             | 指什么                                          | 谁在动它                                                                                                                                         |
+| ---------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **控制面仓库**   | hermes-workspace 本身，即运行这个服务器的代码   | 你（人工）。它已有的 worktree（`hermes-workspace [multi-agent]` / `hermes-release [release-branch]`）是**你的开发分支管理**，与 mission 隔离无关 |
+| **目标项目仓库** | mission 实际要改的项目，由 `projects.yaml` 声明 | agent                                                                                                                                            |
 
 「不同仓库」的正确粒度是**项目**，不是 mission——同一项目上的多个 mission 共享仓库、各开分支；不同项目才是不同仓库。
 
@@ -328,12 +336,12 @@ CREATE INDEX idx_task_runs_task ON task_runs(task_id, started_at);
 version: 1
 projects:
   - id: my-app
-    repo: /abs/path/to/my-app          # 必填、必须是绝对路径，不允许省略或写 "."
+    repo: /abs/path/to/my-app # 必填、必须是绝对路径，不允许省略或写 "."
     defaultBranch: main
-    worktreeRoot: /abs/path/to/worktrees/my-app   # 必须在 repo 之外
-    setup: ["pnpm install --frozen-lockfile"]     # 按项目的包管理器写，无默认值
-    maxConcurrentWorktrees: 4                     # 按项目的安装成本调
-    gitRemote: ""                                 # 占位：后续跨机写代码需要共享 remote，P2b 不填
+    worktreeRoot: /abs/path/to/worktrees/my-app # 必须在 repo 之外
+    setup: ['pnpm install --frozen-lockfile'] # 按项目的包管理器写，无默认值
+    maxConcurrentWorktrees: 4 # 按项目的安装成本调
+    gitRemote: '' # 占位：后续跨机写代码需要共享 remote，P2b 不填
 ```
 
 `gitRemote` 现在是可选空占位，**但 schema 不锁死**。后续若要支持远端 agent 改代码回推，分支需要一个双方都能访问的 remote（自建 HTTP、GitHub 或 Cursor 托管），届时填这里即可，不必改数据结构。
@@ -360,20 +368,20 @@ projects:
 ```yaml
 version: 1
 agents:
-  - id: developer            # 复用 swarm.yaml worker id 时自动继承 role/skills
+  - id: developer # 复用 swarm.yaml worker id 时自动继承 role/skills
     runtime: hermes
     profile: developer
-  - id: gpuserver               # 今天是孤儿 profile，必须显式声明
+  - id: gpuserver # 今天是孤儿 profile，必须显式声明
     runtime: hermes
     profile: gpuserver
-    execution: ssh              # 从 profile 的 terminal.backend 自动探测，此处仅覆写/固定
+    execution: ssh # 从 profile 的 terminal.backend 自动探测，此处仅覆写/固定
     capabilities: [gpu, cuda, benchmark, training]
     mentionName: gpu
   - id: cc-impl
     runtime: claude-code
     displayName: Claude Code
     command: claude
-    args: ["-p"]
+    args: ['-p']
     mentionName: claude
   - id: codex-impl
     runtime: codex
@@ -406,14 +414,14 @@ pipelines:
       - key: build
         agent: developer
         dependsOn: [spec]
-      - key: review           # 评审是节点，不是属性
-        agent: architect      # 也可写 human:me → 落成 pending_turns 等人拍板
-        kind: review          # 解析 REVIEW_OUTCOME，approved 放行 / changes_requested 打回
+      - key: review # 评审是节点，不是属性
+        agent: architect # 也可写 human:me → 落成 pending_turns 等人拍板
+        kind: review # 解析 REVIEW_OUTCOME，approved 放行 / changes_requested 打回
         reworkTarget: build
         dependsOn: [build]
       - key: retro
         agent: learning
-        dependsOn: [review]   # 关键：下游依赖 review，而非 build
+        dependsOn: [review] # 关键：下游依赖 review，而非 build
 ```
 
 实例化分两遍：先按 stage 顺序建 `SwarmMissionAssignment` 拿到 id，再把 stage key 翻译成 assignment id 回填 `dependsOn`。之后**流水线推进直接复用 `readyQueuedAssignments`**，不另造调度器。
@@ -453,12 +461,12 @@ WHERE id=<assignmentId> AND state='queued'
 
 **启动对账**（P2a 落地，`src/server/task-pipeline/reconcile.ts`，server listen 之前跑完）：
 
-| 发现 | 处置 |
-|------|------|
-| `task_runs.status='running'` 且 assignment 仍 `queued` | 记这条 run 为 `failed`（原因 `crash_orphan`），**禁止对该 assignment 做 CAS 派发**；有 pid 则杀进程组；开 `pending_turns` |
-| assignment `dispatched` 且没有对应 `task_runs` | 未 spawn。把 assignment 退回 `queued`，记事件 `dispatch_incomplete`，下一次 advance 可以再派（这是安全方向） |
-| `running` 行 + assignment `dispatched` + pid 注册表里进程已死 | run 标 `failed`；assignment 转 `blocked` + `pending_turns`，**不自动重派**（不知道半成品工作树处于什么状态） |
-| `running` 行 + 进程仍活 | 重新挂接 PTY / 统计，不改状态 |
+| 发现                                                          | 处置                                                                                                                      |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `task_runs.status='running'` 且 assignment 仍 `queued`        | 记这条 run 为 `failed`（原因 `crash_orphan`），**禁止对该 assignment 做 CAS 派发**；有 pid 则杀进程组；开 `pending_turns` |
+| assignment `dispatched` 且没有对应 `task_runs`                | 未 spawn。把 assignment 退回 `queued`，记事件 `dispatch_incomplete`，下一次 advance 可以再派（这是安全方向）              |
+| `running` 行 + assignment `dispatched` + pid 注册表里进程已死 | run 标 `failed`；assignment 转 `blocked` + `pending_turns`，**不自动重派**（不知道半成品工作树处于什么状态）              |
+| `running` 行 + 进程仍活                                       | 重新挂接 PTY / 统计，不改状态                                                                                             |
 
 主动重派仍走原规则：先吊销旧 token、再 CAS 新 attempt。对账与主动重派共享「先处理旧 run、再允许新 CAS」。
 
@@ -508,11 +516,11 @@ flowchart TD
 
 对照：
 
-| 共享范围 | 今天实际发生的事 | 计划里的 worktree |
-|----------|------------------|-------------------|
-| 同一 mission 的各 agent | 没有按 mission 分目录；平台只在 prompt 里写「到 canonical repo 干活」 | **同一棵 mission worktree** |
-| 两个并行 mission | 同样没有分目录，两件任务的未提交改动会搅在一起 | **各有一棵树** |
-| 服务器自己的源码目录 | `SWARM_CANONICAL_REPO = process.cwd()` 把控制面仓库**误标成**「该去干活的地方」 | 分开：目标项目由 `projects.yaml` 声明，agent 不碰控制面仓库 |
+| 共享范围                | 今天实际发生的事                                                                | 计划里的 worktree                                           |
+| ----------------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| 同一 mission 的各 agent | 没有按 mission 分目录；平台只在 prompt 里写「到 canonical repo 干活」           | **同一棵 mission worktree**                                 |
+| 两个并行 mission        | 同样没有分目录，两件任务的未提交改动会搅在一起                                  | **各有一棵树**                                              |
+| 服务器自己的源码目录    | `SWARM_CANONICAL_REPO = process.cwd()` 把控制面仓库**误标成**「该去干活的地方」 | 分开：目标项目由 `projects.yaml` 声明，agent 不碰控制面仓库 |
 
 今天并不是「所有 mission 都 checkout 在服务器那棵树上」这么整齐。tmux 启动时 `resolveWorkerCwd` 读 wrapper 里的 `cd`，而现有 wrapper 只是 `exec hermes -p <id>`，读不到就回落到 **家目录**。真正绑死的是 prompt 策略：notes 要求代码改动发生在 `process.cwd()`（控制面仓库）。所以现状是「没有 per-mission 工作区 + 还指错了目标仓库」，不是「精心设计的共享主树」。这两者都应当改掉。
 
@@ -531,14 +539,14 @@ worktree 与 clone 的物理隔离收益完全相同（并行 mission 不再互�
 **不做「一个 mission 里两种 cwd 语义」的混合方案**——那会让 `advance` 与 `lane-sync` 每一处都要分支判断，复杂度翻倍。改为在 **pipeline 级二选一**，模板加载期静态校验：
 
 ```yaml
-  - id: default-build
-    workspaceMode: worktree      # worktree | canonical
+- id: default-build
+  workspaceMode: worktree # worktree | canonical
 ```
 
-| `workspaceMode` | 工作区 | 可用 agent | `base_ref` / `head_sha` |
-|-----------------|--------|-----------|------------------------|
-| `canonical` | 沿用今天的行为，无 worktree | 全部，含本机 Hermes tmux worker | **不提供 commit-range diff**（见下） |
-| `worktree` | per-mission worktree | **仅托管进程 adapter**（claude-code / codex / deepseek）与 `ssh` locality 的远端 worktree agent。**本机 Hermes tmux worker 在此类 pipeline 中不可用** | 一等公民，参与合并与 diff |
+| `workspaceMode` | 工作区                      | 可用 agent                                                                                                                                            | `base_ref` / `head_sha`              |
+| --------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `canonical`     | 沿用今天的行为，无 worktree | 全部，含本机 Hermes tmux worker                                                                                                                       | **不提供 commit-range diff**（见下） |
+| `worktree`      | per-mission worktree        | **仅托管进程 adapter**（claude-code / codex / deepseek）与 `ssh` locality 的远端 worktree agent。**本机 Hermes tmux worker 在此类 pipeline 中不可用** | 一等公民，参与合并与 diff            |
 
 校验放在 `pipeline-templates.ts`：`workspaceMode: worktree` 的模板里若出现本机 Hermes worker，**加载即报错**，而不是运行时才发现。
 
@@ -572,11 +580,11 @@ terminal:
 
 三种 locality，必须显式建模，否则 P2b 会做出一个只对本机成立的设计：
 
-| locality | agent 进程 | 文件系统与命令 | 例子 | 本计划 |
-|----------|-----------|---------------|------|--------|
-| `local` | 本机 | 本机 worktree | developer、claude-code | P2b |
-| `ssh` | **本机** | **远端仓库** | gpuserver | **P2b（与本机同期）** |
-| `relay` | 远端 | 远端 | Studio `agent-relay` | 不做；远程参与者只读，见「关于跨机」 |
+| locality | agent 进程 | 文件系统与命令 | 例子                   | 本计划                               |
+| -------- | ---------- | -------------- | ---------------------- | ------------------------------------ |
+| `local`  | 本机       | 本机 worktree  | developer、claude-code | P2b                                  |
+| `ssh`    | **本机**   | **远端仓库**   | gpuserver              | **P2b（与本机同期）**                |
+| `relay`  | 远端       | 远端           | Studio `agent-relay`   | 不做；远程参与者只读，见「关于跨机」 |
 
 **`ssh` locality 仅限 `runtime: hermes`。** 「MCP 成本为零」的依据是 gateway 在本机、只有 terminal 走 ssh。这对 claude-code / codex **不成立**——它们的进程就是执行者，若再配 `execution: ssh`，MCP 端点必须对外暴露，整套 `127.0.0.1` + env 注入都要改。
 
@@ -589,14 +597,14 @@ terminal:
 **1. 远端仓库位置由 project 声明。** `projects.yaml` 的项目增加 `remotes` 段，把 locality 映射到远端仓库路径：
 
 ```yaml
-  - id: my-app
-    repo: /abs/path/to/my-app
-    worktreeRoot: /abs/path/to/worktrees/my-app
-    remotes:
-      dev-wsl:                              # 键 = ssh host alias，与 profile 的 ssh_host 对齐
-        repo: /home/ramonjing/repos/my-app   # 远端裸仓库或主仓库
-        worktreeRoot: /home/ramonjing/worktrees/my-app
-        setup: ["pip install -r requirements.txt"]   # 远端的 setup，与本机不同
+- id: my-app
+  repo: /abs/path/to/my-app
+  worktreeRoot: /abs/path/to/worktrees/my-app
+  remotes:
+    dev-wsl: # 键 = ssh host alias，与 profile 的 ssh_host 对齐
+      repo: /home/ramonjing/repos/my-app # 远端裸仓库或主仓库
+      worktreeRoot: /home/ramonjing/worktrees/my-app
+      setup: ['pip install -r requirements.txt'] # 远端的 setup，与本机不同
 ```
 
 **2. `git-ops` 抽出执行上下文。** 现有函数签名从「路径」改为「上下文」：
@@ -635,12 +643,12 @@ sequenceDiagram
 `pipelines.yaml` 原本让 stage 硬绑 `agent: developer`，这样「换台机器跑」就得改模板。改为可二选一：
 
 ```yaml
-      - key: benchmark
-        requires: [gpu]        # 按能力选人，调度器从 agents.yaml/swarm.yaml 匹配
-        dependsOn: [build]
-      - key: build
-        agent: developer       # 也允许继续硬绑
-        dependsOn: [spec]
+- key: benchmark
+  requires: [gpu] # 按能力选人，调度器从 agents.yaml/swarm.yaml 匹配
+  dependsOn: [build]
+- key: build
+  agent: developer # 也允许继续硬绑
+  dependsOn: [spec]
 ```
 
 数据基础已经齐备（`swarm.yaml` 的 `capabilities` / `preferredTaskTypes` / `maxConcurrentTasks`），`advance.ts` 在派发时按 `requires` 过滤候选、再按 `maxConcurrentTasks` 与当前负载择一。无候选时不静默挂起，而是开 `pending_turns` 说明「没有具备 gpu 能力的在线 agent」。
@@ -649,10 +657,10 @@ sequenceDiagram
 
 同一条依赖链是**线性追加提交**，不是并行分叉：`build` 的 `base_ref` 直接继承 `spec` 的 `head_sha`，链条上没有任何合并动作。真正的合并点只有两个：
 
-| 合并点 | 谁来合 | 时机 |
-|--------|--------|------|
-| 并行兄弟格子汇合 | 平台自动 | `readyQueuedAssignments` 判定「上游全部完成」的那一刻——依赖图已经声明了汇合点在哪 |
-| mission 分支 → `defaultBranch` | **始终人工** | 最后一个 review 节点 `approved` 之后，给出 CTA，绝不自动 |
+| 合并点                         | 谁来合       | 时机                                                                              |
+| ------------------------------ | ------------ | --------------------------------------------------------------------------------- |
+| 并行兄弟格子汇合               | 平台自动     | `readyQueuedAssignments` 判定「上游全部完成」的那一刻——依赖图已经声明了汇合点在哪 |
+| mission 分支 → `defaultBranch` | **始终人工** | 最后一个 review 节点 `approved` 之后，给出 CTA，绝不自动                          |
 
 并行兄弟格子各自开子分支 `swarm/<missionId>/<workerId>`；汇合时平台把它们合进 mission 集成分支，合成结果即下游格子的 `base_ref`。
 
@@ -664,18 +672,18 @@ sequenceDiagram
 
 继续用 `execFile` 直调 git CLI，**不引入 `simple-git`**——仓库现有 git 调用全是这个风格，且都带 timeout。新增能力：
 
-| 函数 | 用途 |
-|------|------|
-| `resolveProject(projectId)` | 解析 `projects.yaml`；校验 `repo` 是绝对路径且是 git 仓库、`worktreeRoot` 在 `repo` 之外、`process.cwd()` 不在 `worktreeRoot` 之下 |
-| `gitContextFor(agentId, projectId, missionId)` | 按 agent 的 `execution` 返回 `GitContext`（`local` 或 `ssh`），并解析对应的 `worktreeRoot` |
-| `ensureMissionWorktree(ctx, missionId)` | `git worktree add` + 跑该 locality 对应的 `setup`；受 `maxConcurrentWorktrees` 限流；幂等 |
-| `pushBranchToRemote(projectId, host, branch)` | `ssh` locality 的代码投递；推到远端仓库供其 checkout |
-| `resolveHead(ctx)` | 阶段开工/收工时取 sha，写入 `base_ref` / `head_sha` |
-| `commitStage(ctx, message)` | agent 未自行提交时兜底提交，保证阶段边界有 sha（`ssh` 只读场景跳过） |
-| `mergeSiblings(missionId, branches[])` | 汇合；返回冲突文件列表供 `pending_turns` 使用（仅 `local`） |
-| `diffRange(ctx, base, head)` | 取代 `handoff.ts` 的 `git diff HEAD` |
-| `pullArtifacts(host, missionId, workerId)` | rsync 远端产物回 `memory/swarm/missions/<missionId>/<worker>/` |
-| `releaseMissionWorktree(ctx, missionId)` | 合并入主干后 `worktree remove`；`ssh` 侧同样要回收 |
+| 函数                                           | 用途                                                                                                                               |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `resolveProject(projectId)`                    | 解析 `projects.yaml`；校验 `repo` 是绝对路径且是 git 仓库、`worktreeRoot` 在 `repo` 之外、`process.cwd()` 不在 `worktreeRoot` 之下 |
+| `gitContextFor(agentId, projectId, missionId)` | 按 agent 的 `execution` 返回 `GitContext`（`local` 或 `ssh`），并解析对应的 `worktreeRoot`                                         |
+| `ensureMissionWorktree(ctx, missionId)`        | `git worktree add` + 跑该 locality 对应的 `setup`；受 `maxConcurrentWorktrees` 限流；幂等                                          |
+| `pushBranchToRemote(projectId, host, branch)`  | `ssh` locality 的代码投递；推到远端仓库供其 checkout                                                                               |
+| `resolveHead(ctx)`                             | 阶段开工/收工时取 sha，写入 `base_ref` / `head_sha`                                                                                |
+| `commitStage(ctx, message)`                    | agent 未自行提交时兜底提交，保证阶段边界有 sha（`ssh` 只读场景跳过）                                                               |
+| `mergeSiblings(missionId, branches[])`         | 汇合；返回冲突文件列表供 `pending_turns` 使用（仅 `local`）                                                                        |
+| `diffRange(ctx, base, head)`                   | 取代 `handoff.ts` 的 `git diff HEAD`                                                                                               |
+| `pullArtifacts(host, missionId, workerId)`     | rsync 远端产物回 `memory/swarm/missions/<missionId>/<worker>/`                                                                     |
+| `releaseMissionWorktree(ctx, missionId)`       | 合并入主干后 `worktree remove`；`ssh` 侧同样要回收                                                                                 |
 
 MCP 侧有个顺风：`task_complete` 是 **typed tool**，可以直接把 `headSha` 和 `filesChanged` 声明成必填参数并用 zod 校验，新 adapter 完全不必解析文本。只有 Hermes 的 checkpoint 文本路径需要额外补这两个字段（`FILES_CHANGED` 已有，缺 sha，由 `resolveHead` 在服务端补，不依赖模型自述）。
 
@@ -722,14 +730,30 @@ mission store 是 JSON 文件 + atomic rename。若每个 agent spawn 一个 std
 
 ```ts
 // src/server/agent-runtime/types.ts
-export type AgentRuntimeKind = 'hermes' | 'claude-code' | 'codex' | 'deepseek-harness'
+export type AgentRuntimeKind =
+  | 'hermes'
+  | 'claude-code'
+  | 'codex'
+  | 'deepseek-harness'
 
 // 展示通道：只喂 UI，不驱动状态机
 export type AgentStreamEvent =
-  | { type: 'run_started'; runId: string; agentId: string; taskId?: string; roomId?: string }
+  | {
+      type: 'run_started'
+      runId: string
+      agentId: string
+      taskId?: string
+      roomId?: string
+    }
   | { type: 'text_delta'; runId: string; text: string }
   | { type: 'thinking'; runId: string; text: string }
-  | { type: 'tool'; runId: string; phase: 'start' | 'end'; name: string; args?: unknown }
+  | {
+      type: 'tool'
+      runId: string
+      phase: 'start' | 'end'
+      name: string
+      args?: unknown
+    }
   | { type: 'run_exited'; runId: string; exitCode: number | null }
   | { type: 'error'; runId: string; message: string }
 
@@ -737,14 +761,16 @@ export interface AgentRuntimeAdapter {
   kind: AgentRuntimeKind
   probe(): Promise<{ available: boolean; version?: string; detail?: string }>
   /** 注入 MCP 端点与 runToken，spawn 进程 */
-  startRun(input: AgentRunInput & { mcp: McpHandshake }): Promise<{ runId: string }>
+  startRun(
+    input: AgentRunInput & { mcp: McpHandshake },
+  ): Promise<{ runId: string }>
   streamEvents(runId: string): AsyncIterable<AgentStreamEvent>
   interrupt(runId: string, reason: string): Promise<void>
 }
 
 export type McpHandshake = {
-  endpoint: string        // http://127.0.0.1:<port>/api/mcp
-  runToken: string        // 短期 token，服务端映射到 participantId + assignmentId
+  endpoint: string // http://127.0.0.1:<port>/api/mcp
+  runToken: string // 短期 token，服务端映射到 participantId + assignmentId
   toolAllowlist: string[] // 按角色裁剪，reviewer 才拿得到 review_approve
 }
 ```
@@ -753,13 +779,13 @@ export type McpHandshake = {
 
 按 Agent Teams 的分组裁剪，去掉我们不需要的 cross-team / org：
 
-| 组 | 工具 | 说明 |
-|----|------|------|
-| task | `task_get` / `task_start` / `task_complete` / `task_add_comment` / `task_set_clarification` | `task_set_clarification` 直接开 `pending_turns` |
-| review | `review_request` / `review_start` / `review_approve` / `review_request_changes` | 对应「评审是节点」的四个转移 |
-| message | `message_send` | 写房间消息，支持 `mentions` 与 `taskRefs` |
-| sync | `member_work_sync_status` / `member_work_sync_report` | 见下方双阶段校验 |
-| kanban | `kanban_get` | 只读，给 agent 看全局 |
+| 组      | 工具                                                                                        | 说明                                            |
+| ------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| task    | `task_get` / `task_start` / `task_complete` / `task_add_comment` / `task_set_clarification` | `task_set_clarification` 直接开 `pending_turns` |
+| review  | `review_request` / `review_start` / `review_approve` / `review_request_changes`             | 对应「评审是节点」的四个转移                    |
+| message | `message_send`                                                                              | 写房间消息，支持 `mentions` 与 `taskRefs`       |
+| sync    | `member_work_sync_status` / `member_work_sync_report`                                       | 见下方双阶段校验                                |
+| kanban  | `kanban_get`                                                                                | 只读，给 agent 看全局                           |
 
 ### 三个防幻觉/防串台机制
 
@@ -767,11 +793,11 @@ export type McpHandshake = {
 
 **token 粒度 = 一次 run**，即 `(assignment, 第几次派发)`：
 
-| 粒度 | 为何不选 |
-|------|----------|
-| Task（卡片） | 跨多阶段多 agent，等于任何参与者都能关任何阶段 |
-| Assignment（阶段） | 已确定唯一 agent，但重派时新旧进程会持有同一凭证 |
-| **Run（选定）** | 重派即作废旧 token，僵尸进程的调用被 403 并记事件 |
+| 粒度               | 为何不选                                          |
+| ------------------ | ------------------------------------------------- |
+| Task（卡片）       | 跨多阶段多 agent，等于任何参与者都能关任何阶段    |
+| Assignment（阶段） | 已确定唯一 agent，但重派时新旧进程会持有同一凭证  |
+| **Run（选定）**    | 重派即作废旧 token，僵尸进程的调用被 403 并记事件 |
 
 最后一行是关键：僵尸检测靠抓屏猜，本来就会误判。误判后重派，旧进程若还活着且持有有效凭证，两个进程会互相覆盖状态。绑在 run 上则旧 token 立即失效，我们还顺带知道了它没死。
 
@@ -788,10 +814,10 @@ export type McpHandshake = {
 
 **「拒绝」不是终点，必须告诉 agent 下一步做什么。** 两种失败要区分处理：
 
-| 情况 | 响应 | 依据 |
-|------|------|------|
+| 情况                     | 响应                                                                                                                 | 依据                                                                              |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | `agendaFingerprint` 过期 | 拒绝，且响应里带 `nextRequiredToolCall: member_work_sync_status`（预填参数）+ 一句「议程已变更，请重新获取后再汇报」 | 复用下面第 3 点的机制。若只回一个错误码，agent 极可能拿旧 agenda 原样重试，死循环 |
-| `reportToken` 已使用 | **看 payload 决定**，见下 |
+| `reportToken` 已使用     | **看 payload 决定**，见下                                                                                            |
 
 **`reportToken` 的一次性与网络重试冲突，必须做幂等重放。** 「一次性」若实现成「用过即拒」，那么 agent 侧一次超时重试就会被误判为重放：
 
@@ -811,12 +837,12 @@ export type McpHandshake = {
 
 选托管进程的四条理由，按重要性：
 
-| 维度 | 托管进程 | 长驻 tmux |
-|------|----------|-----------|
-| runToken 注入 | spawn env，天然 per-run 隔离 | session env 创建时设一次；换 token 只能 `send-keys export`，而 pane 内容正被 `recentLogTail` 抓成日志 |
-| 异常路径 | 有 exit code + stderr，能区分「死了」与「卡住了」 | 只能超时 + 抓屏启发式（现有 `❯` 提示符那套） |
-| 中断 | `process.kill(-pid, 'SIGKILL')` 杀整组，[mcp-cli-bridge.ts](hermes-workspace/src/server/mcp-cli-bridge.ts) 已有范式且专门处理了 MCP stdio 孙进程孤儿 | 发 C-c 不可靠——[swarm-dispatch.ts](hermes-workspace/src/routes/api/swarm-dispatch.ts) 注释明确 "Do NOT send Ctrl-C here. Hermes prompt_toolkit treats C-c as exit" |
-| 输入投递 | 管道写入，`claude -p` / `codex exec` 本就是非交互模式 | 模拟键盘：多行粘贴会进 prompt_toolkit continuation 模式永不提交，故须先写 `swarm-task.md` 再粘一行短指令 + 括号粘贴 |
+| 维度          | 托管进程                                                                                                                                             | 长驻 tmux                                                                                                                                                          |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| runToken 注入 | spawn env，天然 per-run 隔离                                                                                                                         | session env 创建时设一次；换 token 只能 `send-keys export`，而 pane 内容正被 `recentLogTail` 抓成日志                                                              |
+| 异常路径      | 有 exit code + stderr，能区分「死了」与「卡住了」                                                                                                    | 只能超时 + 抓屏启发式（现有 `❯` 提示符那套）                                                                                                                       |
+| 中断          | `process.kill(-pid, 'SIGKILL')` 杀整组，[mcp-cli-bridge.ts](hermes-workspace/src/server/mcp-cli-bridge.ts) 已有范式且专门处理了 MCP stdio 孙进程孤儿 | 发 C-c 不可靠——[swarm-dispatch.ts](hermes-workspace/src/routes/api/swarm-dispatch.ts) 注释明确 "Do NOT send Ctrl-C here. Hermes prompt_toolkit treats C-c as exit" |
+| 输入投递      | 管道写入，`claude -p` / `codex exec` 本就是非交互模式                                                                                                | 模拟键盘：多行粘贴会进 prompt_toolkit continuation 模式永不提交，故须先写 `swarm-task.md` 再粘一行短指令 + 括号粘贴                                                |
 
 tmux 唯一真优势是天然活过 server 重启。托管进程用 `detached: true` + `unref()` 补上（[claude-agent.ts](hermes-workspace/src/server/claude-agent.ts) 与 [langgraph-orchestrator.ts](hermes-workspace/src/server/langgraph-orchestrator.ts) 已是此写法，前者还用 `setsid -f`），再加一张 pid 注册表做重启后重连。这也是 `run_tokens` 必须持久化的原因。
 
@@ -833,6 +859,7 @@ tmux 唯一真优势是天然活过 server 重启。托管进程用 `detached: t
 - `deepseek-harness`：能走启动参数或 env 的用启动参数；只能改用户文件的，同样只写耐久层、凭证走 env
 
 **原则：统一入口登记 MCP 端点；per-run 凭证只走环境变量。** 并发 run 各有自己的进程环境，互不覆盖；run 结束吊销 token 也不必回头改 toml。
+
 - `interrupt()` 统一实现为进程组 SIGKILL，不发 C-c
 - 展示通道所有事件 `publishChatEvent` 带 `roomId` / `taskId` / `runId`
 
@@ -842,15 +869,15 @@ tmux 唯一真优势是天然活过 server 重启。托管进程用 `detached: t
 
 **服务**：`src/server/task-pipeline/`
 
-| 文件 | 职责 |
-|------|------|
-| `pipeline-templates.ts` | 读 `pipelines.yaml`，校验 stage 图无环、`reworkTarget` 可达、`agent` 在 `agents.yaml` 或为 `human:*` |
-| `task-service.ts` | 建卡片（复用 `createKanbanCard`）→ 两遍建 mission → 回写 `card.missionId`；解析 `projectId` |
-| `stage-brief.ts` | **模板只定流程，内容由此填**：复用 `swarm-decompose` 为每个 stage 生成具体指令文本（见下） |
-| `advance.ts` | **本计划的核心新代码**：checkpoint 落库后调 `readyQueuedAssignments` → 经 Router 派发下一棒；这是 `dependsOn` 第一次被真正执行。汇合点顺带调 `git-ops.mergeSiblings` |
-| `review.ts` | review stage 的 `REVIEW_OUTCOME` 判定；`changes_requested` 的四步打回（含下游边继承与 3 轮上限） |
-| `run-store.ts` | `task_runs` 读写；每次 `startRun` 落一行并记 `base_ref`，`run_done` 补 `head_sha` / `files_changed` |
-| `lane-sync.ts` | Mission/Assignment 状态 → 卡片 lane（见下表） |
+| 文件                    | 职责                                                                                                                                                                 |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pipeline-templates.ts` | 读 `pipelines.yaml`，校验 stage 图无环、`reworkTarget` 可达、`agent` 在 `agents.yaml` 或为 `human:*`                                                                 |
+| `task-service.ts`       | 建卡片（复用 `createKanbanCard`）→ 两遍建 mission → 回写 `card.missionId`；解析 `projectId`                                                                          |
+| `stage-brief.ts`        | **模板只定流程，内容由此填**：复用 `swarm-decompose` 为每个 stage 生成具体指令文本（见下）                                                                           |
+| `advance.ts`            | **本计划的核心新代码**：checkpoint 落库后调 `readyQueuedAssignments` → 经 Router 派发下一棒；这是 `dependsOn` 第一次被真正执行。汇合点顺带调 `git-ops.mergeSiblings` |
+| `review.ts`             | review stage 的 `REVIEW_OUTCOME` 判定；`changes_requested` 的四步打回（含下游边继承与 3 轮上限）                                                                     |
+| `run-store.ts`          | `task_runs` 读写；每次 `startRun` 落一行并记 `base_ref`，`run_done` 补 `head_sha` / `files_changed`                                                                  |
+| `lane-sync.ts`          | Mission/Assignment 状态 → 卡片 lane（见下表）                                                                                                                        |
 
 ### 模板只定流程，内容由 decompose 填
 
@@ -882,14 +909,14 @@ tmux 唯一真优势是天然活过 server 重启。托管进程用 `detached: t
 
 Lane 同步规则（单向：流水线为准，人工拖拽仅改 backlog/todo/ready）：
 
-| Mission / Assignment | 卡片 lane |
-|----------------------|-----------|
-| 无 mission | `backlog` / `todo` |
-| assignment `queued` | `ready` |
-| 任一 `dispatched` | `running` |
-| 任一 `blocked` / `needs_input` | `blocked` |
-| 当前 ready 或执行中的 stage 是 `kind: review` | `review` |
-| mission `complete` | `done` |
+| Mission / Assignment                          | 卡片 lane          |
+| --------------------------------------------- | ------------------ |
+| 无 mission                                    | `backlog` / `todo` |
+| assignment `queued`                           | `ready`            |
+| 任一 `dispatched`                             | `running`          |
+| 任一 `blocked` / `needs_input`                | `blocked`          |
+| 当前 ready 或执行中的 stage 是 `kind: review` | `review`           |
+| mission `complete`                            | `done`             |
 
 **API**（新增，全部走现有 auth 中间件）：
 
@@ -934,28 +961,28 @@ Lane 同步规则（单向：流水线为准，人工拖拽仅改 backlog/todo/r
 
 **服务**：`src/server/group-chat/`
 
-| 文件 | 职责 |
-|------|------|
-| `participants.ts` | `room_participants` CRUD；`mention_name` 唯一性校验；人/Agent 统一视图 |
-| `mention-routing.ts` | `@name` 边界判定（CJK 友好）、引用块屏蔽、保留名 `@all` / `@human`、`resolveMentionTargets` 返回 **human + agent 两类目标** |
-| `room-store.ts` | `rooms` / `room_messages` CRUD |
-| `context-projection.ts` | 移植 Studio：每条历史投影为 `[senderName]: content` 并剥离 `@token`；roster 注入 `[Human member] / [AI Agent]` |
-| `room-summary.ts` | 滚动摘要：未摘要 user 轮次达阈值（默认 8）→ 调当前 profile gateway 生成「合并后的完整房间状态」 |
-| `room-runner.ts` | 房间级串行队列；组装 `summary + 尾部历史 + 当前消息` 注入 Router；`mentionDepth` 上限 4 |
-| `pending-turns.ts` | 人类被 @ 时开单、去重、回答判定、超时、恢复流水线 |
-| `auto-handoff.ts` | checkpoint → 自动 `@` 下一棒 Agent 或 `@` 人类 |
+| 文件                    | 职责                                                                                                                        |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `participants.ts`       | `room_participants` CRUD；`mention_name` 唯一性校验；人/Agent 统一视图                                                      |
+| `mention-routing.ts`    | `@name` 边界判定（CJK 友好）、引用块屏蔽、保留名 `@all` / `@human`、`resolveMentionTargets` 返回 **human + agent 两类目标** |
+| `room-store.ts`         | `rooms` / `room_messages` CRUD                                                                                              |
+| `context-projection.ts` | 移植 Studio：每条历史投影为 `[senderName]: content` 并剥离 `@token`；roster 注入 `[Human member] / [AI Agent]`              |
+| `room-summary.ts`       | 滚动摘要：未摘要 user 轮次达阈值（默认 8）→ 调当前 profile gateway 生成「合并后的完整房间状态」                             |
+| `room-runner.ts`        | 房间级串行队列；组装 `summary + 尾部历史 + 当前消息` 注入 Router；`mentionDepth` 上限 4                                     |
+| `pending-turns.ts`      | 人类被 @ 时开单、去重、回答判定、超时、恢复流水线                                                                           |
+| `auto-handoff.ts`       | checkpoint → 自动 `@` 下一棒 Agent 或 `@` 人类                                                                              |
 
 ### 人类是一等参与者（相对 Studio 的关键增强）
 
 Studio 只做到一半：人类确实是成员对象，Agent 的系统提示里会看到 `[Human member] Alice`，历史投影也带 `[Alice]:` 归因（见 [context-projection.ts](hermes-studio/packages/server/src/services/hermes/group-chat/context-projection.ts)）；但它的 `StructuredMention` 只有 `type: 'agent' | 'all'`，mention picker 里没有人类，**Agent `@` 人类是纯文本装饰，不路由、不通知、不阻塞**。本计划在此基础上补齐：
 
-| 维度 | Studio 现状 | 本计划 |
-|------|-------------|--------|
-| 成员存储 | 人 `gc_room_members` / Agent `gc_room_agents` 分表 | 单表 `room_participants` + `kind` 判别 |
-| mention 类型 | `agent` \| `all` | `human` \| `agent` \| `all` |
-| `@` 人类 | 无效果 | 开 `pending_turns` 单 + 右下角提示 + 阶段转 `needs_input` |
-| mention picker | 仅在线 Agent | Agent + 人类 + `@all` |
-| 等人回话 | 无此状态 | 房间显式 awaiting 态，可查、可超时、可转派 |
+| 维度           | Studio 现状                                        | 本计划                                                    |
+| -------------- | -------------------------------------------------- | --------------------------------------------------------- |
+| 成员存储       | 人 `gc_room_members` / Agent `gc_room_agents` 分表 | 单表 `room_participants` + `kind` 判别                    |
+| mention 类型   | `agent` \| `all`                                   | `human` \| `agent` \| `all`                               |
+| `@` 人类       | 无效果                                             | 开 `pending_turns` 单 + 右下角提示 + 阶段转 `needs_input` |
+| mention picker | 仅在线 Agent                                       | Agent + 人类 + `@all`                                     |
+| 等人回话       | 无此状态                                           | 房间显式 awaiting 态，可查、可超时、可转派                |
 
 保留名约定：`@all` = 房间内全部 Agent（仅 owner 可用，沿用 Studio 的 `ALL_AGENTS_MENTION` 与权限校验）；`@human` = 房间 owner 人类。其余按 `mention_name` 精确匹配。
 
@@ -1056,11 +1083,11 @@ sequenceDiagram
 
 新增 `src/server/nudge-service.ts`，只在**有明确理由**时下发一条简短控制消息：
 
-| 触发条件 | 判据 |
-|----------|------|
-| 速率限制冷却结束 | 已知 reset 时间到点 |
-| 与当前任务失联 | `member_work_sync_status` 议程非空，但超过 N 分钟未 `member_work_sync_report` |
-| 进度停滞 | 无 stdout 输出且无工具调用超过 N 分钟 |
+| 触发条件         | 判据                                                                          |
+| ---------------- | ----------------------------------------------------------------------------- |
+| 速率限制冷却结束 | 已知 reset 时间到点                                                           |
+| 与当前任务失联   | `member_work_sync_status` 议程非空，但超过 N 分钟未 `member_work_sync_report` |
+| 进度停滞         | 无 stdout 输出且无工具调用超过 N 分钟                                         |
 
 护栏（照抄原设计的克制态度，nudge 是帮它继续，不是刷屏）：
 
@@ -1141,20 +1168,20 @@ CREATE UNIQUE INDEX idx_budgets_scope ON budgets(scope, scope_id, period);
 
 ## 实施阶段与 PR 切分
 
-| Phase | 内容 | 产出可验证点 |
-|-------|------|--------------|
-| **P0 地基** | 从 [kanban-backend.ts](hermes-workspace/src/server/kanban-backend.ts) 抽出 sqlite 解析 helper → `src/server/sqlite-helper.ts`；建 `collab.db` + 迁移；`chat-event-bus` 过滤器改为 `{ sessionKey?, roomId?, scope? }`；新增 `GET /api/collab-events`；`use-collab-stream` hook（含指数退避重连） | 能订阅到心跳与测试事件；现有 `/api/events`、`/api/chat-events` 行为不变 |
-| **P1 步骤 1 先通电** | `src/routes/api/mcp.ts`（HTTP MCP 骨架）+ `src/server/mcp/`：`run_tokens` 表、双 token 签发/吊销、所有权校验。工具**只做三个**：`task_get` / `task_start` / `task_complete` | 裸 HTTP 走通「取任务 → 开工 → 完成」；非 owner 被拒；重派后旧 token 403 并记事件；server 重启后旧 token 仍可用 |
-| **P1 步骤 2 最小 adapter** | `agent-runtime/`：types + router + `agents.yaml` 与 `probe()` + `claude-code` adapter 最小路径（per-run 托管进程、`detached` 进程组、启动参数注入 MCP 配置、pid 注册表、接入 `terminal-sessions` 观察）；`GET /api/agents/status` | 能起一个真实 claude-code 进程并在 PTY 面板里看到它；`interrupt()` 杀净进程树不留孤儿；凭证只在进程环境里，不进用户配置文件 |
-| **P1 步骤 3 端到端** | 打通「派发 → agent 调 MCP 三工具 → 状态推进」全链路；`hermes` adapter 包壳既有路径；压一次 8 agent 并发流式 | 一次真实 run 从派发到完成全自动，协议错误在此暴露；8 个 agent 同时流式时 UI 不卡 |
-| **P1 步骤 4 再装满** | 补 `review` / `sync` / `message` / `kanban` 工具组；双阶段 sync 指纹 + `reportToken` 幂等重放；`nextRequiredToolCall` 回填；`McpHandshake.endpoint` 改可配对外 origin + 远程只读参与者 token 入口 | 指纹过期被拒且响应带「重新取议程」的下一步；同 payload 重试幂等、异 payload 拒绝；`member_work_sync_report` 永不关单；另一台机器上的只读参与者能读看板，写工具一律 403 |
-| **P2a 任务模块** | `task-pipeline/`（含 `advance.ts` 首次接通 `dependsOn` + `withMissionLock` + CAS 幂等派发、`review.ts`、`stage-brief.ts` 含 stale 失效）；`pipelines.yaml`（**只支持 `workspaceMode: canonical`**）；`swarm-decompose` 改造为按 stage 产出指令文本；`swarm-missions.ts` 五处补丁；`task_runs`；`/api/tasks*`；lane 同步；补 `mark_ready_for_eric` | 建任务→自动派首阶段→checkpoint→推进到下一阶段；**并发 fan-in 单测通过：两个上游 checkpoint 同时到达，下游只被派发一次**；review stage 输出 `changes_requested` 能正确打回且下游不被误放行；spec 编辑后未派发的 stage 指令标 stale 并强制重算；卡片 lane 随动 |
-| **P2b 工作区与产物** | 启用 `workspaceMode: worktree` + 模板加载期校验（本机 Hermes worker 出现即报错）；`projects.yaml` + `resolveProject` 校验（含自宿主三条规则与 `remotes` 段）；`swarm-environment.ts` 的 notes 按模式分叉；`git-ops.ts` 全函数走 `GitContext`；per-mission worktree（托管进程 `cwd` 指向它并写 `runtime.json.cwd`）；**ssh locality**：分支单向 push + 远端 worktree + 远端 setup + 产物 rsync 回传；capability 路由（stage `requires`）；`gpuserver` 补进声明；assignment 记 `base_ref` / `head_sha`；汇合自动合并 + 冲突转 `pending_turns`；`handoff.ts` 的 `gitDiff` 改 `diffRange`；`GET /api/git/diff`；`POST /api/tasks/:id/merge` | agent 改的是 `projects.yaml` 声明的目标项目，**不再是控制面仓库**；服务器运行在 `worktreeRoot` 内时拒绝启动；两个并行 mission 互不污染；每格改动可用 `base..head` 精确复算；**一个 `requires: [gpu]` 的 stage 被派给 `gpuserver`，代码 push 到 dev-wsl、在远端 worktree 内执行、产物 rsync 回本机并出现在时间线上**；兄弟分支冲突后右下角出现带冲突文件的提示；mission 合主干必须人工点 |
-| **P3 三视图** | `/mission-control` 三 tab；`agent-status-watcher` | 全局看到在线 Agent 与当前任务；点进任务看到 stage + 卡点 + 历史 |
-| **P4 群聊** | `group-chat/` 全套（含 `room_participants` 人/Agent 同表、三类 mention、`context-projection`）+ `/rooms` UI + `auto-handoff` | 房间内 `@claude` 有回复；A 完成后自动出现 `@B` 系统消息且 B 自动开跑；`@` 人类不再是死文本 |
-| **P5 人工干预** | `pending_turns` + 四类触发源收敛 + `human_attention` 事件 + `AttentionToaster` + toast position + 选项 chip + 超时 | 制造一个 `NEEDS_INPUT`，任意页面右下角出现提示；在房间回话或点 chip 后流水线自动续跑，提示三处同步消失 |
-| **P6 健康与成本** | `nudge-service.ts`（三类触发 + 限流护栏）；`token_usage` 表与采集；预算 80% 告警 / 100% 硬停；Overview 成本卡片 | 制造一个停滞 run，15 分钟内收到且仅收到一次 nudge；预算打满后 `startRun` 被拒并在房间留痕 |
-| **P7 补齐** | `codex` / `deepseek-harness` adapter（各自 MCP 配置注入） | 三种 CLI 均可入房间并在 mission worktree 内工作 |
+| Phase                      | 内容                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | 产出可验证点                                                                                                                                                                                                                                                                                                                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **P0 地基**                | 从 [kanban-backend.ts](hermes-workspace/src/server/kanban-backend.ts) 抽出 sqlite 解析 helper → `src/server/sqlite-helper.ts`；建 `collab.db` + 迁移；`chat-event-bus` 过滤器改为 `{ sessionKey?, roomId?, scope? }`；新增 `GET /api/collab-events`；`use-collab-stream` hook（含指数退避重连）                                                                                                                                                                                                                                                                                                                                         | 能订阅到心跳与测试事件；现有 `/api/events`、`/api/chat-events` 行为不变                                                                                                                                                                                                                                                                                                                 |
+| **P1 步骤 1 先通电**       | `src/routes/api/mcp.ts`（HTTP MCP 骨架）+ `src/server/mcp/`：`run_tokens` 表、双 token 签发/吊销、所有权校验。工具**只做三个**：`task_get` / `task_start` / `task_complete`                                                                                                                                                                                                                                                                                                                                                                                                                                                             | 裸 HTTP 走通「取任务 → 开工 → 完成」；非 owner 被拒；重派后旧 token 403 并记事件；server 重启后旧 token 仍可用                                                                                                                                                                                                                                                                          |
+| **P1 步骤 2 最小 adapter** | `agent-runtime/`：types + router + `agents.yaml` 与 `probe()` + `claude-code` adapter 最小路径（per-run 托管进程、`detached` 进程组、启动参数注入 MCP 配置、pid 注册表、接入 `terminal-sessions` 观察）；`GET /api/agents/status`                                                                                                                                                                                                                                                                                                                                                                                                       | 能起一个真实 claude-code 进程并在 PTY 面板里看到它；`interrupt()` 杀净进程树不留孤儿；凭证只在进程环境里，不进用户配置文件                                                                                                                                                                                                                                                              |
+| **P1 步骤 3 端到端**       | 打通「派发 → agent 调 MCP 三工具 → 状态推进」全链路；`hermes` adapter 包壳既有路径；压一次 8 agent 并发流式                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | 一次真实 run 从派发到完成全自动，协议错误在此暴露；8 个 agent 同时流式时 UI 不卡                                                                                                                                                                                                                                                                                                        |
+| **P1 步骤 4 再装满**       | 补 `review` / `sync` / `message` / `kanban` 工具组；双阶段 sync 指纹 + `reportToken` 幂等重放；`nextRequiredToolCall` 回填；`McpHandshake.endpoint` 改可配对外 origin + 远程只读参与者 token 入口                                                                                                                                                                                                                                                                                                                                                                                                                                       | 指纹过期被拒且响应带「重新取议程」的下一步；同 payload 重试幂等、异 payload 拒绝；`member_work_sync_report` 永不关单；另一台机器上的只读参与者能读看板，写工具一律 403                                                                                                                                                                                                                  |
+| **P2a 任务模块**           | `task-pipeline/`（含 `advance.ts` 首次接通 `dependsOn` + `withMissionLock` + CAS 幂等派发、`review.ts`、`stage-brief.ts` 含 stale 失效）；`pipelines.yaml`（**只支持 `workspaceMode: canonical`**）；`swarm-decompose` 改造为按 stage 产出指令文本；`swarm-missions.ts` 五处补丁；`task_runs`；`/api/tasks*`；lane 同步；补 `mark_ready_for_eric`                                                                                                                                                                                                                                                                                       | 建任务→自动派首阶段→checkpoint→推进到下一阶段；**并发 fan-in 单测通过：两个上游 checkpoint 同时到达，下游只被派发一次**；review stage 输出 `changes_requested` 能正确打回且下游不被误放行；spec 编辑后未派发的 stage 指令标 stale 并强制重算；卡片 lane 随动                                                                                                                            |
+| **P2b 工作区与产物**       | 启用 `workspaceMode: worktree` + 模板加载期校验（本机 Hermes worker 出现即报错）；`projects.yaml` + `resolveProject` 校验（含自宿主三条规则与 `remotes` 段）；`swarm-environment.ts` 的 notes 按模式分叉；`git-ops.ts` 全函数走 `GitContext`；per-mission worktree（托管进程 `cwd` 指向它并写 `runtime.json.cwd`）；**ssh locality**：分支单向 push + 远端 worktree + 远端 setup + 产物 rsync 回传；capability 路由（stage `requires`）；`gpuserver` 补进声明；assignment 记 `base_ref` / `head_sha`；汇合自动合并 + 冲突转 `pending_turns`；`handoff.ts` 的 `gitDiff` 改 `diffRange`；`GET /api/git/diff`；`POST /api/tasks/:id/merge` | agent 改的是 `projects.yaml` 声明的目标项目，**不再是控制面仓库**；服务器运行在 `worktreeRoot` 内时拒绝启动；两个并行 mission 互不污染；每格改动可用 `base..head` 精确复算；**一个 `requires: [gpu]` 的 stage 被派给 `gpuserver`，代码 push 到 dev-wsl、在远端 worktree 内执行、产物 rsync 回本机并出现在时间线上**；兄弟分支冲突后右下角出现带冲突文件的提示；mission 合主干必须人工点 |
+| **P3 三视图**              | `/mission-control` 三 tab；`agent-status-watcher`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | 全局看到在线 Agent 与当前任务；点进任务看到 stage + 卡点 + 历史                                                                                                                                                                                                                                                                                                                         |
+| **P4 群聊**                | `group-chat/` 全套（含 `room_participants` 人/Agent 同表、三类 mention、`context-projection`）+ `/rooms` UI + `auto-handoff`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | 房间内 `@claude` 有回复；A 完成后自动出现 `@B` 系统消息且 B 自动开跑；`@` 人类不再是死文本                                                                                                                                                                                                                                                                                              |
+| **P5 人工干预**            | `pending_turns` + 四类触发源收敛 + `human_attention` 事件 + `AttentionToaster` + toast position + 选项 chip + 超时                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | 制造一个 `NEEDS_INPUT`，任意页面右下角出现提示；在房间回话或点 chip 后流水线自动续跑，提示三处同步消失                                                                                                                                                                                                                                                                                  |
+| **P6 健康与成本**          | `nudge-service.ts`（三类触发 + 限流护栏）；`token_usage` 表与采集；预算 80% 告警 / 100% 硬停；Overview 成本卡片                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | 制造一个停滞 run，15 分钟内收到且仅收到一次 nudge；预算打满后 `startRun` 被拒并在房间留痕                                                                                                                                                                                                                                                                                               |
+| **P7 补齐**                | `codex` / `deepseek-harness` adapter（各自 MCP 配置注入）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | 三种 CLI 均可入房间并在 mission worktree 内工作                                                                                                                                                                                                                                                                                                                                         |
 
 P0–P2b 为一组（后端地基），P3–P5 为一组（可用闭环），P6–P7 独立。
 
@@ -1206,10 +1233,10 @@ hermes-studio 确实有完整的跨机实现——`agent-relay.ts`（2245 行）
 
 fail-closed 的 `0.0.0.0` 开关、`HERMES_PASSWORD`、加密 token 存 `~/.hermes/workspace-sessions.json`、`TRUST_PROXY`（注释里明确提到 Tailscale Serve 这类反代）——整套远程暴露设计已在位。MCP 端点走的是同一个 `isAuthenticated`。
 
-| 层 | 内容 | 状态 |
-|----|------|------|
-| **只说话不改代码** | 远程的人、评审者、对话型 agent 入房间 | **纳入 Phase 1 步骤 4**。所需的三件东西都已在该阶段范围内：HTTP MCP 端点、`read_only` token、现有 auth。真正的增量只是把 `McpHandshake.endpoint` 从硬编码 `127.0.0.1` 改成可配的对外 origin，加一个「远程参与者」的 token 签发入口 |
-| **远程写代码** | 远端 agent 推分支、本机 reviewer 拉分支评审 | **留后**，被排序天然挡住：必须等 P2b 的 git 模型。`base_ref`/`head_sha` 就位后，远端只需推 `swarm/<missionId>/<workerId>` 子分支，宿主 fast-forward 进集成分支，产物模型完全不用改 |
+| 层                 | 内容                                        | 状态                                                                                                                                                                                                                               |
+| ------------------ | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **只说话不改代码** | 远程的人、评审者、对话型 agent 入房间       | **纳入 Phase 1 步骤 4**。所需的三件东西都已在该阶段范围内：HTTP MCP 端点、`read_only` token、现有 auth。真正的增量只是把 `McpHandshake.endpoint` 从硬编码 `127.0.0.1` 改成可配的对外 origin，加一个「远程参与者」的 token 签发入口 |
+| **远程写代码**     | 远端 agent 推分支、本机 reviewer 拉分支评审 | **留后**，被排序天然挡住：必须等 P2b 的 git 模型。`base_ref`/`head_sha` 就位后，远端只需推 `swarm/<missionId>/<workerId>` 子分支，宿主 fast-forward 进集成分支，产物模型完全不用改                                                 |
 
 唯一真正未建的是**网络信任层**：明文 HTTP 上传 token 不可接受。不自己造 TLS——要求走反代或 Tailscale Serve，在文档里写明；`COOKIE_SECURE=0` 那条注释已经预设了明文 LAN 部署的存在，正好在此收紧为「只读跨机必须走加密隧道」。
 
@@ -1219,59 +1246,60 @@ fail-closed 的 `0.0.0.0` 开关、`HERMES_PASSWORD`、加密 token 存 `~/.herm
 
 ## 风险与对策
 
-| 风险 | 对策 |
-|------|------|
-| Agent 压根不调 MCP 工具（忘了 / 不支持） | `probe()` 时验证 MCP 连通性，连不上直接标 unavailable；run 级超时兜底 + nudge；连续 3 次不上报转 `pending_turns` 请人 |
-| MCP 工具描述吃 context | 描述控制在两句以内（Agent Teams 的 `message_send` 描述有 200 多词，不照抄）；按角色裁剪 `toolAllowlist`，reviewer 之外不下发 review 工具 |
-| 各 CLI 的 MCP 注册方式不同 | adapter 自带注入策略：有启动参数的（claude `--mcp-config`）走启动参数；Codex 这种全局 toml 入口则**幂等合并**一个固定 `mcp_servers` 表，凭证一律走 `bearer_token_env_var` / 进程环境。注入后用一次只读工具握手自检 |
-| **把 runToken 写进全局 toml，并发 run 互相覆盖** | 这才是真风险，不是「登记 MCP 端点」。toml 只写耐久的 `url` + 环境变量名；每个 spawn 的进程带自己的 `HERMES_MCP_TOKEN`。不设 `CODEX_HOME` 到临时目录，以免丢掉用户已有 auth/model/skills |
-| **advance 在 fan-in 时双派** | `withMissionLock(missionId)` 包住「读 mission → 算 ready → 写状态 → 派发」整段；派发用 `state='queued'` 作为 CAS 条件，只有成功方 spawn；幂等键 `(assignmentId, attempt)` = `runId`，spawn 前先写入 |
-| **指纹拒绝后 agent 拿旧议程死循环** | 拒绝响应必带 `nextRequiredToolCall: member_work_sync_status`，把下一步塞进它眼前，不只回错误码 |
-| **`reportToken` 一次性与网络重试冲突** | 同 token 同 payload 哈希 → 60s 窗口内幂等重放，回放首次结果；同 token 异 payload → 拒绝并记事件；`run_tokens` 补 `consumed_at` / `consumed_payload_hash` / `last_response_json` |
-| **多条 pending turn 并存时答错对象** | 消息带 `answers_pending_turn_id`，chip 点击天然携带；无引用时默认最旧一条但**必须 UI 确认**；房间仅一条时跳过确认 |
-| **预算归因二义** | `token_usage` 补 `project_id`；查找顺序 `run → task → project → global`，**命中第一个即生效不叠加**；`null` usage 不参与判定 |
-| **`text_delta` 落库把 collab.db 撑爆** | 硬规则：展示通道事件永不落库，只广播；逐字回看由 `task_runs.log_path` 的文件承担 |
-| **8 agent 并发流式拖垮 event loop** | adapter 侧 50ms 合批再广播；订阅端按 `scope` 过滤，Overview 不订阅任何文本流；慢订阅者独立缓冲、超限丢弃并打标，绝不反压 adapter |
-| **`room_messages` 无界增长，且归档与滚动摘要打架** | 只归档「早于阈值 **且** 在 `through_message_id` 之前」的消息；永久保留尾部 200 条与 `pending_turns` 引用的消息；归档进 `room_messages_archive` 而非删除；不在写入路径上做 |
-| **spec 编辑后下游指令仍是旧的** | assignment 记 `brief_spec_version`，与 mission 的 `spec_version` 不一致即标 `stale`；`stale` 的 stage 派发前必须重算或人工确认 |
-| **自动交接消耗掉 mentionDepth 预算** | `auto_handoff = 1` 的消息不递增 `mention_depth`，由流水线拓扑与 rework 上限约束；只有 agent 自发写的 `@` 才计数 |
-| `runToken` 泄露或被复用 | 一次 run 一个写 token，随 run 结束或重派即吊销；只映射该 run 的 `participantId` + `assignmentId`，越权返回 403 并记事件；库里只存 hash |
-| 重派后新旧进程双写 | 重派时 `revoked_at` 打旧 token；旧进程被拒的那一刻反过来证明它没死，据此取消重派或杀旧进程 |
-| detached 进程在 server 重启后失联 | `run_tokens` 持久化保证它仍能上报；pid 注册表用于重启后重新挂接 PTY 与统计；孤儿超时后走 nudge → `pending_turns` |
-| 进程树留孤儿（MCP stdio 孙进程） | 统一 `detached: true` + `process.kill(-pid)`，照 [mcp-cli-bridge.ts](hermes-workspace/src/server/mcp-cli-bridge.ts) 既有写法 |
-| Token usage 采集不到 | 记 `null` 而非估算；预算判定时明确区分「未采集」与「零消耗」，避免拿缺失数据去硬停 |
-| SSE 总线被单个 adapter 拖死 | Router 内每 run 独立 try/catch；`error` 事件必发；订阅端心跳超时自动重连 |
-| 三处任务真源漂移（卡片/mission/runs） | lane 同步单向；`task_id` 全链贯穿；提供 `scripts/verify-task-consistency.mjs` 做一致性检查 |
-| **控制面仓库被误当成目标项目** | `projects.yaml` 的 `repo` 必填且必须绝对路径，禁止 `.` 与从 `process.cwd()` 推导；`swarm-environment` 注入的 notes 改指 mission worktree；加一条启动自检：若某项目的 `repo` 等于控制面仓库，必须显式标注 `selfHosted: true` 才放行 |
-| **服务器跑在 mission worktree 内被误删** | 启动时校验 `process.cwd()` 不在任一 `worktreeRoot` 之下，违反则拒绝启动；`releaseMissionWorktree` 二次校验目标路径不等于 `process.cwd()` |
-| worktree 数量膨胀，磁盘与安装耗时失控 | mission 合入主干后立即 `worktree remove`；`maxConcurrentWorktrees` **按项目**配置（不设全局默认，因为安装成本随包管理器差异巨大），超出则 mission 排队；`setup` 失败即 `blocked` 不放 agent 进半装好的树 |
-| 远程只读参与者走明文 HTTP 泄露 token | 不自造 TLS：要求反代或 Tailscale Serve；非回环绑定时沿用现有 fail-closed（无 `HERMES_PASSWORD` 拒绝启动）；`read_only` token 的 allowlist 只含 `kanban_get` / `task_get`，写工具一律 403 |
-| `agents.yaml` 与 `~/.hermes/profiles/` 漂移 | 加载时对账并报告孤儿 profile（今天 `gpuserver` 就是），不静默忽略 |
-| **git-ops 写出只对本机成立的实现** | 所有 git 函数强制走 `GitContext`，不留收裸路径的重载；单测用一个假的 `ssh` 上下文断言命令拼装正确 |
-| ssh 主机不可达 / 密钥失效 | `probe()` 时跑一次 `ssh -o BatchMode=yes <host> true`，失败即把该 agent 标 unavailable，`requires` 匹配时跳过它；派发中途断连按 run 失败处理并保留远端 worktree 供排查 |
-| `git push` 被 `receive.denyCurrentBranch` 拒 | 远端一律用独立 worktree checkout，被推的分支永不是远端主树的当前分支；`ensureMissionWorktree` 对 `ssh` 上下文同样先建树 |
-| 产物过大拖垮 rsync 或磁盘 | 单次回传体积上限可配，超限只回传清单与摘要并在房间留系统消息说明路径；checkpoint 类大文件不进 git 也不强制回传 |
-| 远端 worktree 泄漏堆积 | mission 结束时 `ssh` 侧同样 `worktree remove`；启动时列一次远端 worktree 与本地 mission 对账，报告孤儿 |
-| `requires` 无人可派时静默挂起 | 无候选立即开 `pending_turns` 说明缺哪个能力，不留在 `queued` 假装排队 |
-| 兄弟分支自动合并冲突 | 不试图自动解决：`mergeSiblings` 失败即 `git merge --abort` 回到干净态，开 `pending_turns` 带冲突文件列表请人处理 |
-| Agent 不提交，阶段边界没有 sha | `commitStage` 在阶段收尾时兜底提交；`head_sha` 由服务端 `resolveHead` 取，**不依赖模型自述** |
-| Hermes 常驻 tmux worker 与 worktree 冲突 | 不做混合：`workspaceMode` 在 pipeline 级二选一，`worktree` 模板里出现本机 Hermes worker 则**加载期报错**。`advance` 与 `lane-sync` 因此每个 mission 只面对一种 cwd 语义 |
-| decompose 生成的每格指令质量不稳 | 模型失败或产出为空时回落「模板措辞 + spec 全文」，与今天等价不倒退；生成结果在建任务后可人工编辑再派发 |
-| 相对/绝对路径混用 | `files_changed` 统一存仓库相对路径；`handoff.ts` 现有绝对路径产出改为相对，读取侧容忍旧数据 |
-| `readyQueuedAssignments` 从未在生产跑过，只有一个单测 | P2a 先补拓扑单测矩阵：线性链、菱形 fan-out/fan-in、review 打回、成环拒绝、continuation 继承边；再接真实派发 |
-| `changes_requested` 打回时漏放行下游 | review 节点必须置 `cancelled` 而非 `checkpointed`（离开 `doneIds`）；新 review 节点接管原下游边；单测断言「打回后 retro 仍为 queued」 |
-| 打回死循环 | rework 轮次上限 3，超出转 `blocked` 并开 `pending_turns` |
-| 自动 @ 造成回合失控 | `mentionDepth` 上限 4（人类发言重置为 0）；同房串行队列；无下一阶段即终止并置 `done` |
-| `mention_name` 冲突（人与 Agent 撞名） | `room_participants` 唯一索引拦截；加入时自动加后缀；投影历史时按 `sender_participant_id` 而非名字判定「是否我自己」 |
-| pending turn 堆积或重复开单 | 同 `(assignment_id, kind)` 只保留一条 pending；30 分钟超时转 `expired`；`GET /api/pending-turns` 首屏对账，不依赖 SSE 不丢 |
-| better-sqlite3 缺失 | 复用 kanban 已有三级回落（better-sqlite3 → node:sqlite → sqlite3 CLI），抽进 `sqlite-helper.ts` |
-| 回归面过大 | 每 Phase 独立 PR；新表面全部新增路由/目录，不改既有 hot path |
+| 风险                                                  | 对策                                                                                                                                                                                                                               |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Agent 压根不调 MCP 工具（忘了 / 不支持）              | `probe()` 时验证 MCP 连通性，连不上直接标 unavailable；run 级超时兜底 + nudge；连续 3 次不上报转 `pending_turns` 请人                                                                                                              |
+| MCP 工具描述吃 context                                | 描述控制在两句以内（Agent Teams 的 `message_send` 描述有 200 多词，不照抄）；按角色裁剪 `toolAllowlist`，reviewer 之外不下发 review 工具                                                                                           |
+| 各 CLI 的 MCP 注册方式不同                            | adapter 自带注入策略：有启动参数的（claude `--mcp-config`）走启动参数；Codex 这种全局 toml 入口则**幂等合并**一个固定 `mcp_servers` 表，凭证一律走 `bearer_token_env_var` / 进程环境。注入后用一次只读工具握手自检                 |
+| **把 runToken 写进全局 toml，并发 run 互相覆盖**      | 这才是真风险，不是「登记 MCP 端点」。toml 只写耐久的 `url` + 环境变量名；每个 spawn 的进程带自己的 `HERMES_MCP_TOKEN`。不设 `CODEX_HOME` 到临时目录，以免丢掉用户已有 auth/model/skills                                            |
+| **advance 在 fan-in 时双派**                          | `withMissionLock(missionId)` 包住「读 mission → 算 ready → 写状态 → 派发」整段；派发用 `state='queued'` 作为 CAS 条件，只有成功方 spawn；幂等键 `(assignmentId, attempt)` = `runId`，spawn 前先写入                                |
+| **指纹拒绝后 agent 拿旧议程死循环**                   | 拒绝响应必带 `nextRequiredToolCall: member_work_sync_status`，把下一步塞进它眼前，不只回错误码                                                                                                                                     |
+| **`reportToken` 一次性与网络重试冲突**                | 同 token 同 payload 哈希 → 60s 窗口内幂等重放，回放首次结果；同 token 异 payload → 拒绝并记事件；`run_tokens` 补 `consumed_at` / `consumed_payload_hash` / `last_response_json`                                                    |
+| **多条 pending turn 并存时答错对象**                  | 消息带 `answers_pending_turn_id`，chip 点击天然携带；无引用时默认最旧一条但**必须 UI 确认**；房间仅一条时跳过确认                                                                                                                  |
+| **预算归因二义**                                      | `token_usage` 补 `project_id`；查找顺序 `run → task → project → global`，**命中第一个即生效不叠加**；`null` usage 不参与判定                                                                                                       |
+| **`text_delta` 落库把 collab.db 撑爆**                | 硬规则：展示通道事件永不落库，只广播；逐字回看由 `task_runs.log_path` 的文件承担                                                                                                                                                   |
+| **8 agent 并发流式拖垮 event loop**                   | adapter 侧 50ms 合批再广播；订阅端按 `scope` 过滤，Overview 不订阅任何文本流；慢订阅者独立缓冲、超限丢弃并打标，绝不反压 adapter                                                                                                   |
+| **`room_messages` 无界增长，且归档与滚动摘要打架**    | 只归档「早于阈值 **且** 在 `through_message_id` 之前」的消息；永久保留尾部 200 条与 `pending_turns` 引用的消息；归档进 `room_messages_archive` 而非删除；不在写入路径上做                                                          |
+| **spec 编辑后下游指令仍是旧的**                       | assignment 记 `brief_spec_version`，与 mission 的 `spec_version` 不一致即标 `stale`；`stale` 的 stage 派发前必须重算或人工确认                                                                                                     |
+| **自动交接消耗掉 mentionDepth 预算**                  | `auto_handoff = 1` 的消息不递增 `mention_depth`，由流水线拓扑与 rework 上限约束；只有 agent 自发写的 `@` 才计数                                                                                                                    |
+| `runToken` 泄露或被复用                               | 一次 run 一个写 token，随 run 结束或重派即吊销；只映射该 run 的 `participantId` + `assignmentId`，越权返回 403 并记事件；库里只存 hash                                                                                             |
+| 重派后新旧进程双写                                    | 重派时 `revoked_at` 打旧 token；旧进程被拒的那一刻反过来证明它没死，据此取消重派或杀旧进程                                                                                                                                         |
+| detached 进程在 server 重启后失联                     | `run_tokens` 持久化保证它仍能上报；pid 注册表用于重启后重新挂接 PTY 与统计；孤儿超时后走 nudge → `pending_turns`                                                                                                                   |
+| 进程树留孤儿（MCP stdio 孙进程）                      | 统一 `detached: true` + `process.kill(-pid)`，照 [mcp-cli-bridge.ts](hermes-workspace/src/server/mcp-cli-bridge.ts) 既有写法                                                                                                       |
+| Token usage 采集不到                                  | 记 `null` 而非估算；预算判定时明确区分「未采集」与「零消耗」，避免拿缺失数据去硬停                                                                                                                                                 |
+| SSE 总线被单个 adapter 拖死                           | Router 内每 run 独立 try/catch；`error` 事件必发；订阅端心跳超时自动重连                                                                                                                                                           |
+| 三处任务真源漂移（卡片/mission/runs）                 | lane 同步单向；`task_id` 全链贯穿；提供 `scripts/verify-task-consistency.mjs` 做一致性检查                                                                                                                                         |
+| **控制面仓库被误当成目标项目**                        | `projects.yaml` 的 `repo` 必填且必须绝对路径，禁止 `.` 与从 `process.cwd()` 推导；`swarm-environment` 注入的 notes 改指 mission worktree；加一条启动自检：若某项目的 `repo` 等于控制面仓库，必须显式标注 `selfHosted: true` 才放行 |
+| **服务器跑在 mission worktree 内被误删**              | 启动时校验 `process.cwd()` 不在任一 `worktreeRoot` 之下，违反则拒绝启动；`releaseMissionWorktree` 二次校验目标路径不等于 `process.cwd()`                                                                                           |
+| worktree 数量膨胀，磁盘与安装耗时失控                 | mission 合入主干后立即 `worktree remove`；`maxConcurrentWorktrees` **按项目**配置（不设全局默认，因为安装成本随包管理器差异巨大），超出则 mission 排队；`setup` 失败即 `blocked` 不放 agent 进半装好的树                           |
+| 远程只读参与者走明文 HTTP 泄露 token                  | 不自造 TLS：要求反代或 Tailscale Serve；非回环绑定时沿用现有 fail-closed（无 `HERMES_PASSWORD` 拒绝启动）；`read_only` token 的 allowlist 只含 `kanban_get` / `task_get`，写工具一律 403                                           |
+| `agents.yaml` 与 `~/.hermes/profiles/` 漂移           | 加载时对账并报告孤儿 profile（今天 `gpuserver` 就是），不静默忽略                                                                                                                                                                  |
+| **git-ops 写出只对本机成立的实现**                    | 所有 git 函数强制走 `GitContext`，不留收裸路径的重载；单测用一个假的 `ssh` 上下文断言命令拼装正确                                                                                                                                  |
+| ssh 主机不可达 / 密钥失效                             | `probe()` 时跑一次 `ssh -o BatchMode=yes <host> true`，失败即把该 agent 标 unavailable，`requires` 匹配时跳过它；派发中途断连按 run 失败处理并保留远端 worktree 供排查                                                             |
+| `git push` 被 `receive.denyCurrentBranch` 拒          | 远端一律用独立 worktree checkout，被推的分支永不是远端主树的当前分支；`ensureMissionWorktree` 对 `ssh` 上下文同样先建树                                                                                                            |
+| 产物过大拖垮 rsync 或磁盘                             | 单次回传体积上限可配，超限只回传清单与摘要并在房间留系统消息说明路径；checkpoint 类大文件不进 git 也不强制回传                                                                                                                     |
+| 远端 worktree 泄漏堆积                                | mission 结束时 `ssh` 侧同样 `worktree remove`；启动时列一次远端 worktree 与本地 mission 对账，报告孤儿                                                                                                                             |
+| `requires` 无人可派时静默挂起                         | 无候选立即开 `pending_turns` 说明缺哪个能力，不留在 `queued` 假装排队                                                                                                                                                              |
+| 兄弟分支自动合并冲突                                  | 不试图自动解决：`mergeSiblings` 失败即 `git merge --abort` 回到干净态，开 `pending_turns` 带冲突文件列表请人处理                                                                                                                   |
+| Agent 不提交，阶段边界没有 sha                        | `commitStage` 在阶段收尾时兜底提交；`head_sha` 由服务端 `resolveHead` 取，**不依赖模型自述**                                                                                                                                       |
+| Hermes 常驻 tmux worker 与 worktree 冲突              | 不做混合：`workspaceMode` 在 pipeline 级二选一，`worktree` 模板里出现本机 Hermes worker 则**加载期报错**。`advance` 与 `lane-sync` 因此每个 mission 只面对一种 cwd 语义                                                            |
+| decompose 生成的每格指令质量不稳                      | 模型失败或产出为空时回落「模板措辞 + spec 全文」，与今天等价不倒退；生成结果在建任务后可人工编辑再派发                                                                                                                             |
+| 相对/绝对路径混用                                     | `files_changed` 统一存仓库相对路径；`handoff.ts` 现有绝对路径产出改为相对，读取侧容忍旧数据                                                                                                                                        |
+| `readyQueuedAssignments` 从未在生产跑过，只有一个单测 | P2a 先补拓扑单测矩阵：线性链、菱形 fan-out/fan-in、review 打回、成环拒绝、continuation 继承边；再接真实派发                                                                                                                        |
+| `changes_requested` 打回时漏放行下游                  | review 节点必须置 `cancelled` 而非 `checkpointed`（离开 `doneIds`）；新 review 节点接管原下游边；单测断言「打回后 retro 仍为 queued」                                                                                              |
+| 打回死循环                                            | rework 轮次上限 3，超出转 `blocked` 并开 `pending_turns`                                                                                                                                                                           |
+| 自动 @ 造成回合失控                                   | `mentionDepth` 上限 4（人类发言重置为 0）；同房串行队列；无下一阶段即终止并置 `done`                                                                                                                                               |
+| `mention_name` 冲突（人与 Agent 撞名）                | `room_participants` 唯一索引拦截；加入时自动加后缀；投影历史时按 `sender_participant_id` 而非名字判定「是否我自己」                                                                                                                |
+| pending turn 堆积或重复开单                           | 同 `(assignment_id, kind)` 只保留一条 pending；30 分钟超时转 `expired`；`GET /api/pending-turns` 首屏对账，不依赖 SSE 不丢                                                                                                         |
+| better-sqlite3 缺失                                   | 复用 kanban 已有三级回落（better-sqlite3 → node:sqlite → sqlite3 CLI），抽进 `sqlite-helper.ts`                                                                                                                                    |
+| 回归面过大                                            | 每 Phase 独立 PR；新表面全部新增路由/目录，不改既有 hot path                                                                                                                                                                       |
 
 ---
 
 ## 验收标准
 
 **多 Agent 与 MCP 控制面**
+
 - `agents.yaml` 声明的 hermes / claude-code / codex / deepseek-harness 均能 `probe()` 成功并在房间与流水线中被派发
 - 任一 adapter 不可用时，UI 显示「未检测到」而非报错崩溃
 - CLI agent 通过 typed tool 推进状态，**stdout 解析失败不影响流水线**（只影响 UI 展示）
@@ -1284,6 +1312,7 @@ fail-closed 的 `0.0.0.0` 开关、`HERMES_PASSWORD`、加密 token 存 `~/.herm
 - Hermes 既有 tmux + checkpoint 文本路径不受影响，与 MCP 路径在 `advance.ts` 汇合
 
 **任务模块**
+
 - 可从模板一键创建任务，卡片自动出现在 `ready` 并派发首阶段
 - 阶段完成后卡片 lane 自动随动，无需手工拖拽
 - `dependsOn` 真正生效：未满足依赖的阶段不会被提前派发（今天会）
@@ -1292,6 +1321,7 @@ fail-closed 的 `0.0.0.0` 开关、`HERMES_PASSWORD`、加密 token 存 `~/.herm
 - 每格 agent 收到的是针对该格生成的指令，而非 spec 原文透传；decompose 失败时回落不中断流水线
 
 **产物与代码同步**
+
 - agent 改动落在 `projects.yaml` 声明的目标项目仓库内，控制面仓库（hermes-workspace 自身）**零改动**
 - 服务器运行目录位于任一 `worktreeRoot` 之下时拒绝启动并给出明确报错
 - 目标项目 `repo` 写 `.` 或缺省时，配置加载直接失败而非回落到 `process.cwd()`
@@ -1307,32 +1337,38 @@ fail-closed 的 `0.0.0.0` 开关、`HERMES_PASSWORD`、加密 token 存 `~/.herm
 - `files_changed` 全为仓库相对路径
 
 **全局视图**
+
 - Agent 状态变化 3 秒内反映到 Overview（SSE 推送，非 30s 轮询）
 - 可一眼看出：谁在线、在做哪个任务、全部任务总进度
 
 **单任务流水线**
+
 - 能看到全部 stage、当前所在 stage、卡点 stage 与当前负责人
 - 时间线包含该任务全部 run（agent、状态、耗时、日志/diff 入口）
 
 **群聊**
+
 - A 阶段 `DONE` 后，房间自动出现 `@B` 消息且内容包含 A 的 `result` / `nextAction` / 变更文件；B 无需人工复述即开跑
 - 人类在 mention picker 里与 Agent 并列可选；Agent `@` 人类会产生真实的 pending turn 与提示，而非死文本
 - `NEEDS_INPUT` 时右下角出现提示，在房间回话或点选项 chip 均可解除，且流水线阶段自动从 `needs_input` 回到执行
 - Agent 的注入上下文里能看到 `[Human member] <名字>` 与 `[名字]: 内容` 归因，不会把人类发言误当自己的历史
 
 **健康与成本**
+
 - 停滞 run 在 15 分钟内收到且仅收到一次 nudge；同一 assignment 第 4 次不再 nudge 而是转 `pending_turns`
 - nudge 不改变 assignment 状态，不产生新的 run
 - 预算达 80% 弹提示、达 100% 后 `startRun` 被拒并在房间留系统消息
 - usage 采集不到时显示「未采集」而非 0
 
 **性能与容量**
+
 - 8 个托管 agent 同时流式输出时 UI 不卡（P1 步骤 3 即验证，不留到 P6）
 - `collab.db` 在一次 8 agent 长跑后的增长量与消息条数成正比，**与输出字数无关**（证明展示通道未落库）
 - 归档脚本跑过之后，滚动摘要仍能正确注入上下文（尾部 200 条与摘要覆盖边界都在）
 - 未答的 `pending_turns` 所引用的消息在任何归档策略下都不丢
 
 **不回归**
+
 - 现有 Chat 单聊、Swarm2 屏、`/api/swarm-dispatch`、`/api/swarm-kanban` 行为不变
 - `workspaceMode: canonical` 的流水线里，本机 Hermes worker 行为与今天一致
 - `pnpm run build` 与既有 vitest 全绿
@@ -1364,14 +1400,14 @@ fail-closed 的 `0.0.0.0` 开关、`HERMES_PASSWORD`、加密 token 存 `~/.herm
 
 ## 附录：三方案对比（决策依据）
 
-| 维度 | A Room-First | B CLI-First | **C Hybrid（选定）** |
-|------|--------------|-------------|----------------------|
-| 群聊体验 | 强 | 中 | 强 |
-| 多 CLI 工程交付 | 中 | 强 | 强（adapter 隔离） |
-| 共同记忆 | 语义摘要为主 | 文件黑板为主 | 语义为主 + 交接文件为辅 |
-| 任务历史 | 需后期补绑 | 天然按 run | 一等 `task_runs` 时间线 |
-| 与现有 Swarm | 易形成双轨 | 需重写/长期双栈 | 复用 mission 引擎，无双轨 |
-| 产物隔离 | 弱（对话为主） | 强（天然 per-run 工作区） | 强（per-mission worktree + 分支） |
-| 实现风险 | 中 | 高（CLI 差异集中爆发） | 中高，但可分 10 期收敛 |
+| 维度            | A Room-First   | B CLI-First               | **C Hybrid（选定）**              |
+| --------------- | -------------- | ------------------------- | --------------------------------- |
+| 群聊体验        | 强             | 中                        | 强                                |
+| 多 CLI 工程交付 | 中             | 强                        | 强（adapter 隔离）                |
+| 共同记忆        | 语义摘要为主   | 文件黑板为主              | 语义为主 + 交接文件为辅           |
+| 任务历史        | 需后期补绑     | 天然按 run                | 一等 `task_runs` 时间线           |
+| 与现有 Swarm    | 易形成双轨     | 需重写/长期双栈           | 复用 mission 引擎，无双轨         |
+| 产物隔离        | 弱（对话为主） | 强（天然 per-run 工作区） | 强（per-mission worktree + 分支） |
+| 实现风险        | 中             | 高（CLI 差异集中爆发）    | 中高，但可分 10 期收敛            |
 
 **选 C 的关键理由**：`SwarmMission.assignments[].dependsOn` 已经是流水线引擎，`SwarmKanbanCard.missionId` 已经是卡片↔流水线外键，`parseSwarmCheckpoint` 已经是交接信号，`swarm-decompose` 已经是内容生成器——四个目标功能都能建立在既有契约上，A 和 B 都要另造一套等价物。git 产物模型（P2b）是三个方案共同的净新增，与选型无关：它修的是「所有 worker 共享一棵工作树、冲突静默覆盖」这个今天就存在的隐患。

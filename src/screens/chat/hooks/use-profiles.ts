@@ -69,19 +69,17 @@ export function setActiveProfileOptimistic(
   profileName: string,
 ) {
   writeCachedActiveProfile(profileName)
-  queryClient.setQueryData<ProfilesListResponse>(
-    ['profiles', 'chat'],
-    (old) =>
-      old
-        ? {
-            ...old,
-            activeProfile: profileName,
-            profiles: old.profiles?.map((p) => ({
-              ...p,
-              active: p.name === profileName,
-            })),
-          }
-        : { activeProfile: profileName, profiles: [] },
+  queryClient.setQueryData<ProfilesListResponse>(['profiles', 'chat'], (old) =>
+    old
+      ? {
+          ...old,
+          activeProfile: profileName,
+          profiles: old.profiles?.map((p) => ({
+            ...p,
+            active: p.name === profileName,
+          })),
+        }
+      : { activeProfile: profileName, profiles: [] },
   )
 }
 
@@ -171,7 +169,9 @@ export function useProfiles() {
       }
       window.setTimeout(() => {
         void queryClient.invalidateQueries({ queryKey: ['profiles', 'chat'] })
-        void queryClient.invalidateQueries({ queryKey: ['gateway-pool', 'status'] })
+        void queryClient.invalidateQueries({
+          queryKey: ['gateway-pool', 'status'],
+        })
       }, 1500)
     },
     onSettled: (_data, _error, profileName) => {
@@ -221,9 +221,7 @@ export function useProfiles() {
     isReady: profilesQuery.isFetched,
     isError: profilesQuery.isError,
     error:
-      profilesQuery.error instanceof Error
-        ? profilesQuery.error.message
-        : null,
+      profilesQuery.error instanceof Error ? profilesQuery.error.message : null,
     activateProfile: activateMutation.mutate,
     isActivating: activateMutation.isPending,
     refetch: profilesQuery.refetch,

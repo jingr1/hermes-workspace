@@ -10,15 +10,25 @@
  *   current ready/running stage is kind: review → review
  *   mission complete              → done
  */
-import {  getSwarmMission } from '../swarm-missions'
-import type {SwarmMission} from '../swarm-missions';
+import { getSwarmMission } from '../swarm-missions'
+import type { SwarmMission } from '../swarm-missions'
 
-export type KanbanLane = 'backlog' | 'todo' | 'ready' | 'running' | 'review' | 'blocked' | 'done'
+export type KanbanLane =
+  | 'backlog'
+  | 'todo'
+  | 'ready'
+  | 'running'
+  | 'review'
+  | 'blocked'
+  | 'done'
 
 export function laneFromMission(mission: SwarmMission): KanbanLane {
   if (mission.state === 'complete') return 'done'
   const assignments = mission.assignments
-  if (assignments.some((a) => a.state === 'blocked' || a.state === 'needs_input')) return 'blocked'
+  if (
+    assignments.some((a) => a.state === 'blocked' || a.state === 'needs_input')
+  )
+    return 'blocked'
   if (assignments.some((a) => a.state === 'dispatched')) return 'running'
   if (assignments.some((a) => a.state === 'reviewing')) return 'review'
   if (assignments.some((a) => a.state === 'queued')) return 'ready'

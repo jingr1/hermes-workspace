@@ -4,7 +4,10 @@ import { describe, expect, it } from 'vitest'
 
 const dialogSrc = () =>
   readFileSync(
-    resolve(process.cwd(), 'src/components/settings-dialog/settings-dialog.tsx'),
+    resolve(
+      process.cwd(),
+      'src/components/settings-dialog/settings-dialog.tsx',
+    ),
     'utf8',
   )
 
@@ -40,11 +43,17 @@ describe('settings model/provider scope wiring', () => {
       'utf8',
     )
     const catalogSrc = readFileSync(
-      resolve(process.cwd(), 'src/components/settings/provider-catalog-panel.tsx'),
+      resolve(
+        process.cwd(),
+        'src/components/settings/provider-catalog-panel.tsx',
+      ),
       'utf8',
     )
     const profileSrc = readFileSync(
-      resolve(process.cwd(), 'src/components/settings/profile-model-selector.tsx'),
+      resolve(
+        process.cwd(),
+        'src/components/settings/profile-model-selector.tsx',
+      ),
       'utf8',
     )
     expect(indexSrc).toContain('ModelProviderScopePanel')

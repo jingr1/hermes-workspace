@@ -164,7 +164,9 @@ export function ensureCollabDb(dbPath: string = getCollabDbPath()): void {
         applied_at INTEGER NOT NULL
       );
     `)
-    const rows = db.prepare('SELECT version FROM schema_migrations ORDER BY version').all() as Array<{ version: number }>
+    const rows = db
+      .prepare('SELECT version FROM schema_migrations ORDER BY version')
+      .all() as Array<{ version: number }>
     const applied = new Set(rows.map((r) => r.version))
     for (const migration of MIGRATIONS) {
       if (applied.has(migration.version)) continue
@@ -173,10 +175,9 @@ export function ensureCollabDb(dbPath: string = getCollabDbPath()): void {
       db.exec('BEGIN')
       try {
         db.exec(migration.sql)
-        db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
-          migration.version,
-          Date.now(),
-        )
+        db.prepare(
+          'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
+        ).run(migration.version, Date.now())
         db.exec('COMMIT')
       } catch (error) {
         db.exec('ROLLBACK')
@@ -190,7 +191,10 @@ export function ensureCollabDb(dbPath: string = getCollabDbPath()): void {
 
 export function getCollabDbVersion(dbPath: string = getCollabDbPath()): number {
   if (!fs.existsSync(dbPath)) return 0
-  const raw = runSqlite(dbPath, 'SELECT MAX(version) as v FROM schema_migrations')
+  const raw = runSqlite(
+    dbPath,
+    'SELECT MAX(version) as v FROM schema_migrations',
+  )
   const parsed = raw ? (JSON.parse(raw) as Array<{ v: number | null }>) : []
   return parsed[0]?.v ?? 0
 }

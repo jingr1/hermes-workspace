@@ -100,7 +100,10 @@ export const BUILTIN_PROVIDER_PRESETS: Record<
     name: 'NVIDIA NIM',
     base_url: 'https://integrate.api.nvidia.com/v1',
     key_env: 'NVIDIA_API_KEY',
-    models: ['nvidia/nemotron-3-super-120b-a12b', 'nvidia/llama-3.3-nemotron-super-49b-v1'],
+    models: [
+      'nvidia/nemotron-3-super-120b-a12b',
+      'nvidia/llama-3.3-nemotron-super-49b-v1',
+    ],
   },
 }
 
@@ -128,7 +131,9 @@ function catalogCustomRow(
   }
 }
 
-function providerBlockFromEntry(entry: CatalogFile['providers'][number]): Record<string, unknown> {
+function providerBlockFromEntry(
+  entry: CatalogFile['providers'][number],
+): Record<string, unknown> {
   const block: Record<string, unknown> = {}
   if (entry.name) block.name = entry.name
   if (entry.base_url) block.base_url = entry.base_url
@@ -151,16 +156,18 @@ function mergeProviderCatalogEntry(input: {
   const next = {
     id,
     name: input.name?.trim() || prev?.name || preset?.name || id,
-    base_url: input.base_url?.trim() ?? prev?.base_url ?? preset?.base_url ?? '',
+    base_url:
+      input.base_url?.trim() ?? prev?.base_url ?? preset?.base_url ?? '',
     key_env: input.key_env?.trim() ?? prev?.key_env ?? preset?.key_env ?? '',
     models:
       input.models ??
-      (prev?.models?.length ? prev.models : preset?.models ?? []),
+      (prev?.models?.length ? prev.models : (preset?.models ?? [])),
   }
   writeCatalogFile({
-    providers: [...file.providers.filter((entry) => entry.id !== id), next].sort(
-      (a, b) => a.id.localeCompare(b.id),
-    ),
+    providers: [
+      ...file.providers.filter((entry) => entry.id !== id),
+      next,
+    ].sort((a, b) => a.id.localeCompare(b.id)),
   })
   return next
 }
@@ -197,7 +204,9 @@ function isRedundantBuiltinProviderBlock(
 }
 
 /** Remove stale ``providers.<builtin>`` blocks that duplicate Hermes defaults. */
-function pruneRedundantBuiltinProviderFromAllProfiles(providerId: string): void {
+function pruneRedundantBuiltinProviderFromAllProfiles(
+  providerId: string,
+): void {
   if (!BUILTIN_PROVIDER_IDS.has(providerId)) return
   for (const profile of listProfiles()) {
     const config = readProfile(profile.name).config
@@ -216,7 +225,9 @@ function pruneAllRedundantBuiltinProvidersFromProfiles(): void {
   }
 }
 
-function syncProviderToAllProfiles(entry: CatalogFile['providers'][number]): void {
+function syncProviderToAllProfiles(
+  entry: CatalogFile['providers'][number],
+): void {
   if (BUILTIN_PROVIDER_IDS.has(entry.id)) {
     pruneRedundantBuiltinProviderFromAllProfiles(entry.id)
     return
@@ -224,7 +235,10 @@ function syncProviderToAllProfiles(entry: CatalogFile['providers'][number]): voi
   patchAllProfileProviders(
     entry.id,
     providerBlockFromEntry(entry),
-    catalogCustomRow(entry.id, { name: entry.name || entry.id, base_url: entry.base_url || '' }),
+    catalogCustomRow(entry.id, {
+      name: entry.name || entry.id,
+      base_url: entry.base_url || '',
+    }),
   )
 }
 
@@ -331,7 +345,9 @@ function collectKeyEnvRefs(excludeProviderId?: string): Set<string> {
 
 function readCatalogFile(): CatalogFile {
   try {
-    const parsed = JSON.parse(fs.readFileSync(catalogPath(), 'utf-8')) as unknown
+    const parsed = JSON.parse(
+      fs.readFileSync(catalogPath(), 'utf-8'),
+    ) as unknown
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       return { providers: [] }
     }
@@ -371,9 +387,10 @@ function readCatalogFile(): CatalogFile {
         ...prev,
         base_url: prev.base_url || readString(item.base_url),
         key_env: prev.key_env || readString(item.key_env),
-        models: model && !prev.models?.includes(model)
-          ? [...(prev.models || []), model]
-          : prev.models,
+        models:
+          model && !prev.models?.includes(model)
+            ? [...(prev.models || []), model]
+            : prev.models,
       })
     }
     return { providers: [...migrated.values()] }
@@ -438,7 +455,9 @@ function discoverProvidersFromConfig(
       base_url: readString(rec.base_url),
       key_env:
         readString(rec.key_env) ||
-        (isCatalogEnvKey(readString(rec.api_key)) ? readString(rec.api_key) : ''),
+        (isCatalogEnvKey(readString(rec.api_key))
+          ? readString(rec.api_key)
+          : ''),
       models: [],
     })
   }
@@ -485,7 +504,9 @@ function mergeCatalog(): CatalogFile {
       models: [...new Set([...(prev.models || []), ...(entry.models || [])])],
     })
   }
-  const merged = { providers: [...byId.values()].sort((a, b) => a.id.localeCompare(b.id)) }
+  const merged = {
+    providers: [...byId.values()].sort((a, b) => a.id.localeCompare(b.id)),
+  }
   if (stored.providers.length === 0 && merged.providers.length > 0) {
     writeCatalogFile(merged)
   }
@@ -496,7 +517,9 @@ export function getProviderCatalog(): ProviderCatalog {
   pruneAllRedundantBuiltinProvidersFromProfiles()
   return {
     providers: mergeCatalog()
-      .providers.filter((entry) => entry.id !== 'manifest' && entry.id !== 'custom')
+      .providers.filter(
+        (entry) => entry.id !== 'manifest' && entry.id !== 'custom',
+      )
       .map((entry) => {
         const value = lookupKeyValue(entry.key_env || '')
         return {
@@ -547,7 +570,9 @@ function extractProviderKeyEnv(
     const fromBlock = readString(block.key_env)
     if (fromBlock) return fromBlock
   }
-  const custom = Array.isArray(config.custom_providers) ? config.custom_providers : []
+  const custom = Array.isArray(config.custom_providers)
+    ? config.custom_providers
+    : []
   for (const raw of custom) {
     const rec = asRecord(raw)
     if (!rec || readString(rec.name) !== providerId) continue
@@ -659,7 +684,9 @@ export function upsertCatalogKey(
   const trimmed = name.trim()
   if (!trimmed) throw new Error('Key name is required')
   if (!isCatalogEnvKey(trimmed)) {
-    throw new Error('Only API key / token env names can be added to the catalog')
+    throw new Error(
+      'Only API key / token env names can be added to the catalog',
+    )
   }
   writeKeyToAllEnvs(trimmed, value)
   const builtinId = resolveBuiltinProviderId(trimmed, providerId)
@@ -685,7 +712,9 @@ function currentModelId(config: Record<string, unknown>): string {
   return nested ? readString(nested.default) : ''
 }
 
-export function readProfileProviderSelection(name: string): ProfileProviderSelection {
+export function readProfileProviderSelection(
+  name: string,
+): ProfileProviderSelection {
   const config = readProfile(name).config
   const fallbacks = Array.isArray(config.fallback_providers)
     ? config.fallback_providers

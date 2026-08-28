@@ -7,27 +7,32 @@ import { createFileRoute } from '@tanstack/react-router'
 import { isAuthenticated } from '../../server/auth-middleware'
 import { getProfilesDir } from '../../server/claude-paths'
 import {
-
-
-
-
-
-
-
-
-
-
-
   buildSwarmDispatchMetadata,
   buildSwarmSessionMetadata,
   getSwarmTmuxSessionName,
   getSwarmWrapperPath,
   listSwarmWorkerIds,
-  readSwarmRuntimeFile
+  readSwarmRuntimeFile,
 } from '../../server/swarm-foundation'
-import { formatSwarmWorkerLabel, resolveSwarmWorkerDisplayName, rosterByWorkerId } from '../../server/swarm-roster'
+import {
+  formatSwarmWorkerLabel,
+  resolveSwarmWorkerDisplayName,
+  rosterByWorkerId,
+} from '../../server/swarm-roster'
 import { readSwarmMode, writeSwarmMode } from '../../server/swarm-mode'
-import type {SwarmArtifactMetadata, SwarmBoundary, SwarmCheckpointStatus, SwarmDispatchMetadata, SwarmLifecycleMetadata, SwarmPreviewMetadata, SwarmRuntimeSource, SwarmSessionMetadata, SwarmTaskMetadata, SwarmTerminalKind, SwarmWorkerState} from '../../server/swarm-foundation';
+import type {
+  SwarmArtifactMetadata,
+  SwarmBoundary,
+  SwarmCheckpointStatus,
+  SwarmDispatchMetadata,
+  SwarmLifecycleMetadata,
+  SwarmPreviewMetadata,
+  SwarmRuntimeSource,
+  SwarmSessionMetadata,
+  SwarmTaskMetadata,
+  SwarmTerminalKind,
+  SwarmWorkerState,
+} from '../../server/swarm-foundation'
 
 type RuntimeEntry = {
   workerId: string
@@ -75,15 +80,22 @@ type RuntimeEntry = {
 }
 
 function listWorkerIds(): Array<string> {
-  return listSwarmWorkerIds({ swarmOnly: true }).filter((id) => id !== 'workspace')
+  return listSwarmWorkerIds({ swarmOnly: true }).filter(
+    (id) => id !== 'workspace',
+  )
 }
 
 function lastLogTail(
   profilePath: string,
   maxBytes = 4_000,
-): { tail: string | null; lastSessionStartedAt: number | null; logPath: string | null } {
+): {
+  tail: string | null
+  lastSessionStartedAt: number | null
+  logPath: string | null
+} {
   const log = join(profilePath, 'logs', 'agent.log')
-  if (!existsSync(log)) return { tail: null, lastSessionStartedAt: null, logPath: null }
+  if (!existsSync(log))
+    return { tail: null, lastSessionStartedAt: null, logPath: null }
   try {
     const stat = statSync(log)
     const buffer = readFileSync(log, 'utf-8')
@@ -105,9 +117,18 @@ function resolveTmuxBin(): string {
 
 function tmuxHasSession(name: string): Promise<boolean> {
   return new Promise((resolve) => {
-    const child = execFile(resolveTmuxBin(), ['has-session', '-t', name], (error) => resolve(!error))
+    const child = execFile(
+      resolveTmuxBin(),
+      ['has-session', '-t', name],
+      (error) => resolve(!error),
+    )
     // Bail out quickly if tmux is unresponsive — avoids blocking the runtime poll.
-    setTimeout(() => { resolve(false); try { child.kill() } catch {} }, 2000)
+    setTimeout(() => {
+      resolve(false)
+      try {
+        child.kill()
+      } catch {}
+    }, 2000)
   })
 }
 
@@ -116,10 +137,21 @@ function tmuxPaneCommand(sessionName: string): Promise<string | null> {
   return new Promise((resolve) => {
     const child = execFile(
       resolveTmuxBin(),
-      ['display-message', '-p', '-t', `${sessionName}:0`, '#{pane_current_command}'],
+      [
+        'display-message',
+        '-p',
+        '-t',
+        `${sessionName}:0`,
+        '#{pane_current_command}',
+      ],
       (error, stdout) => resolve(error ? null : stdout.trim() || null),
     )
-    setTimeout(() => { resolve(null); try { child.kill() } catch {} }, 2000)
+    setTimeout(() => {
+      resolve(null)
+      try {
+        child.kill()
+      } catch {}
+    }, 2000)
   })
 }
 
@@ -131,14 +163,24 @@ function tmuxCapturePane(sessionName: string, lines = 6): Promise<string> {
       ['capture-pane', '-p', '-t', `${sessionName}:0`, '-S', `-${lines}`],
       (error, stdout) => resolve(error ? '' : stdout.toString().trim()),
     )
-    setTimeout(() => { resolve(''); try { child.kill() } catch {} }, 2000)
+    setTimeout(() => {
+      resolve('')
+      try {
+        child.kill()
+      } catch {}
+    }, 2000)
   })
 }
 
 function tmuxIsInstalled(): Promise<boolean> {
   return new Promise((resolve) => {
     const child = execFile(resolveTmuxBin(), ['-V'], (error) => resolve(!error))
-    setTimeout(() => { resolve(false); try { child.kill() } catch {} }, 2000)
+    setTimeout(() => {
+      resolve(false)
+      try {
+        child.kill()
+      } catch {}
+    }, 2000)
   })
 }
 
@@ -154,10 +196,16 @@ async function probeTmuxName(
     `agent-${workerId}`,
   ].filter((value): value is string => Boolean(value))
   const seen = new Set<string>()
-  const unique = candidates.filter((c) => { if (seen.has(c)) return false; seen.add(c); return true })
+  const unique = candidates.filter((c) => {
+    if (seen.has(c)) return false
+    seen.add(c)
+    return true
+  })
   // Probe all candidates in parallel instead of sequentially to avoid stacking
   // multiple serial tmux calls per worker (which causes 30s+ GET /api/swarm-runtime).
-  const results = await Promise.all(unique.map(async (c) => (await tmuxHasSession(c) ? c : null)))
+  const results = await Promise.all(
+    unique.map(async (c) => ((await tmuxHasSession(c)) ? c : null)),
+  )
   return results.find((r) => r !== null) ?? null
 }
 
@@ -180,7 +228,8 @@ async function buildEntry(
   // has returned to shell (hermes process exited without writing a final checkpoint).
   // Grace period: 2 minutes after dispatch to allow slow startup.
   const EXECUTING_GRACE_MS = 2 * 60_000
-  const lastDispatchAt = typeof runtime.lastDispatchAt === 'number' ? runtime.lastDispatchAt : 0
+  const lastDispatchAt =
+    typeof runtime.lastDispatchAt === 'number' ? runtime.lastDispatchAt : 0
   const dispatchAge = Date.now() - lastDispatchAt
   let effectiveState = runtime.state
   let effectiveCheckpointStatus = runtime.checkpointStatus
@@ -298,7 +347,10 @@ function readPid(profilePath: string): number | null {
   const runtimePath = join(profilePath, 'runtime.json')
   if (!existsSync(runtimePath)) return null
   try {
-    const raw = JSON.parse(readFileSync(runtimePath, 'utf-8')) as Record<string, unknown>
+    const raw = JSON.parse(readFileSync(runtimePath, 'utf-8')) as Record<
+      string,
+      unknown
+    >
     return typeof raw.pid === 'number' ? raw.pid : null
   } catch {
     return null
@@ -314,7 +366,9 @@ export const Route = createFileRoute('/api/swarm-runtime')({
         }
         const ids = listWorkerIds()
         const tmuxAvailable = await tmuxIsInstalled()
-        const entries = await Promise.all(ids.map((id) => buildEntry(id, tmuxAvailable)))
+        const entries = await Promise.all(
+          ids.map((id) => buildEntry(id, tmuxAvailable)),
+        )
         return json({
           checkedAt: Date.now(),
           registryVersion: 1,

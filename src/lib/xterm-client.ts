@@ -6,7 +6,10 @@ import type { Terminal } from 'xterm'
 
 type Ctor<T> = new (options?: any) => T
 
-function pickConstructor<T>(mod: Record<string, unknown>, exportName: string): Ctor<T> {
+function pickConstructor<T>(
+  mod: Record<string, unknown>,
+  exportName: string,
+): Ctor<T> {
   const direct = mod[exportName]
   if (typeof direct === 'function') {
     return direct as Ctor<T>
@@ -34,7 +37,11 @@ export type XtermClientCtors = {
 
 export async function loadXtermClient(): Promise<XtermClientCtors> {
   if (loaded) {
-    return { Terminal: TerminalCtor, FitAddon: FitAddonCtor, WebLinksAddon: WebLinksAddonCtor }
+    return {
+      Terminal: TerminalCtor,
+      FitAddon: FitAddonCtor,
+      WebLinksAddon: WebLinksAddonCtor,
+    }
   }
 
   const [xtermMod, fitMod, linksMod] = await Promise.all([
@@ -47,13 +54,23 @@ export async function loadXtermClient(): Promise<XtermClientCtors> {
     await import('xterm/css/xterm.css')
   }
 
-  TerminalCtor = pickConstructor<Terminal>(xtermMod as Record<string, unknown>, 'Terminal')
-  FitAddonCtor = pickConstructor<FitAddon>(fitMod as Record<string, unknown>, 'FitAddon')
+  TerminalCtor = pickConstructor<Terminal>(
+    xtermMod as Record<string, unknown>,
+    'Terminal',
+  )
+  FitAddonCtor = pickConstructor<FitAddon>(
+    fitMod as Record<string, unknown>,
+    'FitAddon',
+  )
   WebLinksAddonCtor = pickConstructor<WebLinksAddon>(
     linksMod as Record<string, unknown>,
     'WebLinksAddon',
   )
   loaded = true
 
-  return { Terminal: TerminalCtor, FitAddon: FitAddonCtor, WebLinksAddon: WebLinksAddonCtor }
+  return {
+    Terminal: TerminalCtor,
+    FitAddon: FitAddonCtor,
+    WebLinksAddon: WebLinksAddonCtor,
+  }
 }

@@ -19,7 +19,9 @@ describe('buildTmuxAttachCommand', () => {
 
 describe('isTmuxAttachCommand', () => {
   it('detects tmux attach argv', () => {
-    expect(isTmuxAttachCommand(buildTmuxAttachCommand('swarm-researcher'))).toBe(true)
+    expect(
+      isTmuxAttachCommand(buildTmuxAttachCommand('swarm-researcher')),
+    ).toBe(true)
     expect(isTmuxAttachCommand(['zsh', '-l'])).toBe(false)
   })
 })

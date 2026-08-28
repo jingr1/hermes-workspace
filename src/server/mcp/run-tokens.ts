@@ -10,7 +10,10 @@ export type RunTokenKind = 'read_only' | 'run_write'
  * allowlist; read_only tokens must never contain any of them (enforced at
  * issue time — plan: "read_only 挂在 agent 上…写工具一律 403").
  */
-export const WRITE_TOOLS: ReadonlyArray<string> = ['task_start', 'task_complete']
+export const WRITE_TOOLS: ReadonlyArray<string> = [
+  'task_start',
+  'task_complete',
+]
 
 export type RunToken = {
   tokenHash: string
@@ -31,24 +34,52 @@ export type RunToken = {
   expiresAt: number
   /** null = not revoked. DB stores 0 as the "not revoked" sentinel; we normalise. */
   revokedAt: number | null
+  /** Opaque dispatcher-supplied context (P2b git worktree metadata). */
+  context?: Record<string, unknown>
 }
 
 export type ResolveTokenResult =
   | { ok: true; token: RunToken }
   | { ok: false; reason: 'unknown' | 'expired' | 'revoked' }
 
+function tokenHashPart(token: string): string {
+  // The hashable part is everything before an optional `|` context suffix.
+  const bar = token.indexOf('|')
+  return bar === -1 ? token : token.slice(0, bar)
+}
+
+function parseTokenContext(token: string): Record<string, unknown> | undefined {
+  const bar = token.indexOf('|')
+  if (bar === -1) return undefined
+  try {
+    return JSON.parse(
+      Buffer.from(token.slice(bar + 1), 'base64url').toString('utf-8'),
+    ) as Record<string, unknown>
+  } catch {
+    return undefined
+  }
+}
+
 function hashToken(token: string): string {
-  return createHash('sha256').update(token).digest('hex')
+  return createHash('sha256').update(tokenHashPart(token)).digest('hex')
 }
 
 function now(): number {
   return Date.now()
 }
 
-export function generateToken(kind: RunTokenKind = 'run_write'): string {
+export function generateToken(
+  kind: RunTokenKind = 'run_write',
+  context?: Record<string, unknown>,
+): string {
   // Kind prefix is a log/debug affordance only — the DB stores hashes.
   const prefix = kind === 'run_write' ? 'mcp_rw' : 'mcp_ro'
-  return `${prefix}_${randomUUID().replace(/-/g, '')}`
+  const randomPart = randomUUID().replace(/-/g, '')
+  if (!context || Object.keys(context).length === 0) {
+    return `${prefix}_${randomPart}`
+  }
+  const ctx = Buffer.from(JSON.stringify(context)).toString('base64url')
+  return `${prefix}_${randomPart}|${ctx}`
 }
 
 export function issueRunToken(input: {
@@ -61,26 +92,34 @@ export function issueRunToken(input: {
   toolAllowlist: Array<string>
   ttlMs?: number
   dbPath?: string
+  /** Opaque dispatcher context carried inside the token string (not in DB). */
+  context?: Record<string, unknown>
 }): { token: string; tokenHash: string } {
   if (input.kind === 'read_only') {
-    const forbidden = input.toolAllowlist.filter((tool) => WRITE_TOOLS.includes(tool))
+    const forbidden = input.toolAllowlist.filter((tool) =>
+      WRITE_TOOLS.includes(tool),
+    )
     if (forbidden.length > 0) {
-      throw new Error(`read_only token must not allow write tools: ${forbidden.join(', ')}`)
+      throw new Error(
+        `read_only token must not allow write tools: ${forbidden.join(', ')}`,
+      )
     }
   }
   const dbPath = input.dbPath ?? getCollabDbPath()
   ensureCollabDb(dbPath)
-  const token = generateToken(input.kind)
+  const token = generateToken(input.kind, input.context)
   const tokenHash = hashToken(token)
   const issuedAt = now()
   const expiresAt = issuedAt + (input.ttlMs ?? 60 * 60 * 1000) // default 1h
   const db = openSqliteDatabase(dbPath, false)
   try {
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO run_tokens
       (token_hash, kind, run_id, participant_id, assignment_id, task_id, room_id, tool_allowlist, issued_at, expires_at, revoked_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-    `).run(
+    `,
+    ).run(
       tokenHash,
       input.kind,
       input.runId,
@@ -103,7 +142,11 @@ export function revokeRunToken(tokenHash: string, dbPath?: string): boolean {
   if (!existsSync(path)) return false
   const db = openSqliteDatabase(path, false)
   try {
-    const result = db.prepare('UPDATE run_tokens SET revoked_at = ? WHERE token_hash = ? AND revoked_at = 0').run(now(), tokenHash)
+    const result = db
+      .prepare(
+        'UPDATE run_tokens SET revoked_at = ? WHERE token_hash = ? AND revoked_at = 0',
+      )
+      .run(now(), tokenHash)
     return result.changes > 0
   } finally {
     db.close()
@@ -122,7 +165,11 @@ export function revokeRunTokensForRun(runId: string, dbPath?: string): number {
   if (!existsSync(path)) return 0
   const db = openSqliteDatabase(path, false)
   try {
-    const result = db.prepare('UPDATE run_tokens SET revoked_at = ? WHERE run_id = ? AND revoked_at = 0').run(now(), runId)
+    const result = db
+      .prepare(
+        'UPDATE run_tokens SET revoked_at = ? WHERE run_id = ? AND revoked_at = 0',
+      )
+      .run(now(), runId)
     return result.changes
   } finally {
     db.close()
@@ -135,18 +182,25 @@ export function revokeRunTokensForRun(runId: string, dbPath?: string): number {
  * of a blanket "forbidden" — per plan, failures must tell the agent what to
  * do next.
  */
-export function resolveRunTokenDetailed(token: string, dbPath?: string): ResolveTokenResult {
+export function resolveRunTokenDetailed(
+  token: string,
+  dbPath?: string,
+): ResolveTokenResult {
   const path = dbPath ?? getCollabDbPath()
   if (!existsSync(path)) return { ok: false, reason: 'unknown' }
   const tokenHash = hashToken(token)
   const db = openSqliteDatabase(path, true)
   try {
-    const rows = db.prepare(`
+    const rows = db
+      .prepare(
+        `
       SELECT token_hash, kind, run_id, participant_id, assignment_id, task_id, room_id,
              tool_allowlist, issued_at, expires_at, revoked_at
       FROM run_tokens
       WHERE token_hash = ?
-    `).all(tokenHash)
+    `,
+      )
+      .all(tokenHash)
     if (rows.length === 0) return { ok: false, reason: 'unknown' }
     const row = rows[0]
     const revokedAt = Number(row.revoked_at ?? 0)
@@ -162,10 +216,13 @@ export function resolveRunTokenDetailed(token: string, dbPath?: string): Resolve
         assignmentId: row.assignment_id ? String(row.assignment_id) : null,
         taskId: String(row.task_id),
         roomId: row.room_id ? String(row.room_id) : null,
-        toolAllowlist: JSON.parse(String(row.tool_allowlist ?? '[]')) as Array<string>,
+        toolAllowlist: JSON.parse(
+          String(row.tool_allowlist ?? '[]'),
+        ) as Array<string>,
         issuedAt: Number(row.issued_at),
         expiresAt: Number(row.expires_at),
         revokedAt: null,
+        context: parseTokenContext(token),
       },
     }
   } finally {
@@ -174,7 +231,10 @@ export function resolveRunTokenDetailed(token: string, dbPath?: string): Resolve
 }
 
 /** Convenience wrapper: returns the token or null (reason collapsed). */
-export function resolveRunToken(token: string, dbPath?: string): RunToken | null {
+export function resolveRunToken(
+  token: string,
+  dbPath?: string,
+): RunToken | null {
   const result = resolveRunTokenDetailed(token, dbPath)
   return result.ok ? result.token : null
 }

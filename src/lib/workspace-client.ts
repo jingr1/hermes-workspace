@@ -1,6 +1,9 @@
 import type { QueryClient } from '@tanstack/react-query'
 
-export const WORKSPACE_PROFILE_QUERY_KEY = ['profiles', 'workspace-profile'] as const
+export const WORKSPACE_PROFILE_QUERY_KEY = [
+  'profiles',
+  'workspace-profile',
+] as const
 
 export type WorkspaceCatalog = {
   path: string
@@ -23,7 +26,10 @@ export type FileTreeEntry = {
   children?: Array<FileTreeEntry>
 }
 
-export function withProfileQuery(basePath: string, profileName: string): string {
+export function withProfileQuery(
+  basePath: string,
+  profileName: string,
+): string {
   if (!profileName.trim()) return basePath
   const query = new URLSearchParams()
   query.set('profile', profileName)
@@ -33,13 +39,7 @@ export function withProfileQuery(basePath: string, profileName: string): string 
 
 /** Build a files API URL that works for local and SSH workspaces. */
 export function buildFilesApiUrl(
-  action:
-    | 'list'
-    | 'read'
-    | 'download'
-    | 'view'
-    | 'abspath'
-    | 'download-folder',
+  action: 'list' | 'read' | 'download' | 'view' | 'abspath' | 'download-folder',
   filePath: string,
   profileName: string,
   extra?: Record<string, string>,

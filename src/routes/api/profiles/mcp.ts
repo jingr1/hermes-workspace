@@ -117,14 +117,15 @@ export const Route = createFileRoute('/api/profiles/mcp')({
             // toggle
             const currentEnabled =
               typeof serverEntry === 'object' && serverEntry !== null
-                ? !(
-                    (serverEntry as Record<string, unknown>).enabled === false
-                  )
+                ? !((serverEntry as Record<string, unknown>).enabled === false)
                 : true
             const nextEnabled = body.enabled ?? !currentEnabled
             const updated =
               typeof serverEntry === 'object' && serverEntry !== null
-                ? { ...(serverEntry as Record<string, unknown>), enabled: nextEnabled }
+                ? {
+                    ...(serverEntry as Record<string, unknown>),
+                    enabled: nextEnabled,
+                  }
                 : { enabled: nextEnabled }
             mcpServers[serverName] = updated
             updateProfileConfig(profileName, {

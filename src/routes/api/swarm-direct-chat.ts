@@ -4,8 +4,15 @@ import { execFile } from 'node:child_process'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { isAuthenticated } from '../../server/auth-middleware'
-import { readWorkerMessages, type SwarmChatMessage } from '../../server/swarm-chat-reader'
-import { ensureLiveTmuxSession, tmuxSessionHasHermesTui, tmuxSessionHasShellReady } from './swarm-dispatch'
+import {
+  readWorkerMessages,
+  type SwarmChatMessage,
+} from '../../server/swarm-chat-reader'
+import {
+  ensureLiveTmuxSession,
+  tmuxSessionHasHermesTui,
+  tmuxSessionHasShellReady,
+} from './swarm-dispatch'
 import { tmuxPasteWithBracketedPaste } from '../../server/swarm-tmux-delivery'
 
 type DirectChatRequest = {
@@ -59,24 +66,37 @@ function execFileAsync(
   args: Array<string>,
   timeout = 8_000,
   input?: string,
-): Promise<{ ok: true; stdout: string; stderr: string } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; stdout: string; stderr: string } | { ok: false; error: string }
+> {
   return new Promise((resolve) => {
-    const child = execFile(cmd, args, { timeout, maxBuffer: MAX_OUTPUT_CHARS }, (error, stdout, stderr) => {
-      if (error) {
-        resolve({ ok: false, error: stderr?.toString().trim() || error.message })
-        return
-      }
-      resolve({
-        ok: true,
-        stdout: (stdout || '').toString(),
-        stderr: (stderr || '').toString(),
-      })
-    })
+    const child = execFile(
+      cmd,
+      args,
+      { timeout, maxBuffer: MAX_OUTPUT_CHARS },
+      (error, stdout, stderr) => {
+        if (error) {
+          resolve({
+            ok: false,
+            error: stderr?.toString().trim() || error.message,
+          })
+          return
+        }
+        resolve({
+          ok: true,
+          stdout: (stdout || '').toString(),
+          stderr: (stderr || '').toString(),
+        })
+      },
+    )
     if (input !== undefined) child.stdin?.end(input)
   })
 }
 
-async function sendPromptToLiveSession(workerId: string, prompt: string): Promise<{ ok: true; delivery: 'tmux' } | { ok: false; error: string }> {
+async function sendPromptToLiveSession(
+  workerId: string,
+  prompt: string,
+): Promise<{ ok: true; delivery: 'tmux' } | { ok: false; error: string }> {
   let ensured = await ensureLiveTmuxSession(workerId)
   if (!ensured.ok) return { ok: false, error: ensured.error }
   let { tmuxBin, sessionName, transport } = ensured
@@ -84,14 +104,22 @@ async function sendPromptToLiveSession(workerId: string, prompt: string): Promis
   // Guard: the session must actually be running Hermes (TUI or CLI). If the
   // pane is only a bare shell, pasting would execute the prompt as a shell
   // command instead of sending it to the agent.
-  const hasHermes = transport === 'cli'
-    ? await tmuxSessionHasShellReady(tmuxBin, sessionName)
-    : await tmuxSessionHasHermesTui(tmuxBin, sessionName)
+  const hasHermes =
+    transport === 'cli'
+      ? await tmuxSessionHasShellReady(tmuxBin, sessionName)
+      : await tmuxSessionHasHermesTui(tmuxBin, sessionName)
   if (!hasHermes) {
     // Kill the stale shell-only session and recreate it with Hermes running.
-    const killed = await execFileAsync(tmuxBin, ['kill-session', '-t', sessionName])
+    const killed = await execFileAsync(tmuxBin, [
+      'kill-session',
+      '-t',
+      sessionName,
+    ])
     if (!killed.ok) {
-      return { ok: false, error: `Session ${sessionName} has no Hermes agent and could not be killed: ${killed.error}` }
+      return {
+        ok: false,
+        error: `Session ${sessionName} has no Hermes agent and could not be killed: ${killed.error}`,
+      }
     }
     ensured = await ensureLiveTmuxSession(workerId)
     if (!ensured.ok) return { ok: false, error: ensured.error }
@@ -109,23 +137,53 @@ async function sendPromptToLiveSession(workerId: string, prompt: string): Promis
     try {
       await tmuxPasteWithBracketedPaste(tmuxBin, sessionName, normalizedPrompt)
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      }
     }
   } else {
     const bufferName = `swarm-direct-chat-${workerId}`
-    const loaded = await execFileAsync(tmuxBin, ['load-buffer', '-b', bufferName, '-'], 8_000, normalizedPrompt)
+    const loaded = await execFileAsync(
+      tmuxBin,
+      ['load-buffer', '-b', bufferName, '-'],
+      8_000,
+      normalizedPrompt,
+    )
     if (!loaded.ok) return { ok: false, error: loaded.error }
-    const cleared = await execFileAsync(tmuxBin, ['send-keys', '-t', sessionName, 'C-c'])
+    const cleared = await execFileAsync(tmuxBin, [
+      'send-keys',
+      '-t',
+      sessionName,
+      'C-c',
+    ])
     if (!cleared.ok) return { ok: false, error: cleared.error }
     await sleep(100)
-    const clearedLine = await execFileAsync(tmuxBin, ['send-keys', '-t', sessionName, 'C-u'])
+    const clearedLine = await execFileAsync(tmuxBin, [
+      'send-keys',
+      '-t',
+      sessionName,
+      'C-u',
+    ])
     if (!clearedLine.ok) return { ok: false, error: clearedLine.error }
-    const pasted = await execFileAsync(tmuxBin, ['paste-buffer', '-d', '-b', bufferName, '-t', sessionName])
+    const pasted = await execFileAsync(tmuxBin, [
+      'paste-buffer',
+      '-d',
+      '-b',
+      bufferName,
+      '-t',
+      sessionName,
+    ])
     if (!pasted.ok) return { ok: false, error: pasted.error }
   }
 
   await sleep(120)
-  const entered = await execFileAsync(tmuxBin, ['send-keys', '-t', sessionName, 'Enter'])
+  const entered = await execFileAsync(tmuxBin, [
+    'send-keys',
+    '-t',
+    sessionName,
+    'Enter',
+  ])
   if (!entered.ok) return { ok: false, error: entered.error }
 
   return { ok: true, delivery: 'tmux' }
@@ -146,9 +204,13 @@ export const Route = createFileRoute('/api/swarm-direct-chat')({
           return json({ error: 'Invalid JSON body' }, { status: 400 })
         }
 
-        const workerId = typeof body.workerId === 'string' ? body.workerId.trim() : ''
+        const workerId =
+          typeof body.workerId === 'string' ? body.workerId.trim() : ''
         const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : ''
-        const limit = typeof body.limit === 'number' && Number.isFinite(body.limit) ? Math.max(1, Math.min(100, Math.floor(body.limit))) : DEFAULT_LIMIT
+        const limit =
+          typeof body.limit === 'number' && Number.isFinite(body.limit)
+            ? Math.max(1, Math.min(100, Math.floor(body.limit)))
+            : DEFAULT_LIMIT
 
         if (!workerId || !validateWorkerId(workerId)) {
           return json({ error: 'Invalid workerId' }, { status: 400 })
@@ -162,17 +224,20 @@ export const Route = createFileRoute('/api/swarm-direct-chat')({
 
         const delivered = await sendPromptToLiveSession(workerId, prompt)
         if (!delivered.ok) {
-          return json({
-            ok: false,
-            workerId,
-            delivered: false,
-            error: delivered.error,
-            sessionId: baselineChat.sessionId,
-            sessionTitle: baselineChat.sessionTitle,
-            messages: baselineChat.messages,
-            source: baselineChat.ok ? 'state.db' : 'unavailable',
-            fetchedAt: Date.now(),
-          } satisfies DirectChatResponse, { status: 500 })
+          return json(
+            {
+              ok: false,
+              workerId,
+              delivered: false,
+              error: delivered.error,
+              sessionId: baselineChat.sessionId,
+              sessionTitle: baselineChat.sessionTitle,
+              messages: baselineChat.messages,
+              source: baselineChat.ok ? 'state.db' : 'unavailable',
+              fetchedAt: Date.now(),
+            } satisfies DirectChatResponse,
+            { status: 500 },
+          )
         }
 
         // Return immediately after tmux delivery. Swarm2LiveChat polls
@@ -184,7 +249,9 @@ export const Route = createFileRoute('/api/swarm-direct-chat')({
           workerId,
           delivered: true,
           delivery: 'tmux',
-          error: chat.ok ? null : (chat.error ?? 'Failed to read worker messages'),
+          error: chat.ok
+            ? null
+            : (chat.error ?? 'Failed to read worker messages'),
           sessionId: chat.sessionId,
           sessionTitle: chat.sessionTitle,
           messages: chat.messages,

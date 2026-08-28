@@ -53,7 +53,10 @@ export function resetLastSessionStorage(): void {
   }
 }
 
-export function writeLastSession(friendlyId: string, profileName?: string): void {
+export function writeLastSession(
+  friendlyId: string,
+  profileName?: string,
+): void {
   const trimmed = friendlyId.trim()
   if (!trimmed || trimmed === 'main' || trimmed === 'new') return
   writeStorage(GLOBAL_LAST_SESSION_KEY, trimmed)

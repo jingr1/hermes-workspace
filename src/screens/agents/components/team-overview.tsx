@@ -1,7 +1,12 @@
 import { cn } from '@/lib/utils'
 import type { OperationsAgent } from '../hooks/use-operations'
 
-export type TeamOverviewFilter = 'all' | 'active' | 'idle' | 'error' | 'needsSetup'
+export type TeamOverviewFilter =
+  | 'all'
+  | 'active'
+  | 'idle'
+  | 'error'
+  | 'needsSetup'
 
 type TeamOverviewProps = {
   agents: OperationsAgent[]
@@ -46,7 +51,11 @@ function StatCard({
   )
 }
 
-export function TeamOverview({ agents, filter, onFilterChange }: TeamOverviewProps) {
+export function TeamOverview({
+  agents,
+  filter,
+  onFilterChange,
+}: TeamOverviewProps) {
   const activeCount = agents.filter((agent) => agent.status === 'active').length
   const idleCount = agents.filter((agent) => agent.status === 'idle').length
   const errorCount = agents.filter((agent) => agent.status === 'error').length
@@ -70,27 +79,21 @@ export function TeamOverview({ agents, filter, onFilterChange }: TeamOverviewPro
           value={activeCount}
           colorClass="bg-emerald-500"
           active={filter === 'active'}
-          onClick={() =>
-            onFilterChange(filter === 'active' ? 'all' : 'active')
-          }
+          onClick={() => onFilterChange(filter === 'active' ? 'all' : 'active')}
         />
         <StatCard
           label="Idle"
           value={idleCount}
           colorClass="bg-primary-300"
           active={filter === 'idle'}
-          onClick={() =>
-            onFilterChange(filter === 'idle' ? 'all' : 'idle')
-          }
+          onClick={() => onFilterChange(filter === 'idle' ? 'all' : 'idle')}
         />
         <StatCard
           label="Error"
           value={errorCount}
           colorClass="bg-red-500"
           active={filter === 'error'}
-          onClick={() =>
-            onFilterChange(filter === 'error' ? 'all' : 'error')
-          }
+          onClick={() => onFilterChange(filter === 'error' ? 'all' : 'error')}
         />
         <StatCard
           label="Needs setup"

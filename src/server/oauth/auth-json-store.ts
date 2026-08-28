@@ -42,7 +42,9 @@ export function saveAuthJson(filePath: string, data: AuthJson): void {
   data.updated_at = new Date().toISOString()
   const dir = path.dirname(filePath)
   fs.mkdirSync(dir, { recursive: true })
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2) + '\n', { mode: 0o600 })
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2) + '\n', {
+    mode: 0o600,
+  })
 }
 
 function readRecord(value: unknown): Record<string, unknown> | null {
@@ -65,7 +67,10 @@ export function readOAuthProviderStatus(
   const filePath = path.join(profilePath, 'auth.json')
   if (!fs.existsSync(filePath)) return 'missing'
   try {
-    const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Record<string, unknown>
+    const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Record<
+      string,
+      unknown
+    >
     const providers = readRecord(raw.providers) || raw
     const provider = readRecord(providers[providerId])
     if (!provider) return 'missing'
@@ -92,7 +97,10 @@ export function readOAuthProviderError(
   const filePath = path.join(profilePath, 'auth.json')
   if (!fs.existsSync(filePath)) return ''
   try {
-    const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Record<string, unknown>
+    const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Record<
+      string,
+      unknown
+    >
     const providers = readRecord(raw.providers) || raw
     const provider = readRecord(providers[providerId])
     if (!provider) return ''
@@ -120,12 +128,17 @@ export function resolveRequestProfile(request: Request): string {
  */
 export function listProfileDirs(): Array<{ name: string; dir: string }> {
   const root = getHermesRoot()
-  const results: Array<{ name: string; dir: string }> = [{ name: 'default', dir: root }]
+  const results: Array<{ name: string; dir: string }> = [
+    { name: 'default', dir: root },
+  ]
   const profilesRoot = path.join(root, 'profiles')
   if (fs.existsSync(profilesRoot)) {
     for (const entry of fs.readdirSync(profilesRoot, { withFileTypes: true })) {
       if (entry.isDirectory() && /^[a-z0-9][a-z0-9_-]*$/.test(entry.name)) {
-        results.push({ name: entry.name, dir: path.join(profilesRoot, entry.name) })
+        results.push({
+          name: entry.name,
+          dir: path.join(profilesRoot, entry.name),
+        })
       }
     }
   }

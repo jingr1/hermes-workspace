@@ -231,7 +231,10 @@ async function cleanExistingWorkspaces(
   const existing: Array<WorkspaceEntry> = []
   for (const workspace of cleaned) {
     if (remoteCwd) {
-      const candidate = remoteTerminalWorkspaceCandidate(workspace.path, remoteCwd)
+      const candidate = remoteTerminalWorkspaceCandidate(
+        workspace.path,
+        remoteCwd,
+      )
       if (candidate) {
         existing.push({ ...workspace, path: candidate })
       }
@@ -304,8 +307,8 @@ async function loadWorkspaceCatalogUncached(
       return {
         path: normalized,
         folderName:
-          workspaces.find((workspace) => workspace.path === normalized)
-            ?.name || extractFolderName(normalized),
+          workspaces.find((workspace) => workspace.path === normalized)?.name ||
+          extractFolderName(normalized),
         source: 'workspace-state',
         isValid: true,
         workspaces,
@@ -317,7 +320,10 @@ async function loadWorkspaceCatalogUncached(
 
   const configured = await configuredDefaultWorkspace(scope)
   const fallback = configured ?? { path: '', source: 'none' }
-  let workspaces = await cleanExistingWorkspaces(state.workspaces ?? [], remoteCwd)
+  let workspaces = await cleanExistingWorkspaces(
+    state.workspaces ?? [],
+    remoteCwd,
+  )
 
   if (workspaces.length === 0 && fallback.path) {
     workspaces = [{ name: 'Home', path: fallback.path }]
@@ -448,7 +454,10 @@ export async function saveWorkspaceSelection(input: {
   const remote = remoteWorkspaceContext(scope)
   let target: string
   if (remote) {
-    const candidate = remoteTerminalWorkspaceCandidate(rawPath, remote.remoteCwd)
+    const candidate = remoteTerminalWorkspaceCandidate(
+      rawPath,
+      remote.remoteCwd,
+    )
     if (!candidate) {
       throw new Error(
         `Path is not under the remote terminal working directory (${remote.remoteCwd}): ${rawPath}`,

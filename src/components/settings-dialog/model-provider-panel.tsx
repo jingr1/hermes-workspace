@@ -116,7 +116,10 @@ export const PROVIDER_CARDS: Array<{
     id: 'nvidia',
     name: 'NVIDIA NIM',
     logo: '/providers/nvidia.png',
-    models: ['nvidia/nemotron-3-super-120b-a12b', 'nvidia/llama-3.3-nemotron-super-49b-v1'],
+    models: [
+      'nvidia/nemotron-3-super-120b-a12b',
+      'nvidia/llama-3.3-nemotron-super-49b-v1',
+    ],
     authType: 'api_key',
     envKey: 'NVIDIA_API_KEY',
   },
@@ -231,11 +234,13 @@ const LOCAL_PROVIDER_SETUP: Partial<
 > = {
   ollama: {
     baseUrl: 'http://127.0.0.1:11434/v1',
-    unavailableMessage: 'No Ollama endpoint detected at http://127.0.0.1:11434/v1.',
+    unavailableMessage:
+      'No Ollama endpoint detected at http://127.0.0.1:11434/v1.',
   },
   'atomic-chat': {
     baseUrl: 'http://127.0.0.1:1337/v1',
-    unavailableMessage: 'No Atomic Chat endpoint detected at http://127.0.0.1:1337/v1.',
+    unavailableMessage:
+      'No Atomic Chat endpoint detected at http://127.0.0.1:1337/v1.',
   },
 }
 
@@ -245,7 +250,9 @@ const DEFAULT_OAUTH_EXPIRES_SECONDS = 600
 const DEFAULT_OAUTH_POLL_INTERVAL_SECONDS = 3
 
 export function getOAuthStartButtonLabel(status: OAuthStatus): string {
-  return status === 'starting' || status === 'pending' ? 'Waiting...' : 'Start OAuth'
+  return status === 'starting' || status === 'pending'
+    ? 'Waiting...'
+    : 'Start OAuth'
 }
 
 type OAuthDeviceCodeResponse = {
@@ -313,7 +320,9 @@ export function ModelProviderPanel({
   const [keyInput, setKeyInput] = useState('')
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
-  const [configuredKeys, setConfiguredKeys] = useState<Record<string, string>>({})
+  const [configuredKeys, setConfiguredKeys] = useState<Record<string, string>>(
+    {},
+  )
   const [oauthProviderId, setOauthProviderId] = useState<string | null>(null)
   const [oauthStatus, setOauthStatus] = useState<OAuthStatus>('idle')
   const [oauthMessage, setOauthMessage] = useState('')
@@ -333,7 +342,10 @@ export function ModelProviderPanel({
     models: Array<{ id: string; name: string; provider: string }>
   } | null>(null)
 
-  const cards = useMemo(() => mergeProviderCards(extraProviders), [extraProviders])
+  const cards = useMemo(
+    () => mergeProviderCards(extraProviders),
+    [extraProviders],
+  )
   const [extraDraft, setExtraDraft] = useState({
     base_url: '',
     key_env: '',
@@ -356,7 +368,9 @@ export function ModelProviderPanel({
           return
         }
       }
-      const card = mergeProviderCards(extraProviders).find((p) => p.id === providerId)
+      const card = mergeProviderCards(extraProviders).find(
+        (p) => p.id === providerId,
+      )
       const fallbackModels = card?.models || []
 
       const tryModelsEndpoint = () => {
@@ -428,7 +442,11 @@ export function ModelProviderPanel({
       if (p.configured && envKey) {
         keys[envKey] = p.maskedCredentials?.[envKey] || '••••'
       }
-      if (p.kind === 'oauth' && p.authenticated && p.maskedCredentials?.['auth-profiles']) {
+      if (
+        p.kind === 'oauth' &&
+        p.authenticated &&
+        p.maskedCredentials?.['auth-profiles']
+      ) {
         keys[`__oauth:${p.id}`] = p.maskedCredentials['auth-profiles']
       }
     }
@@ -500,7 +518,9 @@ export function ModelProviderPanel({
     if (!model) return
     setExtraDraft((prev) => ({
       ...prev,
-      models: prev.models.includes(model) ? prev.models : [...prev.models, model],
+      models: prev.models.includes(model)
+        ? prev.models
+        : [...prev.models, model],
     }))
     setNewModelInput('')
   }
@@ -609,7 +629,8 @@ export function ModelProviderPanel({
         window.open(verificationUri, '_blank', 'noopener,noreferrer')
       }
 
-      const expiresInSeconds = codeData.expires_in || DEFAULT_OAUTH_EXPIRES_SECONDS
+      const expiresInSeconds =
+        codeData.expires_in || DEFAULT_OAUTH_EXPIRES_SECONDS
       const intervalSeconds = Math.max(
         1,
         codeData.interval || DEFAULT_OAUTH_POLL_INTERVAL_SECONDS,
@@ -683,7 +704,10 @@ export function ModelProviderPanel({
       )}
 
       <div>
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wider" style={mutedStyle}>
+        <p
+          className="mb-1 text-xs font-semibold uppercase tracking-wider"
+          style={mutedStyle}
+        >
           Provider
         </p>
         <p className="mb-3 text-[11px]" style={mutedStyle}>
@@ -696,7 +720,8 @@ export function ModelProviderPanel({
             const isActive =
               (oauthProviderId || localProviderId || activeProvider) === p.id
             const localOnline =
-              localDiscovery?.providers.find((lp) => lp.id === p.id)?.online === true
+              localDiscovery?.providers.find((lp) => lp.id === p.id)?.online ===
+              true
             const status = getProviderCardStatus(p, configuredKeys, localOnline)
             const { label, verified, hasKey } = status
             const missingKey =
@@ -751,7 +776,9 @@ export function ModelProviderPanel({
                 }}
                 className={cn(
                   'flex flex-col items-start gap-1 rounded-xl px-3 py-2.5 text-left transition-all',
-                  isActive ? 'ring-2 ring-accent-500 shadow-md' : 'hover:brightness-110',
+                  isActive
+                    ? 'ring-2 ring-accent-500 shadow-md'
+                    : 'hover:brightness-110',
                   missingKey && 'opacity-60',
                 )}
                 style={cardStyle}
@@ -878,102 +905,118 @@ export function ModelProviderPanel({
           {(() => {
             const catalogKeyEnv = extraDraft.key_env || activeCard?.envKey || ''
             const catalogKeyConfigured = isProviderKeyConfigured(
-              { envKey: catalogKeyEnv, keyConfigured: activeCard?.keyConfigured },
+              {
+                envKey: catalogKeyEnv,
+                keyConfigured: activeCard?.keyConfigured,
+              },
               configuredKeys,
             )
             return (
               <>
-          <label className="block space-y-1">
-            <span className="text-xs font-medium" style={mutedStyle}>
-              Base URL
-            </span>
-            <input
-              value={extraDraft.base_url}
-              onChange={(event) =>
-                setExtraDraft((prev) => ({ ...prev, base_url: event.target.value }))
-              }
-              placeholder="https://host/v1"
-              className="h-9 w-full rounded-lg border border-primary-200 bg-primary-50 px-3 font-mono text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
-            />
-          </label>
-          <div className="grid gap-2 md:grid-cols-2">
-            <input
-              value={extraDraft.key_env}
-              onChange={(event) =>
-                setExtraDraft((prev) => ({ ...prev, key_env: event.target.value }))
-              }
-              placeholder="key_env (optional)"
-              className="h-9 w-full rounded-lg border border-primary-200 bg-primary-50 px-3 font-mono text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
-            />
-            <input
-              type="password"
-              value={extraDraft.key_value}
-              onChange={(event) =>
-                setExtraDraft((prev) => ({ ...prev, key_value: event.target.value }))
-              }
-              placeholder={
-                catalogKeyConfigured ? 'Leave blank to keep' : 'Paste API key'
-              }
-              className="h-9 w-full rounded-lg border border-primary-200 bg-primary-50 px-3 font-mono text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
-            />
-          </div>
-          <label className="block space-y-1.5">
-            <span className="text-xs font-medium" style={mutedStyle}>
-              Models
-            </span>
-            {extraDraft.models.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5">
-                {extraDraft.models.map((model) => (
-                  <span
-                    key={model}
-                    className="inline-flex items-center gap-1 rounded-md border border-primary-200 bg-primary-50 px-2 py-1 font-mono text-xs text-primary-900 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
-                  >
-                    {model}
-                    <button
-                      type="button"
-                      aria-label={`Remove ${model}`}
-                      className="text-primary-500 hover:text-red-500 dark:text-neutral-400"
-                      onClick={() =>
-                        setExtraDraft((prev) => ({
-                          ...prev,
-                          models: prev.models.filter((entry) => entry !== model),
-                        }))
-                      }
-                    >
-                      ×
-                    </button>
+                <label className="block space-y-1">
+                  <span className="text-xs font-medium" style={mutedStyle}>
+                    Base URL
                   </span>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs" style={mutedStyle}>
-                No models yet. Add model ids used by this gateway.
-              </p>
-            )}
-            <div className="flex gap-2">
-              <input
-                value={newModelInput}
-                onChange={(event) => setNewModelInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault()
-                    addCatalogModel()
-                  }
-                }}
-                placeholder="e.g. Kimi-K2.7-Code"
-                className="h-9 min-w-0 flex-1 rounded-lg border border-primary-200 bg-primary-50 px-3 font-mono text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
-              />
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                disabled={!newModelInput.trim()}
-                onClick={addCatalogModel}
-              >
-                Add model
-              </Button>
-            </div>
-          </label>
+                  <input
+                    value={extraDraft.base_url}
+                    onChange={(event) =>
+                      setExtraDraft((prev) => ({
+                        ...prev,
+                        base_url: event.target.value,
+                      }))
+                    }
+                    placeholder="https://host/v1"
+                    className="h-9 w-full rounded-lg border border-primary-200 bg-primary-50 px-3 font-mono text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+                  />
+                </label>
+                <div className="grid gap-2 md:grid-cols-2">
+                  <input
+                    value={extraDraft.key_env}
+                    onChange={(event) =>
+                      setExtraDraft((prev) => ({
+                        ...prev,
+                        key_env: event.target.value,
+                      }))
+                    }
+                    placeholder="key_env (optional)"
+                    className="h-9 w-full rounded-lg border border-primary-200 bg-primary-50 px-3 font-mono text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+                  />
+                  <input
+                    type="password"
+                    value={extraDraft.key_value}
+                    onChange={(event) =>
+                      setExtraDraft((prev) => ({
+                        ...prev,
+                        key_value: event.target.value,
+                      }))
+                    }
+                    placeholder={
+                      catalogKeyConfigured
+                        ? 'Leave blank to keep'
+                        : 'Paste API key'
+                    }
+                    className="h-9 w-full rounded-lg border border-primary-200 bg-primary-50 px-3 font-mono text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+                  />
+                </div>
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-medium" style={mutedStyle}>
+                    Models
+                  </span>
+                  {extraDraft.models.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {extraDraft.models.map((model) => (
+                        <span
+                          key={model}
+                          className="inline-flex items-center gap-1 rounded-md border border-primary-200 bg-primary-50 px-2 py-1 font-mono text-xs text-primary-900 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+                        >
+                          {model}
+                          <button
+                            type="button"
+                            aria-label={`Remove ${model}`}
+                            className="text-primary-500 hover:text-red-500 dark:text-neutral-400"
+                            onClick={() =>
+                              setExtraDraft((prev) => ({
+                                ...prev,
+                                models: prev.models.filter(
+                                  (entry) => entry !== model,
+                                ),
+                              }))
+                            }
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs" style={mutedStyle}>
+                      No models yet. Add model ids used by this gateway.
+                    </p>
+                  )}
+                  <div className="flex gap-2">
+                    <input
+                      value={newModelInput}
+                      onChange={(event) => setNewModelInput(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault()
+                          addCatalogModel()
+                        }
+                      }}
+                      placeholder="e.g. Kimi-K2.7-Code"
+                      className="h-9 min-w-0 flex-1 rounded-lg border border-primary-200 bg-primary-50 px-3 font-mono text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      disabled={!newModelInput.trim()}
+                      onClick={addCatalogModel}
+                    >
+                      Add model
+                    </Button>
+                  </div>
+                </label>
               </>
             )
           })()}
@@ -990,7 +1033,12 @@ export function ModelProviderPanel({
                       const message = await onRemoveProvider(activeProvider)
                       setMsg(message || 'Provider removed')
                       setActiveProvider('')
-                      setExtraDraft({ base_url: '', key_env: '', key_value: '', models: [] })
+                      setExtraDraft({
+                        base_url: '',
+                        key_env: '',
+                        key_value: '',
+                        models: [],
+                      })
                       setNewModelInput('')
                       await refreshKeys()
                       window.setTimeout(() => setMsg(null), 3000)
@@ -1011,7 +1059,10 @@ export function ModelProviderPanel({
                 void (async () => {
                   setSaving(true)
                   try {
-                    const message = await onSaveExtraProvider(activeProvider, extraDraft)
+                    const message = await onSaveExtraProvider(
+                      activeProvider,
+                      extraDraft,
+                    )
                     setMsg(message || 'Provider saved')
                     setExtraDraft((prev) => ({ ...prev, key_value: '' }))
                     window.setTimeout(() => setMsg(null), 3000)
@@ -1039,7 +1090,9 @@ export function ModelProviderPanel({
                   <p className="text-sm font-semibold">{provider.name} OAuth</p>
                   <Button
                     size="sm"
-                    disabled={oauthStatus === 'starting' || oauthStatus === 'pending'}
+                    disabled={
+                      oauthStatus === 'starting' || oauthStatus === 'pending'
+                    }
                     onClick={() => {
                       void startOAuthFlow()
                     }}
@@ -1079,9 +1132,13 @@ export function ModelProviderPanel({
           {(() => {
             const provider = cards.find((p) => p.id === localProviderId)
             if (!provider) return null
-            const disc = localDiscovery?.providers.find((lp) => lp.id === provider.id)
+            const disc = localDiscovery?.providers.find(
+              (lp) => lp.id === provider.id,
+            )
             const models =
-              localDiscovery?.models.filter((m) => m.provider === provider.id) || []
+              localDiscovery?.models.filter(
+                (m) => m.provider === provider.id,
+              ) || []
             const setup = LOCAL_PROVIDER_SETUP[provider.id] || {
               baseUrl: 'local OpenAI-compatible endpoint',
               unavailableMessage: 'No local endpoint detected.',
@@ -1105,7 +1162,10 @@ export function ModelProviderPanel({
                 </div>
                 {models.length > 0 ? (
                   <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider" style={mutedStyle}>
+                    <p
+                      className="mb-2 text-xs font-semibold uppercase tracking-wider"
+                      style={mutedStyle}
+                    >
                       Detected Models
                     </p>
                     <div className="flex flex-wrap gap-2">
@@ -1114,7 +1174,8 @@ export function ModelProviderPanel({
                           key={model.id}
                           type="button"
                           aria-pressed={
-                            activeProvider === provider.id && activeModel === model.id
+                            activeProvider === provider.id &&
+                            activeModel === model.id
                           }
                           onClick={() => {
                             setActiveProvider(provider.id)
@@ -1122,14 +1183,16 @@ export function ModelProviderPanel({
                           }}
                           className={cn(
                             'rounded-lg px-3 py-1.5 text-xs font-medium transition-all hover:brightness-110',
-                            activeProvider === provider.id && activeModel === model.id
+                            activeProvider === provider.id &&
+                              activeModel === model.id
                               ? 'ring-2 ring-accent-500'
                               : '',
                           )}
                           style={cardStyle}
                         >
                           {model.id}
-                          {defaultProvider === provider.id && defaultModelId === model.id
+                          {defaultProvider === provider.id &&
+                          defaultModelId === model.id
                             ? ' · default'
                             : ''}
                         </button>
@@ -1138,12 +1201,15 @@ export function ModelProviderPanel({
                     {activeProvider === provider.id &&
                     activeModel &&
                     !configureOnly &&
-                    (defaultProvider !== provider.id || activeModel !== defaultModelId) ? (
+                    (defaultProvider !== provider.id ||
+                      activeModel !== defaultModelId) ? (
                       <div className="mt-2">
                         <Button
                           size="sm"
                           disabled={saving}
-                          onClick={() => void setDefaultModel(provider.id, activeModel)}
+                          onClick={() =>
+                            void setDefaultModel(provider.id, activeModel)
+                          }
                         >
                           {confirmLabel}: {provider.id} · {activeModel}
                         </Button>
@@ -1162,7 +1228,10 @@ export function ModelProviderPanel({
       !localProviderId &&
       activeProvider ? (
         <div>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wider" style={mutedStyle}>
+          <p
+            className="mb-1 text-xs font-semibold uppercase tracking-wider"
+            style={mutedStyle}
+          >
             Model — pick one, then confirm below
           </p>
           <div className="flex flex-wrap gap-2">
@@ -1181,7 +1250,9 @@ export function ModelProviderPanel({
                 onClick={() => setActiveModel(model)}
                 className={cn(
                   'rounded-lg px-3 py-1.5 text-xs font-medium transition-all',
-                  activeModel === model ? 'ring-2 ring-accent-500' : 'hover:brightness-110',
+                  activeModel === model
+                    ? 'ring-2 ring-accent-500'
+                    : 'hover:brightness-110',
                   defaultProvider === activeProvider && defaultModelId === model
                     ? 'border border-accent-500/40'
                     : '',
@@ -1196,12 +1267,15 @@ export function ModelProviderPanel({
             ))}
           </div>
           {activeModel &&
-          (activeProvider !== defaultProvider || activeModel !== defaultModelId) ? (
+          (activeProvider !== defaultProvider ||
+            activeModel !== defaultModelId) ? (
             <div className="mt-2">
               <Button
                 size="sm"
                 disabled={saving}
-                onClick={() => void setDefaultModel(activeProvider, activeModel)}
+                onClick={() =>
+                  void setDefaultModel(activeProvider, activeModel)
+                }
               >
                 {confirmLabel}: {activeProvider} · {activeModel}
               </Button>
@@ -1212,97 +1286,113 @@ export function ModelProviderPanel({
 
       {showApiKeys && !configureOnly ? (
         <div>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wider" style={mutedStyle}>
+          <p
+            className="mb-1 text-xs font-semibold uppercase tracking-wider"
+            style={mutedStyle}
+          >
             API Keys
           </p>
           <p className="mb-2 text-[11px]" style={mutedStyle}>
             API keys are global and stored in ~/.hermes/.env
           </p>
           <div className="space-y-1.5">
-            {cards.filter((p) => p.envKey).map((p) => {
-              const key = p.envKey!
-              const hasKey = !!configuredKeys[key]
-              const isEditing = editingKey === key
-              return (
-                <div
-                  key={p.id}
-                  className="flex items-center gap-3 rounded-xl px-3 py-2.5"
-                  style={cardStyle}
-                >
-                  <ProviderLogo provider={p.id} size={28} className="rounded-md" />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium">{p.name}</div>
-                    <div className="text-[11px] font-mono" style={mutedStyle}>
-                      {isEditing ? (
-                        <input
-                          type="password"
-                          value={keyInput}
-                          onChange={(e) => setKeyInput(e.target.value)}
-                          placeholder={`Paste ${key}`}
-                          className="w-full rounded border-0 bg-transparent py-0.5 text-[11px] outline-none"
-                          style={{ color: 'var(--theme-text)' }}
-                        />
-                      ) : hasKey ? (
-                        configuredKeys[key]
-                      ) : (
-                        'Not configured'
-                      )}
+            {cards
+              .filter((p) => p.envKey)
+              .map((p) => {
+                const key = p.envKey!
+                const hasKey = !!configuredKeys[key]
+                const isEditing = editingKey === key
+                return (
+                  <div
+                    key={p.id}
+                    className="flex items-center gap-3 rounded-xl px-3 py-2.5"
+                    style={cardStyle}
+                  >
+                    <ProviderLogo
+                      provider={p.id}
+                      size={28}
+                      className="rounded-md"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium">{p.name}</div>
+                      <div className="text-[11px] font-mono" style={mutedStyle}>
+                        {isEditing ? (
+                          <input
+                            type="password"
+                            value={keyInput}
+                            onChange={(e) => setKeyInput(e.target.value)}
+                            placeholder={`Paste ${key}`}
+                            className="w-full rounded border-0 bg-transparent py-0.5 text-[11px] outline-none"
+                            style={{ color: 'var(--theme-text)' }}
+                          />
+                        ) : hasKey ? (
+                          configuredKeys[key]
+                        ) : (
+                          'Not configured'
+                        )}
+                      </div>
                     </div>
+                    {isEditing ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (keyInput)
+                            void saveGlobal({ env: { [key]: keyInput } })
+                          setEditingKey(null)
+                          setKeyInput('')
+                        }}
+                        className="rounded-lg bg-accent-500 px-2 py-1 text-[11px] font-medium text-white"
+                      >
+                        Save
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingKey(key)
+                          setKeyInput('')
+                        }}
+                        className="text-xs font-medium"
+                        style={{ color: 'var(--theme-accent)' }}
+                      >
+                        {hasKey ? 'Update' : 'Add'}
+                      </button>
+                    )}
                   </div>
-                  {isEditing ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (keyInput) void saveGlobal({ env: { [key]: keyInput } })
-                        setEditingKey(null)
-                        setKeyInput('')
-                      }}
-                      className="rounded-lg bg-accent-500 px-2 py-1 text-[11px] font-medium text-white"
-                    >
-                      Save
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingKey(key)
-                        setKeyInput('')
-                      }}
-                      className="text-xs font-medium"
-                      style={{ color: 'var(--theme-accent)' }}
-                    >
-                      {hasKey ? 'Update' : 'Add'}
-                    </button>
-                  )}
-                </div>
-              )
-            })}
+                )
+              })}
           </div>
         </div>
       ) : null}
 
       {!configureOnly ? (
-      <div className="rounded-xl px-3 py-2.5" style={cardStyle}>
-        <div className="mb-2 flex items-center gap-2">
-          <span className="size-2 animate-pulse rounded-full bg-green-500" />
-          <span className="text-xs font-semibold uppercase tracking-wider" style={mutedStyle}>
-            Runtime
-          </span>
+        <div className="rounded-xl px-3 py-2.5" style={cardStyle}>
+          <div className="mb-2 flex items-center gap-2">
+            <span className="size-2 animate-pulse rounded-full bg-green-500" />
+            <span
+              className="text-xs font-semibold uppercase tracking-wider"
+              style={mutedStyle}
+            >
+              Runtime
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+            <span style={mutedStyle}>Model</span>
+            <span className="font-mono font-medium">
+              {defaultModelId || activeModel || '—'}
+            </span>
+            <span style={mutedStyle}>Provider</span>
+            <span className="font-mono font-medium">
+              {cards.find((p) => p.id === (defaultProvider || activeProvider))
+                ?.name ||
+                defaultProvider ||
+                activeProvider ||
+                '—'}
+            </span>
+            <span style={mutedStyle}>Config</span>
+            <span className="font-mono font-medium">{configPathLabel}</span>
+          </div>
         </div>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
-          <span style={mutedStyle}>Model</span>
-          <span className="font-mono font-medium">{defaultModelId || activeModel || '—'}</span>
-          <span style={mutedStyle}>Provider</span>
-          <span className="font-mono font-medium">
-            {cards.find((p) => p.id === (defaultProvider || activeProvider))?.name ||
-              defaultProvider ||
-              activeProvider ||
-              '—'}
-          </span>
-          <span style={mutedStyle}>Config</span>
-          <span className="font-mono font-medium">{configPathLabel}</span>
-        </div>
-      </div>
       ) : null}
 
       <CodexLoginModal

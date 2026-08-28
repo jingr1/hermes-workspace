@@ -8,14 +8,14 @@ LangGraph workflows (`radw.yaml` default, `rdi.yaml`, `research_only.yaml`, `des
 
 **Model source of truth:** each worker's `model` lives only in [`swarm.yaml`](swarm.yaml) (`provider/model-id`). Do not hardcode model names in this file — change models via Swarm UI or edit `swarm.yaml`, then run `node scripts/sync-swarm-profiles.mjs`.
 
-| Worker | Wrapper | Modes | Tools | Skills | MCP | Plugins |
-|---|---|---|---|---|---|---|
-| `orchestrator` | `orchestrator:plan` | plan, autoresearch, autoresearch-dispatch | todo, kanban, delegation, terminal, file, session_search, cronjob, skills, clarify, web | orchestrator-core, gstack-for-hermes, llm-wiki, kanban-orchestrator, subagent-driven-development, writing-plans, autoresearch, autoresearch-plan, autoresearch-orchestrate | none | none |
-| `researcher` | `researcher:quick` | quick | web, browser, terminal, file, vision, session_search, skills, todo | researcher-core, llm-wiki, browser-harness, gstack-for-hermes, researcher-quick, arxiv, youtube-content, polymarket | none | none |
-| `architect` | `architect:design` | design, autoresearch | terminal, file, web, session_search, skills, todo | architect-core, harden-gate, gstack-for-hermes, llm-wiki, writing-plans, requesting-code-review, codebase-inspection, autoresearch, autoresearch-execute | none | none |
-| `developer` | `developer:implement` | implement, autoresearch | terminal, file, browser, web, session_search, skills, todo | gstack-for-hermes, llm-wiki, test-driven-development, systematic-debugging, codebase-inspection, github-pr-workflow, autoresearch, autoresearch-execute | none | none |
-| `writer` | `writer:author` | author, autoresearch | terminal, file, web, browser, session_search, skills, todo, vision | gstack-for-hermes, llm-wiki, powerpoint, docx, pdf, writing-plans, autoresearch, autoresearch-execute | none | none |
-| `learning` | `learning` | — | file, session_search, skills, todo, web | gstack-for-hermes, llm-wiki, obsidian, writing-plans, learning-wiki-ingest | none | none |
+| Worker         | Wrapper               | Modes                                     | Tools                                                                                   | Skills                                                                                                                                                                     | MCP  | Plugins |
+| -------------- | --------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ------- |
+| `orchestrator` | `orchestrator:plan`   | plan, autoresearch, autoresearch-dispatch | todo, kanban, delegation, terminal, file, session_search, cronjob, skills, clarify, web | orchestrator-core, gstack-for-hermes, llm-wiki, kanban-orchestrator, subagent-driven-development, writing-plans, autoresearch, autoresearch-plan, autoresearch-orchestrate | none | none    |
+| `researcher`   | `researcher:quick`    | quick                                     | web, browser, terminal, file, vision, session_search, skills, todo                      | researcher-core, llm-wiki, browser-harness, gstack-for-hermes, researcher-quick, arxiv, youtube-content, polymarket                                                        | none | none    |
+| `architect`    | `architect:design`    | design, autoresearch                      | terminal, file, web, session_search, skills, todo                                       | architect-core, harden-gate, gstack-for-hermes, llm-wiki, writing-plans, requesting-code-review, codebase-inspection, autoresearch, autoresearch-execute                   | none | none    |
+| `developer`    | `developer:implement` | implement, autoresearch                   | terminal, file, browser, web, session_search, skills, todo                              | gstack-for-hermes, llm-wiki, test-driven-development, systematic-debugging, codebase-inspection, github-pr-workflow, autoresearch, autoresearch-execute                    | none | none    |
+| `writer`       | `writer:author`       | author, autoresearch                      | terminal, file, web, browser, session_search, skills, todo, vision                      | gstack-for-hermes, llm-wiki, powerpoint, docx, pdf, writing-plans, autoresearch, autoresearch-execute                                                                      | none | none    |
+| `learning`     | `learning`            | —                                         | file, session_search, skills, todo, web                                                 | gstack-for-hermes, llm-wiki, obsidian, writing-plans, learning-wiki-ingest                                                                                                 | none | none    |
 
 ### Default mission pipeline
 
@@ -25,14 +25,14 @@ orchestrator → researcher → architect → (developer | writer) → architect
 
 Canonical contracts: [`docs/swarm/HANDOFF-PROTOCOL.md`](docs/swarm/HANDOFF-PROTOCOL.md) · [`docs/swarm/ESCALATION-GUIDE.md`](docs/swarm/ESCALATION-GUIDE.md).
 
-| Stage | Worker | Role |
-|---|---|---|
-| Route / greenlight / autoresearch dispatch | `orchestrator` | Decompose missions, draft autoresearch contracts, dispatch executors, enforce human approval gates |
-| Research | `researcher` | Establish facts (competitive analysis, data validation, source tracing); no strategy or recommendations; respond to architect challenges with evidence |
-| Direction + design / lane / review | `architect` | Wedge/bets/kill criteria + specs/content brief; **choose exactly one build executor** (`developer` or `writer`); review that executor's output. No fact-gathering or coding/authoring |
-| Build (dev lane) | `developer` | Code per spec, tests, build verification — only when architect sets `executor: developer` |
-| Build (write lane) | `writer` | Docs/slides/narrative/visual deliverables — only when architect sets `executor: writer` |
-| Retrospective | `learning` | Mission docs, lessons learned, durable knowledge capture via `learning-wiki-ingest` |
+| Stage                                      | Worker         | Role                                                                                                                                                                                  |
+| ------------------------------------------ | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Route / greenlight / autoresearch dispatch | `orchestrator` | Decompose missions, draft autoresearch contracts, dispatch executors, enforce human approval gates                                                                                    |
+| Research                                   | `researcher`   | Establish facts (competitive analysis, data validation, source tracing); no strategy or recommendations; respond to architect challenges with evidence                                |
+| Direction + design / lane / review         | `architect`    | Wedge/bets/kill criteria + specs/content brief; **choose exactly one build executor** (`developer` or `writer`); review that executor's output. No fact-gathering or coding/authoring |
+| Build (dev lane)                           | `developer`    | Code per spec, tests, build verification — only when architect sets `executor: developer`                                                                                             |
+| Build (write lane)                         | `writer`       | Docs/slides/narrative/visual deliverables — only when architect sets `executor: writer`                                                                                               |
+| Retrospective                              | `learning`     | Mission docs, lessons learned, durable knowledge capture via `learning-wiki-ingest`                                                                                                   |
 
 **Executor lane rule:** Architect owns `executor: developer | writer`. Lanes are mutually exclusive for the same mission step — do not parallel-dispatch both. If code and content are both required, sequence them (usually developer then writer) under a fresh architect decision.
 
@@ -95,13 +95,13 @@ When the Phase 2 orchestrator raises `needs_human=True`, use one of:
 - `HERMES_SWARM_TMUX_MODE=tui` — **默认/推荐配置**。tmux session 长驻运行 `hermes chat --tui`；WebUI 输入区消息通过 bracketed-paste 直接送达 TUI prompt，支持实时对话。
 - `HERMES_SWARM_TMUX_MODE=cli` — **可选 fallback**。tmux session 运行 `bash -l`；dispatch 使用 `send-keys` 每轮单独运行 `hermes chat -q`。CLI 模式不支持 WebUI 实时聊天，但 paste 更稳定，可用于纯编排场景或 TUI 不可用的环境。
 - **tmux 全局配置要求**（TUI/CLI 共同依赖）：在 `~/.tmux.conf` 添加以下两行，防止最后一个 session 关闭时 tmux server 退出：
+
   ```
   set -g exit-empty off
   set -g exit-unattached off
   ```
 
   **相关修复**：
-
   1. **TUI bracketed-paste 包装**：`src/server/swarm-tmux-delivery.ts` 新增 `tmuxPasteWithBracketedPaste`，在 `\e[?2004h` / `\e[200~` / `\e[201~` / `\e[?2004l` 序列内包装 `tmux paste-buffer`，解决 prompt_toolkit 多行 paste 进入 continuation 模式的问题。
 
   2. **TUI session 空壳检测与自动重启**：`src/routes/api/swarm-direct-chat.ts` 在发送消息前检测 tmux session 是否实际运行 Hermes；若只有 bare shell，则 kill 并重建 session，避免消息被当成 shell 命令执行。
@@ -119,6 +119,5 @@ When the Phase 2 orchestrator raises `needs_human=True`, use one of:
      - `src/screens/swarm2/hooks/use-human-gate.ts`：`HumanGateResumeRequest` 类型增加 `continueWaitMinutes?`
 
   6. **workflow 超时处理**：`rdi.yaml` 把 `timeout` 从 `retry` 移到 `escalate`，触发 Human Gate 而不是无限重试。
-
   - `HERMES_SWARM_USE_LIVE=1` — **deprecated** (tmux is now the default). Setting it only emits a warning.
   - `HERMES_SWARM_MOCK_BIN=<dir>` — when set, `src/routes/api/swarm-dispatch.ts` looks for worker wrapper scripts in `<dir>` before falling back to `~/.local/bin/`. Useful for validating workflow routing without invoking real LLM workers.

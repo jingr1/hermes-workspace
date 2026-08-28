@@ -143,7 +143,8 @@ function readYamlConfig(configPath: string): Record<string, unknown> {
 
 function countMcpServers(config: Record<string, unknown>): number {
   const servers = config.mcp_servers
-  if (!servers || typeof servers !== 'object' || Array.isArray(servers)) return 0
+  if (!servers || typeof servers !== 'object' || Array.isArray(servers))
+    return 0
   return Object.keys(servers).filter((key) => {
     const entry = (servers as Record<string, unknown>)[key]
     return entry !== null && entry !== undefined
@@ -181,7 +182,10 @@ function countFilesRecursive(
       if (predicate(fullPath)) count += 1
     }
   }
-  countCache.set(cacheKey, { count, expiresAt: Date.now() + COUNT_CACHE_TTL_MS })
+  countCache.set(cacheKey, {
+    count,
+    expiresAt: Date.now() + COUNT_CACHE_TTL_MS,
+  })
   return count
 }
 
@@ -324,7 +328,12 @@ async function fetchDashboardProfiles(): Promise<{
 function isLoopbackDashboardUrl(url: string): boolean {
   try {
     const host = new URL(url).hostname.toLowerCase()
-    return host === '127.0.0.1' || host === 'localhost' || host === '::1' || host === '[::1]'
+    return (
+      host === '127.0.0.1' ||
+      host === 'localhost' ||
+      host === '::1' ||
+      host === '[::1]'
+    )
   } catch {
     return false
   }
@@ -388,7 +397,8 @@ export async function readProfileWithFallback(
           }>
         }
         const match = data.profiles?.find(
-          (p) => p.name === normalized || (normalized === 'default' && p.is_default),
+          (p) =>
+            p.name === normalized || (normalized === 'default' && p.is_default),
         )
         if (match) {
           const active = getActiveProfileName()
@@ -463,7 +473,15 @@ function openProfileStateDb(dbPath: string): {
 
 export function listSessionsForProfile(
   name: string,
-): Array<{ key: string; friendlyId: string; updatedAt: number; source: string; title?: string | null; messageCount?: number; model?: string | null }> {
+): Array<{
+  key: string
+  friendlyId: string
+  updatedAt: number
+  source: string
+  title?: string | null
+  messageCount?: number
+  model?: string | null
+}> {
   const normalized = name.trim() || 'default'
   const db = openProfileStateDb(profileStateDbPath(normalized))
   if (!db) return []
@@ -632,7 +650,11 @@ export function applyModelProviderToConfig(
   config.model = modelId
 }
 
-function profileConfigPath(name: string): { normalized: string; profilePath: string; configPath: string } {
+function profileConfigPath(name: string): {
+  normalized: string
+  profilePath: string
+  configPath: string
+} {
   const normalized = name.trim() || 'default'
   const profilePath =
     normalized === 'default'

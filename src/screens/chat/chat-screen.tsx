@@ -79,7 +79,7 @@ import type {
   ChatRunCommandDetail,
   ChatSubmitSelectionDetail,
 } from './chat-events'
-import type {ResponseWaitSnapshot} from './chat-screen-utils';
+import type { ResponseWaitSnapshot } from './chat-screen-utils'
 import type {
   ChatComposerAttachment,
   ChatComposerHandle,
@@ -88,7 +88,7 @@ import type {
 } from './components/chat-composer'
 import type { ApprovalRequest } from '@/screens/gateway/lib/approvals-store'
 import type { ChatAttachment, ChatMessage, SessionMeta } from './types'
-import type {AgentActivity} from '@/stores/chat-activity-store';
+import type { AgentActivity } from '@/stores/chat-activity-store'
 import { useChatSettingsStore } from '@/hooks/use-chat-settings'
 import { playChatComplete } from '@/lib/sounds'
 import {
@@ -538,7 +538,13 @@ export function ChatScreen({
     if (typeof window === 'undefined') return 'low'
     const key = `claude-thinking-${activeFriendlyId || 'new'}`
     const stored = window.sessionStorage.getItem(key)
-    if (stored === 'off' || stored === 'low' || stored === 'medium' || stored === 'high' || stored === 'adaptive')
+    if (
+      stored === 'off' ||
+      stored === 'low' ||
+      stored === 'medium' ||
+      stored === 'high' ||
+      stored === 'adaptive'
+    )
       return stored
     return 'low'
   })
@@ -556,7 +562,8 @@ export function ChatScreen({
   useEffect(() => {
     if (typeof window === 'undefined') return
     const key = `claude-thinking-${activeFriendlyId || 'new'}`
-    thinkingInitializedByUserRef.current = window.sessionStorage.getItem(key) !== null
+    thinkingInitializedByUserRef.current =
+      window.sessionStorage.getItem(key) !== null
   }, [activeFriendlyId])
   const { alertOpen, alertThreshold, alertPercent, dismissAlert } =
     useContextAlert()
@@ -592,8 +599,11 @@ export function ChatScreen({
   const { renameSession, renaming: renamingSessionTitle } = useRenameSession()
   const sseConnectionState = useChatStore((s) => s.connectionState)
 
-  const { activeProfileName, workspaceProfileName, isReady: profilesReady } =
-    useProfiles()
+  const {
+    activeProfileName,
+    workspaceProfileName,
+    isReady: profilesReady,
+  } = useProfiles()
 
   const {
     sessionsQuery,
@@ -636,7 +646,8 @@ export function ChatScreen({
     activeExists,
     sessionsReady: sessionsQuery.isSuccess,
     queryClient,
-    historyRefetchInterval: sseConnectionState === 'connected' ? 60_000 : 20_000,
+    historyRefetchInterval:
+      sseConnectionState === 'connected' ? 60_000 : 20_000,
     portableMode: isPortableMode,
     profileName: activeProfileName,
     sessionVerified,
@@ -728,7 +739,8 @@ export function ChatScreen({
   // If so, re-set waitingForResponse in the store so the UI shows the spinner.
   useActiveRunCheck({
     sessionKey: resolvedSessionKey ?? '',
-    enabled: !isNewChat && Boolean(resolvedSessionKey) && historyQuery.isSuccess,
+    enabled:
+      !isNewChat && Boolean(resolvedSessionKey) && historyQuery.isSuccess,
     onCheckComplete: useCallback(() => {
       setActiveRunCheckDone(true)
     }, []),
@@ -754,9 +766,9 @@ export function ChatScreen({
       : isNewChat
         ? 'new'
         : resolvedSessionKey ||
-        sessionKeyForHistory ||
-        activeCanonicalKey ||
-        'main',
+          sessionKeyForHistory ||
+          activeCanonicalKey ||
+          'main',
     friendlyId: portableChatFriendlyId,
     historyMessages,
     portableMode: isPortableMode,
@@ -788,7 +800,9 @@ export function ChatScreen({
       if (
         approvalId &&
         currentApprovals.some((entry) => {
-          return entry.status === 'pending' && entry.gatewayApprovalId === approvalId
+          return (
+            entry.status === 'pending' && entry.gatewayApprovalId === approvalId
+          )
         })
       ) {
         setPendingApprovals(
@@ -976,10 +990,7 @@ export function ChatScreen({
     // hasn't processed the user's POST yet, the optimistic message vanishes.
     const historySessionKey = isPortableMode
       ? 'main'
-      : activeSessionKey ||
-        sessionKeyForHistory ||
-        resolvedSessionKey ||
-        'main'
+      : activeSessionKey || sessionKeyForHistory || resolvedSessionKey || 'main'
     const reInjectOptimistic = snapshotOptimisticUserMessages(
       queryClient,
       portableChatFriendlyId,
@@ -1071,7 +1082,8 @@ export function ChatScreen({
     ],
     queryFn: async () => {
       try {
-        const statusSessionKey = resolvedSessionKey || activeFriendlyId || 'main'
+        const statusSessionKey =
+          resolvedSessionKey || activeFriendlyId || 'main'
         const query = statusSessionKey
           ? `?sessionKey=${encodeURIComponent(statusSessionKey)}`
           : ''
@@ -1104,11 +1116,22 @@ export function ChatScreen({
       try {
         const res = await fetch('/api/hermes-config')
         if (!res.ok) return 'low'
-        const data = await res.json() as { config?: Record<string, unknown> }
+        const data = (await res.json()) as { config?: Record<string, unknown> }
         const agentSection = data?.config?.agent
-        if (agentSection && typeof agentSection === 'object' && !Array.isArray(agentSection)) {
-          const effort = (agentSection as Record<string, unknown>).reasoning_effort
-          if (effort === 'off' || effort === 'low' || effort === 'medium' || effort === 'high') return effort
+        if (
+          agentSection &&
+          typeof agentSection === 'object' &&
+          !Array.isArray(agentSection)
+        ) {
+          const effort = (agentSection as Record<string, unknown>)
+            .reasoning_effort
+          if (
+            effort === 'off' ||
+            effort === 'low' ||
+            effort === 'medium' ||
+            effort === 'high'
+          )
+            return effort
         }
         return 'low'
       } catch {
@@ -1172,7 +1195,12 @@ export function ChatScreen({
     if (thinkingInitializedByUserRef.current) return
     const configEffort = reasoningEffortQuery.data
     if (!configEffort) return
-    if (configEffort === 'off' || configEffort === 'low' || configEffort === 'medium' || configEffort === 'high') {
+    if (
+      configEffort === 'off' ||
+      configEffort === 'low' ||
+      configEffort === 'medium' ||
+      configEffort === 'high'
+    ) {
       setThinkingLevel(configEffort)
     }
   }, [reasoningEffortQuery.data])
@@ -1257,36 +1285,39 @@ export function ChatScreen({
       },
       [queryClient],
     ),
-    onComplete: useCallback((message: ChatMessage) => {
-      const activeSend = activeSendRef.current
-      if (activeSend?.clientId) {
-        updateHistoryMessageByClientIdEverywhere(
-          queryClient,
-          activeSend.clientId,
-          (message) => ({
-            ...message,
-            status: 'done',
-          }),
-        )
-      }
-      if (activeSend?.sessionKey) {
-        persistRecoveryMessage(activeSend.sessionKey, message)
-        clearPendingSendForSession(
-          activeSend.sessionKey,
-          activeSend.friendlyId,
-        )
-      }
-      activeSendRef.current = null
-      refreshHistoryRef.current()
-      setSending(false)
-      // Clear waitingForResponse so ThinkingBubble hides and message renders
-      streamFinish()
-      // Play notification sound if the user opted in (Settings → Chat).
-      // Read directly from the store to avoid re-creating this callback on every settings change.
-      if (useChatSettingsStore.getState().settings.soundOnChatComplete) {
-        playChatComplete()
-      }
-    }, [queryClient, streamFinish]),
+    onComplete: useCallback(
+      (message: ChatMessage) => {
+        const activeSend = activeSendRef.current
+        if (activeSend?.clientId) {
+          updateHistoryMessageByClientIdEverywhere(
+            queryClient,
+            activeSend.clientId,
+            (message) => ({
+              ...message,
+              status: 'done',
+            }),
+          )
+        }
+        if (activeSend?.sessionKey) {
+          persistRecoveryMessage(activeSend.sessionKey, message)
+          clearPendingSendForSession(
+            activeSend.sessionKey,
+            activeSend.friendlyId,
+          )
+        }
+        activeSendRef.current = null
+        refreshHistoryRef.current()
+        setSending(false)
+        // Clear waitingForResponse so ThinkingBubble hides and message renders
+        streamFinish()
+        // Play notification sound if the user opted in (Settings → Chat).
+        // Read directly from the store to avoid re-creating this callback on every settings change.
+        if (useChatSettingsStore.getState().settings.soundOnChatComplete) {
+          playChatComplete()
+        }
+      },
+      [queryClient, streamFinish],
+    ),
     onError: useCallback(
       (messageText: string) => {
         const activeSend = activeSendRef.current
@@ -1421,10 +1452,12 @@ export function ChatScreen({
     activeRealtimeStreamingText,
     activeIsRealtimeStreaming,
   )
-  const stickyStreamingTextRef = useRef<{ runId: string | null; text: string }>({
-    runId: null,
-    text: '',
-  })
+  const stickyStreamingTextRef = useRef<{ runId: string | null; text: string }>(
+    {
+      runId: null,
+      text: '',
+    },
+  )
   stickyStreamingTextRef.current = advanceStickyStreamingText({
     isStreaming: activeIsRealtimeStreaming,
     runId: streamingRunId ?? null,
@@ -1560,11 +1593,12 @@ export function ChatScreen({
       // message is potentially the same response — match by text overlap
       if (streamingText.length > 0) {
         const msgText = textFromMessage(msg).trim()
-        if (msgText.length > 0 && (
-          msgText === streamingText ||
-          msgText.startsWith(streamingText) ||
-          streamingText.startsWith(msgText)
-        )) {
+        if (
+          msgText.length > 0 &&
+          (msgText === streamingText ||
+            msgText.startsWith(streamingText) ||
+            streamingText.startsWith(msgText))
+        ) {
           return true
         }
       }
@@ -1572,10 +1606,15 @@ export function ChatScreen({
       // calls as the streaming placeholder, it's the same response
       if (streamToolCalls.length > 0) {
         const msgContent = Array.isArray(msg.content) ? msg.content : []
-        const msgToolCalls = msgContent.filter((p: any) => p.type === 'toolCall')
-        if (msgToolCalls.length > 0 && msgToolCalls.length === streamToolCalls.length) {
+        const msgToolCalls = msgContent.filter(
+          (p: any) => p.type === 'toolCall',
+        )
+        if (
+          msgToolCalls.length > 0 &&
+          msgToolCalls.length === streamToolCalls.length
+        ) {
           return streamToolCalls.every((stc: any) =>
-            msgToolCalls.some((mtc: any) => mtc.name === stc.name)
+            msgToolCalls.some((mtc: any) => mtc.name === stc.name),
           )
         }
       }
@@ -1732,9 +1771,9 @@ export function ChatScreen({
   }, [suggestion, resolvedSessionKey, dismiss])
 
   // Sync chat activity to global store for sidebar orchestrator avatar
-  const setLocalActivity = useChatActivityStore(
-    (s) => s.setLocalActivity,
-  ) as (next: AgentActivity) => void
+  const setLocalActivity = useChatActivityStore((s) => s.setLocalActivity) as (
+    next: AgentActivity,
+  ) => void
   useEffect(() => {
     if (liveToolActivity.length > 0) {
       setLocalActivity('tool-use')
@@ -1942,9 +1981,13 @@ export function ChatScreen({
     if (!shouldRedirectToNew) return
     resetPendingSend()
     clearHistoryMessages(queryClient, activeFriendlyId, sessionKeyForHistory)
-    const latestSession = resolveSessionForProfile(sessions, activeProfileName, {
-      sessionsLoaded: sessionsQuery.isSuccess,
-    })
+    const latestSession = resolveSessionForProfile(
+      sessions,
+      activeProfileName,
+      {
+        sessionsLoaded: sessionsQuery.isSuccess,
+      },
+    )
     const targetSession =
       latestSession === activeFriendlyId &&
       !sessionOwnedByProfile &&

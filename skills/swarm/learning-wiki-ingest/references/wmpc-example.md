@@ -4,13 +4,13 @@ Mission: `research-vmc-1782283462`
 
 ## Source files
 
-| Role | Path |
-|------|------|
-| Manifest | `memory/swarm/missions/research-vmc-1782283462/manifest.json` |
-| Research | `.../researcher/world-model-vmc-research.md` |
-| Architecture | `.../architect/wmpc-architecture-spec.md` |
-| Review | `.../architect/architect-review-of-researcher.md` |
-| Retrospective | `.../learning/world-model-vmc-retrospective.md` |
+| Role          | Path                                                          |
+| ------------- | ------------------------------------------------------------- |
+| Manifest      | `memory/swarm/missions/research-vmc-1782283462/manifest.json` |
+| Research      | `.../researcher/world-model-vmc-research.md`                  |
+| Architecture  | `.../architect/wmpc-architecture-spec.md`                     |
+| Review        | `.../architect/architect-review-of-researcher.md`             |
+| Retrospective | `.../learning/world-model-vmc-retrospective.md`               |
 
 ## Planned wiki outputs
 
@@ -39,7 +39,7 @@ confidence: medium
 
 ### Content outline
 
-1. **Definition** — world model as MPC prediction engine (P(S_{t+1}|S_t, A_t))
+1. **Definition** — world model as MPC prediction engine (P(S\_{t+1}|S_t, A_t))
 2. **VMC context** — longitudinal/lateral/vertical coordination; ≤20ms control cycle constraint
 3. **Verified facts** — cite arXiv IDs from approved research report only
 4. **Open problems** — latency, physical plausibility, ASIL-D verification

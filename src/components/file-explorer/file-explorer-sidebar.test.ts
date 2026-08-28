@@ -18,8 +18,12 @@ describe('file explorer workspace refresh', () => {
   it('paints top-level then prefetches depth 3 in the background', () => {
     expect(sidebarSource).toContain('fetchFileTree(workspaceProfileName, 0)')
     expect(sidebarSource).toContain('fetchFileTree(workspaceProfileName, 3)')
-    expect(sidebarSource).toContain('fileTreeQueryKey(workspaceProfileName, workspacePath, 0)')
-    expect(sidebarSource).toContain('fileTreeQueryKey(workspaceProfileName, workspacePath, 3)')
+    expect(sidebarSource).toContain(
+      'fileTreeQueryKey(workspaceProfileName, workspacePath, 0)',
+    )
+    expect(sidebarSource).toContain(
+      'fileTreeQueryKey(workspaceProfileName, workspacePath, 3)',
+    )
     expect(sidebarSource).toContain('deepQuery.data ?? filesQuery.data')
     expect(sidebarSource).not.toContain('loadFolderChildren')
     expect(sidebarSource).not.toContain('patchFileTreeChildren')
@@ -42,10 +46,14 @@ describe('file explorer workspace refresh', () => {
   it('opens files in an in-panel webui-style preview instead of a modal', () => {
     expect(sidebarSource).toContain('FilePanelPreview')
     expect(sidebarSource).toContain('previewActive')
-    expect(sidebarSource).toContain("data-panel-mode={previewActive ? 'preview' : 'browse'}")
-    expect(sidebarSource).toContain("classifyFilePreviewKind(entry.path) === 'download'")
+    expect(sidebarSource).toContain(
+      "data-panel-mode={previewActive ? 'preview' : 'browse'}",
+    )
+    expect(sidebarSource).toContain(
+      "classifyFilePreviewKind(entry.path) === 'download'",
+    )
     expect(sidebarSource).not.toContain('FilePreviewDialog')
-    expect(sidebarSource).not.toContain("w-[min(480px,46vw)]")
+    expect(sidebarSource).not.toContain('w-[min(480px,46vw)]')
   })
 
   it('supports dragging to resize the files panel like webui', () => {
@@ -68,7 +76,9 @@ describe('file explorer workspace refresh', () => {
     expect(sidebarSource).toContain("action: 'rename'")
     expect(sidebarSource).toContain('createTargetDir')
     expect(sidebarSource).toContain('setPreviewPath(null)')
-    expect(sidebarSource).toContain("classifyFilePreviewKind(nextPath) !== 'download'")
+    expect(sidebarSource).toContain(
+      "classifyFilePreviewKind(nextPath) !== 'download'",
+    )
   })
 
   it('shows a webui-style edge toggle with left tooltip when collapsed', () => {

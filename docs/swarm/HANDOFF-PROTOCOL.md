@@ -99,6 +99,7 @@ hermes-workspace/memory/swarm/missions/<missionId>/researcher/{topic}-report.md
 # Research Report: [Topic]
 
 ## Executive Summary
+
 - Research question:
 - Confidence level (high/medium/low):
 - Key unknowns:
@@ -106,6 +107,7 @@ hermes-workspace/memory/swarm/missions/<missionId>/researcher/{topic}-report.md
 ## Facts Established
 
 ### [Category 1]
+
 - **Fact**: [statement]
   - **Source**: [URL / paper / document path]
   - **Verification method**: [how you confirmed]
@@ -113,18 +115,22 @@ hermes-workspace/memory/swarm/missions/<missionId>/researcher/{topic}-report.md
   - **Limitations**: [what you couldn't verify]
 
 ## Claims Requiring Validation
+
 - [Claim]: [why uncertain, what would confirm/refute]
 
 ## Sources
+
 | Source | Type | URL/Path | Accessed |
-|--------|------|----------|----------|
+| ------ | ---- | -------- | -------- |
 
 ## Data Quality Assessment
+
 - **Completeness**: ...
 - **Recency**: ...
 - **Bias risk**: ...
 
 ---
+
 **Researcher checkpoint**: This report contains facts only. No strategic recommendations.
 ```
 
@@ -139,11 +145,11 @@ hermes-workspace/memory/swarm/missions/<missionId>/researcher/{topic}-report.md
 
 Architect **不得**把 researcher 报告当结论直接转发。必须做**决策 + 技术转化**：
 
-| Researcher 说 | Architect 应该输出 |
-|---|---|
-| 「竞品 A 用 WebRTC」 | 「是否采用 WebRTC 的 wedge/假设 + 接口与模块边界」 |
-| 「儿童语音识别准确率约 X%」 | 「对 MVP 范围与 kill criteria 的影响」 |
-| 「来源冲突」 | 「known unknown + 需要人工/再调研的点」 |
+| Researcher 说               | Architect 应该输出                                 |
+| --------------------------- | -------------------------------------------------- |
+| 「竞品 A 用 WebRTC」        | 「是否采用 WebRTC 的 wedge/假设 + 接口与模块边界」 |
+| 「儿童语音识别准确率约 X%」 | 「对 MVP 范围与 kill criteria 的影响」             |
+| 「来源冲突」                | 「known unknown + 需要人工/再调研的点」            |
 
 ---
 
@@ -176,31 +182,40 @@ hermes-workspace/memory/swarm/missions/<missionId>/architect/{topic}-content-bri
 # Strategy / Direction: [Topic]
 
 ## Problem Framing
+
 - Core problem / Constraints / Success criteria:
 
 ## Recommended Wedge
+
 - Who / What / Why now:
 
 ## Assumption Stack
-| ID | Assumption | Validation Method | Priority |
-|----|------------|-------------------|----------|
+
+| ID  | Assumption | Validation Method | Priority |
+| --- | ---------- | ----------------- | -------- |
 
 ## Kill Criteria
-| ID | Criterion | Measurement | Threshold |
-|----|-----------|-------------|-----------|
+
+| ID  | Criterion | Measurement | Threshold |
+| --- | --------- | ----------- | --------- |
 
 ## Phased Milestones
+
 ### Phase 0: …
+
 - Goal / Deliverables / Handoff to: developer | writer | researcher
 
 ## Known Unknowns
+
 - …
 
 ## Risks & Mitigations
+
 | Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
+| ---- | ---------- | ------ | ---------- |
 
 ---
+
 **Architect strategy checkpoint**: Decisions and bets only. Facts cited from researcher report.
 ```
 
@@ -210,32 +225,41 @@ hermes-workspace/memory/swarm/missions/<missionId>/architect/{topic}-content-bri
 # Technical Specification: [Topic]
 
 ## Overview
+
 - Strategy source / Design goal / Scope:
 
 ## Architecture
+
 [diagram or description]
 
 ## Data Model / API Interface
+
 …
 
 ## Module Breakdown
+
 | Module | Responsibility | Input | Output | Dependencies |
-|--------|----------------|-------|--------|--------------|
+| ------ | -------------- | ----- | ------ | ------------ |
 
 ## Technology Stack
+
 | Layer | Choice | Rationale | Alternatives Rejected |
-|-------|--------|-----------|----------------------|
+| ----- | ------ | --------- | --------------------- |
 
 ## Implementation Order
+
 1. …
 
 ## Testing Strategy
+
 - Unit / Integration / Browser smoke:
 
 ## Open Questions
+
 - …
 
 ---
+
 **Architect spec checkpoint**: Implementable technical design. No application code.
 ```
 
@@ -245,13 +269,19 @@ hermes-workspace/memory/swarm/missions/<missionId>/architect/{topic}-content-bri
 # Content Brief: [Topic]
 
 ## Audience & Intent
+
 ## Tone / Brand / Accessibility constraints
+
 ## Deliverable types (slides / HTML / doc / script / social)
+
 ## Structure outline
+
 ## Must-cite facts (from researcher)
+
 ## Out of scope
 
 ---
+
 **Architect content checkpoint**: Audience-ready structure only. No final copy polish required here.
 ```
 
@@ -266,11 +296,11 @@ hermes-workspace/memory/swarm/missions/<missionId>/architect/{topic}-content-bri
 
 ### Developer / Writer 消费方式
 
-| Architect 输出 | Developer / Writer 输出 |
-|---|---|
-| Module / API 定义 | 实现 + 测试 + build/browser proof |
-| Content brief + 必引事实 | 幻灯片 / HTML / 文案 / 脚本等成稿 |
-| Open question | Challenge 回 architect，不自行改架构 |
+| Architect 输出           | Developer / Writer 输出              |
+| ------------------------ | ------------------------------------ |
+| Module / API 定义        | 实现 + 测试 + build/browser proof    |
+| Content brief + 必引事实 | 幻灯片 / HTML / 文案 / 脚本等成稿    |
+| Open question            | Challenge 回 architect，不自行改架构 |
 
 ---
 
@@ -362,12 +392,12 @@ hermes-workspace/memory/swarm/missions/<missionId>/writer/{topic}-*
 
 ### 质疑路径
 
-| 下游 | 可质疑上游 | 质疑文件路径 |
-|------|-----------|-------------|
-| Architect | Researcher | `memory/swarm/missions/<missionId>/architect/challenges/{fact-id}.md` |
-| Developer | Architect | `memory/swarm/missions/<missionId>/developer/challenges/{spec-id}.md` |
-| Writer | Architect | `memory/swarm/missions/<missionId>/writer/challenges/{brief-id}.md` |
-| Learning | Architect / Orchestrator | `memory/swarm/missions/<missionId>/learning/challenges/{mission-id}.md`（仅限摄入冲突 / 归档缺失） |
+| 下游      | 可质疑上游               | 质疑文件路径                                                                                       |
+| --------- | ------------------------ | -------------------------------------------------------------------------------------------------- |
+| Architect | Researcher               | `memory/swarm/missions/<missionId>/architect/challenges/{fact-id}.md`                              |
+| Developer | Architect                | `memory/swarm/missions/<missionId>/developer/challenges/{spec-id}.md`                              |
+| Writer    | Architect                | `memory/swarm/missions/<missionId>/writer/challenges/{brief-id}.md`                                |
+| Learning  | Architect / Orchestrator | `memory/swarm/missions/<missionId>/learning/challenges/{mission-id}.md`（仅限摄入冲突 / 归档缺失） |
 
 Writer 若发现**事实**错误，经 architect 退回 researcher，不自己改事实层。
 

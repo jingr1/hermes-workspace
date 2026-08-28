@@ -1,15 +1,15 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
-import {
-  getMessages,
-  toChatMessage,
-} from '../../server/claude-api'
+import { getMessages, toChatMessage } from '../../server/claude-api'
 import {
   resolveMainChatSessionId,
   resolveSessionKey,
 } from '../../server/session-utils'
 import { isAuthenticated } from '@/server/auth-middleware'
-import { getLocalSession, getLocalMessages } from '../../server/local-session-store'
+import {
+  getLocalSession,
+  getLocalMessages,
+} from '../../server/local-session-store'
 import {
   getActiveProfileName,
   getMessagesForProfile,

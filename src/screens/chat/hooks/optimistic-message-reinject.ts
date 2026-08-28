@@ -1,4 +1,8 @@
-import { appendHistoryMessage, chatQueryKeys, collapseRecentDuplicateUserMessages } from '../chat-queries'
+import {
+  appendHistoryMessage,
+  chatQueryKeys,
+  collapseRecentDuplicateUserMessages,
+} from '../chat-queries'
 import { textFromMessage } from '../utils'
 import type { QueryClient } from '@tanstack/react-query'
 import type { ChatMessage } from '../types'
@@ -37,25 +41,30 @@ export function snapshotOptimisticUserMessages(
 ): () => void {
   const key = chatQueryKeys.history(friendlyId, sessionKey)
   const prevData = queryClient.getQueryData<Record<string, unknown>>(key)
-  const pending = ((prevData?.messages as Array<unknown> | undefined) ?? []).filter(
-    (msg: unknown) => {
-      const raw = msg as Record<string, unknown>
-      if (raw.role !== 'user') return false
-      if (String(raw.__optimisticId ?? '').startsWith('opt-')) return true
-      if (String(raw.status) === 'sending' || String(raw.status) === 'queued') return true
-      if (String(raw.status) === 'sent') {
-        // Re-inject only if the message has a clientId (local) but no server id
-        const hasClientId = normalize(raw.clientId).length > 0 || normalize(raw.client_id).length > 0
-        const hasServerId = normalize(raw.id).length > 0 || normalize(raw.messageId).length > 0
-        return hasClientId && !hasServerId
-      }
-      return false
-    },
-  ) as unknown as Array<ChatMessage>
+  const pending = (
+    (prevData?.messages as Array<unknown> | undefined) ?? []
+  ).filter((msg: unknown) => {
+    const raw = msg as Record<string, unknown>
+    if (raw.role !== 'user') return false
+    if (String(raw.__optimisticId ?? '').startsWith('opt-')) return true
+    if (String(raw.status) === 'sending' || String(raw.status) === 'queued')
+      return true
+    if (String(raw.status) === 'sent') {
+      // Re-inject only if the message has a clientId (local) but no server id
+      const hasClientId =
+        normalize(raw.clientId).length > 0 ||
+        normalize(raw.client_id).length > 0
+      const hasServerId =
+        normalize(raw.id).length > 0 || normalize(raw.messageId).length > 0
+      return hasClientId && !hasServerId
+    }
+    return false
+  }) as unknown as Array<ChatMessage>
 
   return () => {
     const currentData = queryClient.getQueryData<Record<string, unknown>>(key)
-    const currentMessages = (currentData?.messages as Array<unknown> | undefined) ?? []
+    const currentMessages =
+      (currentData?.messages as Array<unknown> | undefined) ?? []
 
     for (const msg of pending) {
       const raw = msg as unknown as Record<string, unknown>
@@ -66,7 +75,8 @@ export function snapshotOptimisticUserMessages(
         const mRaw = m as Record<string, unknown>
         if (mRaw.role !== 'user') return false
         if (msgClientId) {
-          const mClientId = normalize(mRaw.clientId) || normalize(mRaw.client_id)
+          const mClientId =
+            normalize(mRaw.clientId) || normalize(mRaw.client_id)
           if (mClientId && mClientId === msgClientId) return true
         }
         if (msgText.length > 0) {
@@ -86,7 +96,8 @@ export function snapshotOptimisticUserMessages(
     }
 
     const latestData = queryClient.getQueryData<Record<string, unknown>>(key)
-    const latestMessages = (latestData?.messages as Array<ChatMessage> | undefined) ?? []
+    const latestMessages =
+      (latestData?.messages as Array<ChatMessage> | undefined) ?? []
     const collapsed = collapseRecentDuplicateUserMessages(latestMessages)
     if (collapsed.length !== latestMessages.length) {
       queryClient.setQueryData(key, {

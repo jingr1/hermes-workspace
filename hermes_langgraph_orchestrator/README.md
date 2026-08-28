@@ -117,26 +117,26 @@ bash scripts/sync-autoresearch-skills.sh
 
 `sync-swarm-profiles.mjs` 对每个 `swarm.yaml` worker 写入：
 
-| 文件 | 来源字段 | 备注 |
-|------|----------|------|
-| `config.yaml` → `toolsets` | `tools` | **learning** 为合并（union），保留原有 `hermes-cli` 等 |
-| `config.yaml` → `kanban.orchestrator_profile` | orchestrator 固定为 `orchestrator` | |
-| `SOUL.md` | `name`, `role`, `mission`, … | **learning** 保留 `agents/learning/SOUL.md` 教学人格，仅追加 swarm 扩展段 |
-| `memory/IDENTITY.md` | 同上 + `skills`, `capabilities` | learning 额外标注 tutor + retrospective 双模式 |
-| `skills/<skill>/` | `skills` 列表中存在于 `skills/swarm/` 的条目 | |
+| 文件                                          | 来源字段                                     | 备注                                                                      |
+| --------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------- |
+| `config.yaml` → `toolsets`                    | `tools`                                      | **learning** 为合并（union），保留原有 `hermes-cli` 等                    |
+| `config.yaml` → `kanban.orchestrator_profile` | orchestrator 固定为 `orchestrator`           |                                                                           |
+| `SOUL.md`                                     | `name`, `role`, `mission`, …                 | **learning** 保留 `agents/learning/SOUL.md` 教学人格，仅追加 swarm 扩展段 |
+| `memory/IDENTITY.md`                          | 同上 + `skills`, `capabilities`              | learning 额外标注 tutor + retrospective 双模式                            |
+| `skills/<skill>/`                             | `skills` 列表中存在于 `skills/swarm/` 的条目 |                                                                           |
 
 Hub / bundled 技能（`gstack-for-hermes`、`llm-wiki`、`obsidian` 等）不在 `skills/swarm/`，由 Hermes profile skills hub 提供，脚本会跳过。
 
 ### 当前 roster 与 profile 映射
 
-| Worker | Wrapper | Modes |
-|--------|---------|-------|
-| `orchestrator` | `orchestrator:plan` | plan, autoresearch-dispatch |
-| `researcher` | `researcher:quick` | quick |
-| `architect` | `architect:design` | design, autoresearch |
-| `developer` | `developer:implement` | implement, autoresearch |
-| `writer` | `writer:author` | author, autoresearch |
-| `learning` | `learning` | tutor + swarm retrospective（SOUL 合并，不覆盖） |
+| Worker         | Wrapper               | Modes                                            |
+| -------------- | --------------------- | ------------------------------------------------ |
+| `orchestrator` | `orchestrator:plan`   | plan, autoresearch-dispatch                      |
+| `researcher`   | `researcher:quick`    | quick                                            |
+| `architect`    | `architect:design`    | design, autoresearch                             |
+| `developer`    | `developer:implement` | implement, autoresearch                          |
+| `writer`       | `writer:author`       | author, autoresearch                             |
+| `learning`     | `learning`            | tutor + swarm retrospective（SOUL 合并，不覆盖） |
 
 **Model：** 以根目录 [`swarm.yaml`](../swarm.yaml) 的 `model` 字段为准（勿在文档中硬编码）。改完后跑 `node scripts/sync-swarm-profiles.mjs`。角色/技能合同见 [`AGENTS.md`](../AGENTS.md)。
 
@@ -237,12 +237,12 @@ swarm.yaml          workflow.yaml              LangGraph 图
 
 ### 内置 workflow 示例
 
-| 文件 | 入口 | 路径 | 适用场景 |
-|---|---|---|---|
-| `radw.yaml` | `researcher` | 调研 → 设计 → (developer\|writer) → 审查 + Harden | 默认全流程（Gate C/H） |
-| `rdi.yaml` | `researcher` | 调研 → 设计 → developer → 审查 + Harden | 纯代码交付（无 writer 车道） |
-| `research_only.yaml` | `researcher` | 调研 → architect 对抗审查（3 轮未达成一致 → Human Gate） | 纯调研、文献综述、选项备忘录 |
-| `design_implement.yaml` | `architect` | 设计 → 实现 → 审查（跳过调研） | 需求已明确、直接设计与开发 |
+| 文件                    | 入口         | 路径                                                     | 适用场景                     |
+| ----------------------- | ------------ | -------------------------------------------------------- | ---------------------------- |
+| `radw.yaml`             | `researcher` | 调研 → 设计 → (developer\|writer) → 审查 + Harden        | 默认全流程（Gate C/H）       |
+| `rdi.yaml`              | `researcher` | 调研 → 设计 → developer → 审查 + Harden                  | 纯代码交付（无 writer 车道） |
+| `research_only.yaml`    | `researcher` | 调研 → architect 对抗审查（3 轮未达成一致 → Human Gate） | 纯调研、文献综述、选项备忘录 |
+| `design_implement.yaml` | `architect`  | 设计 → 实现 → 审查（跳过调研）                           | 需求已明确、直接设计与开发   |
 
 ### 第一步：编写 workflow YAML
 
@@ -251,42 +251,42 @@ swarm.yaml          workflow.yaml              LangGraph 图
 ```yaml
 name: my_workflow
 version: 1
-entry: researcher          # 第一个派发的 worker
+entry: researcher # 第一个派发的 worker
 description: |
   一句话说明这条编排解决什么问题。
 
 transitions:
-  - from: researcher       # 哪个 worker 的 checkpoint 触发了这条边
-    "on":
-      verdict: DONE        # 匹配 WorkerClassification.verdict
+  - from: researcher # 哪个 worker 的 checkpoint 触发了这条边
+    'on':
+      verdict: DONE # 匹配 WorkerClassification.verdict
       # review_outcome: approved   # 可选，architect 审查时常用
-    to: architect          # 下一个 worker；null = 任务结束
-    reason: "调研完成，进入设计"
+    to: architect # 下一个 worker；null = 任务结束
+    reason: '调研完成，进入设计'
     # max_iterations: 3    # 可选，限制 from→to 循环次数（审查环）
 
 blockers:
-  escalate:                # 这些 blocker_type → Human Gate
+  escalate: # 这些 blocker_type → Human Gate
     - architecture_decision
     - missing_credential
-  retry:                   # 这些 blocker_type → 自动重试同一 worker
+  retry: # 这些 blocker_type → 自动重试同一 worker
     - timeout
     - test_failure
     - missing_dependency
 
 settings:
-  max_iterations: 5        # 全局路由轮数上限
-  terminal_docs: false     # true 时启用 workflow 里声明的 terminal_docs 边
+  max_iterations: 5 # 全局路由轮数上限
+  terminal_docs: false # true 时启用 workflow 里声明的 terminal_docs 边
 ```
 
 **路由匹配规则**（`workflow.py` → `route_by_workflow`）：
 
-| checkpoint 状态 | 行为 |
-|---|---|
-| `SKIP` | 继续轮询，不派发 |
-| `BLOCKED` + `blockers.retry` | 重试同一 worker |
-| `BLOCKED` / `NEEDS_INPUT` / `HANDOFF`（其他） | Human Gate |
-| `DONE` | 按 `transitions` 第一条匹配的边派发；`to: null` 则 finalize |
-| 无匹配 transition | Human Gate（避免静默结束） |
+| checkpoint 状态                               | 行为                                                        |
+| --------------------------------------------- | ----------------------------------------------------------- |
+| `SKIP`                                        | 继续轮询，不派发                                            |
+| `BLOCKED` + `blockers.retry`                  | 重试同一 worker                                             |
+| `BLOCKED` / `NEEDS_INPUT` / `HANDOFF`（其他） | Human Gate                                                  |
+| `DONE`                                        | 按 `transitions` 第一条匹配的边派发；`to: null` 则 finalize |
+| 无匹配 transition                             | Human Gate（避免静默结束）                                  |
 
 `transitions` 按文件顺序匹配；更具体的边（带 `review_outcome`）应写在更泛的边**前面**（参考 `design_implement.yaml`）。
 
@@ -430,13 +430,13 @@ hermes-langgraph --execute --mock-services --workflow research_only \
 
 **`--mock-profile` 策略**
 
-| Profile | 用途 |
-|---------|------|
-| `auto` | 等同 `generic` |
-| `generic` | 通用：worker DONE；有审查环时 architect 先 `changes_requested` 再 `approved`（Gate H workflow 会带 `HARDEN_OUTCOME: pass`） |
-| `blocked_once` | developer 首次 BLOCKED，二次 DONE（测 Human Gate / resume） |
-| `cdc` | `blocked_once` 的废弃别名 |
-| `human_gate` | architect 审查始终 `changes_requested`，用于测审查环触顶 → Human Gate |
+| Profile        | 用途                                                                                                                        |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `auto`         | 等同 `generic`                                                                                                              |
+| `generic`      | 通用：worker DONE；有审查环时 architect 先 `changes_requested` 再 `approved`（Gate H workflow 会带 `HARDEN_OUTCOME: pass`） |
+| `blocked_once` | developer 首次 BLOCKED，二次 DONE（测 Human Gate / resume）                                                                 |
+| `cdc`          | `blocked_once` 的废弃别名                                                                                                   |
+| `human_gate`   | architect 审查始终 `changes_requested`，用于测审查环触顶 → Human Gate                                                       |
 
 `blocked_once` Mock 路径：
 
@@ -481,20 +481,20 @@ curl -s -X POST http://127.0.0.1:3000/api/swarm-langgraph/resume \
 
 ### 常用 CLI 参数
 
-| 参数 | 说明 |
-|---|---|
-| `--execute` | 运行 LangGraph 编排（必须，除非 `--get-state` / `--list-active-gates`） |
-| `--mock-services` | mock init/ensure/dispatch/classify，不依赖 Workspace |
-| `--mock-profile auto\|generic\|blocked_once\|cdc\|human_gate` | mock checkpoint 策略（需配合 `--mock-services`） |
-| `--mission-id <id>` | mission 标识，也是 LangGraph thread_id |
-| `--goal "..."` | 自定义 mission goal |
-| `--initial-workers researcher,architect` | 跳过 workflow entry，直接派发指定 worker |
-| `--max-iterations 5` | 最大路由轮数 |
-| `--workflow path/to.yaml` | 自定义 workflow YAML（默认 `workflows/radw.yaml`） |
-| `--checkpoint-path path.db` | 自定义 SQLite checkpointer |
-| `--resume approved\|abort` | 从 human gate 恢复 |
-| `--get-state` | 读取 mission 状态（JSON） |
-| `--list-active-gates` | 列出所有 Human Gate 暂停的 mission |
+| 参数                                                          | 说明                                                                    |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `--execute`                                                   | 运行 LangGraph 编排（必须，除非 `--get-state` / `--list-active-gates`） |
+| `--mock-services`                                             | mock init/ensure/dispatch/classify，不依赖 Workspace                    |
+| `--mock-profile auto\|generic\|blocked_once\|cdc\|human_gate` | mock checkpoint 策略（需配合 `--mock-services`）                        |
+| `--mission-id <id>`                                           | mission 标识，也是 LangGraph thread_id                                  |
+| `--goal "..."`                                                | 自定义 mission goal                                                     |
+| `--initial-workers researcher,architect`                      | 跳过 workflow entry，直接派发指定 worker                                |
+| `--max-iterations 5`                                          | 最大路由轮数                                                            |
+| `--workflow path/to.yaml`                                     | 自定义 workflow YAML（默认 `workflows/radw.yaml`）                      |
+| `--checkpoint-path path.db`                                   | 自定义 SQLite checkpointer                                              |
+| `--resume approved\|abort`                                    | 从 human gate 恢复                                                      |
+| `--get-state`                                                 | 读取 mission 状态（JSON）                                               |
+| `--list-active-gates`                                         | 列出所有 Human Gate 暂停的 mission                                      |
 
 ---
 
@@ -584,20 +584,20 @@ curl -s "http://localhost:3000/api/swarm-missions?id=radw-real-001" | python3 -m
 
 ## Tmux Worker 生命周期（Swarm2 Runtime）
 
-| 步骤 | API | 行为 |
-|------|-----|------|
-| 创建 | `POST /api/swarm-tmux-start` | `tmux new-session -d -s swarm-<role> "<shell\|hermes --tui>"` |
-| 分发 | `POST /api/swarm-dispatch` | `tmux send-keys` 注入任务（TUI paste 或 CLI `hermes chat -q`） |
-| 交互 | `POST /api/swarm-tmux-scroll` | copy-mode 滚动；Runtime 通过 `capture-pane` 读输出 |
-| 销毁 | `POST /api/swarm-tmux-stop` | `tmux kill-session` |
+| 步骤 | API                           | 行为                                                           |
+| ---- | ----------------------------- | -------------------------------------------------------------- |
+| 创建 | `POST /api/swarm-tmux-start`  | `tmux new-session -d -s swarm-<role> "<shell\|hermes --tui>"`  |
+| 分发 | `POST /api/swarm-dispatch`    | `tmux send-keys` 注入任务（TUI paste 或 CLI `hermes chat -q`） |
+| 交互 | `POST /api/swarm-tmux-scroll` | copy-mode 滚动；Runtime 通过 `capture-pane` 读输出             |
+| 销毁 | `POST /api/swarm-tmux-stop`   | `tmux kill-session`                                            |
 
 派发模式：
 
-| 模式 | 环境变量 / `deliveryMode` | 创建 | 分发 |
-|------|---------------------------|------|------|
-| `tmux-tui` | 默认 | `hermes chat --tui` | paste SwarmBrief 进 TUI |
-| `tmux-cli` | `HERMES_SWARM_TMUX_MODE=cli` | `bash -l` + Hermes env | `send-keys` 跑 `swarm-run.sh` |
-| `oneshot` | `HERMES_SWARM_FORCE_ONESHOT=1` | 无 tmux | 直接 `hermes chat -q` |
+| 模式       | 环境变量 / `deliveryMode`      | 创建                   | 分发                          |
+| ---------- | ------------------------------ | ---------------------- | ----------------------------- |
+| `tmux-tui` | 默认                           | `hermes chat --tui`    | paste SwarmBrief 进 TUI       |
+| `tmux-cli` | `HERMES_SWARM_TMUX_MODE=cli`   | `bash -l` + Hermes env | `send-keys` 跑 `swarm-run.sh` |
+| `oneshot`  | `HERMES_SWARM_FORCE_ONESHOT=1` | 无 tmux                | 直接 `hermes chat -q`         |
 
 ---
 

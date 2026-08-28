@@ -44,39 +44,49 @@ Valid `{downstream-role}` values: `architect`, `developer`, `writer`, `learning`
 # Escalation: [Topic]
 
 ## 争议双方
+
 - **挑战方**: [downstream agent]
 - **被挑战方**: [upstream agent]
 
 ## 争议内容
+
 - **原始交付**: [link to upstream deliverable]
 - **Challenge 文件**: [link to challenge]
 - **Response 文件**: [link to response]
 
 ## 3 轮回顾
+
 ### Round 1
+
 - 挑战: ...
 - 回应: ...
 
 ### Round 2
+
 - 挑战: ...
 - 回应: ...
 
 ### Round 3
+
 - 挑战: ...
 - 回应: ...
 
 ## 核心分歧
+
 [一句话描述争议焦点]
 
 ## 对下游工作的影响
+
 [如果不解决，下游无法做什么]
 
 ## 建议的决策选项
+
 1. [选项 A: 接受上游方案]
 2. [选项 B: 接受下游要求]
 3. [选项 C: 折中方案]
 
 ---
+
 **需要人工决策**
 ```
 
@@ -88,16 +98,20 @@ Orchestrator records the decision and notifies both agents:
 # Decision Record: [Escalation ID]
 
 ## Decision
+
 [What was decided]
 
 ## Rationale
+
 [Why this decision]
 
 ## Action Items
+
 - [Upstream agent]: [what to change]
 - [Downstream agent]: [how to proceed]
 
 ## Recorded By
+
 Orchestrator at [timestamp]
 ```
 

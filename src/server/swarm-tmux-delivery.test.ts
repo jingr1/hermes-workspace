@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  buildHermesTmuxTuiCommand,
-} from './swarm-tmux-delivery'
+import { buildHermesTmuxTuiCommand } from './swarm-tmux-delivery'
 
 describe('buildHermesTmuxTuiCommand runtime model injection', () => {
   it('injects launch-scoped HERMES_MODEL env without mutating profile config', () => {

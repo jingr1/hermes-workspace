@@ -1,5 +1,11 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync } from 'node:fs'
+import {
+  appendFileSync,
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+} from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
@@ -20,8 +26,20 @@ export function resolveLanggraphPythonBin(): string {
 
   const workspaceRoot = resolveLanggraphWorkspaceRoot()
   const candidates = [
-    join(workspaceRoot, 'hermes_langgraph_orchestrator', '.venv', 'bin', 'python'),
-    join(workspaceRoot, 'hermes_langgraph_orchestrator', '.venv', 'bin', 'python3'),
+    join(
+      workspaceRoot,
+      'hermes_langgraph_orchestrator',
+      '.venv',
+      'bin',
+      'python',
+    ),
+    join(
+      workspaceRoot,
+      'hermes_langgraph_orchestrator',
+      '.venv',
+      'bin',
+      'python3',
+    ),
     override || '',
     'python3',
     'python',
@@ -43,19 +61,30 @@ export function resolveLanggraphPythonBin(): string {
   // Last resort: keep the conventional venv path so error messages stay clear.
   return (
     override ||
-    join(workspaceRoot, 'hermes_langgraph_orchestrator', '.venv', 'bin', 'python')
+    join(
+      workspaceRoot,
+      'hermes_langgraph_orchestrator',
+      '.venv',
+      'bin',
+      'python',
+    )
   )
 }
 
 export function langgraphPythonMissingHint(pythonBin: string): string {
-  const orch = join(resolveLanggraphWorkspaceRoot(), 'hermes_langgraph_orchestrator')
+  const orch = join(
+    resolveLanggraphWorkspaceRoot(),
+    'hermes_langgraph_orchestrator',
+  )
   return (
     `LangGraph Python not found at ${pythonBin}. ` +
     `Create the venv: cd ${orch} && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`
   )
 }
 
-function langgraphSpawnEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+function langgraphSpawnEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
   const workspaceRoot = resolveLanggraphWorkspaceRoot()
   const pythonPath = [workspaceRoot, env.PYTHONPATH].filter(Boolean).join(':')
   return { ...env, PYTHONPATH: pythonPath }
@@ -89,14 +118,19 @@ export function spawnLanggraphDetached(
 
   const logDir = join(homedir(), '.hermes', 'logs')
   mkdirSync(logDir, { recursive: true })
-  const missionId = args[args.indexOf('--mission-id') + 1] ?? `lg-${Date.now().toString(36)}`
+  const missionId =
+    args[args.indexOf('--mission-id') + 1] ?? `lg-${Date.now().toString(36)}`
   const logFile = join(logDir, `langgraph-${missionId}.log`)
   const logFd = openSync(logFile, 'a')
-  const child = spawn(python, ['-m', 'hermes_langgraph_orchestrator', ...args], {
-    detached: true,
-    stdio: ['ignore', logFd, logFd],
-    env: langgraphSpawnEnv(env),
-  })
+  const child = spawn(
+    python,
+    ['-m', 'hermes_langgraph_orchestrator', ...args],
+    {
+      detached: true,
+      stdio: ['ignore', logFd, logFd],
+      env: langgraphSpawnEnv(env),
+    },
+  )
   // Detached spawn emits async 'error' on ENOENT — must handle or Node crashes.
   child.on('error', (error) => {
     try {
@@ -133,16 +167,19 @@ export function runLanggraphSync(
       error: langgraphPythonMissingHint(python),
     }
   }
-  const result = spawnSync(python, ['-m', 'hermes_langgraph_orchestrator', ...args], {
-    encoding: 'utf8',
-    maxBuffer: 10 * 1024 * 1024,
-    env: langgraphSpawnEnv(env),
-  })
+  const result = spawnSync(
+    python,
+    ['-m', 'hermes_langgraph_orchestrator', ...args],
+    {
+      encoding: 'utf8',
+      maxBuffer: 10 * 1024 * 1024,
+      env: langgraphSpawnEnv(env),
+    },
+  )
   if (result.error) {
-    const message =
-      result.error.message.includes('ENOENT')
-        ? langgraphPythonMissingHint(python)
-        : result.error.message
+    const message = result.error.message.includes('ENOENT')
+      ? langgraphPythonMissingHint(python)
+      : result.error.message
     return {
       ok: false,
       stdout: result.stdout ?? '',

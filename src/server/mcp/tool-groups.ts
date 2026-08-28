@@ -17,7 +17,11 @@
  * member_work_sync_report NEVER completes a task.
  */
 import { createHash, randomUUID } from 'node:crypto'
-import { getSwarmMission, markMissionAssignmentReviewed, recordMissionCheckpoint } from '../swarm-missions'
+import {
+  getSwarmMission,
+  markMissionAssignmentReviewed,
+  recordMissionCheckpoint,
+} from '../swarm-missions'
 import { createCollabId, getCollabDbPath, insertCollabRow } from '../collab-db'
 import { openSqliteDatabase } from '../sqlite-helper'
 import { listKanbanCards } from '../kanban-backend'
@@ -28,7 +32,12 @@ import type { McpContext, McpResponse } from './mcp-handler'
 
 export type ToolDeps = {
   success: (id: string | number, result: unknown) => McpResponse
-  error: (id: string | number, code: number, message: string, data?: unknown) => McpResponse
+  error: (
+    id: string | number,
+    code: number,
+    message: string,
+    data?: unknown,
+  ) => McpResponse
   codes: {
     INVALID_PARAMS: number
     FORBIDDEN: number
@@ -52,7 +61,8 @@ export async function handleKanbanGet(
       status: (c as Record<string, unknown>).status ?? null,
       assignee: (c as Record<string, unknown>).assignee ?? null,
     })),
-    nextRequiredAction: 'This is a read-only view. Idle agents: wait for dispatch.',
+    nextRequiredAction:
+      'This is a read-only view. Idle agents: wait for dispatch.',
   })
 }
 
@@ -68,17 +78,37 @@ export function handleReviewApprove(
 ): McpResponse {
   const missionId = ctx.token.taskId
   const mission = getSwarmMission(missionId)
-  if (!mission) return deps.error(id, deps.codes.INVALID_PARAMS, `Mission not found: ${missionId}`)
+  if (!mission)
+    return deps.error(
+      id,
+      deps.codes.INVALID_PARAMS,
+      `Mission not found: ${missionId}`,
+    )
 
   // Reviewer may approve someone else's checkpointed assignment. Target comes
   // from params.assignmentId (required) — the reviewer's own token scope is
   // their review assignment, not the reviewed one.
-  const targetId = typeof params?.assignmentId === 'string' ? params.assignmentId : null
-  if (!targetId) return deps.error(id, deps.codes.INVALID_PARAMS, 'Missing assignmentId to approve')
+  const targetId =
+    typeof params?.assignmentId === 'string' ? params.assignmentId : null
+  if (!targetId)
+    return deps.error(
+      id,
+      deps.codes.INVALID_PARAMS,
+      'Missing assignmentId to approve',
+    )
   const target = mission.assignments.find((a) => a.id === targetId)
-  if (!target) return deps.error(id, deps.codes.INVALID_PARAMS, `Assignment not found: ${targetId}`)
+  if (!target)
+    return deps.error(
+      id,
+      deps.codes.INVALID_PARAMS,
+      `Assignment not found: ${targetId}`,
+    )
   if (target.state !== 'checkpointed' && target.state !== 'reviewing') {
-    return deps.error(id, deps.codes.INVALID_PARAMS, `Assignment ${targetId} is ${target.state}, not awaiting review`)
+    return deps.error(
+      id,
+      deps.codes.INVALID_PARAMS,
+      `Assignment ${targetId} is ${target.state}, not awaiting review`,
+    )
   }
 
   const updated = markMissionAssignmentReviewed({
@@ -86,16 +116,21 @@ export function handleReviewApprove(
     assignmentId: targetId,
     reviewerId: ctx.token.participantId,
   })
-  if (!updated) return deps.error(id, deps.codes.INTERNAL_ERROR, 'Failed to mark reviewed')
+  if (!updated)
+    return deps.error(id, deps.codes.INTERNAL_ERROR, 'Failed to mark reviewed')
 
   publishChatEvent('review_decision', {
-    missionId, assignmentId: targetId, outcome: 'approved', reviewerId: ctx.token.participantId,
+    missionId,
+    assignmentId: targetId,
+    outcome: 'approved',
+    reviewerId: ctx.token.participantId,
   })
   return deps.success(id, {
     assignmentId: targetId,
     outcome: 'approved',
     state: 'done',
-    nextRequiredAction: 'Review complete. The pipeline advances downstream stages automatically.',
+    nextRequiredAction:
+      'Review complete. The pipeline advances downstream stages automatically.',
   })
 }
 
@@ -107,16 +142,37 @@ export function handleReviewRequestChanges(
 ): McpResponse {
   const missionId = ctx.token.taskId
   const mission = getSwarmMission(missionId)
-  if (!mission) return deps.error(id, deps.codes.INVALID_PARAMS, `Mission not found: ${missionId}`)
+  if (!mission)
+    return deps.error(
+      id,
+      deps.codes.INVALID_PARAMS,
+      `Mission not found: ${missionId}`,
+    )
 
-  const targetId = typeof params?.assignmentId === 'string' ? params.assignmentId : null
-  if (!targetId) return deps.error(id, deps.codes.INVALID_PARAMS, 'Missing assignmentId')
+  const targetId =
+    typeof params?.assignmentId === 'string' ? params.assignmentId : null
+  if (!targetId)
+    return deps.error(id, deps.codes.INVALID_PARAMS, 'Missing assignmentId')
   const feedback = typeof params?.feedback === 'string' ? params.feedback : null
-  if (!feedback) return deps.error(id, deps.codes.INVALID_PARAMS, 'Missing feedback (required for changes_requested)')
+  if (!feedback)
+    return deps.error(
+      id,
+      deps.codes.INVALID_PARAMS,
+      'Missing feedback (required for changes_requested)',
+    )
   const target = mission.assignments.find((a) => a.id === targetId)
-  if (!target) return deps.error(id, deps.codes.INVALID_PARAMS, `Assignment not found: ${targetId}`)
+  if (!target)
+    return deps.error(
+      id,
+      deps.codes.INVALID_PARAMS,
+      `Assignment not found: ${targetId}`,
+    )
   if (target.state !== 'checkpointed' && target.state !== 'reviewing') {
-    return deps.error(id, deps.codes.INVALID_PARAMS, `Assignment ${targetId} is ${target.state}, not awaiting review`)
+    return deps.error(
+      id,
+      deps.codes.INVALID_PARAMS,
+      `Assignment ${targetId} is ${target.state}, not awaiting review`,
+    )
   }
 
   // changes_requested: record a checkpoint carrying the review outcome; the
@@ -143,13 +199,17 @@ export function handleReviewRequestChanges(
   })
 
   publishChatEvent('review_decision', {
-    missionId, assignmentId: targetId, outcome: 'changes_requested', reviewerId: ctx.token.participantId,
+    missionId,
+    assignmentId: targetId,
+    outcome: 'changes_requested',
+    reviewerId: ctx.token.participantId,
   })
   return deps.success(id, {
     assignmentId: targetId,
     outcome: 'changes_requested',
     state: 'blocked',
-    nextRequiredAction: 'Assignment sent back with feedback. Rework loop dispatch is delivered in 模块 1 review.ts.',
+    nextRequiredAction:
+      'Assignment sent back with feedback. Rework loop dispatch is delivered in 模块 1 review.ts.',
   })
 }
 
@@ -161,28 +221,52 @@ export function handleMessageSend(
   ctx: McpContext,
   deps: ToolDeps,
 ): McpResponse {
-  const roomId = ctx.token.roomId ?? (typeof params?.roomId === 'string' ? params.roomId : null)
-  if (!roomId) return deps.error(id, deps.codes.INVALID_PARAMS, 'No roomId in token scope or params')
-  if (params?.roomId && ctx.token.roomId && params.roomId !== ctx.token.roomId) {
-    return deps.error(id, deps.codes.OWNERSHIP_MISMATCH, 'params.roomId does not match token scope')
+  const roomId =
+    ctx.token.roomId ??
+    (typeof params?.roomId === 'string' ? params.roomId : null)
+  if (!roomId)
+    return deps.error(
+      id,
+      deps.codes.INVALID_PARAMS,
+      'No roomId in token scope or params',
+    )
+  if (
+    params?.roomId &&
+    ctx.token.roomId &&
+    params.roomId !== ctx.token.roomId
+  ) {
+    return deps.error(
+      id,
+      deps.codes.OWNERSHIP_MISMATCH,
+      'params.roomId does not match token scope',
+    )
   }
   const content = typeof params?.content === 'string' ? params.content : null
-  if (!content?.trim()) return deps.error(id, deps.codes.INVALID_PARAMS, 'Missing content')
+  if (!content?.trim())
+    return deps.error(id, deps.codes.INVALID_PARAMS, 'Missing content')
 
   const messageId = createCollabId('msg')
-  insertCollabRow('room_messages', {
-    id: messageId,
-    room_id: roomId,
-    sender_kind: 'agent',
-    sender_participant_id: ctx.token.participantId,
-    sender_name: ctx.token.participantId,
-    content,
-    mentions: JSON.stringify(Array.isArray(params?.mentions) ? params.mentions : []),
-    task_refs: JSON.stringify(Array.isArray(params?.taskRefs) ? params.taskRefs : []),
-    run_id: ctx.token.runId,
-    task_id: ctx.token.taskId,
-    created_at: Date.now(),
-  }, ctx.dbPath)
+  insertCollabRow(
+    'room_messages',
+    {
+      id: messageId,
+      room_id: roomId,
+      sender_kind: 'agent',
+      sender_participant_id: ctx.token.participantId,
+      sender_name: ctx.token.participantId,
+      content,
+      mentions: JSON.stringify(
+        Array.isArray(params?.mentions) ? params.mentions : [],
+      ),
+      task_refs: JSON.stringify(
+        Array.isArray(params?.taskRefs) ? params.taskRefs : [],
+      ),
+      run_id: ctx.token.runId,
+      task_id: ctx.token.taskId,
+      created_at: Date.now(),
+    },
+    ctx.dbPath,
+  )
 
   publishChatEvent('room_message', {
     roomId,
@@ -200,7 +284,9 @@ export function handleMessageSend(
 const REPLAY_WINDOW_MS = 60_000
 
 function payloadHash(payload: unknown): string {
-  return createHash('sha256').update(JSON.stringify(payload ?? null)).digest('hex')
+  return createHash('sha256')
+    .update(JSON.stringify(payload ?? null))
+    .digest('hex')
 }
 
 /** Agenda fingerprint: hash of the mission's current assignment states. */
@@ -218,9 +304,21 @@ export function handleSyncStatus(
 ): McpResponse {
   const missionId = ctx.token.taskId
   const mission = getSwarmMission(missionId)
-  if (!mission) return deps.error(id, deps.codes.INVALID_PARAMS, `Mission not found: ${missionId}`)
-  const assignment = mission.assignments.find((a) => a.id === ctx.token.assignmentId)
-  if (!assignment) return deps.error(id, deps.codes.INVALID_PARAMS, `Assignment not found: ${ctx.token.assignmentId}`)
+  if (!mission)
+    return deps.error(
+      id,
+      deps.codes.INVALID_PARAMS,
+      `Mission not found: ${missionId}`,
+    )
+  const assignment = mission.assignments.find(
+    (a) => a.id === ctx.token.assignmentId,
+  )
+  if (!assignment)
+    return deps.error(
+      id,
+      deps.codes.INVALID_PARAMS,
+      `Assignment not found: ${ctx.token.assignmentId}`,
+    )
 
   // One-shot reportToken, persisted on the run_tokens row (consumed_* cols).
   const reportToken = `rpt_${randomUUID().replace(/-/g, '')}`
@@ -237,12 +335,17 @@ export function handleSyncStatus(
   return deps.success(id, {
     agenda: {
       missionId: mission.id,
-      assignment: { id: assignment.id, state: assignment.state, task: assignment.task },
+      assignment: {
+        id: assignment.id,
+        state: assignment.state,
+        task: assignment.task,
+      },
     },
     agendaFingerprint: fingerprint,
     reportToken,
     expiresInMs: REPLAY_WINDOW_MS,
-    nextRequiredAction: 'Report within 60s via member_work_sync_report with this agendaFingerprint + reportToken.',
+    nextRequiredAction:
+      'Report within 60s via member_work_sync_report with this agendaFingerprint + reportToken.',
     nextRequiredToolCall: {
       tool: 'member_work_sync_report',
       params: { agendaFingerprint: fingerprint, reportToken },
@@ -258,36 +361,59 @@ export function handleSyncReport(
 ): McpResponse {
   const state = typeof params?.state === 'string' ? params.state : null
   if (!state || !['on_track', 'stuck', 'idle'].includes(state)) {
-    return deps.error(id, deps.codes.INVALID_PARAMS, "state must be one of: on_track | stuck | idle")
+    return deps.error(
+      id,
+      deps.codes.INVALID_PARAMS,
+      'state must be one of: on_track | stuck | idle',
+    )
   }
-  const fingerprint = typeof params?.agendaFingerprint === 'string' ? params.agendaFingerprint : null
-  const reportToken = typeof params?.reportToken === 'string' ? params.reportToken : null
+  const fingerprint =
+    typeof params?.agendaFingerprint === 'string'
+      ? params.agendaFingerprint
+      : null
+  const reportToken =
+    typeof params?.reportToken === 'string' ? params.reportToken : null
   if (!fingerprint || !reportToken) {
-    return deps.error(id, deps.codes.INVALID_PARAMS, 'Missing agendaFingerprint or reportToken', {
-      nextRequiredToolCall: { tool: 'member_work_sync_status', params: {} },
-    })
+    return deps.error(
+      id,
+      deps.codes.INVALID_PARAMS,
+      'Missing agendaFingerprint or reportToken',
+      {
+        nextRequiredToolCall: { tool: 'member_work_sync_status', params: {} },
+      },
+    )
   }
 
   // Fingerprint check first: stale agenda → reject with re-fetch guidance.
   const current = agendaFingerprint(ctx.token.taskId)
   if (fingerprint !== current) {
-    return deps.error(id, deps.codes.INVALID_PARAMS, 'agendaFingerprint stale: agenda changed, re-fetch before reporting', {
-      nextRequiredAction: '议程已变更，请重新获取后再汇报',
-      nextRequiredToolCall: { tool: 'member_work_sync_status', params: {} },
-    })
+    return deps.error(
+      id,
+      deps.codes.INVALID_PARAMS,
+      'agendaFingerprint stale: agenda changed, re-fetch before reporting',
+      {
+        nextRequiredAction: '议程已变更，请重新获取后再汇报',
+        nextRequiredToolCall: { tool: 'member_work_sync_status', params: {} },
+      },
+    )
   }
 
   const db = openSqliteDatabase(ctx.dbPath ?? getCollabDbPath(), false)
   let row: Record<string, unknown> | undefined
   try {
-    const rows = db.prepare(
-      'SELECT consumed_at, consumed_payload_hash, last_response_json FROM run_tokens WHERE token_hash = ?',
-    ).all(ctx.token.tokenHash)
+    const rows = db
+      .prepare(
+        'SELECT consumed_at, consumed_payload_hash, last_response_json FROM run_tokens WHERE token_hash = ?',
+      )
+      .all(ctx.token.tokenHash)
     row = rows[0]
   } finally {
     db.close()
   }
-  const stored = typeof row.consumed_payload_hash === 'string' ? row.consumed_payload_hash : null
+  const stored =
+    typeof row.consumed_payload_hash === 'string'
+      ? row.consumed_payload_hash
+      : null
   if (stored !== `pending:${reportToken}` && stored !== `used:${reportToken}`) {
     return deps.error(id, deps.codes.INVALID_PARAMS, 'Unknown reportToken', {
       nextRequiredToolCall: { tool: 'member_work_sync_status', params: {} },
@@ -295,23 +421,37 @@ export function handleSyncReport(
   }
 
   const thisPayload = payloadHash({ state, note: params?.note ?? null })
-  const consumedAt = typeof row.consumed_at === 'number' ? row.consumed_at : null
+  const consumedAt =
+    typeof row.consumed_at === 'number' ? row.consumed_at : null
 
   if (stored === `used:${reportToken}`) {
     // Already consumed: replay if same payload within window, else reject.
-    const withinWindow = consumedAt !== null && Date.now() - consumedAt <= REPLAY_WINDOW_MS
+    const withinWindow =
+      consumedAt !== null && Date.now() - consumedAt <= REPLAY_WINDOW_MS
     // The request payload hash travels inside the last_response_json envelope.
-    const envelope = typeof row.last_response_json === 'string'
-      ? JSON.parse(row.last_response_json) as { ph?: string; response?: unknown }
-      : null
+    const envelope =
+      typeof row.last_response_json === 'string'
+        ? (JSON.parse(row.last_response_json) as {
+            ph?: string
+            response?: unknown
+          })
+        : null
     if (withinWindow && envelope?.ph === thisPayload) {
-      return deps.success(id, { ...(envelope.response as Record<string, unknown>), replayed: true })
+      return deps.success(id, {
+        ...(envelope.response as Record<string, unknown>),
+        replayed: true,
+      })
     }
-    return deps.error(id, deps.codes.FORBIDDEN, withinWindow
-      ? 'reportToken replayed with different payload — rejected as possible cross-talk'
-      : 'reportToken expired', {
-      nextRequiredToolCall: { tool: 'member_work_sync_status', params: {} },
-    })
+    return deps.error(
+      id,
+      deps.codes.FORBIDDEN,
+      withinWindow
+        ? 'reportToken replayed with different payload — rejected as possible cross-talk'
+        : 'reportToken expired',
+      {
+        nextRequiredToolCall: { tool: 'member_work_sync_status', params: {} },
+      },
+    )
   }
 
   // First use: consume. member_work_sync_report NEVER closes a task — it
@@ -321,14 +461,24 @@ export function handleSyncReport(
     state,
     runId: ctx.token.runId,
     ...(state === 'stuck'
-      ? { nextRequiredAction: 'If blocked on the task itself, call task_complete with blocker.' }
+      ? {
+          nextRequiredAction:
+            'If blocked on the task itself, call task_complete with blocker.',
+        }
       : {}),
   }
   const writeDb = openSqliteDatabase(ctx.dbPath ?? getCollabDbPath(), false)
   try {
-    writeDb.prepare(
-      'UPDATE run_tokens SET consumed_at = ?, consumed_payload_hash = ?, last_response_json = ? WHERE token_hash = ?',
-    ).run(Date.now(), `used:${reportToken}`, JSON.stringify({ ph: thisPayload, response }), ctx.token.tokenHash)
+    writeDb
+      .prepare(
+        'UPDATE run_tokens SET consumed_at = ?, consumed_payload_hash = ?, last_response_json = ? WHERE token_hash = ?',
+      )
+      .run(
+        Date.now(),
+        `used:${reportToken}`,
+        JSON.stringify({ ph: thisPayload, response }),
+        ctx.token.tokenHash,
+      )
   } finally {
     writeDb.close()
   }

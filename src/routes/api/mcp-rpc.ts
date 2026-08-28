@@ -1,8 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../server/auth-middleware'
-import {  handleMcpRequest } from '../../server/mcp/mcp-handler'
-import type {McpRequest} from '../../server/mcp/mcp-handler';
+import { handleMcpRequest } from '../../server/mcp/mcp-handler'
+import type { McpRequest } from '../../server/mcp/mcp-handler'
 
 /**
  * Agent-facing MCP JSON-RPC endpoint (plan P1.1 «先通电»).
@@ -37,10 +37,17 @@ export const Route = createFileRoute('/api/mcp-rpc')({
           // proxies/monitors see them. Token responses are never cacheable.
           const rpcError = response.error
           const httpStatus =
-            rpcError?.code === -32001 ? 401
-            : rpcError?.code === -32003 || rpcError?.code === -32004 || rpcError?.code === -32005 ? 403
-            : 200
-          if (rpcError && (rpcError.code === -32001 || rpcError.code === -32003)) {
+            rpcError?.code === -32001
+              ? 401
+              : rpcError?.code === -32003 ||
+                  rpcError?.code === -32004 ||
+                  rpcError?.code === -32005
+                ? 403
+                : 200
+          if (
+            rpcError &&
+            (rpcError.code === -32001 || rpcError.code === -32003)
+          ) {
             // Audit trail for token-probe / unauthorized attempts.
             console.warn('[api/mcp-rpc] auth-class failure', {
               code: rpcError.code,
@@ -56,7 +63,10 @@ export const Route = createFileRoute('/api/mcp-rpc')({
           return json(
             {
               jsonrpc: '2.0',
-              id: typeof body.id === 'string' || typeof body.id === 'number' ? body.id : 'internal-error',
+              id:
+                typeof body.id === 'string' || typeof body.id === 'number'
+                  ? body.id
+                  : 'internal-error',
               error: {
                 code: -32603,
                 message: error instanceof Error ? error.message : String(error),

@@ -22,7 +22,9 @@ import { createFileRoute } from '@tanstack/react-router'
 import { isAuthenticated } from '../../server/auth-middleware'
 
 const HERMES_HOME =
-  process.env.HERMES_HOME ?? process.env.CLAUDE_HOME ?? path.join(os.homedir(), '.hermes')
+  process.env.HERMES_HOME ??
+  process.env.CLAUDE_HOME ??
+  path.join(os.homedir(), '.hermes')
 
 type ModelEntry = {
   id: string
@@ -45,7 +47,9 @@ function readModelsJson(): ModelEntry[] {
           return {
             id,
             name: id.split('/').pop() ?? id,
-            provider: id.includes('/') ? (id.split('/')[0] ?? 'model') : 'model',
+            provider: id.includes('/')
+              ? (id.split('/')[0] ?? 'model')
+              : 'model',
           }
         }
         if (!entry || typeof entry !== 'object') return null

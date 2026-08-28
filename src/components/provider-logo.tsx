@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 
-const CDN_BASE =
-  'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-png/light'
+const CDN_BASE = 'https://cdn.jsdelivr.net/npm/@lobehub/icons-static-png/light'
 
 // Provider IDs → lobehub CDN filenames (light variant; inverted in dark mode)
 const CDN_FILE_MAP: Record<string, string> = {
@@ -69,9 +68,7 @@ export function ProviderLogo({
     )
   }
 
-  const src = cdnFile
-    ? `${CDN_BASE}/${cdnFile}`
-    : `/providers/${localFile}`
+  const src = cdnFile ? `${CDN_BASE}/${cdnFile}` : `/providers/${localFile}`
 
   return (
     <img

@@ -51,10 +51,16 @@ export function registerPid(entry: PidRegistryEntry, root?: string): void {
 }
 
 export function unregisterPid(runId: string, root?: string): void {
-  writeAll(readAll(root).filter((e) => e.runId !== runId), root)
+  writeAll(
+    readAll(root).filter((e) => e.runId !== runId),
+    root,
+  )
 }
 
-export function lookupPid(runId: string, root?: string): PidRegistryEntry | null {
+export function lookupPid(
+  runId: string,
+  root?: string,
+): PidRegistryEntry | null {
   return readAll(root).find((e) => e.runId === runId) ?? null
 }
 
@@ -78,7 +84,10 @@ export function isProcessGroupAlive(pid: number): boolean {
 }
 
 /** Kill the entire process group. Returns true if a signal was delivered. */
-export function killProcessGroup(pid: number, signal: NodeJS.Signals = 'SIGKILL'): boolean {
+export function killProcessGroup(
+  pid: number,
+  signal: NodeJS.Signals = 'SIGKILL',
+): boolean {
   try {
     process.kill(-pid, signal)
     return true

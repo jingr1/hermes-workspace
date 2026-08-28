@@ -11,7 +11,8 @@ import {
 const ANTHROPIC_CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e'
 const ANTHROPIC_AUTHORIZE_URL = 'https://claude.ai/oauth/authorize'
 const ANTHROPIC_TOKEN_URL = 'https://console.anthropic.com/v1/oauth/token'
-const ANTHROPIC_REDIRECT_URI = 'https://console.anthropic.com/oauth/code/callback'
+const ANTHROPIC_REDIRECT_URI =
+  'https://console.anthropic.com/oauth/code/callback'
 const ANTHROPIC_SCOPES = 'org:create_api_key user:profile user:inference'
 const ANTHROPIC_DEFAULT_BASE_URL = 'https://api.anthropic.com'
 const CLAUDE_OAUTH_PROVIDER = 'claude-oauth'
@@ -33,12 +34,17 @@ const sessions = new Map<string, AnthropicSession>()
 function cleanupExpiredSessions(): void {
   const now = Date.now()
   sessions.forEach((session, id) => {
-    if (now - session.createdAt > POLL_MAX_DURATION + 60_000) sessions.delete(id)
+    if (now - session.createdAt > POLL_MAX_DURATION + 60_000)
+      sessions.delete(id)
   })
 }
 
 function base64Url(input: Buffer): string {
-  return input.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  return input
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
 }
 
 function makeCodeVerifier(): string {
@@ -51,11 +57,17 @@ function makeCodeChallenge(verifier: string): string {
 
 function saveAnthropicOAuthTokens(
   profile: string,
-  tokenData: { access_token: string; refresh_token?: string; expires_in?: number; token_type?: string },
+  tokenData: {
+    access_token: string
+    refresh_token?: string
+    expires_in?: number
+    token_type?: string
+  },
 ): void {
   const accessToken = String(tokenData.access_token || '').trim()
   const refreshToken = String(tokenData.refresh_token || '').trim()
-  if (!accessToken) throw new Error('Anthropic token response missing access_token')
+  if (!accessToken)
+    throw new Error('Anthropic token response missing access_token')
 
   const expiresIn = Number(tokenData.expires_in || 3600)
   const expiresAtMs = Date.now() + Math.max(60, expiresIn) * 1000
@@ -91,7 +103,11 @@ function saveAnthropicOAuthTokens(
   }
   auth.credential_pool[CLAUDE_OAUTH_PROVIDER] = [poolEntry]
   auth.credential_pool[ANTHROPIC_RUNTIME_PROVIDER] = [
-    { ...poolEntry, id: `${ANTHROPIC_RUNTIME_PROVIDER}-${Date.now()}`, label: 'Anthropic Claude OAuth' },
+    {
+      ...poolEntry,
+      id: `${ANTHROPIC_RUNTIME_PROVIDER}-${Date.now()}`,
+      label: 'Anthropic Claude OAuth',
+    },
   ]
   saveAuthJson(filePath, auth)
 }
@@ -125,7 +141,11 @@ export function startAnthropicLogin(profile: string): {
     state,
     createdAt: Date.now(),
   })
-  return { session_id: sessionId, authorization_url: authorizeUrl, expires_in: Math.floor(POLL_MAX_DURATION / 1000) }
+  return {
+    session_id: sessionId,
+    authorization_url: authorizeUrl,
+    expires_in: Math.floor(POLL_MAX_DURATION / 1000),
+  }
 }
 
 export async function submitAnthropicCode(
@@ -143,7 +163,8 @@ export async function submitAnthropicCode(
   }
 
   const [code, receivedState = ''] = rawCode.trim().split('#', 2)
-  if (!code.trim()) return { status: 'error', error: 'Authorization code is required' }
+  if (!code.trim())
+    return { status: 'error', error: 'Authorization code is required' }
   if (receivedState && receivedState !== session.state) {
     session.status = 'error'
     session.error = 'OAuth state mismatch'
@@ -153,7 +174,10 @@ export async function submitAnthropicCode(
   try {
     const res = await fetch(ANTHROPIC_TOKEN_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'User-Agent': 'hermes-workspace/1.0' },
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'hermes-workspace/1.0',
+      },
       body: JSON.stringify({
         grant_type: 'authorization_code',
         client_id: ANTHROPIC_CLIENT_ID,
@@ -166,9 +190,16 @@ export async function submitAnthropicCode(
     })
     if (!res.ok) {
       const text = await res.text().catch(() => '')
-      throw new Error(`Token exchange failed: ${res.status}${text ? ` ${text}` : ''}`)
+      throw new Error(
+        `Token exchange failed: ${res.status}${text ? ` ${text}` : ''}`,
+      )
     }
-    const tokenData = (await res.json()) as { access_token: string; refresh_token?: string; expires_in?: number; token_type?: string }
+    const tokenData = (await res.json()) as {
+      access_token: string
+      refresh_token?: string
+      expires_in?: number
+      token_type?: string
+    }
     saveAnthropicOAuthTokens(session.profile, tokenData)
     session.status = 'approved'
     return { status: 'approved', error: null }
@@ -179,7 +210,9 @@ export async function submitAnthropicCode(
   }
 }
 
-export function getAnthropicSessionStatus(sessionId: string): { status: string; error: string | null } | null {
+export function getAnthropicSessionStatus(
+  sessionId: string,
+): { status: string; error: string | null } | null {
   const session = sessions.get(sessionId)
   if (!session) return null
   return { status: session.status, error: session.error || null }

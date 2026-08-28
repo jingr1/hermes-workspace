@@ -1,24 +1,32 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { newestCheckpointFromMessages, parseSwarmCheckpoint, readRuntimeJson, type ParsedSwarmCheckpoint } from './swarm-checkpoints'
+import {
+  newestCheckpointFromMessages,
+  parseSwarmCheckpoint,
+  readRuntimeJson,
+  type ParsedSwarmCheckpoint,
+} from './swarm-checkpoints'
 import { readWorkerMessages } from './swarm-chat-reader'
 import { buildHandoff, writeHandoff } from './handoff'
 import { getSwarmProfilePath } from './swarm-foundation'
 import { harvestSwarmWorkerCheckpoint } from './swarm-harvest'
-import { getSwarmMission, recordMissionCheckpoint, type SwarmMission } from './swarm-missions'
+import {
+  getSwarmMission,
+  recordMissionCheckpoint,
+  type SwarmMission,
+} from './swarm-missions'
 import {
   checkpointFromRuntimeSnapshot,
   readRuntimeCheckpointSnapshot,
 } from '../routes/api/swarm-dispatch'
 
-const TERMINAL_CHECKPOINT_LABELS = new Set<ParsedSwarmCheckpoint['stateLabel']>([
-  'DONE',
-  'BLOCKED',
-  'HANDOFF',
-  'NEEDS_INPUT',
-])
+const TERMINAL_CHECKPOINT_LABELS = new Set<ParsedSwarmCheckpoint['stateLabel']>(
+  ['DONE', 'BLOCKED', 'HANDOFF', 'NEEDS_INPUT'],
+)
 
-function parseCheckpointFromRuntimeText(value: unknown): ParsedSwarmCheckpoint | null {
+function parseCheckpointFromRuntimeText(
+  value: unknown,
+): ParsedSwarmCheckpoint | null {
   if (typeof value !== 'string' || !value.trim()) return null
   const stripped = value.replace(/```/g, '')
   const parsed = parseSwarmCheckpoint(stripped)
@@ -26,9 +34,13 @@ function parseCheckpointFromRuntimeText(value: unknown): ParsedSwarmCheckpoint |
   return parsed
 }
 
-function assignmentNeedsSync(assignment: SwarmMission['assignments'][number]): boolean {
-  if (assignment.state === 'done' || assignment.state === 'cancelled') return false
-  if (assignment.state === 'checkpointed' && !assignment.reviewRequired) return false
+function assignmentNeedsSync(
+  assignment: SwarmMission['assignments'][number],
+): boolean {
+  if (assignment.state === 'done' || assignment.state === 'cancelled')
+    return false
+  if (assignment.state === 'checkpointed' && !assignment.reviewRequired)
+    return false
   return true
 }
 
@@ -37,7 +49,10 @@ function readRuntimeRecord(profilePath: string): Record<string, unknown> {
   return existsSync(runtimePath) ? readRuntimeJson(runtimePath) : {}
 }
 
-async function writeHandoffForCheckpoint(workerId: string, checkpoint: ParsedSwarmCheckpoint): Promise<void> {
+async function writeHandoffForCheckpoint(
+  workerId: string,
+  checkpoint: ParsedSwarmCheckpoint,
+): Promise<void> {
   const profilePath = getSwarmProfilePath(workerId)
   const current = readRuntimeRecord(profilePath)
   const handoff = await buildHandoff(workerId, checkpoint, current)
@@ -124,8 +139,12 @@ export async function syncSwarmMissionCheckpoints(missionId: string): Promise<{
   return { mission: getSwarmMission(missionId), synced }
 }
 
-export function missionAssignmentsSettled(mission: SwarmMission | null): boolean {
+export function missionAssignmentsSettled(
+  mission: SwarmMission | null,
+): boolean {
   if (!mission) return true
   if (mission.state === 'complete' || mission.state === 'cancelled') return true
-  return mission.assignments.every((assignment) => !assignmentNeedsSync(assignment))
+  return mission.assignments.every(
+    (assignment) => !assignmentNeedsSync(assignment),
+  )
 }

@@ -85,7 +85,10 @@ export async function revealLocalPath(targetPath: string): Promise<void> {
   }
   const platform = os.platform()
   if (platform === 'darwin') {
-    spawn('open', ['-R', targetPath], { detached: true, stdio: 'ignore' }).unref()
+    spawn('open', ['-R', targetPath], {
+      detached: true,
+      stdio: 'ignore',
+    }).unref()
     return
   }
   if (platform === 'win32') {

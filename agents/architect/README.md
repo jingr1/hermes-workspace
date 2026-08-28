@@ -19,15 +19,19 @@ Modes: design, autoresearch
 - Parallel-dispatching developer and writer in the same step
 
 ## Tools
+
 terminal, file, web, session_search, skills, todo
 
 ## Skills
+
 architect-core, gstack-for-hermes, llm-wiki, writing-plans, requesting-code-review, codebase-inspection, architecture-diagram, brainstorming, autoresearch, autoresearch-execute
 
 ## MCP servers
+
 none (brain-first via `llm-wiki` skill + `WIKI_PATH`)
 
 ## Plugins
+
 none
 
 ## Mode split

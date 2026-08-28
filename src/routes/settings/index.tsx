@@ -18,7 +18,7 @@ import type { LoaderStyle } from '@/hooks/use-chat-settings'
 import type { BrailleSpinnerPreset } from '@/components/ui/braille-spinner'
 import type { ThemeId } from '@/lib/theme'
 import type { SettingsNavId } from '@/components/settings/settings-sidebar'
-import type {LocaleId} from '@/lib/i18n';
+import type { LocaleId } from '@/lib/i18n'
 import { GROQ_STT_MODELS, STT_PROVIDER_OPTIONS } from '@/lib/stt-config'
 import {
   SETTINGS_NAV_ITEMS,
@@ -30,7 +30,7 @@ import { usePageTitle } from '@/hooks/use-page-title'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { useSettings } from '@/hooks/use-settings'
-import { LOCALE_LABELS,  getLocale, setLocale } from '@/lib/i18n'
+import { LOCALE_LABELS, getLocale, setLocale } from '@/lib/i18n'
 import { THEMES, getTheme, isDarkTheme, setTheme } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import {
@@ -161,7 +161,7 @@ const THEME_PREVIEWS: Record<
     accent: '#b98a44',
     text: '#1a1f26',
   },
-  'matrix': {
+  matrix: {
     bg: '#020804',
     panel: '#07130A',
     border: 'rgba(0,255,65,0.28)',
@@ -182,7 +182,7 @@ const THEME_PREVIEWS: Record<
     accent: '#3b82f6',
     text: '#1F2328',
   },
-  'scifi': {
+  scifi: {
     bg: '#060b18',
     panel: '#0a1628',
     border: '#1a3a5c',
@@ -407,7 +407,8 @@ function SettingsRoute() {
                         value={settings.interfaceFont}
                         onChange={(event) =>
                           updateSettings({
-                            interfaceFont: event.target.value as typeof settings.interfaceFont,
+                            interfaceFont: event.target
+                              .value as typeof settings.interfaceFont,
                           })
                         }
                         className="w-full rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-900 outline-none"
@@ -426,7 +427,8 @@ function SettingsRoute() {
                         value={settings.interfaceDensity}
                         onChange={(event) =>
                           updateSettings({
-                            interfaceDensity: event.target.value as typeof settings.interfaceDensity,
+                            interfaceDensity: event.target
+                              .value as typeof settings.interfaceDensity,
                           })
                         }
                         className="w-full rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-primary-900 outline-none"
@@ -1128,7 +1130,9 @@ function ClaudeConfigSection({
     try {
       const res = await fetch('/api/models')
       if (res.ok) {
-        const data = (await res.json()) as { models?: Array<{ id: string; provider?: string }> }
+        const data = (await res.json()) as {
+          models?: Array<{ id: string; provider?: string }>
+        }
         const filtered = (data.models || [])
           .filter((m) => m.provider === provider)
           .map((m) => ({ id: m.id, description: '' }))
@@ -1665,7 +1669,9 @@ function ClaudeConfigSection({
                 value={(sttGroq.model as string) || GROQ_STT_MODELS[0]}
                 onChange={(e) =>
                   void saveConfig({
-                    config: { stt: { groq: { ...sttGroq, model: e.target.value } } },
+                    config: {
+                      stt: { groq: { ...sttGroq, model: e.target.value } },
+                    },
                   })
                 }
                 className={selectClassName}

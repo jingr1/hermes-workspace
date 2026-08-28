@@ -14,9 +14,9 @@ describe('session-model-store', () => {
       .getState()
       .setModel(PENDING_SESSION_MODEL_KEY, 'deepseek/deepseek-v4-flash')
 
-    expect(useSessionModelStore.getState().models[PENDING_SESSION_MODEL_KEY]).toBe(
-      'deepseek/deepseek-v4-flash',
-    )
+    expect(
+      useSessionModelStore.getState().models[PENDING_SESSION_MODEL_KEY],
+    ).toBe('deepseek/deepseek-v4-flash')
   })
 
   it('transfers a pending pick onto the concrete session id', () => {

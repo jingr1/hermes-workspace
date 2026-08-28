@@ -227,8 +227,15 @@ function canResetToRemote(repoPath: string, remoteRef: string): boolean {
   return Boolean(git(['rev-parse', '--verify', remoteRef], repoPath, 10_000))
 }
 
-function branchDivergence(repoPath: string, remoteRef: string): { ahead: number; behind: number } | null {
-  const raw = git(['rev-list', '--left-right', '--count', `HEAD...${remoteRef}`], repoPath, 10_000)
+function branchDivergence(
+  repoPath: string,
+  remoteRef: string,
+): { ahead: number; behind: number } | null {
+  const raw = git(
+    ['rev-list', '--left-right', '--count', `HEAD...${remoteRef}`],
+    repoPath,
+    10_000,
+  )
   if (!raw) return null
   const [aheadRaw, behindRaw] = raw.split(/\s+/)
   const ahead = Number(aheadRaw)
@@ -367,7 +374,10 @@ export function readWorkspaceUpdateStatus(
   const remoteRef = `origin/${branch || 'main'}`
   const divergence = latestHead ? branchDivergence(gitRepo, remoteRef) : null
   const updateAvailable = Boolean(
-    supportedBranch && currentHead && latestHead && updateAvailableFromDivergence(divergence, currentHead !== latestHead),
+    supportedBranch &&
+    currentHead &&
+    latestHead &&
+    updateAvailableFromDivergence(divergence, currentHead !== latestHead),
   )
   const canSync = updateAvailable ? canResetToRemote(gitRepo, remoteRef) : true
   const ff = updateAvailable ? canFastForward(gitRepo, remoteRef) : true
@@ -432,7 +442,9 @@ export function readAgentUpdateStatus(): ProductUpdateStatus {
   const repoPath = agentRepoPath()
   const repoHermes = repoPath ? join(repoPath, 'venv', 'bin', 'hermes') : null
   const path =
-    repoHermes && existsSync(repoHermes) ? repoHermes : exec('which', ['hermes'])
+    repoHermes && existsSync(repoHermes)
+      ? repoHermes
+      : exec('which', ['hermes'])
   const version =
     (path ? exec(path, ['--version'], { timeout: 10_000 }) : null)?.split(
       '\n',
@@ -472,7 +484,10 @@ export function readAgentUpdateStatus(): ProductUpdateStatus {
   const dirty = isDirty(repoPath)
   const divergence = remoteRef ? branchDivergence(repoPath, remoteRef) : null
   const updateAvailable = Boolean(
-    currentHead && latestHead && remoteRef && updateAvailableFromDivergence(divergence, currentHead !== latestHead),
+    currentHead &&
+    latestHead &&
+    remoteRef &&
+    updateAvailableFromDivergence(divergence, currentHead !== latestHead),
   )
   const canSync = remoteRef ? canResetToRemote(repoPath, remoteRef) : false
   const ff = remoteRef ? canFastForward(repoPath, remoteRef) : false
@@ -660,7 +675,11 @@ export async function applyAgentUpdate(): Promise<ApplyUpdateResult> {
   output.push(syncRepoToRemote(before.repoPath, remoteRef))
 
   const after = readAgentUpdateStatus()
-  const codeChanged = Boolean(before.currentHead && after.currentHead && before.currentHead !== after.currentHead)
+  const codeChanged = Boolean(
+    before.currentHead &&
+    after.currentHead &&
+    before.currentHead !== after.currentHead,
+  )
   let workerRestart: RestartActiveSwarmWorkersResult | undefined
 
   if (codeChanged && before.repoPath) {

@@ -1,6 +1,10 @@
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { Cancel01Icon, Chatting01Icon, Settings01Icon } from '@hugeicons/core-free-icons'
+import {
+  Cancel01Icon,
+  Chatting01Icon,
+  Settings01Icon,
+} from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { AgentProgress } from '@/components/agent-view/agent-progress'
 import { PixelAvatar } from '@/components/agent-swarm/pixel-avatar'
@@ -10,16 +14,15 @@ import { cn } from '@/lib/utils'
 const ORCHESTRATOR_NAME_KEY = 'operations:orchestrator:name'
 const DEFAULT_ORCHESTRATOR_NAME = 'Main Agent'
 
-export function OrchestratorCard({
-  totalAgents,
-}: {
-  totalAgents: number
-}) {
+export function OrchestratorCard({ totalAgents }: { totalAgents: number }) {
   const navigate = useNavigate()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [orchestratorName, setOrchestratorName] = useState(() => {
     if (typeof window === 'undefined') return DEFAULT_ORCHESTRATOR_NAME
-    return window.localStorage.getItem(ORCHESTRATOR_NAME_KEY) || DEFAULT_ORCHESTRATOR_NAME
+    return (
+      window.localStorage.getItem(ORCHESTRATOR_NAME_KEY) ||
+      DEFAULT_ORCHESTRATOR_NAME
+    )
   })
   const [draftName, setDraftName] = useState(orchestratorName)
 
@@ -110,7 +113,11 @@ export function OrchestratorCard({
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-start gap-3">
                 <div className="flex size-11 items-center justify-center rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-accent)]">
-                  <HugeiconsIcon icon={Settings01Icon} size={20} strokeWidth={1.8} />
+                  <HugeiconsIcon
+                    icon={Settings01Icon}
+                    size={20}
+                    strokeWidth={1.8}
+                  />
                 </div>
                 <div>
                   <h2 className="text-xl font-semibold text-[var(--theme-text)]">
@@ -127,7 +134,11 @@ export function OrchestratorCard({
                 className="inline-flex size-10 items-center justify-center rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card2)] text-[var(--theme-muted)] transition-colors hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent-strong)]"
                 aria-label="Close orchestrator settings"
               >
-                <HugeiconsIcon icon={Cancel01Icon} size={18} strokeWidth={1.8} />
+                <HugeiconsIcon
+                  icon={Cancel01Icon}
+                  size={18}
+                  strokeWidth={1.8}
+                />
               </button>
             </div>
 
@@ -144,7 +155,11 @@ export function OrchestratorCard({
             </label>
 
             <div className="mt-6 flex items-center justify-end gap-3">
-              <Button type="button" variant="secondary" onClick={() => setSettingsOpen(false)}>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setSettingsOpen(false)}
+              >
                 Close
               </Button>
               <Button type="button" onClick={saveSettings}>

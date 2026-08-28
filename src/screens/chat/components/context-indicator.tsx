@@ -179,7 +179,10 @@ function ContextIndicatorComponent({
               cx="12"
               cy="12"
               r={RING_RADIUS}
-              className={cn('fill-none stroke-[3] transition-[stroke-dashoffset] duration-500 ease-out', ringStroke)}
+              className={cn(
+                'fill-none stroke-[3] transition-[stroke-dashoffset] duration-500 ease-out',
+                ringStroke,
+              )}
               strokeLinecap="round"
               strokeDasharray={String(RING_CIRCUMFERENCE)}
               strokeDashoffset={String(ringOffset)}
@@ -196,9 +199,7 @@ function ContextIndicatorComponent({
         role="tooltip"
         className={cn(
           'pointer-events-none absolute bottom-[calc(100%+8px)] right-0 z-50 min-w-[240px] rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-left shadow-lg transition-all duration-150 dark:border-neutral-700 dark:bg-neutral-900',
-          tooltipOpen
-            ? 'translate-y-0 opacity-100'
-            : 'translate-y-1 opacity-0',
+          tooltipOpen ? 'translate-y-0 opacity-100' : 'translate-y-1 opacity-0',
         )}
       >
         <div className="mb-1.5 text-[11px] font-semibold text-neutral-900 dark:text-neutral-100">

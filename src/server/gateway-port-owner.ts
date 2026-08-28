@@ -16,7 +16,9 @@ import { resolveProfileHermesHome } from './profiles-browser'
 
 function readAliveGatewayPid(hermesHome: string): number | null {
   try {
-    const raw = fs.readFileSync(path.join(hermesHome, 'gateway.pid'), 'utf-8').trim()
+    const raw = fs
+      .readFileSync(path.join(hermesHome, 'gateway.pid'), 'utf-8')
+      .trim()
     if (!raw) return null
     let pid: number | null = null
     if (/^\d+$/.test(raw)) {
@@ -38,7 +40,8 @@ function readAliveGatewayPid(hermesHome: string): number | null {
 const LISTEN_CACHE_MS = 250
 let listenCache: { at: number; inodesByPort: Map<number, Set<string>> } | null =
   null
-let pidCache: { at: number; pidByPort: Map<number, number | null> } | null = null
+let pidCache: { at: number; pidByPort: Map<number, number | null> } | null =
+  null
 let linuxProcAvailable: boolean | null = null
 
 function hasLinuxProcNet(): boolean {
@@ -160,7 +163,11 @@ export function isPortInUse(port: number): boolean {
 
 export function pidListeningOnPort(port: number): number | null {
   const now = Date.now()
-  if (pidCache && now - pidCache.at < LISTEN_CACHE_MS && pidCache.pidByPort.has(port)) {
+  if (
+    pidCache &&
+    now - pidCache.at < LISTEN_CACHE_MS &&
+    pidCache.pidByPort.has(port)
+  ) {
     return pidCache.pidByPort.get(port) ?? null
   }
 

@@ -148,7 +148,9 @@ async function vacateForeignOccupant(
   }
 }
 
-export async function probeProfileGateway(profileName: string): Promise<boolean> {
+export async function probeProfileGateway(
+  profileName: string,
+): Promise<boolean> {
   const port = resolveProfileGatewayPort(profileName)
   const name = (profileName || 'default').trim() || 'default'
   if (!profileOwnsPort(name, port)) return false
@@ -171,7 +173,9 @@ export function getGatewayPoolSnapshot(): Array<PooledGateway> {
 export async function getGatewayPoolStatus(): Promise<Array<PooledGateway>> {
   const snapshot = getGatewayPoolSnapshot()
   for (const entry of snapshot) {
-    entry.state = profileOwnsPort(entry.profile, entry.port) ? 'healthy' : 'stopped'
+    entry.state = profileOwnsPort(entry.profile, entry.port)
+      ? 'healthy'
+      : 'stopped'
   }
   return snapshot
 }
@@ -181,7 +185,10 @@ async function applyRoute(url: string): Promise<void> {
   applyProfileGatewayRoute(url)
 }
 
-async function applyRouteIfActive(profileName: string, url: string): Promise<void> {
+async function applyRouteIfActive(
+  profileName: string,
+  url: string,
+): Promise<void> {
   const { shouldApplyGatewayRoute } = await import('./gateway-lifecycle')
   if (!shouldApplyGatewayRoute(profileName, getActiveProfileName())) return
   await applyRoute(url)
@@ -231,7 +238,11 @@ async function ensureProfileGatewayLocked(
     if (occupant && occupant.profile !== name) {
       await vacateForeignOccupant(port, name)
     }
-    if (!profileOwnsPort(name, port) && isPortInUse(port) && !identifyPortOccupant(port)) {
+    if (
+      !profileOwnsPort(name, port) &&
+      isPortInUse(port) &&
+      !identifyPortOccupant(port)
+    ) {
       return {
         ok: false,
         error: `port ${port} is occupied by a non-Hermes process`,
@@ -248,8 +259,7 @@ async function ensureProfileGatewayLocked(
 
   const owned = profileOwnsPort(name, port)
   const healthy = await isClaudeAgentHealthy(port, 250)
-  const forceReplace =
-    options.forceReplace === true || (healthy && !owned)
+  const forceReplace = options.forceReplace === true || (healthy && !owned)
 
   const { evictBeforeGatewayStart } = await import('./gateway-lifecycle')
   await evictBeforeGatewayStart(name)
@@ -346,7 +356,8 @@ export async function ensureProfileGateway(
       started: false,
     }
   }
-  const { ensureGatewayLifecycleScheduler } = await import('./gateway-lifecycle')
+  const { ensureGatewayLifecycleScheduler } =
+    await import('./gateway-lifecycle')
   ensureGatewayLifecycleScheduler()
   const key = `${name}:${options.forceReplace ? 'replace' : 'ensure'}`
   const existing = ensurePromises.get(key)

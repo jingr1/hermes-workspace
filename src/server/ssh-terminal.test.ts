@@ -80,9 +80,7 @@ describe('ssh workspace folder listing', () => {
         '-type',
         'd',
       ]),
-    ).toBe(
-      "'find' '/home/ramonjing/vhl_dyn_sim' '-mindepth' '1' '-type' 'd'",
-    )
+    ).toBe("'find' '/home/ramonjing/vhl_dyn_sim' '-mindepth' '1' '-type' 'd'")
   })
 
   it('builds a remote file tree from find -printf output', async () => {

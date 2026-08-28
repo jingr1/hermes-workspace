@@ -2,7 +2,11 @@ import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs/promises'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { invalidateWorkspaceCatalogCache, loadWorkspaceCatalog, saveWorkspaceSelection } from './workspace'
+import {
+  invalidateWorkspaceCatalogCache,
+  loadWorkspaceCatalog,
+  saveWorkspaceSelection,
+} from './workspace'
 import {
   WorkspaceFolderAccessError,
   listWorkspaceFolders,
@@ -219,7 +223,11 @@ describe('workspace API catalog semantics', () => {
 
   it('loads workspace state from an explicit profile without active_profile', async () => {
     const localProject = await makeDir(tempRoot, 'local-app')
-    const sshProfileDir = path.join(process.env.HERMES_HOME!, 'profiles', 'gpussh')
+    const sshProfileDir = path.join(
+      process.env.HERMES_HOME!,
+      'profiles',
+      'gpussh',
+    )
     await fs.mkdir(sshProfileDir, { recursive: true })
     await fs.writeFile(
       path.join(sshProfileDir, 'config.yaml'),
@@ -281,7 +289,9 @@ describe('workspace folder listing', () => {
       '.cache',
       'project',
     ])
-    expect(root.folders.find((folder) => folder.name === '.hermes')).toBeUndefined()
+    expect(
+      root.folders.find((folder) => folder.name === '.hermes'),
+    ).toBeUndefined()
   })
 
   it('expands a subdirectory with a relative path', async () => {

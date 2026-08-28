@@ -1,7 +1,6 @@
 import { marked } from 'marked'
 import {
   createContext,
-  isValidElement,
   memo,
   useContext,
   useId,
@@ -16,6 +15,7 @@ import remarkBreaks from 'remark-breaks'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import { CodeBlock } from './code-block'
+import { extractLanguageFromClassName } from './code-block/utils'
 import type { Components } from 'react-markdown'
 import { normalizeMathDelimiters } from '@/lib/markdown-math'
 import { cn } from '@/lib/utils'
@@ -40,7 +40,9 @@ export function rewriteLocalMediaSources(content: string): string {
     markdownImage,
     (_match, prefix: string, mediaPath: string, suffix: string) => {
       const rewritten = rewritePath(mediaPath)
-      return rewritten ? `${prefix}${rewritten}${suffix}` : `${prefix}MEDIA:${mediaPath}${suffix}`
+      return rewritten
+        ? `${prefix}${rewritten}${suffix}`
+        : `${prefix}MEDIA:${mediaPath}${suffix}`
     },
   )
 
@@ -66,24 +68,6 @@ export type MarkdownProps = {
 function parseMarkdownIntoBlocks(markdown: string): Array<string> {
   const tokens = marked.lexer(markdown)
   return tokens.map((token) => token.raw)
-}
-
-function extractLanguage(className?: string): string {
-  if (!className) return 'text'
-  const match = className.match(/language-(\w+)/)
-  return match ? match[1] : 'text'
-}
-
-function extractFencedCode(
-  children: React.ReactNode,
-): { content: string; language: string } | null {
-  const child = Array.isArray(children) ? children[0] : children
-  if (!isValidElement(child)) return null
-  const props = child.props as { className?: string; children?: React.ReactNode }
-  return {
-    content: String(props.children ?? '').replace(/\n$/, ''),
-    language: extractLanguage(props.className),
-  }
 }
 
 type TableRenderContextValue = {
@@ -121,32 +105,45 @@ function slugifyHeading(children: React.ReactNode): string {
   return raw.length > 0 ? raw : 'section'
 }
 
+function extractFencedCodeContent(children: React.ReactNode): string {
+  return String(children ?? '').replace(/\n$/, '')
+}
+
+function isFencedCodeBlock(className: string, content: string): boolean {
+  if (extractLanguageFromClassName(className) !== 'text') return true
+  return content.includes('\n')
+}
+
 const INITIAL_COMPONENTS: Partial<Components> = {
-  code: function CodeComponent({ className, children }) {
+  code: function CodeComponent({ className, children, ...props }) {
+    const content = extractFencedCodeContent(children)
+    const fenceLanguage = extractLanguageFromClassName(className)
+
+    if (isFencedCodeBlock(className ?? '', content)) {
+      return (
+        <CodeBlock
+          content={content}
+          language={fenceLanguage}
+          className="w-full my-2"
+        />
+      )
+    }
+
     return (
       <code
         className={cn(
           'inline-code rounded-[4px] px-[5px] py-px text-[0.9em]',
           className,
         )}
+        {...props}
       >
         {children}
       </code>
     )
   },
   pre: function PreComponent({ children }) {
-    // Fenced blocks always arrive as <pre><code>. Unlabeled fences have no
-    // `language-*` class, so they must be handled here — not in `code`,
-    // which also renders inline `code` spans.
-    const fenced = extractFencedCode(children)
-    if (!fenced) return <>{children}</>
-    return (
-      <CodeBlock
-        content={fenced.content}
-        language={fenced.language}
-        className="w-full my-2"
-      />
-    )
+    // Fenced blocks are rendered by `code`; avoid an extra <pre> wrapper.
+    return <>{children}</>
   },
   h1: function H1Component({ children }) {
     return (
@@ -271,7 +268,11 @@ const INITIAL_COMPONENTS: Partial<Components> = {
     )
   },
   strong: function StrongComponent({ children }) {
-    return <strong className="font-semibold text-[var(--md-strong)]">{children}</strong>
+    return (
+      <strong className="font-semibold text-[var(--md-strong)]">
+        {children}
+      </strong>
+    )
   },
   b: function BComponent({ children }) {
     return <b className="font-semibold text-[var(--md-strong)]">{children}</b>

@@ -24,19 +24,35 @@ describe('mergeProviderCards', () => {
 describe('getProviderClickAction', () => {
   it('routes oauth and local providers', () => {
     expect(
-      getProviderClickAction({ providerId: 'nous', authType: 'oauth', hasKey: false }),
+      getProviderClickAction({
+        providerId: 'nous',
+        authType: 'oauth',
+        hasKey: false,
+      }),
     ).toBe('oauth')
     expect(
-      getProviderClickAction({ providerId: 'ollama', authType: 'none', hasKey: true }),
+      getProviderClickAction({
+        providerId: 'ollama',
+        authType: 'none',
+        hasKey: true,
+      }),
     ).toBe('local')
   })
 
   it('selects keyed providers and ignores missing keys', () => {
     expect(
-      getProviderClickAction({ providerId: 'anthropic', authType: 'api_key', hasKey: true }),
+      getProviderClickAction({
+        providerId: 'anthropic',
+        authType: 'api_key',
+        hasKey: true,
+      }),
     ).toBe('select')
     expect(
-      getProviderClickAction({ providerId: 'anthropic', authType: 'api_key', hasKey: false }),
+      getProviderClickAction({
+        providerId: 'anthropic',
+        authType: 'api_key',
+        hasKey: false,
+      }),
     ).toBe('ignore')
   })
 })

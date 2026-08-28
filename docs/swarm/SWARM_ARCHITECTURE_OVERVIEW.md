@@ -5,6 +5,7 @@
 > **涵盖范围**: 整体架构、多 Agent 协同机制、Swarm Board 与 Hermes Kanban 关系
 >
 > **现行真源（勿以文中旧 builder/reviewer 示例为准）**：
+>
 > - Roster / pipeline：[`AGENTS.md`](../../AGENTS.md) + [`swarm.yaml`](../../swarm.yaml)
 > - LangGraph 默认 workflow：`hermes_langgraph_orchestrator/workflows/radw.yaml`
 > - 派发与交接：[`DISPATCH-GUIDE.md`](./DISPATCH-GUIDE.md) · [`HANDOFF-PROTOCOL.md`](./HANDOFF-PROTOCOL.md)
@@ -125,6 +126,7 @@ workers:
 ```
 
 每个 Worker 对应：
+
 - **Profile**: `~/.hermes/profiles/<worker-id>/` 下的独立 Hermes Agent 配置
 - **Wrapper**: `~/.local/bin/` 下的启动脚本
 - **Skills**: 注入到 Agent system prompt 的专业技能
@@ -223,6 +225,7 @@ Worker 间通信的核心是 **tmux send-keys**，而非 HTTP 回调或消息队
 ```
 
 **两种派发模式**：
+
 1. **tmux 持久会话**（默认）：长任务，保持上下文，通过 `sendPromptToLiveSession()` 将完整 prompt 写入 `swarm-task.md` 后注入短指令
 2. **oneshot 回退**：tmux 基础设施不可用（未安装）或 `HERMES_SWARM_FORCE_ONESHOT=1` 时使用 `hermes chat -q` 一次性执行
 
@@ -245,15 +248,16 @@ NEXT_ACTION: exact recommended next action
 
 ### 3.4 通知路由规则
 
-| Checkpoint 状态 | 路由目标 | 说明 |
-|---|---|---|
-| `DONE` | Orchestrator | 任务完成，等待下一步指令 |
-| `HANDOFF` | Orchestrator | 任务交接给其他 Worker |
-| `BLOCKED` | Orchestrator | 遇到阻塞，需要决策 |
-| `NEEDS_INPUT` | 主会话升级 | 需要人工输入 |
-| Orchestrator 不可达 | 主会话升级 | 兜底升级 |
+| Checkpoint 状态     | 路由目标     | 说明                     |
+| ------------------- | ------------ | ------------------------ |
+| `DONE`              | Orchestrator | 任务完成，等待下一步指令 |
+| `HANDOFF`           | Orchestrator | 任务交接给其他 Worker    |
+| `BLOCKED`           | Orchestrator | 遇到阻塞，需要决策       |
+| `NEEDS_INPUT`       | 主会话升级   | 需要人工输入             |
+| Orchestrator 不可达 | 主会话升级   | 兜底升级                 |
 
 **去重机制**：
+
 - `orchestratorProcessedRaw`：已处理的原始 checkpoint 集合
 - `lastNotifiedCheckpointSignature`：上次通知的签名，防止重复通知
 
@@ -358,15 +362,15 @@ Orchestrator **不是**独立调度进程，而是一个普通 Worker Profile，
 
 ### 5.1 两套系统对比
 
-| 维度 | Hermes 内置 Kanban | Swarm Board（工作区看板） |
-|---|---|---|
-| **存储** | SQLite (`~/.hermes/kanban.db`) | JSON 文件 (`~/.hermes/swarm2-kanban.json`) |
-| **派发机制** | 内置 Dispatcher，自动 spawn worker 进程 | `swarm-dispatch.ts`，通过 tmux 注入 prompt |
-| **任务生命周期** | triage → todo → ready → running → done/blocked | backlog → todo → ready → running → review → blocked → done |
-| **Worker 通信** | 进程级，通过 `KANBAN_GUIDANCE` 注入 system prompt | tmux 会话级，通过 checkpoint 结构化文本 |
-| **依赖管理** | 内置 parent/child 门控（父任务 done 后子任务自动 ready） | 无内置依赖，由 Orchestrator 手动编排 |
-| **心跳/超时** | 内置 heartbeat、max_runtime、retry 诊断 | 无内置，由 `swarm-orchestrator-loop.ts` 轮询 |
-| **UI** | `hermes kanban` CLI + Dashboard 插件 | Swarm2 Web UI 中的 `<Swarm2KanbanBoard>` 组件 |
+| 维度             | Hermes 内置 Kanban                                       | Swarm Board（工作区看板）                                  |
+| ---------------- | -------------------------------------------------------- | ---------------------------------------------------------- |
+| **存储**         | SQLite (`~/.hermes/kanban.db`)                           | JSON 文件 (`~/.hermes/swarm2-kanban.json`)                 |
+| **派发机制**     | 内置 Dispatcher，自动 spawn worker 进程                  | `swarm-dispatch.ts`，通过 tmux 注入 prompt                 |
+| **任务生命周期** | triage → todo → ready → running → done/blocked           | backlog → todo → ready → running → review → blocked → done |
+| **Worker 通信**  | 进程级，通过 `KANBAN_GUIDANCE` 注入 system prompt        | tmux 会话级，通过 checkpoint 结构化文本                    |
+| **依赖管理**     | 内置 parent/child 门控（父任务 done 后子任务自动 ready） | 无内置依赖，由 Orchestrator 手动编排                       |
+| **心跳/超时**    | 内置 heartbeat、max_runtime、retry 诊断                  | 无内置，由 `swarm-orchestrator-loop.ts` 轮询               |
+| **UI**           | `hermes kanban` CLI + Dashboard 插件                     | Swarm2 Web UI 中的 `<Swarm2KanbanBoard>` 组件              |
 
 ### 5.2 数据桥接：三层后端
 
@@ -552,7 +556,14 @@ type SwarmKanbanCard = {
   acceptanceCriteria: string[]
   assignedWorker: string | null
   reviewer: string | null
-  status: 'backlog' | 'todo' | 'ready' | 'running' | 'review' | 'blocked' | 'done'
+  status:
+    | 'backlog'
+    | 'todo'
+    | 'ready'
+    | 'running'
+    | 'review'
+    | 'blocked'
+    | 'done'
   missionId: string | null
   reportPath: string | null
   createdBy: string
@@ -571,44 +582,44 @@ type SwarmKanbanCard = {
 
 ### 核心源代码
 
-| 文件 | 行数 | 职责 |
-|---|---|---|
-| `src/routes/api/swarm-dispatch.ts` | 1138 | 核心派发逻辑：`dispatchSwarmAssignments()`, `runWorker()`, `sendPromptToLiveSession()`, `waitForFreshCheckpoint()` |
-| `src/routes/api/swarm-orchestrator-loop.ts` | ~600 | 自动编排循环：轮询 Worker 状态并自动续派 |
-| `src/routes/api/swarm-roster.ts` | ~50 | Worker 花名册 API |
-| `src/routes/api/conductor-spawn.ts` | 477 | Conductor 任务启动入口（dashboard / native-swarm 双模式） |
-| `src/routes/api/swarm-direct-chat.ts` | 293 | 直接向 Worker tmux 会话发送消息 |
-| `src/routes/api/swarm-kanban.ts` | 93 | 看板 CRUD API |
-| `src/server/swarm-foundation.ts` | ~600 | 基础设施：路径、profile 管理 |
-| `src/server/swarm-notifications.ts` | ~300 | 通知路由与发布 |
-| `src/server/swarm-roster.ts` | ~180 | 读取 `swarm.yaml` 并校验 Worker 定义 |
-| `src/server/swarm-checkpoints.ts` | ~120 | Checkpoint 解析与契约定义 |
-| `src/server/swarm-mode.ts` | 63 | 控制模式（auto/manual）读写 |
-| `src/server/swarm-missions.ts` | 478 | Mission 持久化与状态管理 |
-| `src/server/kanban-backend.ts` | 629 | 三层看板后端（local / claude / hermes-proxy） |
-| `src/server/swarm-kanban-store.ts` | 161 | 本地 JSON 看板存储 |
-| `src/server/kanban-dashboard-proxy.ts` | 203 | Hermes Dashboard Kanban 插件 HTTP 代理 |
-| `src/server/claude-tasks-backend.ts` | 166 | Claude Tasks 兼容层 |
-| `src/screens/swarm2/swarm2-screen.tsx` | 1774 | Swarm2 主界面 |
-| `src/screens/swarm2/swarm2-kanban-board.tsx` | 503 | 看板 UI 组件 |
-| `src/lib/tasks-api.ts` | 263 | 任务 API 客户端（自动后端检测） |
+| 文件                                         | 行数 | 职责                                                                                                               |
+| -------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------ |
+| `src/routes/api/swarm-dispatch.ts`           | 1138 | 核心派发逻辑：`dispatchSwarmAssignments()`, `runWorker()`, `sendPromptToLiveSession()`, `waitForFreshCheckpoint()` |
+| `src/routes/api/swarm-orchestrator-loop.ts`  | ~600 | 自动编排循环：轮询 Worker 状态并自动续派                                                                           |
+| `src/routes/api/swarm-roster.ts`             | ~50  | Worker 花名册 API                                                                                                  |
+| `src/routes/api/conductor-spawn.ts`          | 477  | Conductor 任务启动入口（dashboard / native-swarm 双模式）                                                          |
+| `src/routes/api/swarm-direct-chat.ts`        | 293  | 直接向 Worker tmux 会话发送消息                                                                                    |
+| `src/routes/api/swarm-kanban.ts`             | 93   | 看板 CRUD API                                                                                                      |
+| `src/server/swarm-foundation.ts`             | ~600 | 基础设施：路径、profile 管理                                                                                       |
+| `src/server/swarm-notifications.ts`          | ~300 | 通知路由与发布                                                                                                     |
+| `src/server/swarm-roster.ts`                 | ~180 | 读取 `swarm.yaml` 并校验 Worker 定义                                                                               |
+| `src/server/swarm-checkpoints.ts`            | ~120 | Checkpoint 解析与契约定义                                                                                          |
+| `src/server/swarm-mode.ts`                   | 63   | 控制模式（auto/manual）读写                                                                                        |
+| `src/server/swarm-missions.ts`               | 478  | Mission 持久化与状态管理                                                                                           |
+| `src/server/kanban-backend.ts`               | 629  | 三层看板后端（local / claude / hermes-proxy）                                                                      |
+| `src/server/swarm-kanban-store.ts`           | 161  | 本地 JSON 看板存储                                                                                                 |
+| `src/server/kanban-dashboard-proxy.ts`       | 203  | Hermes Dashboard Kanban 插件 HTTP 代理                                                                             |
+| `src/server/claude-tasks-backend.ts`         | 166  | Claude Tasks 兼容层                                                                                                |
+| `src/screens/swarm2/swarm2-screen.tsx`       | 1774 | Swarm2 主界面                                                                                                      |
+| `src/screens/swarm2/swarm2-kanban-board.tsx` | 503  | 看板 UI 组件                                                                                                       |
+| `src/lib/tasks-api.ts`                       | 263  | 任务 API 客户端（自动后端检测）                                                                                    |
 
 ### 配置文件
 
-| 文件 | 职责 |
-|---|---|
-| `swarm.yaml` | Worker 定义、角色、工具、技能配置 |
-| `AGENTS.md` | Agent 契约与操作规则 |
-| `docs/swarm/ARCHITECTURE.md` | Swarm 架构文档 |
+| 文件                         | 职责                              |
+| ---------------------------- | --------------------------------- |
+| `swarm.yaml`                 | Worker 定义、角色、工具、技能配置 |
+| `AGENTS.md`                  | Agent 契约与操作规则              |
+| `docs/swarm/ARCHITECTURE.md` | Swarm 架构文档                    |
 
 ### Skills（技能文件）
 
-| Skill | 路径 | 职责 |
-|---|---|---|
-| `kanban-orchestrator` | `devops/kanban-orchestrator/` | 任务分解、卡片创建、路由编排 |
-| `kanban-worker` | `devops/kanban-worker/` | Worker 生命周期、handoff 格式、pitfalls |
-| `kanban-codex-lane` | `autonomous-ai-agents/kanban-codex-lane/` | Codex CLI 作为隔离实现通道 |
-| `hermes-agent` | (内置) | Hermes Agent 配置与扩展指南 |
+| Skill                 | 路径                                      | 职责                                    |
+| --------------------- | ----------------------------------------- | --------------------------------------- |
+| `kanban-orchestrator` | `devops/kanban-orchestrator/`             | 任务分解、卡片创建、路由编排            |
+| `kanban-worker`       | `devops/kanban-worker/`                   | Worker 生命周期、handoff 格式、pitfalls |
+| `kanban-codex-lane`   | `autonomous-ai-agents/kanban-codex-lane/` | Codex CLI 作为隔离实现通道              |
+| `hermes-agent`        | (内置)                                    | Hermes Agent 配置与扩展指南             |
 
 ---
 

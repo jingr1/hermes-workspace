@@ -5,11 +5,27 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { isAuthenticated } from '../../server/auth-middleware'
-import { newestCheckpointFromMessages, parseSwarmCheckpoint, type ParsedSwarmCheckpoint } from '../../server/swarm-checkpoints'
+import {
+  newestCheckpointFromMessages,
+  parseSwarmCheckpoint,
+  type ParsedSwarmCheckpoint,
+} from '../../server/swarm-checkpoints'
 import { readWorkerMessages } from '../../server/swarm-chat-reader'
-import { createOrUpdateMission, getSwarmMission, markMissionAssignmentDispatched, recordMissionAssignmentBlocked, recordMissionCheckpoint } from '../../server/swarm-missions'
-import { appendSwarmMemoryEvent, buildSwarmStartupSnapshot } from '../../server/swarm-memory'
-import { rosterByWorkerId, type SwarmRosterWorker } from '../../server/swarm-roster'
+import {
+  createOrUpdateMission,
+  getSwarmMission,
+  markMissionAssignmentDispatched,
+  recordMissionAssignmentBlocked,
+  recordMissionCheckpoint,
+} from '../../server/swarm-missions'
+import {
+  appendSwarmMemoryEvent,
+  buildSwarmStartupSnapshot,
+} from '../../server/swarm-memory'
+import {
+  rosterByWorkerId,
+  type SwarmRosterWorker,
+} from '../../server/swarm-roster'
 import { publishSwarmCheckpointNotification } from '../../server/swarm-notifications'
 import { isSwarmDispatchWorkerId } from '../../lib/swarm-workers'
 import { ensureSwarmProfileConfig } from '../../server/swarm-profile-config'
@@ -70,7 +86,10 @@ type AssignmentRequest = {
 export type SwarmDeliveryMode = 'tmux-tui' | 'tmux-cli' | 'oneshot'
 /** @deprecated alias — resolves to tmux-tui or tmux-cli via HERMES_SWARM_TMUX_MODE */
 export type SwarmDeliveryModeLegacy = 'tmux'
-export type SwarmDeliveryModeRequest = SwarmDeliveryMode | SwarmDeliveryModeLegacy | 'auto'
+export type SwarmDeliveryModeRequest =
+  | SwarmDeliveryMode
+  | SwarmDeliveryModeLegacy
+  | 'auto'
 export type SwarmDeliveryFallback = 'tmux_unavailable'
 
 type DispatchRequest = {
@@ -88,7 +107,9 @@ type DispatchRequest = {
   deliveryMode?: unknown
 }
 
-export function resolveWaitForCheckpoint(body: Pick<DispatchRequest, 'waitForCheckpoint' | 'allowAsync'>): boolean {
+export function resolveWaitForCheckpoint(
+  body: Pick<DispatchRequest, 'waitForCheckpoint' | 'allowAsync'>,
+): boolean {
   if (body.waitForCheckpoint === true) return true
   if (body.waitForCheckpoint === false || body.allowAsync === true) return false
   return true
@@ -120,13 +141,15 @@ function warnIfDeprecatedUseLive(): void {
   if (legacy === '1' || legacy === 'true') {
     warnedDeprecatedUseLive = true
     console.warn(
-      '[swarm-dispatch] HERMES_SWARM_USE_LIVE is deprecated: tmux delivery is now the default. '
-      + 'Use HERMES_SWARM_FORCE_ONESHOT=1 to force wrapper oneshot instead.',
+      '[swarm-dispatch] HERMES_SWARM_USE_LIVE is deprecated: tmux delivery is now the default. ' +
+        'Use HERMES_SWARM_FORCE_ONESHOT=1 to force wrapper oneshot instead.',
     )
   }
 }
 
-function resolveTmuxDeliveryMode(transport?: TmuxTransportMode | null): SwarmDeliveryMode {
+function resolveTmuxDeliveryMode(
+  transport?: TmuxTransportMode | null,
+): SwarmDeliveryMode {
   return resolveTmuxTransportMode(transport) === 'cli' ? 'tmux-cli' : 'tmux-tui'
 }
 
@@ -147,7 +170,10 @@ export function resolveDeliveryMode(
   if (requestMode === 'tmux') {
     return { mode: resolveTmuxDeliveryMode(), fallback: null }
   }
-  if (process.env.HERMES_SWARM_FORCE_ONESHOT === '1' || process.env.HERMES_SWARM_FORCE_ONESHOT === 'true') {
+  if (
+    process.env.HERMES_SWARM_FORCE_ONESHOT === '1' ||
+    process.env.HERMES_SWARM_FORCE_ONESHOT === 'true'
+  ) {
     return { mode: 'oneshot', fallback: null }
   }
   const tmuxAvailable = options?.tmuxAvailable ?? resolveTmuxBin() !== null
@@ -159,11 +185,11 @@ export function resolveDeliveryMode(
 
 function parseDeliveryModeRequest(value: unknown): SwarmDeliveryModeRequest {
   if (
-    value === 'tmux'
-    || value === 'tmux-tui'
-    || value === 'tmux-cli'
-    || value === 'oneshot'
-    || value === 'auto'
+    value === 'tmux' ||
+    value === 'tmux-tui' ||
+    value === 'tmux-cli' ||
+    value === 'oneshot' ||
+    value === 'auto'
   ) {
     return value
   }
@@ -171,7 +197,13 @@ function parseDeliveryModeRequest(value: unknown): SwarmDeliveryModeRequest {
 }
 
 type RuntimeCheckpointSnapshot = {
-  checkpointStatus: 'none' | 'in_progress' | 'done' | 'blocked' | 'handoff' | 'needs_input'
+  checkpointStatus:
+    | 'none'
+    | 'in_progress'
+    | 'done'
+    | 'blocked'
+    | 'handoff'
+    | 'needs_input'
   state: string | null
   lastSummary: string | null
   lastResult: string | null
@@ -277,19 +309,29 @@ function execFileAsync(
   args: Array<string>,
   timeout = 8_000,
   input?: string,
-): Promise<{ ok: true; stdout: string; stderr: string } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; stdout: string; stderr: string } | { ok: false; error: string }
+> {
   return new Promise((resolve) => {
-    const child = execFile(cmd, args, { timeout, maxBuffer: MAX_OUTPUT_CHARS }, (error, stdout, stderr) => {
-      if (error) {
-        resolve({ ok: false, error: stderr?.toString().trim() || error.message })
-        return
-      }
-      resolve({
-        ok: true,
-        stdout: (stdout || '').toString(),
-        stderr: (stderr || '').toString(),
-      })
-    })
+    const child = execFile(
+      cmd,
+      args,
+      { timeout, maxBuffer: MAX_OUTPUT_CHARS },
+      (error, stdout, stderr) => {
+        if (error) {
+          resolve({
+            ok: false,
+            error: stderr?.toString().trim() || error.message,
+          })
+          return
+        }
+        resolve({
+          ok: true,
+          stdout: (stdout || '').toString(),
+          stderr: (stderr || '').toString(),
+        })
+      },
+    )
     if (input !== undefined) {
       child.stdin?.end(input)
     }
@@ -338,12 +380,32 @@ function parseAssignments(value: unknown): Array<AssignmentRequest> {
     const obj = entry as Record<string, unknown>
     const workerId = typeof obj.workerId === 'string' ? obj.workerId.trim() : ''
     const task = typeof obj.task === 'string' ? obj.task.trim() : ''
-    const rationale = typeof obj.rationale === 'string' ? obj.rationale.trim() : undefined
-    const dependsOn = Array.isArray(obj.dependsOn) ? obj.dependsOn.filter((value): value is string => typeof value === 'string' && value.trim().length > 0) : undefined
-    const reviewRequired = typeof obj.reviewRequired === 'boolean' ? obj.reviewRequired : undefined
+    const rationale =
+      typeof obj.rationale === 'string' ? obj.rationale.trim() : undefined
+    const dependsOn = Array.isArray(obj.dependsOn)
+      ? obj.dependsOn.filter(
+          (value): value is string =>
+            typeof value === 'string' && value.trim().length > 0,
+        )
+      : undefined
+    const reviewRequired =
+      typeof obj.reviewRequired === 'boolean' ? obj.reviewRequired : undefined
     const direct = typeof obj.direct === 'boolean' ? obj.direct : undefined
-    if (!workerId || !task || !validateWorkerId(workerId) || !isSwarmDispatchWorkerId(workerId)) continue
-    assignments.push({ workerId, task, rationale, dependsOn, reviewRequired, direct })
+    if (
+      !workerId ||
+      !task ||
+      !validateWorkerId(workerId) ||
+      !isSwarmDispatchWorkerId(workerId)
+    )
+      continue
+    assignments.push({
+      workerId,
+      task,
+      rationale,
+      dependsOn,
+      reviewRequired,
+      direct,
+    })
   }
   return assignments
 }
@@ -352,7 +414,10 @@ function readRuntimeJson(profilePath: string): Record<string, unknown> {
   const runtimePath = join(profilePath, 'runtime.json')
   if (!existsSync(runtimePath)) return {}
   try {
-    return JSON.parse(readFileSync(runtimePath, 'utf8')) as Record<string, unknown>
+    return JSON.parse(readFileSync(runtimePath, 'utf8')) as Record<
+      string,
+      unknown
+    >
   } catch {
     return {}
   }
@@ -362,7 +427,10 @@ function readRuntimeJson(profilePath: string): Record<string, unknown> {
  * Build and persist a structured handoff for a completed worker checkpoint.
  * Non-blocking: failures are logged but do not break dispatch.
  */
-async function recordHandoffForWorker(workerId: string, checkpoint: ParsedSwarmCheckpoint): Promise<void> {
+async function recordHandoffForWorker(
+  workerId: string,
+  checkpoint: ParsedSwarmCheckpoint,
+): Promise<void> {
   try {
     const runtime = readRuntimeJson(getProfilePath(workerId))
     const handoff = await buildHandoff(workerId, checkpoint, runtime)
@@ -372,7 +440,10 @@ async function recordHandoffForWorker(workerId: string, checkpoint: ParsedSwarmC
   }
 }
 
-function writeRuntimePatch(workerId: string, patch: Record<string, unknown>): void {
+function writeRuntimePatch(
+  workerId: string,
+  patch: Record<string, unknown>,
+): void {
   const profilePath = getProfilePath(workerId)
   mkdirSync(profilePath, { recursive: true })
   const runtimePath = join(profilePath, 'runtime.json')
@@ -395,13 +466,21 @@ function cleanRuntimeNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
-function cleanRuntimeCheckpointStatus(value: unknown): RuntimeCheckpointSnapshot['checkpointStatus'] {
-  return value === 'in_progress' || value === 'done' || value === 'blocked' || value === 'handoff' || value === 'needs_input'
+function cleanRuntimeCheckpointStatus(
+  value: unknown,
+): RuntimeCheckpointSnapshot['checkpointStatus'] {
+  return value === 'in_progress' ||
+    value === 'done' ||
+    value === 'blocked' ||
+    value === 'handoff' ||
+    value === 'needs_input'
     ? value
     : 'none'
 }
 
-export function readRuntimeCheckpointSnapshot(profilePath: string): RuntimeCheckpointSnapshot {
+export function readRuntimeCheckpointSnapshot(
+  profilePath: string,
+): RuntimeCheckpointSnapshot {
   const raw = readRuntimeJson(profilePath)
   return {
     checkpointStatus: cleanRuntimeCheckpointStatus(raw.checkpointStatus),
@@ -415,13 +494,16 @@ export function readRuntimeCheckpointSnapshot(profilePath: string): RuntimeCheck
     checkpointRaw: cleanRuntimeText(raw.checkpointRaw),
     checkpointTimestamp: Math.max(
       cleanRuntimeNumber(raw.lastOutputAt) ?? 0,
-      isoToMs(typeof raw.lastCheckIn === 'string' ? raw.lastCheckIn : null) ?? 0,
+      isoToMs(typeof raw.lastCheckIn === 'string' ? raw.lastCheckIn : null) ??
+        0,
       cleanRuntimeNumber(raw.lastDispatchAt) ?? 0,
     ),
   }
 }
 
-export function runtimeCheckpointSignature(snapshot: RuntimeCheckpointSnapshot): string {
+export function runtimeCheckpointSignature(
+  snapshot: RuntimeCheckpointSnapshot,
+): string {
   return JSON.stringify(snapshot)
 }
 
@@ -431,7 +513,9 @@ function isoToMs(value: string | null): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-function stateLabelForRuntimeSnapshot(snapshot: RuntimeCheckpointSnapshot): ParsedSwarmCheckpoint['stateLabel'] | null {
+function stateLabelForRuntimeSnapshot(
+  snapshot: RuntimeCheckpointSnapshot,
+): ParsedSwarmCheckpoint['stateLabel'] | null {
   switch (snapshot.checkpointStatus) {
     case 'done':
       return 'DONE'
@@ -449,12 +533,21 @@ function stateLabelForRuntimeSnapshot(snapshot: RuntimeCheckpointSnapshot): Pars
   const state = snapshot.state?.toLowerCase()
   if (state === 'blocked') return 'BLOCKED'
   if (state === 'waiting') return 'NEEDS_INPUT'
-  if (state === 'executing' || state === 'thinking' || state === 'writing' || state === 'reviewing' || state === 'syncing') return 'IN_PROGRESS'
+  if (
+    state === 'executing' ||
+    state === 'thinking' ||
+    state === 'writing' ||
+    state === 'reviewing' ||
+    state === 'syncing'
+  )
+    return 'IN_PROGRESS'
   if (state === 'idle') return 'DONE'
   return null
 }
 
-function runtimeSnapshotHasMeaningfulCheckpoint(snapshot: RuntimeCheckpointSnapshot): boolean {
+function runtimeSnapshotHasMeaningfulCheckpoint(
+  snapshot: RuntimeCheckpointSnapshot,
+): boolean {
   return Boolean(
     snapshot.checkpointRaw ||
     snapshot.lastSummary ||
@@ -464,7 +557,11 @@ function runtimeSnapshotHasMeaningfulCheckpoint(snapshot: RuntimeCheckpointSnaps
   )
 }
 
-export function runtimeSnapshotIsFresh(snapshot: RuntimeCheckpointSnapshot, baselineSignature: string, dispatchedAt: number): boolean {
+export function runtimeSnapshotIsFresh(
+  snapshot: RuntimeCheckpointSnapshot,
+  baselineSignature: string,
+  dispatchedAt: number,
+): boolean {
   const changed = runtimeCheckpointSignature(snapshot) !== baselineSignature
   if (!changed) return false
   const outputAt = snapshot.lastOutputAt
@@ -489,9 +586,12 @@ function formatRuntimeCheckpointRaw(checkpoint: ParsedSwarmCheckpoint): string {
   ].join('\n')
 }
 
-export function checkpointFromRuntimeSnapshot(snapshot: RuntimeCheckpointSnapshot): ParsedSwarmCheckpoint | null {
+export function checkpointFromRuntimeSnapshot(
+  snapshot: RuntimeCheckpointSnapshot,
+): ParsedSwarmCheckpoint | null {
   const stateLabel = stateLabelForRuntimeSnapshot(snapshot)
-  if (!stateLabel || !runtimeSnapshotHasMeaningfulCheckpoint(snapshot)) return null
+  if (!stateLabel || !runtimeSnapshotHasMeaningfulCheckpoint(snapshot))
+    return null
   const result = snapshot.lastResult ?? snapshot.lastSummary
   const blocker = snapshot.blockedReason
   const checkpoint: ParsedSwarmCheckpoint = {
@@ -541,9 +641,14 @@ export function buildWorkerPrompt(input: {
   const displayName = roster?.name?.trim() || input.workerId
   const role = roster?.role || 'Worker'
   const humanLabel = `${displayName} — ${role}`
-  const skills = roster?.skills?.length ? roster.skills.join(', ') : 'swarm-worker-core'
-  const capabilities = roster?.capabilities?.length ? roster.capabilities.join(', ') : 'not declared'
-  const mission = roster?.mission || 'Execute assigned swarm tasks and checkpoint progress.'
+  const skills = roster?.skills?.length
+    ? roster.skills.join(', ')
+    : 'swarm-worker-core'
+  const capabilities = roster?.capabilities?.length
+    ? roster.capabilities.join(', ')
+    : 'not declared'
+  const mission =
+    roster?.mission || 'Execute assigned swarm tasks and checkpoint progress.'
   const specialty = roster?.specialty || 'General execution'
 
   let snapshotSection = ''
@@ -580,11 +685,7 @@ export function buildWorkerPrompt(input: {
   const taskText = missionId
     ? rewriteLegacyOutputPathsInText(input.task, missionId)
     : input.task
-  lines.push(
-    '## Assigned Task',
-    taskText,
-    '',
-  )
+  lines.push('## Assigned Task', taskText, '')
   if (missionId) {
     lines.push(buildMissionArtifactInstructions(missionId, input.workerId), '')
   }
@@ -610,7 +711,13 @@ export function buildWorkerPrompt(input: {
   return lines.filter(Boolean).join('\n')
 }
 
-function markDispatchStarted(workerId: string, task: string, missionId?: string | null, assignmentId?: string | null, notifySessionKey?: string | null): void {
+function markDispatchStarted(
+  workerId: string,
+  task: string,
+  missionId?: string | null,
+  assignmentId?: string | null,
+  notifySessionKey?: string | null,
+): void {
   if (missionId) {
     ensureSwarmMissionArtifactDirs(missionId, workerId)
   }
@@ -630,7 +737,8 @@ function markDispatchStarted(workerId: string, task: string, missionId?: string 
     lastCheckIn: new Date().toISOString(),
     lastSummary: controlMessage,
     lastControlMessage: controlMessage,
-    nextAction: 'Worker should execute and return the required checkpoint format.',
+    nextAction:
+      'Worker should execute and return the required checkpoint format.',
     notifySessionKey: notifySessionKey ?? 'main',
     // Clear stale checkpoint and processed marker so harvest does not pick up
     // the previous task's DONE as the result for this new dispatch.
@@ -647,7 +755,9 @@ function markDispatchResult(workerId: string, result: WorkerResult): void {
   writeRuntimePatch(workerId, {
     lastDispatchAt: Date.now(),
     lastDispatchMode: result.delivery ?? 'none',
-    lastDispatchResult: result.ok ? result.output.slice(0, 500) : (result.error ?? 'dispatch failed').slice(0, 500),
+    lastDispatchResult: result.ok
+      ? result.output.slice(0, 500)
+      : (result.error ?? 'dispatch failed').slice(0, 500),
     state: result.ok ? 'executing' : 'blocked',
     checkpointStatus: result.ok ? 'in_progress' : 'blocked',
     blockedReason: result.ok ? null : result.error,
@@ -655,13 +765,26 @@ function markDispatchResult(workerId: string, result: WorkerResult): void {
   })
 }
 
-export function dispatchBlockReason(result: Pick<WorkerResult, 'ok' | 'error' | 'output' | 'checkpointStatus'>): string | null {
-  if (!result.ok) return result.error?.trim() || result.output?.trim() || 'Dispatch failed before a worker checkpoint was recorded.'
-  if (result.checkpointStatus === 'timeout') return 'No fresh checkpoint before poll timeout.'
+export function dispatchBlockReason(
+  result: Pick<WorkerResult, 'ok' | 'error' | 'output' | 'checkpointStatus'>,
+): string | null {
+  if (!result.ok)
+    return (
+      result.error?.trim() ||
+      result.output?.trim() ||
+      'Dispatch failed before a worker checkpoint was recorded.'
+    )
+  if (result.checkpointStatus === 'timeout')
+    return 'No fresh checkpoint before poll timeout.'
   return null
 }
 
-function recordDispatchBlock(workerId: string, assignment: AssignmentRequest, result: WorkerResult, options?: { missionId?: string | null }): void {
+function recordDispatchBlock(
+  workerId: string,
+  assignment: AssignmentRequest,
+  result: WorkerResult,
+  options?: { missionId?: string | null },
+): void {
   const reason = dispatchBlockReason(result)
   if (!reason) return
   recordMissionAssignmentBlocked({
@@ -682,7 +805,11 @@ function recordDispatchBlock(workerId: string, assignment: AssignmentRequest, re
   })
 }
 
-function markCheckpointResult(workerId: string, checkpoint: ParsedSwarmCheckpoint, notifySessionKey?: string | null): void {
+function markCheckpointResult(
+  workerId: string,
+  checkpoint: ParsedSwarmCheckpoint,
+  notifySessionKey?: string | null,
+): void {
   // When the checkpoint reaches any terminal status (anything other than
   // 'in_progress' — i.e. done/blocked/needs_input/handoff) the worker is no
   // longer running this task, so clear currentTask the same way conductor-stop
@@ -702,7 +829,11 @@ function markCheckpointResult(workerId: string, checkpoint: ParsedSwarmCheckpoin
     lastRealResult: checkpoint.result,
     lastControlMessage: null,
     nextAction: checkpoint.nextAction,
-    blockedReason: checkpoint.stateLabel === 'BLOCKED' || checkpoint.stateLabel === 'NEEDS_INPUT' ? checkpoint.blocker : null,
+    blockedReason:
+      checkpoint.stateLabel === 'BLOCKED' ||
+      checkpoint.stateLabel === 'NEEDS_INPUT'
+        ? checkpoint.blocker
+        : null,
     needsHuman: checkpoint.stateLabel === 'NEEDS_INPUT',
     checkpointRaw: checkpoint.raw,
     checkpointFilesChanged: checkpoint.filesChanged,
@@ -739,7 +870,11 @@ async function attachCheckpointToResult(
   }
 
   if (checkpoint) {
-    markCheckpointResult(context.workerId, checkpoint, context.notifySessionKey ?? 'main')
+    markCheckpointResult(
+      context.workerId,
+      checkpoint,
+      context.notifySessionKey ?? 'main',
+    )
     const updatedMission = recordMissionCheckpoint({
       missionId: context.missionId,
       assignmentId: context.assignment.assignmentId ?? null,
@@ -749,7 +884,9 @@ async function attachCheckpointToResult(
     })
     if (updatedMission?._completed) {
       try {
-        for (const wId of new Set(updatedMission.assignments.map((a) => a.workerId))) {
+        for (const wId of new Set(
+          updatedMission.assignments.map((a) => a.workerId),
+        )) {
           appendSwarmMemoryEvent({
             workerId: wId,
             missionId: updatedMission.id,
@@ -758,7 +895,9 @@ async function attachCheckpointToResult(
             summary: `Mission complete: ${updatedMission.title}`,
           })
         }
-      } catch { /* memory write best-effort */ }
+      } catch {
+        /* memory write best-effort */
+      }
     }
     appendSwarmMemoryEvent({
       workerId: context.workerId,
@@ -810,13 +949,20 @@ async function waitForFreshCheckpoint(
   const profilePath = getProfilePath(workerId)
   while (Date.now() - started < timeoutMs) {
     const runtimeSnapshot = readRuntimeCheckpointSnapshot(profilePath)
-    if (runtimeSnapshotIsFresh(runtimeSnapshot, baselineRuntimeSignature, dispatchedAt)) {
+    if (
+      runtimeSnapshotIsFresh(
+        runtimeSnapshot,
+        baselineRuntimeSignature,
+        dispatchedAt,
+      )
+    ) {
       const runtimeCheckpoint = checkpointFromRuntimeSnapshot(runtimeSnapshot)
       // Trust the runtime snapshot when it is fresh (post-dispatch) and the
       // checkpoint content has actually changed.  The runtime checkpointRaw can
       // persist across assignments, so a stale DONE from a previous task would
       // otherwise be returned immediately for a freshly dispatched worker.
-      if (runtimeCheckpoint && runtimeCheckpoint.raw !== previousRaw) return runtimeCheckpoint
+      if (runtimeCheckpoint && runtimeCheckpoint.raw !== previousRaw)
+        return runtimeCheckpoint
     }
 
     const chat = readWorkerMessages(profilePath, 50)
@@ -854,12 +1000,22 @@ function resolveWorkerCwd(workerId: string): string {
   return homedir()
 }
 
-async function captureTmuxPane(tmuxBin: string, sessionName: string): Promise<string> {
-  const captured = await execFileAsync(tmuxBin, ['capture-pane', '-p', '-t', sessionName, '-S', '-200'], 8_000)
+async function captureTmuxPane(
+  tmuxBin: string,
+  sessionName: string,
+): Promise<string> {
+  const captured = await execFileAsync(
+    tmuxBin,
+    ['capture-pane', '-p', '-t', sessionName, '-S', '-200'],
+    8_000,
+  )
   return captured.ok ? captured.stdout.trim() : ''
 }
 
-export async function tmuxSessionHasHermesTui(tmuxBin: string, sessionName: string): Promise<boolean> {
+export async function tmuxSessionHasHermesTui(
+  tmuxBin: string,
+  sessionName: string,
+): Promise<boolean> {
   const pane = await captureTmuxPane(tmuxBin, sessionName)
   return tmuxPaneLooksLikeHermesTui(pane)
 }
@@ -879,7 +1035,10 @@ async function waitForHermesTuiReady(
   return false
 }
 
-async function getPaneCurrentCommand(tmuxBin: string, sessionName: string): Promise<string> {
+async function getPaneCurrentCommand(
+  tmuxBin: string,
+  sessionName: string,
+): Promise<string> {
   const captured = await execFileAsync(
     tmuxBin,
     ['list-panes', '-t', sessionName, '-F', '#{pane_current_command}'],
@@ -888,7 +1047,10 @@ async function getPaneCurrentCommand(tmuxBin: string, sessionName: string): Prom
   return captured.ok ? captured.stdout.trim().split('\n')[0] || '' : ''
 }
 
-export async function tmuxSessionHasShellReady(tmuxBin: string, sessionName: string): Promise<boolean> {
+export async function tmuxSessionHasShellReady(
+  tmuxBin: string,
+  sessionName: string,
+): Promise<boolean> {
   const pane = await captureTmuxPane(tmuxBin, sessionName)
   const paneCommand = await getPaneCurrentCommand(tmuxBin, sessionName)
   return tmuxPaneLooksLikeShellReady(pane, paneCommand)
@@ -920,20 +1082,21 @@ async function startHermesTmuxSession(input: {
   workerId: string
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const runtimeModel = resolveWorkerRuntimeModel(input.workerId)
-  const execCommand = input.transport === 'cli'
-    ? buildHermesTmuxShellCommand({
-        profilePath: input.profilePath,
-        hermesBin: input.hermesBin,
-        ghToken: input.ghToken,
-        runtimeModel,
-      })
-    : buildHermesTmuxTuiCommand({
-        profilePath: input.profilePath,
-        hermesBin: input.hermesBin,
-        ghToken: input.ghToken,
-        useExec: true,
-        runtimeModel,
-      })
+  const execCommand =
+    input.transport === 'cli'
+      ? buildHermesTmuxShellCommand({
+          profilePath: input.profilePath,
+          hermesBin: input.hermesBin,
+          ghToken: input.ghToken,
+          runtimeModel,
+        })
+      : buildHermesTmuxTuiCommand({
+          profilePath: input.profilePath,
+          hermesBin: input.hermesBin,
+          ghToken: input.ghToken,
+          useExec: true,
+          runtimeModel,
+        })
   const started = await execFileAsync(input.tmuxBin, [
     'new-session',
     '-d',
@@ -955,9 +1118,10 @@ async function startHermesTmuxSession(input: {
     }
   }
 
-  const ready = input.transport === 'cli'
-    ? await waitForShellReady(input.tmuxBin, input.sessionName)
-    : await waitForHermesTuiReady(input.tmuxBin, input.sessionName)
+  const ready =
+    input.transport === 'cli'
+      ? await waitForShellReady(input.tmuxBin, input.sessionName)
+      : await waitForHermesTuiReady(input.tmuxBin, input.sessionName)
   if (!ready) {
     const pane = await captureTmuxPane(input.tmuxBin, input.sessionName)
     const sanitized = redactStartupOutput(pane).slice(-4_000)
@@ -980,7 +1144,15 @@ function redactStartupOutput(output: string): string {
 export async function ensureLiveTmuxSession(
   workerId: string,
   transport: TmuxTransportMode = resolveTmuxTransportMode(),
-): Promise<{ ok: true; tmuxBin: string; sessionName: string; transport: TmuxTransportMode } | { ok: false; error: string }> {
+): Promise<
+  | {
+      ok: true
+      tmuxBin: string
+      sessionName: string
+      transport: TmuxTransportMode
+    }
+  | { ok: false; error: string }
+> {
   const tmuxBin = resolveTmuxBin()
   if (!tmuxBin) return { ok: false, error: 'tmux not installed' }
 
@@ -993,12 +1165,13 @@ export async function ensureLiveTmuxSession(
   const ghToken = resolveGithubToken()
 
   const sessionExists = await tmuxHasSession(tmuxBin, sessionName)
-  const sessionUsable = sessionExists && (await tmuxSessionUsable(tmuxBin, sessionName))
-  const sessionReady = sessionUsable && (
-    transport === 'cli'
+  const sessionUsable =
+    sessionExists && (await tmuxSessionUsable(tmuxBin, sessionName))
+  const sessionReady =
+    sessionUsable &&
+    (transport === 'cli'
       ? await tmuxSessionHasShellReady(tmuxBin, sessionName)
-      : await tmuxSessionHasHermesTui(tmuxBin, sessionName)
-  )
+      : await tmuxSessionHasHermesTui(tmuxBin, sessionName))
 
   if (sessionUsable && sessionReady) {
     // sessionReady already verified Hermes TUI / shell markers — do not
@@ -1029,7 +1202,10 @@ export async function ensureLiveTmuxSession(
   return { ok: true, tmuxBin, sessionName, transport }
 }
 
-async function sendPromptToLiveSession(workerId: string, prompt: string): Promise<WorkerResult> {
+async function sendPromptToLiveSession(
+  workerId: string,
+  prompt: string,
+): Promise<WorkerResult> {
   const startedAt = Date.now()
   const ensured = await ensureLiveTmuxSession(workerId)
   if (!ensured.ok) {
@@ -1101,7 +1277,8 @@ async function sendPromptToLiveSession(workerId: string, prompt: string): Promis
       const msg = err instanceof Error ? err.message : String(err)
       if (!/can't find (pane|session|window)/i.test(msg)) throw err
       const restarted = await ensureLiveTmuxSession(workerId)
-      if (!restarted.ok) throw new Error(`${msg}; recreate failed: ${restarted.error}`)
+      if (!restarted.ok)
+        throw new Error(`${msg}; recreate failed: ${restarted.error}`)
       await pasteOnce()
     }
   } catch (err) {
@@ -1120,7 +1297,12 @@ async function sendPromptToLiveSession(workerId: string, prompt: string): Promis
   // bracketed-paste the content is accepted as a single block, so we only need
   // a short settle before sending Enter.
   await sleep(500)
-  const enter = await execFileAsync(tmuxBin, ['send-keys', '-t', paneTarget, 'C-m'])
+  const enter = await execFileAsync(tmuxBin, [
+    'send-keys',
+    '-t',
+    paneTarget,
+    'C-m',
+  ])
   if (!enter.ok) {
     return {
       workerId,
@@ -1166,7 +1348,10 @@ function buildSwarmRunScript(
   ].join('\n')
 }
 
-async function sendPromptToCliSession(workerId: string, prompt: string): Promise<WorkerResult> {
+async function sendPromptToCliSession(
+  workerId: string,
+  prompt: string,
+): Promise<WorkerResult> {
   const startedAt = Date.now()
   const ensured = await ensureLiveTmuxSession(workerId, 'cli')
   if (!ensured.ok) {
@@ -1203,7 +1388,11 @@ async function sendPromptToCliSession(workerId: string, prompt: string): Promise
   const instruction = `Execute the task in ${taskFilePath} and return the required checkpoint format.`
   const hermesBin = resolveHermesBin()
   try {
-    writeFileSync(runScriptPath, buildSwarmRunScript(profilePath, hermesBin, instruction, workerId), 'utf8')
+    writeFileSync(
+      runScriptPath,
+      buildSwarmRunScript(profilePath, hermesBin, instruction, workerId),
+      'utf8',
+    )
   } catch (err) {
     return {
       workerId,
@@ -1230,7 +1419,12 @@ async function sendPromptToCliSession(workerId: string, prompt: string): Promise
   }
 
   const dispatchCmd = `bash '${runScriptPath.replace(/'/g, `'\\''`)}'`
-  const sent = await execFileAsync(tmuxBin, ['send-keys', '-t', sessionName, dispatchCmd])
+  const sent = await execFileAsync(tmuxBin, [
+    'send-keys',
+    '-t',
+    sessionName,
+    dispatchCmd,
+  ])
   if (!sent.ok) {
     return {
       workerId,
@@ -1243,7 +1437,12 @@ async function sendPromptToCliSession(workerId: string, prompt: string): Promise
     }
   }
   await sleep(150)
-  const enter = await execFileAsync(tmuxBin, ['send-keys', '-t', sessionName, 'C-m'])
+  const enter = await execFileAsync(tmuxBin, [
+    'send-keys',
+    '-t',
+    sessionName,
+    'C-m',
+  ])
   if (!enter.ok) {
     return {
       workerId,
@@ -1267,7 +1466,18 @@ async function sendPromptToCliSession(workerId: string, prompt: string): Promise
   }
 }
 
-function runWorker(assignment: AssignmentRequest, timeoutMs: number, roster: SwarmRosterWorker | undefined, options?: { waitForCheckpoint?: boolean; checkpointPollMs?: number; missionId?: string | null; notifySessionKey?: string | null; deliveryMode?: SwarmDeliveryModeRequest }): Promise<WorkerResult> {
+function runWorker(
+  assignment: AssignmentRequest,
+  timeoutMs: number,
+  roster: SwarmRosterWorker | undefined,
+  options?: {
+    waitForCheckpoint?: boolean
+    checkpointPollMs?: number
+    missionId?: string | null
+    notifySessionKey?: string | null
+    deliveryMode?: SwarmDeliveryModeRequest
+  },
+): Promise<WorkerResult> {
   return new Promise(async (resolve) => {
     const workerId = assignment.workerId
     const prompt = buildWorkerPrompt({
@@ -1288,9 +1498,18 @@ function runWorker(assignment: AssignmentRequest, timeoutMs: number, roster: Swa
     const previousChatCheckpoint = chatBeforeDispatch.ok
       ? newestCheckpointFromMessages(chatBeforeDispatch.messages)
       : null
-    const previousRaw = previousChatCheckpoint?.raw ?? runtimeBeforeDispatch.checkpointRaw
-    const baselineRuntimeSignature = runtimeCheckpointSignature(runtimeBeforeDispatch)
-    markDispatchStarted(workerId, assignment.task, options?.missionId ?? null, assignment.assignmentId ?? null, options?.notifySessionKey ?? 'main')
+    const previousRaw =
+      previousChatCheckpoint?.raw ?? runtimeBeforeDispatch.checkpointRaw
+    const baselineRuntimeSignature = runtimeCheckpointSignature(
+      runtimeBeforeDispatch,
+    )
+    markDispatchStarted(
+      workerId,
+      assignment.task,
+      options?.missionId ?? null,
+      assignment.assignmentId ?? null,
+      options?.notifySessionKey ?? 'main',
+    )
     if (options?.missionId) {
       markMissionAssignmentDispatched({
         missionId: options.missionId,
@@ -1300,7 +1519,8 @@ function runWorker(assignment: AssignmentRequest, timeoutMs: number, roster: Swa
         author: 'aurora',
       })
     }
-    const { mode: deliveryMode, fallback: deliveryFallback } = resolveDeliveryMode(options?.deliveryMode)
+    const { mode: deliveryMode, fallback: deliveryFallback } =
+      resolveDeliveryMode(options?.deliveryMode)
     appendSwarmMemoryEvent({
       workerId,
       missionId: options?.missionId ?? null,
@@ -1340,7 +1560,11 @@ function runWorker(assignment: AssignmentRequest, timeoutMs: number, roster: Swa
         return
       }
       if (options?.waitForCheckpoint) {
-        const withCheckpoint = await attachCheckpointToResult(result, checkpointContext, null)
+        const withCheckpoint = await attachCheckpointToResult(
+          result,
+          checkpointContext,
+          null,
+        )
         recordDispatchBlock(workerId, assignment, withCheckpoint, options)
         resolve(withCheckpoint)
         return
@@ -1361,7 +1585,11 @@ function runWorker(assignment: AssignmentRequest, timeoutMs: number, roster: Swa
         return
       }
       if (options?.waitForCheckpoint) {
-        const withCheckpoint = await attachCheckpointToResult(result, checkpointContext, null)
+        const withCheckpoint = await attachCheckpointToResult(
+          result,
+          checkpointContext,
+          null,
+        )
         recordDispatchBlock(workerId, assignment, withCheckpoint, options)
         resolve(withCheckpoint)
         return
@@ -1391,7 +1619,10 @@ function runWorker(assignment: AssignmentRequest, timeoutMs: number, roster: Swa
 
     const useWrapper = existsSync(wrapperPath)
     const cmd = useWrapper ? wrapperPath : resolveHermesBin()
-    const args = buildHermesChatQueryArgs(prompt, resolveWorkerRuntimeModel(workerId))
+    const args = buildHermesChatQueryArgs(
+      prompt,
+      resolveWorkerRuntimeModel(workerId),
+    )
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       HERMES_HOME: profilePath,
@@ -1414,48 +1645,55 @@ function runWorker(assignment: AssignmentRequest, timeoutMs: number, roster: Swa
       },
       (error, stdout, stderr) => {
         void (async () => {
-        const durationMs = Date.now() - startedAt
-        const stdoutStr = (stdout || '').toString()
-        const stderrStr = (stderr || '').toString()
-        const out = stdoutStr.length > MAX_OUTPUT_CHARS ? stdoutStr.slice(-MAX_OUTPUT_CHARS) : stdoutStr
+          const durationMs = Date.now() - startedAt
+          const stdoutStr = (stdout || '').toString()
+          const stderrStr = (stderr || '').toString()
+          const out =
+            stdoutStr.length > MAX_OUTPUT_CHARS
+              ? stdoutStr.slice(-MAX_OUTPUT_CHARS)
+              : stdoutStr
 
-        if (error) {
-          const code = (error as { code?: number | null }).code ?? null
-          const result: WorkerResult = {
+          if (error) {
+            const code = (error as { code?: number | null }).code ?? null
+            const result: WorkerResult = {
+              workerId,
+              ok: false,
+              output: out,
+              error: stderrStr.trim() || error.message,
+              durationMs,
+              exitCode: typeof code === 'number' ? code : null,
+              delivery: 'oneshot',
+              deliveryFallback,
+            }
+            markDispatchResult(workerId, result)
+            recordDispatchBlock(workerId, assignment, result, options)
+            resolve(result)
+            return
+          }
+
+          let result: WorkerResult = {
             workerId,
-            ok: false,
+            ok: true,
             output: out,
-            error: stderrStr.trim() || error.message,
+            error: stderrStr.trim() || null,
             durationMs,
-            exitCode: typeof code === 'number' ? code : null,
+            exitCode: 0,
             delivery: 'oneshot',
             deliveryFallback,
+          }
+          if (options?.waitForCheckpoint) {
+            const stdoutCheckpoint = parseSwarmCheckpoint(out)
+            result = await attachCheckpointToResult(
+              result,
+              checkpointContext,
+              stdoutCheckpoint,
+            )
+          } else {
+            result.checkpointStatus = 'not-requested'
           }
           markDispatchResult(workerId, result)
           recordDispatchBlock(workerId, assignment, result, options)
           resolve(result)
-          return
-        }
-
-        let result: WorkerResult = {
-          workerId,
-          ok: true,
-          output: out,
-          error: stderrStr.trim() || null,
-          durationMs,
-          exitCode: 0,
-          delivery: 'oneshot',
-          deliveryFallback,
-        }
-        if (options?.waitForCheckpoint) {
-          const stdoutCheckpoint = parseSwarmCheckpoint(out)
-          result = await attachCheckpointToResult(result, checkpointContext, stdoutCheckpoint)
-        } else {
-          result.checkpointStatus = 'not-requested'
-        }
-        markDispatchResult(workerId, result)
-        recordDispatchBlock(workerId, assignment, result, options)
-        resolve(result)
         })()
       },
     )
@@ -1497,7 +1735,12 @@ export async function dispatchSwarmAssignments(body: DispatchRequest) {
     const workerIds = workerIdsRaw
       .filter((value): value is string => typeof value === 'string')
       .map((value) => value.trim())
-      .filter((value) => value.length > 0 && validateWorkerId(value) && isSwarmDispatchWorkerId(value))
+      .filter(
+        (value) =>
+          value.length > 0 &&
+          validateWorkerId(value) &&
+          isSwarmDispatchWorkerId(value),
+      )
     assignments = workerIds.map((workerId) => ({
       workerId,
       task: prompt,
@@ -1515,24 +1758,46 @@ export async function dispatchSwarmAssignments(body: DispatchRequest) {
   if (assignments.some((assignment) => assignment.task.length === 0)) {
     throw new SwarmDispatchError('assignment task required')
   }
-  if (assignments.some((assignment) => assignment.task.length > MAX_PROMPT_CHARS)) {
-    throw new SwarmDispatchError(`assignment task exceeds ${MAX_PROMPT_CHARS} characters`)
+  if (
+    assignments.some((assignment) => assignment.task.length > MAX_PROMPT_CHARS)
+  ) {
+    throw new SwarmDispatchError(
+      `assignment task exceeds ${MAX_PROMPT_CHARS} characters`,
+    )
   }
 
-  const timeoutRaw = typeof body.timeoutSeconds === 'number' ? body.timeoutSeconds : DEFAULT_TIMEOUT_S
-  const timeoutSeconds = Math.max(10, Math.min(MAX_TIMEOUT_S, Math.floor(timeoutRaw)))
+  const timeoutRaw =
+    typeof body.timeoutSeconds === 'number'
+      ? body.timeoutSeconds
+      : DEFAULT_TIMEOUT_S
+  const timeoutSeconds = Math.max(
+    10,
+    Math.min(MAX_TIMEOUT_S, Math.floor(timeoutRaw)),
+  )
   const timeoutMs = timeoutSeconds * 1000
   const waitForCheckpoint = resolveWaitForCheckpoint(body)
-  const pollRaw = typeof body.checkpointPollSeconds === 'number' ? body.checkpointPollSeconds : 90
+  const pollRaw =
+    typeof body.checkpointPollSeconds === 'number'
+      ? body.checkpointPollSeconds
+      : 90
   const checkpointPollSeconds = Math.max(5, Math.min(300, Math.floor(pollRaw)))
-  const notifySessionKey = typeof body.notifySessionKey === 'string' && body.notifySessionKey.trim() ? body.notifySessionKey.trim() : 'main'
+  const notifySessionKey =
+    typeof body.notifySessionKey === 'string' && body.notifySessionKey.trim()
+      ? body.notifySessionKey.trim()
+      : 'main'
   const deliveryMode = parseDeliveryModeRequest(body.deliveryMode)
 
-  const requestedMissionId = typeof body.missionId === 'string' ? body.missionId.trim() : ''
-  const hasExplicitMissionTitle = typeof body.missionTitle === 'string' && body.missionTitle.trim()
+  const requestedMissionId =
+    typeof body.missionId === 'string' ? body.missionId.trim() : ''
+  const hasExplicitMissionTitle =
+    typeof body.missionTitle === 'string' && body.missionTitle.trim()
   const missionTitle = hasExplicitMissionTitle
     ? (body.missionTitle as string).trim()
-    : requestedMissionId ? '' : assignments.length === 1 ? assignments[0].task.slice(0, 120) : `${assignments.length} assigned tasks`
+    : requestedMissionId
+      ? ''
+      : assignments.length === 1
+        ? assignments[0].task.slice(0, 120)
+        : `${assignments.length} assigned tasks`
   const mission = createOrUpdateMission({
     missionId: requestedMissionId || null,
     title: missionTitle,
@@ -1553,20 +1818,34 @@ export async function dispatchSwarmAssignments(body: DispatchRequest) {
     }
   }
 
-  const assignmentIdByKey = new Map(mission.assignments.map((item) => [`${item.workerId}\n${item.task}`, item.id]))
+  const assignmentIdByKey = new Map(
+    mission.assignments.map((item) => [
+      `${item.workerId}\n${item.task}`,
+      item.id,
+    ]),
+  )
   assignments = assignments.map((assignment) => ({
     ...assignment,
-    assignmentId: assignmentIdByKey.get(`${assignment.workerId}\n${assignment.task}`),
+    assignmentId: assignmentIdByKey.get(
+      `${assignment.workerId}\n${assignment.task}`,
+    ),
   }))
 
   const dispatchedAt = Date.now()
-  const roster = rosterByWorkerId(assignments.map((assignment) => assignment.workerId))
-  const results = await Promise.all(assignments.map((assignment) => runWorker(
-    assignment,
-    timeoutMs,
-    roster.get(assignment.workerId),
-    { waitForCheckpoint, checkpointPollMs: checkpointPollSeconds * 1000, missionId: mission.id, notifySessionKey, deliveryMode },
-  )))
+  const roster = rosterByWorkerId(
+    assignments.map((assignment) => assignment.workerId),
+  )
+  const results = await Promise.all(
+    assignments.map((assignment) =>
+      runWorker(assignment, timeoutMs, roster.get(assignment.workerId), {
+        waitForCheckpoint,
+        checkpointPollMs: checkpointPollSeconds * 1000,
+        missionId: mission.id,
+        notifySessionKey,
+        deliveryMode,
+      }),
+    ),
+  )
 
   const latestMission = getSwarmMission(mission.id) ?? mission
 
@@ -1589,7 +1868,10 @@ export async function dispatchSwarmAssignments(body: DispatchRequest) {
     completedAt: Date.now(),
     missionId: mission.id,
     mission: latestMission,
-    prompt: assignments.length === 1 ? assignments[0].task : `${assignments.length} assigned tasks`,
+    prompt:
+      assignments.length === 1
+        ? assignments[0].task
+        : `${assignments.length} assigned tasks`,
     assignments,
     timeoutSeconds,
     waitForCheckpoint,
@@ -1620,7 +1902,10 @@ export const Route = createFileRoute('/api/swarm-dispatch')({
           if (error instanceof SwarmDispatchError) {
             return json({ error: error.message }, { status: error.status })
           }
-          return json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 })
+          return json(
+            { error: error instanceof Error ? error.message : String(error) },
+            { status: 500 },
+          )
         }
       },
     },

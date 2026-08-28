@@ -21,10 +21,16 @@ import { Markdown } from '@/components/prompt-kit/markdown'
 import { toast } from '@/components/ui/toast'
 import { runCronJob, toggleCronJob } from '@/lib/cron-api'
 import { cn } from '@/lib/utils'
-import { useAgentChat, type OperationsChatMessage } from '../hooks/use-agent-chat'
+import {
+  useAgentChat,
+  type OperationsChatMessage,
+} from '../hooks/use-agent-chat'
 import type { OperationsAgent } from '../hooks/use-operations'
 
-function getStatusStyles(status: OperationsAgent['status'], needsSetup: boolean) {
+function getStatusStyles(
+  status: OperationsAgent['status'],
+  needsSetup: boolean,
+) {
   if (needsSetup) {
     return {
       dot: 'bg-amber-400',
@@ -143,7 +149,10 @@ export function OperationsInlineChat({
               return (
                 <div
                   key={message.id}
-                  className={cn('flex', isUser ? 'justify-end' : 'justify-start')}
+                  className={cn(
+                    'flex',
+                    isUser ? 'justify-end' : 'justify-start',
+                  )}
                 >
                   <div
                     className={cn(
@@ -178,7 +187,11 @@ export function OperationsInlineChat({
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+              if (
+                event.key === 'Enter' &&
+                !event.shiftKey &&
+                !event.nativeEvent.isComposing
+              ) {
                 event.preventDefault()
                 void handleSend()
               }
@@ -193,7 +206,11 @@ export function OperationsInlineChat({
             disabled={!draft.trim() || isSending}
             aria-label={isSending ? 'Sending message' : 'Send message'}
           >
-            <HugeiconsIcon icon={ArrowRight01Icon} size={15} strokeWidth={1.8} />
+            <HugeiconsIcon
+              icon={ArrowRight01Icon}
+              size={15}
+              strokeWidth={1.8}
+            />
           </Button>
         </div>
       </div>
@@ -213,7 +230,9 @@ export function OperationsAgentCard({
   const displayName = stripEmojiPrefix(agent.name)
   const [showCronPanel, setShowCronPanel] = useState(false)
   const [showChat, setShowChat] = useState(false)
-  const { messages, sendMessage, isSending, error } = useAgentChat(agent.sessionKey)
+  const { messages, sendMessage, isSending, error } = useAgentChat(
+    agent.sessionKey,
+  )
   const cronJobCount = agent.jobs.length
 
   const toggleMutation = useMutation({
@@ -240,7 +259,9 @@ export function OperationsAgentCard({
     },
     onError: (mutationError) => {
       toast(
-        mutationError instanceof Error ? mutationError.message : 'Failed to run cron job',
+        mutationError instanceof Error
+          ? mutationError.message
+          : 'Failed to run cron job',
         { type: 'error' },
       )
     },
@@ -271,7 +292,9 @@ export function OperationsAgentCard({
       })
       const stopPayload = (await stopRes.json()) as { error?: string }
       if (!stopRes.ok) {
-        throw new Error(stopPayload.error || `Stop failed: HTTP ${stopRes.status}`)
+        throw new Error(
+          stopPayload.error || `Stop failed: HTTP ${stopRes.status}`,
+        )
       }
 
       // Step 2: Start a fresh tmux session (loads latest config.yaml)
@@ -280,16 +303,28 @@ export function OperationsAgentCard({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workerId: agent.id }),
       })
-      const startPayload = (await startRes.json()) as { error?: string; started?: boolean; alreadyRunning?: boolean }
+      const startPayload = (await startRes.json()) as {
+        error?: string
+        started?: boolean
+        alreadyRunning?: boolean
+      }
       if (!startRes.ok) {
-        throw new Error(startPayload.error || `Start failed: HTTP ${startRes.status}`)
+        throw new Error(
+          startPayload.error || `Start failed: HTTP ${startRes.status}`,
+        )
       }
 
       toast(`${agent.id} restarted successfully`, { type: 'success' })
-      await queryClient.invalidateQueries({ queryKey: ['operations', 'swarm-runtime'] })
-      await queryClient.invalidateQueries({ queryKey: ['operations', 'sessions'] })
+      await queryClient.invalidateQueries({
+        queryKey: ['operations', 'swarm-runtime'],
+      })
+      await queryClient.invalidateQueries({
+        queryKey: ['operations', 'sessions'],
+      })
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Failed to recover', { type: 'error' })
+      toast(err instanceof Error ? err.message : 'Failed to recover', {
+        type: 'error',
+      })
     } finally {
       setRecovering(false)
     }
@@ -341,7 +376,9 @@ export function OperationsAgentCard({
               <span
                 className={cn(
                   'h-2 w-2 shrink-0 rounded-full',
-                  agent.status === 'active' && !agent.needsSetup && 'animate-pulse',
+                  agent.status === 'active' &&
+                    !agent.needsSetup &&
+                    'animate-pulse',
                   status.dot,
                 )}
                 aria-label={status.label}
@@ -468,13 +505,19 @@ export function OperationsAgentCard({
       {isBlocked ? (
         <div className="mx-2 mt-2 rounded-lg border border-red-300/40 bg-red-300/10 px-2.5 py-2">
           <div className="flex items-start gap-2">
-            <HugeiconsIcon icon={AlertCircleIcon} size={14} strokeWidth={2} className="mt-0.5 shrink-0 text-red-400" />
+            <HugeiconsIcon
+              icon={AlertCircleIcon}
+              size={14}
+              strokeWidth={2}
+              className="mt-0.5 shrink-0 text-red-400"
+            />
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-red-300">
                 {agent.needsHuman ? 'Needs human' : 'Blocked'}
               </p>
               <p className="mt-0.5 line-clamp-2 text-[11px] text-red-200/80">
-                {agent.blockedReason || 'Worker is blocked. Check runtime state.'}
+                {agent.blockedReason ||
+                  'Worker is blocked. Check runtime state.'}
               </p>
             </div>
           </div>
@@ -484,7 +527,12 @@ export function OperationsAgentCard({
             disabled={recovering}
             className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-red-300/30 bg-red-300/10 px-2 py-1.5 text-[11px] font-medium text-red-200 transition-colors hover:bg-red-300/20 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <HugeiconsIcon icon={RefreshIcon} size={12} strokeWidth={2} className={recovering ? 'animate-spin' : ''} />
+            <HugeiconsIcon
+              icon={RefreshIcon}
+              size={12}
+              strokeWidth={2}
+              className={recovering ? 'animate-spin' : ''}
+            />
             {recovering ? 'Restarting…' : 'Restart session'}
           </button>
         </div>
@@ -521,7 +569,9 @@ export function OperationsAgentCard({
                               })
                             }
                             className="peer sr-only"
-                            aria-label={job.enabled ? 'Disable job' : 'Enable job'}
+                            aria-label={
+                              job.enabled ? 'Disable job' : 'Enable job'
+                            }
                           />
                           <span className="h-5 w-9 rounded-full bg-primary-200 transition-colors peer-checked:bg-[var(--theme-accent)]" />
                           <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-[var(--theme-card)] shadow-sm transition-transform peer-checked:translate-x-4" />
@@ -541,7 +591,11 @@ export function OperationsAgentCard({
                           onClick={() => runCronMutation.mutate(job.id)}
                           aria-label={`Run ${displayJobName(job.name, agent.id)} now`}
                         >
-                          <HugeiconsIcon icon={PlayIcon} size={14} strokeWidth={1.9} />
+                          <HugeiconsIcon
+                            icon={PlayIcon}
+                            size={14}
+                            strokeWidth={1.9}
+                          />
                         </Button>
                       </div>
                     ))}
@@ -614,7 +668,8 @@ export function OperationsAgentCard({
           variant="secondary"
           className={cn(
             'h-8 flex-1 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] text-xs font-medium text-[var(--theme-text)] hover:bg-[var(--theme-card2)]',
-            showChat && 'border-[var(--theme-accent)] bg-[var(--theme-accent-soft)]',
+            showChat &&
+              'border-[var(--theme-accent)] bg-[var(--theme-accent-soft)]',
           )}
           onClick={() => setShowChat((value) => !value)}
         >

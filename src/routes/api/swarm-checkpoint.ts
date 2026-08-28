@@ -1,13 +1,22 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { isAuthenticated } from '../../server/auth-middleware'
 import { getSwarmProfilePath } from '../../server/swarm-foundation'
 import { isSwarmWorkerId } from '../../server/swarm-roster'
 import { appendSwarmMemoryEvent } from '../../server/swarm-memory'
-import { checkpointFromRuntimeSnapshot, readRuntimeCheckpointSnapshot } from './swarm-dispatch'
+import {
+  checkpointFromRuntimeSnapshot,
+  readRuntimeCheckpointSnapshot,
+} from './swarm-dispatch'
 import { publishSwarmCheckpointNotification } from '../../server/swarm-notifications'
 import { recordMissionCheckpoint } from '../../server/swarm-missions'
 
@@ -28,23 +37,60 @@ type CheckpointRequest = {
 }
 
 const CheckpointBodySchema = z.object({
-  workerId: z.string().trim().refine(isSwarmWorkerId, 'worker id must look like swarm13 or a semantic profile id'),
-  state: z.enum(['idle', 'executing', 'thinking', 'writing', 'waiting', 'blocked', 'syncing', 'reviewing', 'offline']).optional(),
+  workerId: z
+    .string()
+    .trim()
+    .refine(
+      isSwarmWorkerId,
+      'worker id must look like swarm13 or a semantic profile id',
+    ),
+  state: z
+    .enum([
+      'idle',
+      'executing',
+      'thinking',
+      'writing',
+      'waiting',
+      'blocked',
+      'syncing',
+      'reviewing',
+      'offline',
+    ])
+    .optional(),
   phase: z.string().trim().max(200).nullable().optional(),
   currentTask: z.string().trim().max(16_000).nullable().optional(),
   lastSummary: z.string().trim().max(16_000).nullable().optional(),
   lastResult: z.string().trim().max(32_000).nullable().optional(),
   nextAction: z.string().trim().max(16_000).nullable().optional(),
   blockedReason: z.string().trim().max(16_000).nullable().optional(),
-  checkpointStatus: z.enum(['none', 'in_progress', 'done', 'blocked', 'handoff', 'needs_input']).optional(),
+  checkpointStatus: z
+    .enum(['none', 'in_progress', 'done', 'blocked', 'handoff', 'needs_input'])
+    .optional(),
   needsHuman: z.boolean().optional(),
   tasks: z.array(z.unknown()).optional(),
   artifacts: z.array(z.unknown()).optional(),
   previews: z.array(z.unknown()).optional(),
 })
 
-const ALLOWED_STATES = new Set(['idle', 'executing', 'thinking', 'writing', 'waiting', 'blocked', 'syncing', 'reviewing', 'offline'])
-const ALLOWED_CHECKPOINTS = new Set(['none', 'in_progress', 'done', 'blocked', 'handoff', 'needs_input'])
+const ALLOWED_STATES = new Set([
+  'idle',
+  'executing',
+  'thinking',
+  'writing',
+  'waiting',
+  'blocked',
+  'syncing',
+  'reviewing',
+  'offline',
+])
+const ALLOWED_CHECKPOINTS = new Set([
+  'none',
+  'in_progress',
+  'done',
+  'blocked',
+  'handoff',
+  'needs_input',
+])
 
 function validateWorkerId(value: string): boolean {
   return isSwarmWorkerId(value)
@@ -64,7 +110,10 @@ function cleanArray(value: unknown): Array<unknown> | undefined {
 function readCurrent(runtimePath: string): Record<string, unknown> {
   if (!existsSync(runtimePath)) return {}
   try {
-    return JSON.parse(readFileSync(runtimePath, 'utf8')) as Record<string, unknown>
+    return JSON.parse(readFileSync(runtimePath, 'utf8')) as Record<
+      string,
+      unknown
+    >
   } catch {
     return {}
   }
@@ -88,12 +137,23 @@ export const Route = createFileRoute('/api/swarm-checkpoint')({
         try {
           body = (await request.json()) as CheckpointRequest
         } catch {
-          return json({ ok: false, error: 'Invalid JSON body' }, { status: 400 })
+          return json(
+            { ok: false, error: 'Invalid JSON body' },
+            { status: 400 },
+          )
         }
 
         const parsed = CheckpointBodySchema.safeParse(body)
         if (!parsed.success) {
-          return json({ ok: false, error: parsed.error.issues.map((issue) => issue.message).join('; ') }, { status: 400 })
+          return json(
+            {
+              ok: false,
+              error: parsed.error.issues
+                .map((issue) => issue.message)
+                .join('; '),
+            },
+            { status: 400 },
+          )
         }
         const input = parsed.data
         const workerId = input.workerId
@@ -104,7 +164,20 @@ export const Route = createFileRoute('/api/swarm-checkpoint')({
           lastOutputAt: Date.now(),
         }
 
-        for (const key of ['state', 'phase', 'currentTask', 'lastSummary', 'lastResult', 'nextAction', 'blockedReason', 'checkpointStatus', 'needsHuman', 'tasks', 'artifacts', 'previews'] as const) {
+        for (const key of [
+          'state',
+          'phase',
+          'currentTask',
+          'lastSummary',
+          'lastResult',
+          'nextAction',
+          'blockedReason',
+          'checkpointStatus',
+          'needsHuman',
+          'tasks',
+          'artifacts',
+          'previews',
+        ] as const) {
           if (input[key] !== undefined) patch[key] = input[key]
         }
 
@@ -115,14 +188,27 @@ export const Route = createFileRoute('/api/swarm-checkpoint')({
         const next = { ...current, ...patch }
         writeJsonAtomic(runtimePath, next)
 
-        const missionId = typeof next.currentMissionId === 'string' ? next.currentMissionId : null
-        const assignmentId = typeof next.currentAssignmentId === 'string' ? next.currentAssignmentId : null
+        const missionId =
+          typeof next.currentMissionId === 'string'
+            ? next.currentMissionId
+            : null
+        const assignmentId =
+          typeof next.currentAssignmentId === 'string'
+            ? next.currentAssignmentId
+            : null
         appendSwarmMemoryEvent({
           workerId,
           missionId,
           assignmentId,
-          type: input.checkpointStatus === 'blocked' || input.state === 'blocked' ? 'blocked' : 'checkpoint',
-          summary: input.lastResult ?? input.lastSummary ?? input.currentTask ?? 'Runtime checkpoint updated',
+          type:
+            input.checkpointStatus === 'blocked' || input.state === 'blocked'
+              ? 'blocked'
+              : 'checkpoint',
+          summary:
+            input.lastResult ??
+            input.lastSummary ??
+            input.currentTask ??
+            'Runtime checkpoint updated',
           event: {
             state: input.state ?? null,
             phase: input.phase ?? null,
@@ -156,7 +242,9 @@ export const Route = createFileRoute('/api/swarm-checkpoint')({
           missionClosed = Boolean(updatedMission?._completed)
           if (missionClosed) {
             try {
-              for (const wId of new Set(updatedMission!.assignments.map((a) => a.workerId))) {
+              for (const wId of new Set(
+                updatedMission!.assignments.map((a) => a.workerId),
+              )) {
                 appendSwarmMemoryEvent({
                   workerId: wId,
                   missionId: updatedMission!.id,
@@ -165,7 +253,9 @@ export const Route = createFileRoute('/api/swarm-checkpoint')({
                   summary: `Mission complete: ${updatedMission!.title}`,
                 })
               }
-            } catch { /* memory write best-effort */ }
+            } catch {
+              /* memory write best-effort */
+            }
           }
         }
 
@@ -175,11 +265,28 @@ export const Route = createFileRoute('/api/swarm-checkpoint')({
               missionId,
               assignmentId,
               checkpoint: parsedCheckpoint,
-              notifySessionKey: typeof next.notifySessionKey === 'string' ? next.notifySessionKey : null,
+              notifySessionKey:
+                typeof next.notifySessionKey === 'string'
+                  ? next.notifySessionKey
+                  : null,
             })
-          : { published: false, sessionKey: typeof next.notifySessionKey === 'string' ? next.notifySessionKey : 'main' }
+          : {
+              published: false,
+              sessionKey:
+                typeof next.notifySessionKey === 'string'
+                  ? next.notifySessionKey
+                  : 'main',
+            }
 
-        return json({ ok: true, workerId, runtimePath, checkpoint: next, savedAt: Date.now(), notification, missionClosed })
+        return json({
+          ok: true,
+          workerId,
+          runtimePath,
+          checkpoint: next,
+          savedAt: Date.now(),
+          notification,
+          missionClosed,
+        })
       },
     },
   },

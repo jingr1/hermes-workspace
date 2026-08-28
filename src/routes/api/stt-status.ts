@@ -18,7 +18,9 @@ export const Route = createFileRoute('/api/stt-status')({
         const paths = resolveHermesConfigPaths()
         const { config } = readHermesConfigFiles(paths)
         const stt =
-          config.stt && typeof config.stt === 'object' && !Array.isArray(config.stt)
+          config.stt &&
+          typeof config.stt === 'object' &&
+          !Array.isArray(config.stt)
             ? (config.stt as Record<string, unknown>)
             : {}
         const provider =

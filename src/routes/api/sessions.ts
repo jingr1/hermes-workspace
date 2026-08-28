@@ -60,9 +60,8 @@ export const Route = createFileRoute('/api/sessions')({
         // state.db (same codepath as ?profile=), merging local portable
         // sessions. Gateway/dashboard are not required for listing.
         try {
-          const { getActiveProfileName } = await import(
-            '../../server/profiles-browser'
-          )
+          const { getActiveProfileName } =
+            await import('../../server/profiles-browser')
           const activeProfile = getActiveProfileName() || 'default'
           const fsSessions = listSessionsForProfile(activeProfile)
           const result: Array<any> = fsSessions.map((s) => ({
@@ -116,9 +115,8 @@ export const Route = createFileRoute('/api/sessions')({
         }
         const csrfCheckPost = requireJsonContentType(request)
         if (csrfCheckPost) return csrfCheckPost
-        const { ensureActiveProfileGateway } = await import(
-          '../../server/gateway-pool'
-        )
+        const { ensureActiveProfileGateway } =
+          await import('../../server/gateway-pool')
         await ensureActiveProfileGateway()
         const capabilities = await ensureSessionsCapability()
         if (!capabilities.sessions) {
@@ -160,7 +158,10 @@ export const Route = createFileRoute('/api/sessions')({
             ok: true,
             sessionKey: createdId,
             friendlyId: createdId,
-            entry: toSessionSummary({ ...(session ?? { id: createdId }), id: createdId }),
+            entry: toSessionSummary({
+              ...(session ?? { id: createdId }),
+              id: createdId,
+            }),
             modelApplied: true,
           })
         } catch (err) {

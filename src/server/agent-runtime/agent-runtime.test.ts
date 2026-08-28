@@ -22,7 +22,11 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  try { rmSync(tempRoot, { recursive: true, force: true }) } catch { /* ignore */ }
+  try {
+    rmSync(tempRoot, { recursive: true, force: true })
+  } catch {
+    /* ignore */
+  }
 })
 
 describe('agents-config', () => {
@@ -100,7 +104,17 @@ agents:
 
 describe('pid-registry', () => {
   it('register / lookup / unregister roundtrip', () => {
-    registerPid({ runId: 'r1', agentId: 'a1', pid: 999999, runtime: 'claude-code', startedAt: 1, logPath: '/tmp/x' }, tempRoot)
+    registerPid(
+      {
+        runId: 'r1',
+        agentId: 'a1',
+        pid: 999999,
+        runtime: 'claude-code',
+        startedAt: 1,
+        logPath: '/tmp/x',
+      },
+      tempRoot,
+    )
     expect(lookupPid('r1', tempRoot)?.pid).toBe(999999)
     expect(listPids(tempRoot)).toHaveLength(1)
     unregisterPid('r1', tempRoot)
@@ -109,8 +123,28 @@ describe('pid-registry', () => {
   })
 
   it('register replaces an existing entry for the same runId', () => {
-    registerPid({ runId: 'r1', agentId: 'a1', pid: 1, runtime: 'x', startedAt: 1, logPath: '/a' }, tempRoot)
-    registerPid({ runId: 'r1', agentId: 'a1', pid: 2, runtime: 'x', startedAt: 2, logPath: '/b' }, tempRoot)
+    registerPid(
+      {
+        runId: 'r1',
+        agentId: 'a1',
+        pid: 1,
+        runtime: 'x',
+        startedAt: 1,
+        logPath: '/a',
+      },
+      tempRoot,
+    )
+    registerPid(
+      {
+        runId: 'r1',
+        agentId: 'a1',
+        pid: 2,
+        runtime: 'x',
+        startedAt: 2,
+        logPath: '/b',
+      },
+      tempRoot,
+    )
     expect(listPids(tempRoot)).toHaveLength(1)
     expect(lookupPid('r1', tempRoot)?.pid).toBe(2)
   })
@@ -121,8 +155,28 @@ describe('pid-registry', () => {
     child.unref()
     const livePid = child.pid!
 
-    registerPid({ runId: 'live', agentId: 'a', pid: livePid, runtime: 'x', startedAt: 1, logPath: '/a' }, tempRoot)
-    registerPid({ runId: 'dead', agentId: 'a', pid: 999999, runtime: 'x', startedAt: 1, logPath: '/b' }, tempRoot)
+    registerPid(
+      {
+        runId: 'live',
+        agentId: 'a',
+        pid: livePid,
+        runtime: 'x',
+        startedAt: 1,
+        logPath: '/a',
+      },
+      tempRoot,
+    )
+    registerPid(
+      {
+        runId: 'dead',
+        agentId: 'a',
+        pid: 999999,
+        runtime: 'x',
+        startedAt: 1,
+        logPath: '/b',
+      },
+      tempRoot,
+    )
 
     expect(isProcessGroupAlive(livePid)).toBe(true)
     expect(isProcessGroupAlive(999999)).toBe(false)
@@ -138,7 +192,9 @@ describe('pid-registry', () => {
 
   it('killProcessGroup kills the whole group (children too)', async () => {
     // spawn a group leader that forks a child; kill(-pgid) must reap both
-    const child = spawn('bash', ['-c', 'sleep 60 & sleep 60'], { detached: true })
+    const child = spawn('bash', ['-c', 'sleep 60 & sleep 60'], {
+      detached: true,
+    })
     child.unref()
     const pid = child.pid!
     expect(isProcessGroupAlive(pid)).toBe(true)
@@ -182,7 +238,9 @@ agents:
     profile: developer
 `,
     })
-    await expect(router.getAdapter('dev')!.startRun({} as never)).rejects.toThrow(/swarm-dispatch/)
+    await expect(
+      router.getAdapter('dev')!.startRun({} as never),
+    ).rejects.toThrow(/swarm-dispatch/)
   })
 
   it('probeAll returns one row per agent with runtime/execution', async () => {
@@ -211,7 +269,10 @@ describe('ClaudeCodeAdapter process management', () => {
   it('startRun spawns a detached process, streams output, interrupt kills the group', async () => {
     // Use a stand-in "claude" binary: a shell script echoing then sleeping.
     const fakeBin = join(tempRoot, 'fake-claude')
-    writeFileSync(fakeBin, '#!/bin/bash\necho "hello from fake claude"\nsleep 60\n')
+    writeFileSync(
+      fakeBin,
+      '#!/bin/bash\necho "hello from fake claude"\nsleep 60\n',
+    )
     const { chmodSync } = await import('node:fs')
     chmodSync(fakeBin, 0o755)
 
@@ -231,7 +292,11 @@ describe('ClaudeCodeAdapter process management', () => {
       runId: 'run-cc-1',
       agentId: 'cc',
       task: 'do something',
-      mcp: { endpoint: 'http://127.0.0.1:1/api/mcp-rpc', runToken: 'tok', toolAllowlist: [] },
+      mcp: {
+        endpoint: 'http://127.0.0.1:1/api/mcp-rpc',
+        runToken: 'tok',
+        toolAllowlist: [],
+      },
     })
     expect(runId).toBe('run-cc-1')
 

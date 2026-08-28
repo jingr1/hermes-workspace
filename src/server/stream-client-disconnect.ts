@@ -23,9 +23,7 @@ export type ClientDisconnectEvaluation = {
 export function evaluateClientDisconnect(input: {
   activeRunId: string | null
   streamClosed: boolean
-  resolveAction?: (args: {
-    runId: string
-  }) => ClientDisconnectAction
+  resolveAction?: (args: { runId: string }) => ClientDisconnectAction
 }): ClientDisconnectEvaluation {
   const idle: ClientDisconnectEvaluation = {
     keepUpstreamAlive: false,

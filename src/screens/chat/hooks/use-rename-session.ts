@@ -57,37 +57,31 @@ export function useRenameSession(): RenameSessionResult {
         error: null,
       })
       // Optimistically update the session title in cache
-      queryClient.setQueryData(
-        sessionsKey,
-        function update(sessions: unknown) {
-          if (!Array.isArray(sessions)) return sessions
-          return (sessions as Array<Record<string, unknown>>).map((session) => {
-            const key = typeof session.key === 'string' ? session.key : ''
-            const friendlyId =
-              typeof session.friendlyId === 'string' ? session.friendlyId : ''
-            if (key !== payload.sessionKey && friendlyId !== targetId)
-              return session
-            return {
-              ...session,
-              label: payload.newTitle,
-              title: payload.newTitle,
-              derivedTitle: payload.newTitle,
-              titleStatus: 'ready',
-              titleSource: 'manual',
-              titleError: null,
-            }
-          })
-        },
-      )
+      queryClient.setQueryData(sessionsKey, function update(sessions: unknown) {
+        if (!Array.isArray(sessions)) return sessions
+        return (sessions as Array<Record<string, unknown>>).map((session) => {
+          const key = typeof session.key === 'string' ? session.key : ''
+          const friendlyId =
+            typeof session.friendlyId === 'string' ? session.friendlyId : ''
+          if (key !== payload.sessionKey && friendlyId !== targetId)
+            return session
+          return {
+            ...session,
+            label: payload.newTitle,
+            title: payload.newTitle,
+            derivedTitle: payload.newTitle,
+            titleStatus: 'ready',
+            titleSource: 'manual',
+            titleError: null,
+          }
+        })
+      })
 
       return { previousSessions, targetId }
     },
     onError: function onError(err, _payload, context) {
       if (context?.previousSessions) {
-        queryClient.setQueryData(
-          sessionsKey,
-          context.previousSessions,
-        )
+        queryClient.setQueryData(sessionsKey, context.previousSessions)
       }
       setError(err instanceof Error ? err.message : String(err))
     },

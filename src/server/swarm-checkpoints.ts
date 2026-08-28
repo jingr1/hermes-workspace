@@ -3,7 +3,12 @@ import { existsSync, readFileSync } from 'node:fs'
 export type ParsedSwarmCheckpoint = {
   stateLabel: 'DONE' | 'BLOCKED' | 'NEEDS_INPUT' | 'HANDOFF' | 'IN_PROGRESS'
   runtimeState: 'idle' | 'blocked' | 'waiting' | 'executing'
-  checkpointStatus: 'done' | 'blocked' | 'needs_input' | 'handoff' | 'in_progress'
+  checkpointStatus:
+    | 'done'
+    | 'blocked'
+    | 'needs_input'
+    | 'handoff'
+    | 'in_progress'
   filesChanged: string | null
   commandsRun: string | null
   result: string | null
@@ -13,11 +18,21 @@ export type ParsedSwarmCheckpoint = {
   raw: string
 }
 
-const LABELS = ['STATE', 'FILES_CHANGED', 'COMMANDS_RUN', 'RESULT', 'BLOCKER', 'NEXT_ACTION'] as const
+const LABELS = [
+  'STATE',
+  'FILES_CHANGED',
+  'COMMANDS_RUN',
+  'RESULT',
+  'BLOCKER',
+  'NEXT_ACTION',
+] as const
 
-type Label = typeof LABELS[number]
+type Label = (typeof LABELS)[number]
 
-const STATE_MAP: Record<ParsedSwarmCheckpoint['stateLabel'], Pick<ParsedSwarmCheckpoint, 'runtimeState' | 'checkpointStatus'>> = {
+const STATE_MAP: Record<
+  ParsedSwarmCheckpoint['stateLabel'],
+  Pick<ParsedSwarmCheckpoint, 'runtimeState' | 'checkpointStatus'>
+> = {
   DONE: { runtimeState: 'idle', checkpointStatus: 'done' },
   BLOCKED: { runtimeState: 'blocked', checkpointStatus: 'blocked' },
   NEEDS_INPUT: { runtimeState: 'waiting', checkpointStatus: 'needs_input' },
@@ -27,7 +42,9 @@ const STATE_MAP: Record<ParsedSwarmCheckpoint['stateLabel'], Pick<ParsedSwarmChe
 
 function normalizeLabel(value: string): Label | null {
   const upper = value.trim().toUpperCase().replace(/[ -]/g, '_')
-  return (LABELS as ReadonlyArray<string>).includes(upper) ? upper as Label : null
+  return (LABELS as ReadonlyArray<string>).includes(upper)
+    ? (upper as Label)
+    : null
 }
 
 function clean(value: string | undefined): string | null {
@@ -36,7 +53,9 @@ function clean(value: string | undefined): string | null {
   return trimmed.replace(/^none$/i, 'none')
 }
 
-export function parseSwarmCheckpoint(text: string): ParsedSwarmCheckpoint | null {
+export function parseSwarmCheckpoint(
+  text: string,
+): ParsedSwarmCheckpoint | null {
   if (!/\bSTATE\s*:/i.test(text)) return null
   const fields: Partial<Record<Label, string>> = {}
   let current: Label | null = null
@@ -65,7 +84,9 @@ export function parseSwarmCheckpoint(text: string): ParsedSwarmCheckpoint | null
   const stateLabel = stateRaw as ParsedSwarmCheckpoint['stateLabel']
   const mapped = STATE_MAP[stateLabel]
 
-  const review_match = text.match(/REVIEW[_\s]OUTCOME\s*[:=]\s*(approved|changes_requested)/i)
+  const review_match = text.match(
+    /REVIEW[_\s]OUTCOME\s*[:=]\s*(approved|changes_requested)/i,
+  )
   const reviewOutcome = review_match ? review_match[1].toLowerCase() : null
 
   return {
@@ -82,7 +103,13 @@ export function parseSwarmCheckpoint(text: string): ParsedSwarmCheckpoint | null
   }
 }
 
-export function newestCheckpointFromMessages(messages: Array<{ role?: string; content: string; timestamp?: number | null }>): ParsedSwarmCheckpoint | null {
+export function newestCheckpointFromMessages(
+  messages: Array<{
+    role?: string
+    content: string
+    timestamp?: number | null
+  }>,
+): ParsedSwarmCheckpoint | null {
   for (const message of [...messages].reverse()) {
     if (message.role && message.role !== 'assistant') continue
     const parsed = parseSwarmCheckpoint(message.content)
@@ -94,7 +121,10 @@ export function newestCheckpointFromMessages(messages: Array<{ role?: string; co
 export function readRuntimeJson(runtimePath: string): Record<string, unknown> {
   if (!existsSync(runtimePath)) return {}
   try {
-    return JSON.parse(readFileSync(runtimePath, 'utf8')) as Record<string, unknown>
+    return JSON.parse(readFileSync(runtimePath, 'utf8')) as Record<
+      string,
+      unknown
+    >
   } catch {
     return {}
   }

@@ -27,16 +27,18 @@ function readPinnedModelFields(input: JobFormSubmitInput): {
   return { model, provider }
 }
 
-export function jobModelFieldsToCreatePayload(
-  input: JobFormSubmitInput,
-): { model?: string; provider?: string } {
+export function jobModelFieldsToCreatePayload(input: JobFormSubmitInput): {
+  model?: string
+  provider?: string
+} {
   if (input.modelPin !== 'pinned') return {}
   return readPinnedModelFields(input)
 }
 
-export function jobModelFieldsToUpdatePayload(
-  input: JobFormSubmitInput,
-): { model: string; provider: string } {
+export function jobModelFieldsToUpdatePayload(input: JobFormSubmitInput): {
+  model: string
+  provider: string
+} {
   if (input.modelPin === 'pinned') return readPinnedModelFields(input)
   return { model: '', provider: '' }
 }

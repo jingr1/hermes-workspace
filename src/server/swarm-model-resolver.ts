@@ -75,13 +75,15 @@ export function resolveSwarmModelKey(
   }
 
   if (options?.length) {
-    if (options.some((m) => swarmModelKeyFromOption(m) === trimmed)) return trimmed
+    if (options.some((m) => swarmModelKeyFromOption(m) === trimmed))
+      return trimmed
     const byId = options.find((m) => m.id === trimmed)
     if (byId) return swarmModelKeyFromOption(byId)
     const p = (provider ?? '').trim()
     if (p && p !== 'unknown') {
       const combined = toSwarmModelKey(p, trimmed)
-      if (options.some((m) => swarmModelKeyFromOption(m) === combined)) return combined
+      if (options.some((m) => swarmModelKeyFromOption(m) === combined))
+        return combined
     }
   }
 
