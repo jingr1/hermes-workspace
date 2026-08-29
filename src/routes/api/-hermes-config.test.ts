@@ -95,9 +95,9 @@ describe('canonical /api/hermes-config route', () => {
     const body = await res.json()
 
     expect(body).toMatchObject({ ok: true, message: 'Default model updated.' })
-    expect(
-      fs.readFileSync(path.join(tmpHome, 'config.yaml'), 'utf-8'),
-    ).toMatch(/provider: openrouter/)
+    expect(fs.readFileSync(path.join(tmpHome, 'config.yaml'), 'utf-8')).toMatch(
+      /provider: openrouter/,
+    )
   })
 
   it('PATCH legacy { config } body deep-merges and preserves siblings', async () => {
@@ -160,7 +160,10 @@ describe('canonical /api/hermes-config route', () => {
     const res = await Promise.race([
       getPromise,
       new Promise<Response>((_, reject) =>
-        setTimeout(() => reject(new Error('GET blocked on gateway probe')), 200),
+        setTimeout(
+          () => reject(new Error('GET blocked on gateway probe')),
+          200,
+        ),
       ),
     ])
     const body = await res.json()
@@ -181,7 +184,11 @@ describe('canonical /api/hermes-config route', () => {
     const res = await handlers.PATCH({
       request: new Request('http://localhost/api/hermes-config', {
         method: 'PATCH',
-        body: JSON.stringify({ action: 'set-api-key', envKey: 'X', value: 'y' }),
+        body: JSON.stringify({
+          action: 'set-api-key',
+          envKey: 'X',
+          value: 'y',
+        }),
       }),
     })
     expect(res.status).toBe(503)

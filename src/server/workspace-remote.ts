@@ -21,9 +21,7 @@ export function isRemoteTerminalBackend(terminalCfg: unknown): boolean {
   ) {
     return false
   }
-  const backend = String(
-    (terminalCfg as TerminalConfig).backend ?? '',
-  )
+  const backend = String((terminalCfg as TerminalConfig).backend ?? '')
     .trim()
     .toLowerCase()
   return !LOCAL_TERMINAL_BACKENDS.has(backend)
@@ -72,17 +70,17 @@ export function remoteTerminalWorkspaceCandidate(
   const normalized = normalizePosixPath(candidatePath)
   const normalizedCwd = normalizePosixPath(remoteCwd)
   if (!normalized || !normalizedCwd) return null
-  if (
-    isBlockedSystemPath(normalized) ||
-    isBlockedSystemPath(normalizedCwd)
-  ) {
+  if (isBlockedSystemPath(normalized) || isBlockedSystemPath(normalizedCwd)) {
     return null
   }
   if (!isRemotePathUnderCwd(normalized, normalizedCwd)) return null
   return normalized
 }
 
-function readConfigString(config: Record<string, unknown>, key: string): string {
+function readConfigString(
+  config: Record<string, unknown>,
+  key: string,
+): string {
   return typeof config[key] === 'string' ? config[key].trim() : ''
 }
 

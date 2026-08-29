@@ -128,7 +128,9 @@ export function resolveTranscriptionTarget(
   const stt = readRecord(config.stt)
   const provider = readString(stt.provider) || 'local'
   const language =
-    readString(stt.language) || readString(readRecord(stt.local).language) || undefined
+    readString(stt.language) ||
+    readString(readRecord(stt.local).language) ||
+    undefined
 
   if (provider === 'local') {
     const local = readRecord(stt.local)
@@ -161,7 +163,10 @@ export function resolveTranscriptionTarget(
     const apiKey =
       readString(runtimeEnv.GROQ_API_KEY) || readString(hermesEnv.GROQ_API_KEY)
     if (!apiKey) {
-      return { ok: false, error: 'Groq STT is configured but GROQ_API_KEY is missing.' }
+      return {
+        ok: false,
+        error: 'Groq STT is configured but GROQ_API_KEY is missing.',
+      }
     }
     return {
       ok: true,
@@ -187,7 +192,8 @@ export function resolveTranscriptionTarget(
     if (!apiKey) {
       return {
         ok: false,
-        error: 'OpenAI STT is configured but VOICE_TOOLS_OPENAI_KEY or OPENAI_API_KEY is missing.',
+        error:
+          'OpenAI STT is configured but VOICE_TOOLS_OPENAI_KEY or OPENAI_API_KEY is missing.',
       }
     }
     return {
@@ -299,7 +305,9 @@ export async function transcribeUploadedAudio(
 
     const raw = await upstream.text()
     if (!upstream.ok) {
-      throw new Error(raw || `Transcription request failed (${upstream.status}).`)
+      throw new Error(
+        raw || `Transcription request failed (${upstream.status}).`,
+      )
     }
 
     let parsed: unknown = { text: raw }

@@ -54,7 +54,9 @@ export const SwarmTerminal = memo(function SwarmTerminal({
       // while typed input never reaches terminal.onData.
       containerRef.current?.focus()
       terminalRef.current?.focus()
-      const textarea = containerRef.current?.querySelector('.xterm-helper-textarea') as HTMLTextAreaElement | null
+      const textarea = containerRef.current?.querySelector(
+        '.xterm-helper-textarea',
+      ) as HTMLTextAreaElement | null
       textarea?.focus()
     } catch {
       /* noop */
@@ -73,15 +75,18 @@ export const SwarmTerminal = memo(function SwarmTerminal({
     }).catch(() => undefined)
   }, [])
 
-  const queueInput = useCallback((data: string) => {
-    if (!data) return
-    inputBufferRef.current += data
-    if (flushTimerRef.current) return
-    flushTimerRef.current = setTimeout(() => {
-      flushTimerRef.current = null
-      flushPendingInput()
-    }, 18)
-  }, [flushPendingInput])
+  const queueInput = useCallback(
+    (data: string) => {
+      if (!data) return
+      inputBufferRef.current += data
+      if (flushTimerRef.current) return
+      flushTimerRef.current = setTimeout(() => {
+        flushTimerRef.current = null
+        flushPendingInput()
+      }, 18)
+    },
+    [flushPendingInput],
+  )
 
   const restart = useCallback(() => {
     if (flushTimerRef.current) {
@@ -187,7 +192,9 @@ export const SwarmTerminal = memo(function SwarmTerminal({
 
       if (cancelled) return
       if (!response || !response.ok || !response.body) {
-        setError(`Failed to start swarm terminal (${response?.status ?? 'no response'})`)
+        setError(
+          `Failed to start swarm terminal (${response?.status ?? 'no response'})`,
+        )
         setState('error')
         terminal.writeln('\r\n\x1b[31m[swarm] failed to start terminal\x1b[0m')
         return
@@ -228,7 +235,9 @@ export const SwarmTerminal = memo(function SwarmTerminal({
       try {
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         while (true) {
-          const readState = await reader.read().catch(() => ({ done: true, value: undefined }))
+          const readState = await reader
+            .read()
+            .catch(() => ({ done: true, value: undefined }))
           if (readState.done) break
           const value = readState.value
           if (!value) continue
@@ -248,27 +257,38 @@ export const SwarmTerminal = memo(function SwarmTerminal({
             try {
               const parsed = JSON.parse(dataLine) as Record<string, unknown>
               if (event === 'session') {
-                const sessionId = typeof parsed.sessionId === 'string' ? parsed.sessionId : null
+                const sessionId =
+                  typeof parsed.sessionId === 'string' ? parsed.sessionId : null
                 const reattach = parsed.reattach === true
                 if (sessionId) sessionIdRef.current = sessionId
                 if (!reattach) terminal.clear()
-                terminal.writeln(`\x1b[1;36m[swarm] worker ${workerId} terminal\x1b[0m`)
+                terminal.writeln(
+                  `\x1b[1;36m[swarm] worker ${workerId} terminal\x1b[0m`,
+                )
                 terminal.writeln(`\x1b[2mcommand: ${command.join(' ')}\x1b[0m`)
                 if (reattach) {
-                  terminal.writeln('\x1b[2mreattached — waiting for output…\x1b[0m')
+                  terminal.writeln(
+                    '\x1b[2mreattached — waiting for output…\x1b[0m',
+                  )
                 }
                 terminal.writeln('')
               } else if (event === 'data') {
                 const data = typeof parsed.data === 'string' ? parsed.data : ''
                 if (data) terminal.write(data)
               } else if (event === 'exit' || event === 'close') {
-                const exitCode = typeof parsed.exitCode === 'number' ? parsed.exitCode : null
+                const exitCode =
+                  typeof parsed.exitCode === 'number' ? parsed.exitCode : null
                 const suffix = exitCode !== null ? ` (exit ${exitCode})` : ''
-                terminal.writeln(`\r\n\x1b[33m[swarm] session ended${suffix}\x1b[0m`)
+                terminal.writeln(
+                  `\r\n\x1b[33m[swarm] session ended${suffix}\x1b[0m`,
+                )
                 sessionIdRef.current = null
                 setState('closed')
               } else if (event === 'error') {
-                const message = typeof parsed.message === 'string' ? parsed.message : 'unknown error'
+                const message =
+                  typeof parsed.message === 'string'
+                    ? parsed.message
+                    : 'unknown error'
                 terminal.writeln(`\r\n\x1b[31m[swarm] ${message}\x1b[0m`)
                 sessionIdRef.current = null
                 setError(message)
@@ -322,7 +342,14 @@ export const SwarmTerminal = memo(function SwarmTerminal({
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workerId, command.join('|'), cwd, reconnectKey, focusTerminal, flushPendingInput])
+  }, [
+    workerId,
+    command.join('|'),
+    cwd,
+    reconnectKey,
+    focusTerminal,
+    flushPendingInput,
+  ])
 
   useEffect(() => {
     if (!active) return
@@ -358,13 +385,17 @@ export const SwarmTerminal = memo(function SwarmTerminal({
         <div className="flex items-center justify-between gap-2 text-[10px] text-[var(--theme-muted)]">
           <span>
             {state === 'connecting' && 'connecting…'}
-            {state === 'closed' && 'browser terminal disconnected — tmux session may still be running'}
+            {state === 'closed' &&
+              'browser terminal disconnected — tmux session may still be running'}
             {state === 'error' && 'error'}
             {state === 'idle' && 'idle'}
           </span>
           <div className="flex items-center gap-2">
             {error ? <span className="text-red-300">attach error</span> : null}
-            {(state === 'closed' || state === 'error' || state === 'idle' || state === 'connecting') ? (
+            {state === 'closed' ||
+            state === 'error' ||
+            state === 'idle' ||
+            state === 'connecting' ? (
               <button
                 type="button"
                 onClick={() => restart()}
@@ -401,7 +432,8 @@ export const SwarmTerminal = memo(function SwarmTerminal({
             if (event.ctrlKey && event.key.length === 1) {
               const upper = event.key.toUpperCase()
               const code = upper.charCodeAt(0)
-              if (code >= 64 && code <= 95) return String.fromCharCode(code - 64)
+              if (code >= 64 && code <= 95)
+                return String.fromCharCode(code - 64)
             }
             switch (event.key) {
               case 'Enter':
@@ -438,7 +470,9 @@ export const SwarmTerminal = memo(function SwarmTerminal({
           const data = keyToData()
           if (!data) return
           const activeEl = document.activeElement as HTMLElement | null
-          const isXtermTextarea = activeEl?.classList?.contains('xterm-helper-textarea')
+          const isXtermTextarea = activeEl?.classList?.contains(
+            'xterm-helper-textarea',
+          )
 
           if (isXtermTextarea) {
             // Prefer xterm's native onData path. On some macOS browser/input
@@ -467,7 +501,9 @@ export const SwarmTerminal = memo(function SwarmTerminal({
         style={{ height }}
       />
       {error ? (
-        <div className="rounded border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</div>
+        <div className="rounded border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+          {error}
+        </div>
       ) : null}
     </div>
   )

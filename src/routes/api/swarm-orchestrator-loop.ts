@@ -4,13 +4,29 @@ import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../server/auth-middleware'
 import { getProfilesDir } from '../../server/claude-paths'
-import { newestCheckpointFromMessages, readRuntimeJson } from '../../server/swarm-checkpoints'
+import {
+  newestCheckpointFromMessages,
+  readRuntimeJson,
+} from '../../server/swarm-checkpoints'
 import { readWorkerMessages } from '../../server/swarm-chat-reader'
-import { getSwarmProfilePath, listSwarmWorkerIds } from '../../server/swarm-foundation'
-import { appendMissionContinuation, markMissionAssignmentsReviewedByWorker, recordMissionCheckpoint } from '../../server/swarm-missions'
+import {
+  getSwarmProfilePath,
+  listSwarmWorkerIds,
+} from '../../server/swarm-foundation'
+import {
+  appendMissionContinuation,
+  markMissionAssignmentsReviewedByWorker,
+  recordMissionCheckpoint,
+} from '../../server/swarm-missions'
 import { appendSwarmMemoryEvent } from '../../server/swarm-memory'
-import { publishSwarmActionPrompt, publishSwarmCheckpointNotification } from '../../server/swarm-notifications'
-import { applySwarmModeToLoopFlags, readSwarmMode } from '../../server/swarm-mode'
+import {
+  publishSwarmActionPrompt,
+  publishSwarmCheckpointNotification,
+} from '../../server/swarm-notifications'
+import {
+  applySwarmModeToLoopFlags,
+  readSwarmMode,
+} from '../../server/swarm-mode'
 import { isSwarmWorkerId, readSwarmRoster } from '../../server/swarm-roster'
 import { buildHandoff, writeHandoff } from '../../server/handoff'
 import type { ParsedSwarmCheckpoint } from '../../server/swarm-checkpoints'
@@ -26,7 +42,12 @@ type LoopRequest = {
 
 type WorkerLoopResult = {
   workerId: string
-  status: 'checkpointed' | 'already_processed' | 'stale' | 'waiting' | 'unavailable'
+  status:
+    | 'checkpointed'
+    | 'already_processed'
+    | 'stale'
+    | 'waiting'
+    | 'unavailable'
   checkpoint: ParsedSwarmCheckpoint | null
   action: string
   runtimePath: string
@@ -66,7 +87,10 @@ function summarizeAction(checkpoint: ParsedSwarmCheckpoint): string {
   }
 }
 
-function runtimePatchFromCheckpoint(workerId: string, checkpoint: ParsedSwarmCheckpoint): Record<string, unknown> {
+function runtimePatchFromCheckpoint(
+  workerId: string,
+  checkpoint: ParsedSwarmCheckpoint,
+): Record<string, unknown> {
   return {
     workerId,
     state: checkpoint.runtimeState,
@@ -80,9 +104,11 @@ function runtimePatchFromCheckpoint(workerId: string, checkpoint: ParsedSwarmChe
     lastRealResult: checkpoint.result,
     lastControlMessage: null,
     nextAction: checkpoint.nextAction,
-    blockedReason: checkpoint.stateLabel === 'BLOCKED' || checkpoint.stateLabel === 'NEEDS_INPUT'
-      ? checkpoint.blocker
-      : null,
+    blockedReason:
+      checkpoint.stateLabel === 'BLOCKED' ||
+      checkpoint.stateLabel === 'NEEDS_INPUT'
+        ? checkpoint.blocker
+        : null,
     needsHuman: checkpoint.stateLabel === 'NEEDS_INPUT',
     checkpointRaw: checkpoint.raw,
     orchestratorProcessedRaw: checkpoint.raw,
@@ -91,17 +117,27 @@ function runtimePatchFromCheckpoint(workerId: string, checkpoint: ParsedSwarmChe
   }
 }
 
-function writeRuntimePatch(workerId: string, patch: Record<string, unknown>, dryRun: boolean): string {
+function writeRuntimePatch(
+  workerId: string,
+  patch: Record<string, unknown>,
+  dryRun: boolean,
+): string {
   const profilePath = getSwarmProfilePath(workerId)
   const runtimePath = join(profilePath, 'runtime.json')
   if (dryRun) return runtimePath
   mkdirSync(profilePath, { recursive: true })
   const current = readRuntimeJson(runtimePath)
-  writeFileSync(runtimePath, JSON.stringify({ ...current, ...patch }, null, 2) + '\n')
+  writeFileSync(
+    runtimePath,
+    JSON.stringify({ ...current, ...patch }, null, 2) + '\n',
+  )
   return runtimePath
 }
 
-function runtimeString(current: Record<string, unknown>, key: string): string | null {
+function runtimeString(
+  current: Record<string, unknown>,
+  key: string,
+): string | null {
   const value = current[key]
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
@@ -111,13 +147,23 @@ async function recordCheckpoint(input: {
   checkpoint: ParsedSwarmCheckpoint
   current: Record<string, unknown>
   dryRun: boolean
-}): Promise<{ notification: { published: boolean; sessionKey: string }; missionRecorded: boolean; handoffPaths?: { jsonPath: string; markdownPath: string } }> {
+}): Promise<{
+  notification: { published: boolean; sessionKey: string }
+  missionRecorded: boolean
+  handoffPaths?: { jsonPath: string; markdownPath: string }
+}> {
   const missionId = runtimeString(input.current, 'currentMissionId')
   const assignmentId = runtimeString(input.current, 'currentAssignmentId')
   const notifySessionKey = runtimeString(input.current, 'notifySessionKey')
 
   if (input.dryRun) {
-    return { notification: { published: false, sessionKey: notifySessionKey ?? 'main' }, missionRecorded: false }
+    return {
+      notification: {
+        published: false,
+        sessionKey: notifySessionKey ?? 'main',
+      },
+      missionRecorded: false,
+    }
   }
 
   const mission = recordMissionCheckpoint({
@@ -132,8 +178,15 @@ async function recordCheckpoint(input: {
     workerId: input.workerId,
     missionId,
     assignmentId,
-    type: input.checkpoint.checkpointStatus === 'blocked' ? 'blocked' : 'checkpoint',
-    summary: input.checkpoint.result ?? input.checkpoint.blocker ?? input.checkpoint.nextAction ?? 'Worker checkpoint processed',
+    type:
+      input.checkpoint.checkpointStatus === 'blocked'
+        ? 'blocked'
+        : 'checkpoint',
+    summary:
+      input.checkpoint.result ??
+      input.checkpoint.blocker ??
+      input.checkpoint.nextAction ??
+      'Worker checkpoint processed',
     checkpoint: input.checkpoint,
     event: {
       state: input.checkpoint.stateLabel,
@@ -147,7 +200,11 @@ async function recordCheckpoint(input: {
   // Build a structured handoff so the next agent can start warm.
   let handoffPaths: { jsonPath: string; markdownPath: string } | undefined
   try {
-    const handoff = await buildHandoff(input.workerId, input.checkpoint, input.current)
+    const handoff = await buildHandoff(
+      input.workerId,
+      input.checkpoint,
+      input.current,
+    )
     handoffPaths = await writeHandoff(handoff)
   } catch (err) {
     console.error(`[handoff] failed for ${input.workerId}:`, err)
@@ -163,11 +220,19 @@ async function recordCheckpoint(input: {
   return { notification, missionRecorded: Boolean(mission), handoffPaths }
 }
 
-async function runWorkerLoop(workerId: string, staleMs: number, dryRun: boolean): Promise<WorkerLoopResult> {
+async function runWorkerLoop(
+  workerId: string,
+  staleMs: number,
+  dryRun: boolean,
+): Promise<WorkerLoopResult> {
   const profilePath = join(getProfilesDir(), workerId)
   const runtimePath = join(profilePath, 'runtime.json')
   const current = readRuntimeJson(runtimePath)
-  const chat = readWorkerMessages(profilePath, 40, typeof current.lastDispatchAt === 'number' ? current.lastDispatchAt : 0)
+  const chat = readWorkerMessages(
+    profilePath,
+    40,
+    typeof current.lastDispatchAt === 'number' ? current.lastDispatchAt : 0,
+  )
   if (!chat.ok) {
     return {
       workerId,
@@ -186,12 +251,22 @@ async function runWorkerLoop(workerId: string, staleMs: number, dryRun: boolean)
         workerId,
         status: 'already_processed',
         checkpoint,
-        action: 'Checkpoint already processed by orchestrator; no continuation dispatched.',
+        action:
+          'Checkpoint already processed by orchestrator; no continuation dispatched.',
         runtimePath,
       }
     }
-    const savedPath = writeRuntimePatch(workerId, runtimePatchFromCheckpoint(workerId, checkpoint), dryRun)
-    const recorded = await recordCheckpoint({ workerId, checkpoint, current, dryRun })
+    const savedPath = writeRuntimePatch(
+      workerId,
+      runtimePatchFromCheckpoint(workerId, checkpoint),
+      dryRun,
+    )
+    const recorded = await recordCheckpoint({
+      workerId,
+      checkpoint,
+      current,
+      dryRun,
+    })
     return {
       workerId,
       status: 'checkpointed',
@@ -202,7 +277,10 @@ async function runWorkerLoop(workerId: string, staleMs: number, dryRun: boolean)
     }
   }
 
-  const last = timestampFromRuntime(current.lastOutputAt) ?? timestampFromRuntime(current.lastCheckIn) ?? timestampFromRuntime(current.lastDispatchAt)
+  const last =
+    timestampFromRuntime(current.lastOutputAt) ??
+    timestampFromRuntime(current.lastCheckIn) ??
+    timestampFromRuntime(current.lastDispatchAt)
   const stale = last ? Date.now() - last > staleMs : true
   const patch = stale
     ? {
@@ -211,7 +289,8 @@ async function runWorkerLoop(workerId: string, staleMs: number, dryRun: boolean)
         checkpointStatus: 'needs_input',
         needsHuman: false,
         blockedReason: 'No parseable checkpoint found before stale threshold.',
-        nextAction: 'Orchestrator should re-prompt this worker with the required checkpoint format.',
+        nextAction:
+          'Orchestrator should re-prompt this worker with the required checkpoint format.',
         lastCheckIn: new Date().toISOString(),
       }
     : {
@@ -221,7 +300,9 @@ async function runWorkerLoop(workerId: string, staleMs: number, dryRun: boolean)
         // drift even when the harvester is actively monitoring it.
         lastCheckIn: new Date().toISOString(),
       }
-  const savedPath = Object.keys(patch).length ? writeRuntimePatch(workerId, patch, dryRun) : runtimePath
+  const savedPath = Object.keys(patch).length
+    ? writeRuntimePatch(workerId, patch, dryRun)
+    : runtimePath
   return {
     workerId,
     status: stale ? 'stale' : 'waiting',
@@ -233,20 +314,39 @@ async function runWorkerLoop(workerId: string, staleMs: number, dryRun: boolean)
   }
 }
 
-
-function chooseByRole(workerIds: Array<string>, pattern: RegExp): string | null {
+function chooseByRole(
+  workerIds: Array<string>,
+  pattern: RegExp,
+): string | null {
   const roster = readSwarmRoster(workerIds)
-  const worker = roster.workers.find((entry) => pattern.test(`${entry.role} ${entry.specialty}`))
+  const worker = roster.workers.find((entry) =>
+    pattern.test(`${entry.role} ${entry.specialty}`),
+  )
   return worker?.id ?? null
 }
 
-function buildNextActionAssignments(results: Array<WorkerLoopResult>, workerIds: Array<string>, allowExecution: boolean): Array<{ workerId: string; task: string; rationale: string }> {
-  const assignments: Array<{ workerId: string; task: string; rationale: string }> = []
+function buildNextActionAssignments(
+  results: Array<WorkerLoopResult>,
+  workerIds: Array<string>,
+  allowExecution: boolean,
+): Array<{ workerId: string; task: string; rationale: string }> {
+  const assignments: Array<{
+    workerId: string
+    task: string
+    rationale: string
+  }> = []
   for (const item of results) {
     const checkpoint = item.checkpoint
-    if (item.status !== 'checkpointed' || !checkpoint || checkpoint.stateLabel !== 'DONE' || !checkpoint.nextAction) continue
+    if (
+      item.status !== 'checkpointed' ||
+      !checkpoint ||
+      checkpoint.stateLabel !== 'DONE' ||
+      !checkpoint.nextAction
+    )
+      continue
     const next = checkpoint.nextAction
-    const implementationLike = /builder|implement|patch|code|ship|execute|run|real execution/i.test(next)
+    const implementationLike =
+      /builder|implement|patch|code|ship|execute|run|real execution/i.test(next)
     if (implementationLike && !allowExecution) continue
     const target = implementationLike
       ? chooseByRole(workerIds, /builder|backend|ui/i)
@@ -269,7 +369,9 @@ ${next}`,
   return assignments
 }
 
-function buildStaleAssignments(results: Array<WorkerLoopResult>): Array<{ workerId: string; task: string; rationale: string }> {
+function buildStaleAssignments(
+  results: Array<WorkerLoopResult>,
+): Array<{ workerId: string; task: string; rationale: string }> {
   return results
     .filter((item) => item.status === 'stale')
     .map((item) => ({
@@ -279,10 +381,19 @@ function buildStaleAssignments(results: Array<WorkerLoopResult>): Array<{ worker
     }))
 }
 
-function mergeAssignments(assignments: Array<{ workerId: string; task: string; rationale: string }>): Array<{ workerId: string; task: string; rationale: string }> {
-  const byWorker = new Map<string, { workerId: string; tasks: Array<string>; rationales: Array<string> }>()
+function mergeAssignments(
+  assignments: Array<{ workerId: string; task: string; rationale: string }>,
+): Array<{ workerId: string; task: string; rationale: string }> {
+  const byWorker = new Map<
+    string,
+    { workerId: string; tasks: Array<string>; rationales: Array<string> }
+  >()
   for (const assignment of assignments) {
-    const existing = byWorker.get(assignment.workerId) ?? { workerId: assignment.workerId, tasks: [], rationales: [] }
+    const existing = byWorker.get(assignment.workerId) ?? {
+      workerId: assignment.workerId,
+      tasks: [],
+      rationales: [],
+    }
     existing.tasks.push(assignment.task)
     existing.rationales.push(assignment.rationale)
     byWorker.set(assignment.workerId, existing)
@@ -290,31 +401,46 @@ function mergeAssignments(assignments: Array<{ workerId: string; task: string; r
   return [...byWorker.values()].map((entry) => ({
     workerId: entry.workerId,
     rationale: [...new Set(entry.rationales)].join(' + '),
-    task: entry.tasks.length === 1
-      ? entry.tasks[0]
-      : `You have multiple orchestrator follow-ups. Execute them in order and return one complete checkpoint.\n\n${entry.tasks.map((task, index) => `## Follow-up ${index + 1}\n${task}`).join('\n\n')}`,
+    task:
+      entry.tasks.length === 1
+        ? entry.tasks[0]
+        : `You have multiple orchestrator follow-ups. Execute them in order and return one complete checkpoint.\n\n${entry.tasks.map((task, index) => `## Follow-up ${index + 1}\n${task}`).join('\n\n')}`,
   }))
 }
 
-function buildMainSessionPrompt(results: Array<WorkerLoopResult>): string | null {
-  const fresh = results.filter((item) => item.status === 'checkpointed' && item.checkpoint)
+function buildMainSessionPrompt(
+  results: Array<WorkerLoopResult>,
+): string | null {
+  const fresh = results.filter(
+    (item) => item.status === 'checkpointed' && item.checkpoint,
+  )
   if (fresh.length === 0) return null
 
   const lines = fresh.flatMap((item) => {
     const checkpoint = item.checkpoint!
-    const needsHuman = checkpoint.stateLabel === 'NEEDS_INPUT' || checkpoint.stateLabel === 'BLOCKED'
+    const needsHuman =
+      checkpoint.stateLabel === 'NEEDS_INPUT' ||
+      checkpoint.stateLabel === 'BLOCKED'
     const heading = needsHuman
       ? `- ${item.workerId} needs attention (${checkpoint.stateLabel})`
       : `- ${item.workerId} reported ${checkpoint.stateLabel}`
     return [
       heading,
       `  Result: ${checkpoint.result ?? 'none'}`,
-      checkpoint.blocker && checkpoint.blocker.toLowerCase() !== 'none' ? `  Blocker/question: ${checkpoint.blocker}` : null,
-      checkpoint.nextAction && checkpoint.nextAction.toLowerCase() !== 'none' ? `  Suggested next: ${checkpoint.nextAction}` : null,
+      checkpoint.blocker && checkpoint.blocker.toLowerCase() !== 'none'
+        ? `  Blocker/question: ${checkpoint.blocker}`
+        : null,
+      checkpoint.nextAction && checkpoint.nextAction.toLowerCase() !== 'none'
+        ? `  Suggested next: ${checkpoint.nextAction}`
+        : null,
     ].filter((line): line is string => Boolean(line))
   })
 
-  const hasQuestions = fresh.some((item) => item.checkpoint?.stateLabel === 'NEEDS_INPUT' || item.checkpoint?.stateLabel === 'BLOCKED')
+  const hasQuestions = fresh.some(
+    (item) =>
+      item.checkpoint?.stateLabel === 'NEEDS_INPUT' ||
+      item.checkpoint?.stateLabel === 'BLOCKED',
+  )
   return [
     `${fresh.length} worker update${fresh.length === 1 ? '' : 's'} ready.`,
     ...lines,
@@ -325,17 +451,30 @@ function buildMainSessionPrompt(results: Array<WorkerLoopResult>): string | null
   ].join('\n')
 }
 
-async function dispatchAssignments(request: Request, assignments: Array<{ workerId: string; task: string; rationale: string }>, missionId?: string | null): Promise<unknown | null> {
+async function dispatchAssignments(
+  request: Request,
+  assignments: Array<{ workerId: string; task: string; rationale: string }>,
+  missionId?: string | null,
+): Promise<unknown | null> {
   const merged = mergeAssignments(assignments)
   if (merged.length === 0) return null
-  for (const assignment of merged) appendMissionContinuation({ missionId, ...assignment })
+  for (const assignment of merged)
+    appendMissionContinuation({ missionId, ...assignment })
   const res = await fetch(new URL('/api/swarm-dispatch', request.url), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...(request.headers.get('cookie') ? { cookie: request.headers.get('cookie') as string } : {}),
+      ...(request.headers.get('cookie')
+        ? { cookie: request.headers.get('cookie') as string }
+        : {}),
     },
-    body: JSON.stringify({ assignments: merged, timeoutSeconds: 90, missionId, waitForCheckpoint: true, checkpointPollSeconds: 90 }),
+    body: JSON.stringify({
+      assignments: merged,
+      timeoutSeconds: 90,
+      missionId,
+      waitForCheckpoint: true,
+      checkpointPollSeconds: 90,
+    }),
   })
   const data = await res.json().catch(() => null)
   if (!res.ok) return { ok: false, status: res.status, data }
@@ -353,14 +492,19 @@ export const Route = createFileRoute('/api/swarm-orchestrator-loop')({
         try {
           body = (await request.json()) as LoopRequest
         } catch {
-          return json({ ok: false, error: 'Invalid JSON body' }, { status: 400 })
+          return json(
+            { ok: false, error: 'Invalid JSON body' },
+            { status: 400 },
+          )
         }
 
         const requested = validWorkerIds(body.workerIds)
         const workerIds = requested.length ? requested : listSwarmWorkerIds()
-        const staleMinutes = typeof body.staleMinutes === 'number' && Number.isFinite(body.staleMinutes)
-          ? Math.max(1, Math.min(240, body.staleMinutes))
-          : 10
+        const staleMinutes =
+          typeof body.staleMinutes === 'number' &&
+          Number.isFinite(body.staleMinutes)
+            ? Math.max(1, Math.min(240, body.staleMinutes))
+            : 10
         const dryRun = body.dryRun === true
         const requestedAutoContinue = body.autoContinue === true
         const requestedAllowExecution = body.allowExecution === true
@@ -372,17 +516,32 @@ export const Route = createFileRoute('/api/swarm-orchestrator-loop')({
         })
         const autoContinue = loopFlags.autoContinue
         const allowExecution = loopFlags.allowExecution
-        const missionId = typeof body.missionId === 'string' && body.missionId.trim() ? body.missionId.trim() : null
-        const results = await Promise.all(workerIds.map((workerId) => runWorkerLoop(workerId, staleMinutes * 60_000, dryRun)))
+        const missionId =
+          typeof body.missionId === 'string' && body.missionId.trim()
+            ? body.missionId.trim()
+            : null
+        const results = await Promise.all(
+          workerIds.map((workerId) =>
+            runWorkerLoop(workerId, staleMinutes * 60_000, dryRun),
+          ),
+        )
 
         const summary = {
-          checkpointed: results.filter((item) => item.status === 'checkpointed').length,
+          checkpointed: results.filter((item) => item.status === 'checkpointed')
+            .length,
           stale: results.filter((item) => item.status === 'stale').length,
-          waiting: results.filter((item) => item.status === 'waiting' || item.status === 'already_processed').length,
-          unavailable: results.filter((item) => item.status === 'unavailable').length,
+          waiting: results.filter(
+            (item) =>
+              item.status === 'waiting' || item.status === 'already_processed',
+          ).length,
+          unavailable: results.filter((item) => item.status === 'unavailable')
+            .length,
         }
 
-        let orchestrationPrompt: { published: boolean; sessionKey: string } | null = null
+        let orchestrationPrompt: {
+          published: boolean
+          sessionKey: string
+        } | null = null
         const promptText = !dryRun ? buildMainSessionPrompt(results) : null
         if (promptText) {
           orchestrationPrompt = publishSwarmActionPrompt({
@@ -394,7 +553,9 @@ export const Route = createFileRoute('/api/swarm-orchestrator-loop')({
               checkpointed: summary.checkpointed,
               stale: summary.stale,
               waiting: summary.waiting,
-              workerIds: results.filter((item) => item.status === 'checkpointed').map((item) => item.workerId),
+              workerIds: results
+                .filter((item) => item.status === 'checkpointed')
+                .map((item) => item.workerId),
             },
           })
         }
@@ -402,8 +563,13 @@ export const Route = createFileRoute('/api/swarm-orchestrator-loop')({
         let continuation: unknown | null = null
         if (autoContinue && !dryRun) {
           const assignments = buildStaleAssignments(results)
-          assignments.push(...buildNextActionAssignments(results, workerIds, allowExecution))
-          continuation = assignments.length > 0 ? await dispatchAssignments(request, assignments, missionId) : null
+          assignments.push(
+            ...buildNextActionAssignments(results, workerIds, allowExecution),
+          )
+          continuation =
+            assignments.length > 0
+              ? await dispatchAssignments(request, assignments, missionId)
+              : null
         }
 
         return json({

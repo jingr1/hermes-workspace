@@ -23,7 +23,71 @@ async function loadModules() {
     SWARM_MEMORY_HANDOFFS: join(tempRoot, 'memory'),
     SWARM_LEGACY_OUTPUT_ROOT: join(tempRoot, 'output'),
   }))
-  const templates = await import('../../server/task-pipeline/pipeline-templates')
+  vi.doMock('../../server/agent-runtime/agents-config', () => ({
+    loadAgentsRegistry: () => ({
+      version: 1,
+      agents: [
+        {
+          id: 'orchestrator',
+          runtime: 'hermes',
+          execution: 'local',
+          profile: 'orchestrator',
+          capabilities: [],
+        },
+        {
+          id: 'gpuserver',
+          runtime: 'hermes',
+          execution: 'ssh',
+          profile: 'gpuserver',
+          capabilities: ['gpu'],
+        },
+        {
+          id: 'cc-impl',
+          runtime: 'claude-code',
+          execution: 'local',
+          command: 'claude',
+          capabilities: [],
+        },
+      ],
+      byId: new Map([
+        [
+          'orchestrator',
+          {
+            id: 'orchestrator',
+            runtime: 'hermes',
+            execution: 'local',
+            profile: 'orchestrator',
+            capabilities: [],
+          },
+        ],
+        [
+          'gpuserver',
+          {
+            id: 'gpuserver',
+            runtime: 'hermes',
+            execution: 'ssh',
+            profile: 'gpuserver',
+            capabilities: ['gpu'],
+          },
+        ],
+        [
+          'cc-impl',
+          {
+            id: 'cc-impl',
+            runtime: 'claude-code',
+            execution: 'local',
+            command: 'claude',
+            capabilities: [],
+          },
+        ],
+      ]),
+      orphanProfiles: [],
+    }),
+    detectExecutionFromProfile: () => 'local',
+    getProfileSshHost: () => null,
+  }))
+  const templates =
+    await import('../../server/task-pipeline/pipeline-templates')
   const taskService = await import('../../server/task-pipeline/task-service')
   const review = await import('../../server/task-pipeline/review')
   const laneSync = await import('../../server/task-pipeline/lane-sync')
@@ -37,10 +101,22 @@ afterEach(() => {
   vi.doUnmock('../collab-db')
   vi.doUnmock('../../server/collab-db')
   vi.doUnmock('../../server/swarm-environment')
-  try { rmSync(tempRoot, { recursive: true, force: true }) } catch { /* ignore */ }
+  vi.doUnmock('../../server/agent-runtime/agents-config')
+  try {
+    rmSync(tempRoot, { recursive: true, force: true })
+  } catch {
+    /* ignore */
+  }
 })
 
-const AGENTS = ['researcher', 'architect', 'developer', 'learning', 'writer', 'orchestrator']
+const AGENTS = [
+  'researcher',
+  'architect',
+  'developer',
+  'learning',
+  'writer',
+  'orchestrator',
+]
 
 const VALID_PIPELINE = `
 version: 1
@@ -76,18 +152,51 @@ describe('pipeline-templates', () => {
       agentIds: new Set(AGENTS),
     })
     expect(file.pipelines).toHaveLength(1)
-    expect(file.pipelines[0].stages.map((s) => s.key)).toEqual(['research', 'spec', 'build', 'review', 'retro'])
+    expect(file.pipelines[0].stages.map((s) => s.key)).toEqual([
+      'research',
+      'spec',
+      'build',
+      'review',
+      'retro',
+    ])
     expect(file.pipelines[0].workspaceMode).toBe('canonical')
   })
 
-  it('rejects workspaceMode=worktree in P2a', async () => {
+  it('rejects local hermes worker in worktree mode', async () => {
     const { templates } = await loadModules()
+    const rawYaml = `
+version: 1
+pipelines:
+  - id: worktree-local
+    name: worktree-local
+    workspaceMode: worktree
+    stages:
+      - key: only
+        agent: orchestrator
+        dependsOn: []
+`
     expect(() =>
       templates.loadPipelineTemplates({
-        rawYaml: VALID_PIPELINE.replace('workspaceMode: canonical', 'workspaceMode: worktree'),
-        agentIds: new Set(AGENTS),
+        repoRoot: '/tmp',
+        rawYaml,
+        agentIds: new Set(['orchestrator']),
       }),
-    ).toThrow(/worktree is not enabled until P2b/)
+    ).toThrow(/workspaceMode=worktree forbids local hermes tmux worker/)
+  })
+
+  it('allows managed CLI adapter in worktree mode', async () => {
+    const { templates } = await loadModules()
+    const rawYaml = VALID_PIPELINE.replace(
+      'workspaceMode: canonical',
+      'workspaceMode: worktree',
+    )
+    expect(() =>
+      templates.loadPipelineTemplates({
+        repoRoot: '/tmp',
+        rawYaml,
+        agentIds: new Set(['researcher', 'architect', 'developer', 'learning']),
+      }),
+    ).not.toThrow()
   })
 
   it('rejects cyclic stage graph', async () => {
@@ -116,7 +225,10 @@ pipelines:
     const { templates } = await loadModules()
     expect(() =>
       templates.loadPipelineTemplates({
-        rawYaml: VALID_PIPELINE.replace('dependsOn: [research]', 'dependsOn: [ghost]').replace('reworkTarget: build', 'reworkTarget: ghost'),
+        rawYaml: VALID_PIPELINE.replace(
+          'dependsOn: [research]',
+          'dependsOn: [ghost]',
+        ).replace('reworkTarget: build', 'reworkTarget: ghost'),
         agentIds: new Set(AGENTS),
       }),
     ).toThrow(/unknown dependsOn|unknown reworkTarget/)
@@ -140,8 +252,13 @@ describe('stage-brief staleness', () => {
 describe('review.ts', () => {
   it('parseReviewOutcome extracts verdict + feedback', async () => {
     const { review } = await loadModules()
-    expect(review.parseReviewOutcome('REVIEW_OUTCOME: approved')).toEqual({ outcome: 'approved', feedback: null })
-    const cr = review.parseReviewOutcome('REVIEW_OUTCOME: changes_requested\nfile x.ts line 3 is wrong')
+    expect(review.parseReviewOutcome('REVIEW_OUTCOME: approved')).toEqual({
+      outcome: 'approved',
+      feedback: null,
+    })
+    const cr = review.parseReviewOutcome(
+      'REVIEW_OUTCOME: changes_requested\nfile x.ts line 3 is wrong',
+    )
     expect(cr?.outcome).toBe('changes_requested')
     expect(cr?.feedback).toContain('x.ts')
     expect(review.parseReviewOutcome('no verdict here')).toBeNull()
@@ -173,7 +290,9 @@ describe('task-service instantiatePipeline (two-pass)', () => {
     const byStage = new Map(mission.assignments.map((a) => [a.stageKey, a]))
     // research has no deps; spec depends on research's assignment id, etc.
     expect(byStage.get('research')!.dependsOn).toEqual([])
-    expect(byStage.get('spec')!.dependsOn).toEqual([byStage.get('research')!.id])
+    expect(byStage.get('spec')!.dependsOn).toEqual([
+      byStage.get('research')!.id,
+    ])
     expect(byStage.get('build')!.dependsOn).toEqual([byStage.get('spec')!.id])
     expect(byStage.get('review')!.dependsOn).toEqual([byStage.get('build')!.id])
     expect(byStage.get('retro')!.dependsOn).toEqual([byStage.get('review')!.id])
@@ -191,12 +310,58 @@ describe('task-service instantiatePipeline (two-pass)', () => {
 describe('lane-sync', () => {
   it('maps mission state to lane', async () => {
     const { laneSync } = await loadModules()
-    const base = { id: 'm', title: 't', state: 'executing' as const, createdAt: 0, updatedAt: 0, events: [] }
-    const mk = (state: string) => ({ id: state, workerId: 'w', task: '', rationale: null, dependsOn: [], reviewRequired: false, state, dispatchedAt: null, completedAt: null, reviewedAt: null, reviewedBy: null, checkpoint: null })
-    expect(laneSync.laneFromMission({ ...base, state: 'complete', assignments: [] } as never)).toBe('done')
-    expect(laneSync.laneFromMission({ ...base, assignments: [mk('blocked')] } as never)).toBe('blocked')
-    expect(laneSync.laneFromMission({ ...base, assignments: [mk('dispatched')] } as never)).toBe('running')
-    expect(laneSync.laneFromMission({ ...base, assignments: [mk('reviewing')] } as never)).toBe('review')
-    expect(laneSync.laneFromMission({ ...base, assignments: [mk('queued')] } as never)).toBe('ready')
+    const base = {
+      id: 'm',
+      title: 't',
+      state: 'executing' as const,
+      createdAt: 0,
+      updatedAt: 0,
+      events: [],
+    }
+    const mk = (state: string) => ({
+      id: state,
+      workerId: 'w',
+      task: '',
+      rationale: null,
+      dependsOn: [],
+      reviewRequired: false,
+      state,
+      dispatchedAt: null,
+      completedAt: null,
+      reviewedAt: null,
+      reviewedBy: null,
+      checkpoint: null,
+    })
+    expect(
+      laneSync.laneFromMission({
+        ...base,
+        state: 'complete',
+        assignments: [],
+      } as never),
+    ).toBe('done')
+    expect(
+      laneSync.laneFromMission({
+        ...base,
+        assignments: [mk('blocked')],
+      } as never),
+    ).toBe('blocked')
+    expect(
+      laneSync.laneFromMission({
+        ...base,
+        assignments: [mk('dispatched')],
+      } as never),
+    ).toBe('running')
+    expect(
+      laneSync.laneFromMission({
+        ...base,
+        assignments: [mk('reviewing')],
+      } as never),
+    ).toBe('review')
+    expect(
+      laneSync.laneFromMission({
+        ...base,
+        assignments: [mk('queued')],
+      } as never),
+    ).toBe('ready')
   })
 })

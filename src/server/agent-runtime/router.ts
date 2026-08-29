@@ -5,8 +5,8 @@
  * «hermes：完全不动») and appear in status via a read-only stub.
  */
 import { ClaudeCodeAdapter } from './claude-code-adapter'
-import {   loadAgentsRegistry } from './agents-config'
-import type {AgentDeclaration, AgentsRegistry} from './agents-config';
+import { loadAgentsRegistry } from './agents-config'
+import type { AgentDeclaration, AgentsRegistry } from './agents-config'
 import type { AgentProbeResult, AgentRuntimeAdapter } from './types'
 
 /** Read-only stand-in for hermes-runtime agents (they are not spawned here). */
@@ -14,10 +14,15 @@ class HermesAdapterStub implements AgentRuntimeAdapter {
   readonly kind = 'hermes' as const
   constructor(private readonly decl: AgentDeclaration) {}
   async probe(): Promise<AgentProbeResult> {
-    return { available: true, detail: `hermes profile ${this.decl.profile} (unmanaged path)` }
+    return {
+      available: true,
+      detail: `hermes profile ${this.decl.profile} (unmanaged path)`,
+    }
   }
   async startRun(): Promise<{ runId: string }> {
-    throw new Error('hermes runtime is dispatched via the existing swarm-dispatch path, not AgentRuntime')
+    throw new Error(
+      'hermes runtime is dispatched via the existing swarm-dispatch path, not AgentRuntime',
+    )
   }
   streamEvents(): AsyncIterable<never> {
     throw new Error('hermes runtime has no managed stream')
@@ -36,7 +41,10 @@ class UnavailableAdapter implements AgentRuntimeAdapter {
     return this.decl.runtime
   }
   async probe(): Promise<AgentProbeResult> {
-    return { available: false, detail: `adapter for ${this.decl.runtime} not yet delivered (P1 步骤 4)` }
+    return {
+      available: false,
+      detail: `adapter for ${this.decl.runtime} not yet delivered (P1 步骤 4)`,
+    }
   }
   async startRun(): Promise<{ runId: string }> {
     throw new Error(`adapter for ${this.decl.runtime} not yet delivered`)
@@ -77,7 +85,12 @@ export class AgentRuntimeRouter {
   }
 
   async probeAll(): Promise<
-    Array<{ agentId: string; runtime: string; execution: string; probe: AgentProbeResult }>
+    Array<{
+      agentId: string
+      runtime: string
+      execution: string
+      probe: AgentProbeResult
+    }>
   > {
     const results = []
     for (const decl of this.registry.agents) {
@@ -87,9 +100,17 @@ export class AgentRuntimeRouter {
       try {
         probe = await adapter.probe()
       } catch (error) {
-        probe = { available: false, detail: error instanceof Error ? error.message : String(error) }
+        probe = {
+          available: false,
+          detail: error instanceof Error ? error.message : String(error),
+        }
       }
-      results.push({ agentId: decl.id, runtime: decl.runtime, execution: decl.execution, probe })
+      results.push({
+        agentId: decl.id,
+        runtime: decl.runtime,
+        execution: decl.execution,
+        probe,
+      })
     }
     return results
   }
@@ -108,7 +129,9 @@ export function getAgentRuntimeRouter(): AgentRuntimeRouter {
 }
 
 /** Test hook: replace the singleton. */
-export function setAgentRuntimeRouterForTests(router: AgentRuntimeRouter | null): void {
+export function setAgentRuntimeRouterForTests(
+  router: AgentRuntimeRouter | null,
+): void {
   const g = globalThis as Record<string, unknown>
   if (router) g[ROUTER_KEY] = router
   else delete g[ROUTER_KEY]

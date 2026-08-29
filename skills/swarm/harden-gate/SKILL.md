@@ -72,10 +72,10 @@ RESULT: <one paragraph + evidence paths>
 NEXT_ACTION: learning|fix:<item>|human
 ```
 
-| `HARDEN_OUTCOME` | Next |
-|---|---|
-| `pass` | learning / ask orchestrator for publish greenlight |
-| `fail` | same EXECUTOR revises (Gate H retry ≤2), or `human` if secrets/destructive |
+| `HARDEN_OUTCOME` | Next                                                                       |
+| ---------------- | -------------------------------------------------------------------------- |
+| `pass`           | learning / ask orchestrator for publish greenlight                         |
+| `fail`           | same EXECUTOR revises (Gate H retry ≤2), or `human` if secrets/destructive |
 
 ## Prohibited
 

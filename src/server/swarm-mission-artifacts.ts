@@ -1,6 +1,10 @@
 import { mkdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { SWARM_CANONICAL_REPO, SWARM_LEGACY_OUTPUT_ROOT, SWARM_MEMORY_HANDOFFS } from './swarm-environment'
+import {
+  SWARM_CANONICAL_REPO,
+  SWARM_LEGACY_OUTPUT_ROOT,
+  SWARM_MEMORY_HANDOFFS,
+} from './swarm-environment'
 import type { ParsedSwarmCheckpoint } from './swarm-checkpoints'
 
 const MISSIONS_ROOT = join(SWARM_MEMORY_HANDOFFS, 'swarm', 'missions')
@@ -9,11 +13,17 @@ export function swarmMissionRoot(missionId: string): string {
   return join(MISSIONS_ROOT, missionId.trim())
 }
 
-export function swarmMissionWorkerDir(missionId: string, workerId: string): string {
+export function swarmMissionWorkerDir(
+  missionId: string,
+  workerId: string,
+): string {
   return join(swarmMissionRoot(missionId), workerId.trim())
 }
 
-export function swarmMissionEscalationDir(missionId: string, workerId: string): string {
+export function swarmMissionEscalationDir(
+  missionId: string,
+  workerId: string,
+): string {
   return join(swarmMissionWorkerDir(missionId, workerId), 'escalations')
 }
 
@@ -21,7 +31,10 @@ export function swarmMissionManifestPath(missionId: string): string {
   return join(swarmMissionRoot(missionId), 'manifest.json')
 }
 
-export function ensureSwarmMissionArtifactDirs(missionId: string, workerId: string): string {
+export function ensureSwarmMissionArtifactDirs(
+  missionId: string,
+  workerId: string,
+): string {
   const workerDir = swarmMissionWorkerDir(missionId, workerId)
   mkdirSync(workerDir, { recursive: true })
   return workerDir
@@ -32,35 +45,59 @@ export function isLegacyOutputArtifactPath(pathValue: string): boolean {
   if (!normalized || normalized === 'none') return false
   const legacy = SWARM_LEGACY_OUTPUT_ROOT.replace(/\\/g, '/')
   const rel = `/${legacy}/`
-  const abs = normalized.startsWith('/') ? normalized : resolve(SWARM_CANONICAL_REPO, normalized).replace(/\\/g, '/')
-  return abs === legacy || abs.startsWith(`${legacy}/`) || normalized.startsWith('output/')
+  const abs = normalized.startsWith('/')
+    ? normalized
+    : resolve(SWARM_CANONICAL_REPO, normalized).replace(/\\/g, '/')
+  return (
+    abs === legacy ||
+    abs.startsWith(`${legacy}/`) ||
+    normalized.startsWith('output/')
+  )
 }
 
-export function splitArtifactPaths(filesChanged: string | null | undefined): Array<string> {
+export function splitArtifactPaths(
+  filesChanged: string | null | undefined,
+): Array<string> {
   if (!filesChanged || filesChanged.trim().toLowerCase() === 'none') return []
   return filesChanged
     .split(/\n|,/)
-    .map((part) => part.trim().replace(/^[-*]\s*`?|`$/g, '').trim())
+    .map((part) =>
+      part
+        .trim()
+        .replace(/^[-*]\s*`?|`$/g, '')
+        .trim(),
+    )
     .filter(Boolean)
 }
 
-export function checkpointUsesLegacyOutputPaths(filesChanged: string | null | undefined): boolean {
+export function checkpointUsesLegacyOutputPaths(
+  filesChanged: string | null | undefined,
+): boolean {
   return splitArtifactPaths(filesChanged).some(isLegacyOutputArtifactPath)
 }
 
-export function rewriteLegacyOutputPathsInText(text: string, missionId: string): string {
+export function rewriteLegacyOutputPathsInText(
+  text: string,
+  missionId: string,
+): string {
   if (!missionId.trim()) return text
   const missionRoot = swarmMissionRoot(missionId).replace(/\\/g, '/')
   const legacyRoot = SWARM_LEGACY_OUTPUT_ROOT.replace(/\\/g, '/')
   let next = text
   next = next.replaceAll(legacyRoot, `${missionRoot}`)
-  next = next.replace(/(^|[\s`'"(])output\/([a-z0-9_-]+)\//gi, (_match, prefix: string, role: string) => {
-    return `${prefix}memory/swarm/missions/${missionId}/${role}/`
-  })
+  next = next.replace(
+    /(^|[\s`'"(])output\/([a-z0-9_-]+)\//gi,
+    (_match, prefix: string, role: string) => {
+      return `${prefix}memory/swarm/missions/${missionId}/${role}/`
+    },
+  )
   return next
 }
 
-export function buildMissionArtifactInstructions(missionId: string, workerId: string): string {
+export function buildMissionArtifactInstructions(
+  missionId: string,
+  workerId: string,
+): string {
   const workerDir = swarmMissionWorkerDir(missionId, workerId)
   const manifest = swarmMissionManifestPath(missionId)
   return [
@@ -78,10 +115,10 @@ export function applyArtifactPathPolicy(
   workerId: string,
 ): ParsedSwarmCheckpoint {
   if (!missionId || checkpoint.stateLabel !== 'DONE') return checkpoint
-  if (!checkpointUsesLegacyOutputPaths(checkpoint.filesChanged)) return checkpoint
+  if (!checkpointUsesLegacyOutputPaths(checkpoint.filesChanged))
+    return checkpoint
   const expected = swarmMissionWorkerDir(missionId, workerId)
-  const blocker =
-    `FILES_CHANGED references legacy output/ paths. Rewrite deliverables under ${expected}/ and return a new checkpoint.`
+  const blocker = `FILES_CHANGED references legacy output/ paths. Rewrite deliverables under ${expected}/ and return a new checkpoint.`
   return {
     ...checkpoint,
     stateLabel: 'BLOCKED',

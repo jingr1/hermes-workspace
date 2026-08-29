@@ -59,14 +59,14 @@ developer:autoresearch   改代码/测试类目标
 
 ## 角色分工
 
-| 角色 | Wrapper | 做什么 |
-|------|---------|--------|
-| orchestrator | `orchestrator:autoresearch` | **默认入口**：wizard / plan / 跑契约 / 自动派发 |
-| orchestrator | `orchestrator:autoresearch-dispatch` | 仅校验已有契约并派发（无 wizard） |
-| researcher | `researcher:quick` | 供事实；可帮起草契约字段；**不执行 loop** |
-| architect | `architect:autoresearch` | `executor: architect` 时执行 loop（规格类） |
-| developer | `developer:autoresearch` | `executor: developer` 时执行 loop（代码类） |
-| learning | `learning` | 任务结束后把结论写入 wiki |
+| 角色         | Wrapper                              | 做什么                                          |
+| ------------ | ------------------------------------ | ----------------------------------------------- |
+| orchestrator | `orchestrator:autoresearch`          | **默认入口**：wizard / plan / 跑契约 / 自动派发 |
+| orchestrator | `orchestrator:autoresearch-dispatch` | 仅校验已有契约并派发（无 wizard）               |
+| researcher   | `researcher:quick`                   | 供事实；可帮起草契约字段；**不执行 loop**       |
+| architect    | `architect:autoresearch`             | `executor: architect` 时执行 loop（规格类）     |
+| developer    | `developer:autoresearch`             | `executor: developer` 时执行 loop（代码类）     |
+| learning     | `learning`                           | 任务结束后把结论写入 wiki                       |
 
 ## 环境准备（首次）
 
@@ -77,12 +77,12 @@ bash scripts/sync-autoresearch-skills.sh
 
 会安装三个 wrapper（`~/.local/bin/`）并把 skills 同步到 `~/.hermes/skills/swarm/`：
 
-| Wrapper | 预加载 skills |
-|---------|----------------|
-| `orchestrator:autoresearch` | autoresearch-orchestrate, autoresearch-plan, autoresearch |
-| `orchestrator:autoresearch-dispatch` | 同上（契约校验专用别名） |
-| `architect:autoresearch` | autoresearch-execute, autoresearch |
-| `developer:autoresearch` | autoresearch-execute, autoresearch |
+| Wrapper                              | 预加载 skills                                             |
+| ------------------------------------ | --------------------------------------------------------- |
+| `orchestrator:autoresearch`          | autoresearch-orchestrate, autoresearch-plan, autoresearch |
+| `orchestrator:autoresearch-dispatch` | 同上（契约校验专用别名）                                  |
+| `architect:autoresearch`             | autoresearch-execute, autoresearch                        |
+| `developer:autoresearch`             | autoresearch-execute, autoresearch                        |
 
 > **注意：** wrapper 的 `-s` 只预加载 autoresearch 系列；`orchestrator-core`、`architect-core` 等由 profile 自带，不要写进 `-s`（否则会报 `Unknown skill`）。
 
@@ -113,14 +113,14 @@ locked_eval:
   - path/to/eval.sh
   - path/to/guard.sh
 metric: <指标名与单位>
-direction: higher   # 或 lower
+direction: higher # 或 lower
 verify: bash path/to/eval.sh
 guard: bash path/to/guard.sh
 iterations: 3
 results_log: autoresearch-results/my-run.tsv
 rollback: git checkout -- path/to/only/file/you/may/edit.md when metric worsens or guard fails
 greenlight: approved — <范围说明，demo/试点/禁止 merge 等>
-executor: architect   # 或 developer
+executor: architect # 或 developer
 ```
 
 ### 3. Orchestrator 校验并派发
@@ -158,23 +158,23 @@ developer:autoresearch chat -q \
 
 目录：`autoresearch-demo/`
 
-| 文件 | 作用 |
-|------|------|
-| `contract.yaml` | 契约：`executor: architect`，2 轮迭代 |
-| `routing_hint.md` | **唯一可改** 的研究员路由提示（mutable_target） |
-| `eval.sh` | **锁定** 评分：统计 hint 里 4 组关键词命中数（0–4） |
-| `guard.sh` | **锁定** 守卫：文件存在且 ≤600 字节 |
-| `DISPATCH.md` | 本 demo 的命令速查 |
+| 文件              | 作用                                                |
+| ----------------- | --------------------------------------------------- |
+| `contract.yaml`   | 契约：`executor: architect`，2 轮迭代               |
+| `routing_hint.md` | **唯一可改** 的研究员路由提示（mutable_target）     |
+| `eval.sh`         | **锁定** 评分：统计 hint 里 4 组关键词命中数（0–4） |
+| `guard.sh`        | **锁定** 守卫：文件存在且 ≤600 字节                 |
+| `DISPATCH.md`     | 本 demo 的命令速查                                  |
 
 **eval 逻辑（简化）：** 每命中一组关键词 +1 分——`wiki`、`citation|source`、`uncertainty|confidence`、`no recommendation|no strategy`。
 
 **一次成功 pilot 的效果：**
 
-| 轮次 | metric | 做了什么 |
-|------|--------|----------|
-| 0 baseline | 1 | 只有「读 wiki」 |
-| 1 keep | 2 | 加了 cite sources |
-| 2 keep | 3 | 加了 uncertainty 提示 |
+| 轮次       | metric | 做了什么              |
+| ---------- | ------ | --------------------- |
+| 0 baseline | 1      | 只有「读 wiki」       |
+| 1 keep     | 2      | 加了 cite sources     |
+| 2 keep     | 3      | 加了 uncertainty 提示 |
 
 日志：`autoresearch-results/demo-pilot.tsv`。
 
@@ -226,10 +226,10 @@ iteration	timestamp	commit	metric	delta	guard	guard-metric	status	description
 
 ## 选 executor
 
-| 目标类型 | executor | 示例 |
-|----------|----------|------|
-| SKILL.md、SOUL.md、路由 hint、接口说明 | `architect` | `autoresearch-demo/routing_hint.md` |
-| 应用代码、单测、构建脚本 | `developer` | 某个 `src/foo.ts`、eslint 违规数下降 |
+| 目标类型                               | executor    | 示例                                 |
+| -------------------------------------- | ----------- | ------------------------------------ |
+| SKILL.md、SOUL.md、路由 hint、接口说明 | `architect` | `autoresearch-demo/routing_hint.md`  |
+| 应用代码、单测、构建脚本               | `developer` | 某个 `src/foo.ts`、eslint 违规数下降 |
 
 边界模糊时：能写成「设计/规格变更」→ architect；必须改运行时代码 → developer。
 
@@ -244,7 +244,7 @@ wrapper `-s` 里写了 profile core skill。解决：只保留 `autoresearch-*`�
 契约路径相对 **当前工作目录**（一般在 workspace 根）。错误示例：
 
 ```yaml
-verify: bash hermes-workspace/autoresearch-demo/eval.sh   # 在根目录执行会双叠
+verify: bash hermes-workspace/autoresearch-demo/eval.sh # 在根目录执行会双叠
 ```
 
 正确：

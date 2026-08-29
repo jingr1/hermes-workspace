@@ -43,7 +43,13 @@ export type OrchestratorState = {
     analysis?: string
     assignments?: Array<PendingAssignment>
     human_approval_required?: boolean
-    metadata?: { classifications?: Array<{ worker_id: string; verdict: string; blocker_type: string }> }
+    metadata?: {
+      classifications?: Array<{
+        worker_id: string
+        verdict: string
+        blocker_type: string
+      }>
+    }
   } | null
   iteration?: number
   max_iterations?: number
@@ -66,14 +72,21 @@ export type HumanGate = {
   logEntries: Array<string>
 }
 
-async function fetchOrchestratorState(missionId: string): Promise<OrchestratorState | null> {
-  const res = await fetch(`/api/orchestrator-state?missionId=${encodeURIComponent(missionId)}`)
+async function fetchOrchestratorState(
+  missionId: string,
+): Promise<OrchestratorState | null> {
+  const res = await fetch(
+    `/api/orchestrator-state?missionId=${encodeURIComponent(missionId)}`,
+  )
   if (!res.ok) {
     if (res.status === 404) return null
     const data = (await res.json().catch(() => ({}))) as { error?: string }
     throw new Error(data.error || `HTTP ${res.status}`)
   }
-  const data = (await res.json()) as { ok: boolean; state?: OrchestratorState | null }
+  const data = (await res.json()) as {
+    ok: boolean
+    state?: OrchestratorState | null
+  }
   return data.state ?? null
 }
 
@@ -83,7 +96,10 @@ async function fetchActiveGates(): Promise<Array<OrchestratorState>> {
     const data = (await res.json().catch(() => ({}))) as { error?: string }
     throw new Error(data.error || `HTTP ${res.status}`)
   }
-  const data = (await res.json()) as { ok: boolean; gates?: Array<OrchestratorState> }
+  const data = (await res.json()) as {
+    ok: boolean
+    gates?: Array<OrchestratorState>
+  }
   return data.gates ?? []
 }
 
@@ -111,29 +127,38 @@ async function postResume({
   targetWorkerId?: string
   mock: boolean
 }): Promise<{ ok: boolean; completed?: boolean }> {
-  const res = await fetch(`/api/swarm-langgraph/resume${mock ? '?mock=1' : ''}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      missionId,
-      action,
-      ...(action === 'approved'
-        ? {
-            choice: choice ?? 'primary',
-            humanNote: humanNote ?? '',
-            targetWorkerId: targetWorkerId ?? '',
-          }
-        : {}),
-    }),
-  })
-  const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; completed?: boolean }
+  const res = await fetch(
+    `/api/swarm-langgraph/resume${mock ? '?mock=1' : ''}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        missionId,
+        action,
+        ...(action === 'approved'
+          ? {
+              choice: choice ?? 'primary',
+              humanNote: humanNote ?? '',
+              targetWorkerId: targetWorkerId ?? '',
+            }
+          : {}),
+      }),
+    },
+  )
+  const data = (await res.json().catch(() => ({}))) as {
+    ok?: boolean
+    error?: string
+    completed?: boolean
+  }
   if (!res.ok) {
     throw new Error(data.error || `HTTP ${res.status}`)
   }
   return { ok: Boolean(data.ok), completed: data.completed }
 }
 
-function deriveGate(state: OrchestratorState | null | undefined): HumanGate | null {
+function deriveGate(
+  state: OrchestratorState | null | undefined,
+): HumanGate | null {
   if (!state) return null
   const needsHuman = state.langgraph_needs_human === true
   const pending = state.pending_human_assignments ?? []
@@ -141,7 +166,8 @@ function deriveGate(state: OrchestratorState | null | undefined): HumanGate | nu
 
   const classification = state.classifications?.[0]
   const checkpoint = state.checkpoints?.[0] ?? null
-  const workerId = classification?.worker_id ?? pending[0]?.worker_id ?? 'unknown'
+  const workerId =
+    classification?.worker_id ?? pending[0]?.worker_id ?? 'unknown'
   const analysis = state.langgraph_decision?.analysis ?? ''
 
   return {
@@ -150,7 +176,8 @@ function deriveGate(state: OrchestratorState | null | undefined): HumanGate | nu
     workerId,
     verdict: classification?.verdict ?? 'BLOCKED',
     blockerType: classification?.blocker_type ?? '',
-    blockerSummary: classification?.blocker_summary ?? checkpoint?.blocker ?? '',
+    blockerSummary:
+      classification?.blocker_summary ?? checkpoint?.blocker ?? '',
     reasoning: classification?.reasoning ?? '',
     checkpoint,
     pendingAssignments: pending,
@@ -170,7 +197,9 @@ export function useHumanGate(missionId?: string | null | undefined) {
   const stateQuery = useQuery({
     queryKey,
     queryFn: () =>
-      missionId ? fetchOrchestratorState(missionId) : fetchActiveGates().then((gates) => gates[0] ?? null),
+      missionId
+        ? fetchOrchestratorState(missionId)
+        : fetchActiveGates().then((gates) => gates[0] ?? null),
     enabled: true,
     refetchInterval: 3_000,
     staleTime: 2_000,
@@ -182,8 +211,12 @@ export function useHumanGate(missionId?: string | null | undefined) {
     mutationFn: postResume,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey })
-      await queryClient.invalidateQueries({ queryKey: ['orchestrator', 'active-gates'] })
-      await queryClient.invalidateQueries({ queryKey: ['orchestrator', 'state'] })
+      await queryClient.invalidateQueries({
+        queryKey: ['orchestrator', 'active-gates'],
+      })
+      await queryClient.invalidateQueries({
+        queryKey: ['orchestrator', 'state'],
+      })
     },
   })
 

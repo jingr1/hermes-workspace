@@ -21,13 +21,13 @@ Reference: `docs/swarm/AUTORESEARCH-GUIDE.md`, `references/orchestrator-routing.
 
 ## Parse user input (first match wins)
 
-| Condition | Mode | Action |
-|-----------|------|--------|
-| User says `/autoresearch` with **no** goal/metric/verify/contract path | **wizard** | Setup wizard (below) |
-| `Metric:` or `Verify:` inline, or full contract block in message | **classic** | `autoresearch-plan` → write contract → dispatch |
-| Path to existing `contract.yaml` or `*.yaml` with all fields | **contract** | Validate, dry-run verify/guard, dispatch |
-| Only a natural-language goal (no metric/verify) | **plan** | `autoresearch-plan` derive config → confirm → dispatch |
-| `--plan-only` or "draft contract only" | **plan** | Write contract, stop before dispatch |
+| Condition                                                              | Mode         | Action                                                 |
+| ---------------------------------------------------------------------- | ------------ | ------------------------------------------------------ |
+| User says `/autoresearch` with **no** goal/metric/verify/contract path | **wizard**   | Setup wizard (below)                                   |
+| `Metric:` or `Verify:` inline, or full contract block in message       | **classic**  | `autoresearch-plan` → write contract → dispatch        |
+| Path to existing `contract.yaml` or `*.yaml` with all fields           | **contract** | Validate, dry-run verify/guard, dispatch               |
+| Only a natural-language goal (no metric/verify)                        | **plan**     | `autoresearch-plan` derive config → confirm → dispatch |
+| `--plan-only` or "draft contract only"                                 | **plan**     | Write contract, stop before dispatch                   |
 
 ## Setup wizard (mode: wizard)
 
@@ -69,11 +69,11 @@ Parse `Goal:`, `Scope:`, `Metric:`, `Direction:`, `Verify:`, `Guard:`, `Iteratio
 
 ## Choose executor
 
-| mutable_target | executor |
-|----------------|----------|
-| `*.md` skill/SOUL/routing hint/spec under `skills/`, `agents/`, `memory/` | `architect` |
-| `src/**`, `tests/**`, `*.ts`, `*.py`, build configs | `developer` |
-| Ambiguous | ask user; default `architect` for docs-only |
+| mutable_target                                                            | executor                                    |
+| ------------------------------------------------------------------------- | ------------------------------------------- |
+| `*.md` skill/SOUL/routing hint/spec under `skills/`, `agents/`, `memory/` | `architect`                                 |
+| `src/**`, `tests/**`, `*.ts`, `*.py`, build configs                       | `developer`                                 |
+| Ambiguous                                                                 | ask user; default `architect` for docs-only |
 
 ## Dispatch (after contract is complete)
 

@@ -116,10 +116,12 @@ export function estimateContextTokensFromMessages(
     const topLevelText = typeof msg.text === 'string' ? msg.text : ''
     if (structured) {
       totalChars += structured.length
-      if (topLevelText && topLevelText !== structured) totalChars += topLevelText.length
+      if (topLevelText && topLevelText !== structured)
+        totalChars += topLevelText.length
     } else if (typeof msg.content === 'string') {
       totalChars += msg.content.length
-      if (topLevelText && topLevelText !== msg.content) totalChars += topLevelText.length
+      if (topLevelText && topLevelText !== msg.content)
+        totalChars += topLevelText.length
     } else if (topLevelText) {
       totalChars += topLevelText.length
     }
@@ -140,7 +142,9 @@ export function estimateContextTokensFromCacheRead(
   messageCount: number,
 ): number {
   const assistantTurns = Math.max(1, Math.ceil((Number(messageCount) || 0) / 2))
-  return Math.ceil((Math.max(0, Number(cacheReadTokens) || 0) / assistantTurns) * 1.2)
+  return Math.ceil(
+    (Math.max(0, Number(cacheReadTokens) || 0) / assistantTurns) * 1.2,
+  )
 }
 
 export function estimateContextTokensFromSessionUsage(
@@ -182,7 +186,8 @@ export function resolvePreferredContextWindow(
   configuredMaxTokens?: number,
   sessionContextLength?: number,
 ): number {
-  if (sessionContextLength && sessionContextLength > 0) return sessionContextLength
+  if (sessionContextLength && sessionContextLength > 0)
+    return sessionContextLength
   if (configuredMaxTokens && configuredMaxTokens > 0) return configuredMaxTokens
   return lookupStaticContextWindow(model)
 }
@@ -195,7 +200,11 @@ export function parseCompressionSettings(
   config: Record<string, unknown> | null | undefined,
 ): CompressionSettings {
   const compression = config?.compression
-  if (!compression || typeof compression !== 'object' || Array.isArray(compression)) {
+  if (
+    !compression ||
+    typeof compression !== 'object' ||
+    Array.isArray(compression)
+  ) {
     return {
       thresholdRatio: DEFAULT_COMPRESSION_THRESHOLD,
       thresholdTokensCap: 0,
@@ -227,9 +236,7 @@ export function computeThresholdTokens(
   if (explicit > 0) return explicit
   if (maxTokens <= 0) return 0
   const safeRatio =
-    Number.isFinite(thresholdRatio) &&
-    thresholdRatio > 0 &&
-    thresholdRatio <= 1
+    Number.isFinite(thresholdRatio) && thresholdRatio > 0 && thresholdRatio <= 1
       ? thresholdRatio
       : DEFAULT_COMPRESSION_THRESHOLD
   let threshold = Math.floor(maxTokens * safeRatio)
@@ -318,7 +325,11 @@ function readConfiguredContextLength(payload: Record<string, unknown>): number {
   if (direct && direct > 0) return direct
 
   const capabilities = payload.capabilities
-  if (capabilities && typeof capabilities === 'object' && !Array.isArray(capabilities)) {
+  if (
+    capabilities &&
+    typeof capabilities === 'object' &&
+    !Array.isArray(capabilities)
+  ) {
     const contextWindow = Number(
       (capabilities as Record<string, unknown>).context_window,
     )
@@ -399,9 +410,7 @@ async function readConfiguredModelContext(): Promise<ResolvedModelContext | null
     // Prefer gateway effective_context_length (same resolution chain as the
     // agent). Static table is last-resort only when the gateway has no length.
     const maxTokens =
-      configuredLength > 0
-        ? configuredLength
-        : lookupStaticContextWindow(model)
+      configuredLength > 0 ? configuredLength : lookupStaticContextWindow(model)
 
     if (!model && maxTokens <= 0) return null
 
@@ -448,9 +457,7 @@ async function readGatewayRuntimeSnapshot(
       configuredModelContext?.model ||
       ''
     const sessionContextLength =
-      Number(data.context_length) ||
-      Number(data.effective_context_length) ||
-      0
+      Number(data.context_length) || Number(data.effective_context_length) || 0
     const maxTokens = resolvePreferredContextWindow(
       model,
       configuredModelContext?.maxTokens,
@@ -613,9 +620,8 @@ export async function readContextUsage(
       const localMessages = getLocalMessages(explicitSessionId)
       const activeRun = await getActiveRunForSession(explicitSessionId)
       if (localSession) {
-        const mirroredRuntimeSessionId = await resolveMirroredRuntimeSessionId(
-          explicitSessionId,
-        )
+        const mirroredRuntimeSessionId =
+          await resolveMirroredRuntimeSessionId(explicitSessionId)
         if (mirroredRuntimeSessionId) {
           const mirroredRuntime = await readGatewayRuntimeSnapshot(
             mirroredRuntimeSessionId,
@@ -685,9 +691,12 @@ export async function readContextUsage(
     if (explicitSessionId) {
       try {
         const res = capabilities.dashboard.available
-          ? await dashboardFetch(`/api/sessions/${encodeURIComponent(resolvedSessionId)}`, {
-              signal: AbortSignal.timeout(3000),
-            })
+          ? await dashboardFetch(
+              `/api/sessions/${encodeURIComponent(resolvedSessionId)}`,
+              {
+                signal: AbortSignal.timeout(3000),
+              },
+            )
           : await fetch(
               `${CLAUDE_API}/api/sessions/${encodeURIComponent(resolvedSessionId)}`,
               {
@@ -699,7 +708,9 @@ export async function readContextUsage(
           const data = (await res.json()) as {
             session?: Record<string, unknown>
           } & Record<string, unknown>
-          sessionData = capabilities.dashboard.available ? data : (data.session ?? null)
+          sessionData = capabilities.dashboard.available
+            ? data
+            : (data.session ?? null)
         }
       } catch {
         /* ignore */
@@ -755,10 +766,14 @@ export async function readContextUsage(
         apiCallCount,
       )
     } else if (cacheReadTokens > 0 && messageCount > 0) {
-      usedTokens = estimateContextTokensFromCacheRead(cacheReadTokens, messageCount)
+      usedTokens = estimateContextTokensFromCacheRead(
+        cacheReadTokens,
+        messageCount,
+      )
     } else if (messageCount > 0) {
       try {
-        const targetSessionId = resolvedSessionId || String(sessionData.id || '')
+        const targetSessionId =
+          resolvedSessionId || String(sessionData.id || '')
         if (targetSessionId) {
           const capabilitiesNow = getCapabilities()
           const msgRes = capabilitiesNow.dashboard.available

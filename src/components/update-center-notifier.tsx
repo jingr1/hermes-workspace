@@ -222,7 +222,10 @@ export function UpdateCenterNotifier() {
         : null
       if (stored) setNotes(stored)
       await queryClient.invalidateQueries({ queryKey: ['update-status-v2'] })
-      const restartedWorkers = result.workerRestart?.results.filter((item) => item.started).map((item) => item.workerId) ?? []
+      const restartedWorkers =
+        result.workerRestart?.results
+          .filter((item) => item.started)
+          .map((item) => item.workerId) ?? []
       if (product.id === 'agent' && restartedWorkers.length > 0) {
         toast(
           `${product.label} updated. Restarted swarm workers: ${restartedWorkers.join(', ')}.`,
@@ -377,7 +380,9 @@ function UpdateCard({
               {product.repoPath}
             </p>
           ) : null}
-          {blocked && product.blockingFiles && product.blockingFiles.length > 0 ? (
+          {blocked &&
+          product.blockingFiles &&
+          product.blockingFiles.length > 0 ? (
             <ul className="mt-1 max-h-24 overflow-auto pr-1">
               {product.blockingFiles.slice(0, 8).map((file) => (
                 <li

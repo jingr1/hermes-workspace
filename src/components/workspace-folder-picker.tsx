@@ -1,6 +1,10 @@
 'use client'
 
-import { ArrowDown01Icon, ArrowRight01Icon, Folder01Icon } from '@hugeicons/core-free-icons'
+import {
+  ArrowDown01Icon,
+  ArrowRight01Icon,
+  Folder01Icon,
+} from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Input } from '@/components/ui/input'
@@ -222,7 +226,8 @@ export function WorkspaceFolderPicker({
 
   useEffect(() => {
     const pending = [...expandedPaths].filter(
-      (entryPath) => !childrenCache.has(entryPath) && !loadingPaths.has(entryPath),
+      (entryPath) =>
+        !childrenCache.has(entryPath) && !loadingPaths.has(entryPath),
     )
     if (pending.length === 0) return
 
@@ -338,16 +343,25 @@ export function WorkspaceFolderPicker({
                     '…'
                   ) : (
                     <HugeiconsIcon
-                      icon={node.isExpanded ? ArrowDown01Icon : ArrowRight01Icon}
+                      icon={
+                        node.isExpanded ? ArrowDown01Icon : ArrowRight01Icon
+                      }
                       size={11}
                       strokeWidth={1.8}
                     />
                   )}
                 </span>
-                <HugeiconsIcon icon={Folder01Icon} size={14} strokeWidth={1.8} className="shrink-0" />
+                <HugeiconsIcon
+                  icon={Folder01Icon}
+                  size={14}
+                  strokeWidth={1.8}
+                  className="shrink-0"
+                />
                 <span className="min-w-0 truncate">{node.folder.name}</span>
               </button>
-              {node.isExpanded && !node.isLoading && node.hasChildren === false ? (
+              {node.isExpanded &&
+              !node.isLoading &&
+              node.hasChildren === false ? (
                 <div
                   className="px-2 py-0.5 text-[11px] italic text-[var(--theme-muted)]"
                   style={{ paddingLeft: `${28 + node.depth * 16}px` }}

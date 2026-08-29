@@ -1,6 +1,12 @@
 'use client'
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 import {
   clearPrimedAudioStream,
   createAudioRecorder,
@@ -143,7 +149,12 @@ export function useVoiceInput(
 
     resetSpeechRecognition()
     setState('idle')
-  }, [cleanupRecorder, clearListenTimeout, releaseSpeechStream, resetSpeechRecognition])
+  }, [
+    cleanupRecorder,
+    clearListenTimeout,
+    releaseSpeechStream,
+    resetSpeechRecognition,
+  ])
 
   const armListenTimeout = useCallback(() => {
     clearListenTimeout()
@@ -158,7 +169,9 @@ export function useVoiceInput(
 
     if (callbacksRef.current.transcribe) {
       if (!detectAudioRecordingSupport()) {
-        callbacksRef.current.onError?.('Audio recording not supported in this browser')
+        callbacksRef.current.onError?.(
+          'Audio recording not supported in this browser',
+        )
         setState('error')
         return
       }
@@ -306,7 +319,9 @@ export function useVoiceInput(
           return
         }
         setState('error')
-        callbacksRef.current.onError?.(formatSpeechRecognitionError(event.error))
+        callbacksRef.current.onError?.(
+          formatSpeechRecognitionError(event.error),
+        )
         recognitionRef.current = null
       }
 
@@ -348,16 +363,14 @@ export function useVoiceInput(
         beginRecognition()
       }
 
-      void streamPromise
-        .then(attachStreamAndStart)
-        .catch((error) => {
-          if (startToken !== speechStartTokenRef.current) return
-          startInFlightRef.current = false
-          clearListenTimeout()
-          releaseSpeechStream()
-          setState('error')
-          callbacksRef.current.onError?.(formatVoiceInputError(error))
-        })
+      void streamPromise.then(attachStreamAndStart).catch((error) => {
+        if (startToken !== speechStartTokenRef.current) return
+        startInFlightRef.current = false
+        clearListenTimeout()
+        releaseSpeechStream()
+        setState('error')
+        callbacksRef.current.onError?.(formatVoiceInputError(error))
+      })
 
       // If mic was already allowed, start immediately in the gesture turn.
       beginRecognition()
@@ -365,7 +378,16 @@ export function useVoiceInput(
     }
 
     beginRecognition()
-  }, [armListenTimeout, cleanupRecorder, clearListenTimeout, interim, lang, releaseSpeechStream, resetSpeechRecognition, stop])
+  }, [
+    armListenTimeout,
+    cleanupRecorder,
+    clearListenTimeout,
+    interim,
+    lang,
+    releaseSpeechStream,
+    resetSpeechRecognition,
+    stop,
+  ])
 
   const toggle = useCallback(() => {
     if (state === 'listening') {
@@ -389,7 +411,12 @@ export function useVoiceInput(
       }
       cleanupRecorder()
     }
-  }, [cleanupRecorder, clearListenTimeout, releaseSpeechStream, resetSpeechRecognition])
+  }, [
+    cleanupRecorder,
+    clearListenTimeout,
+    releaseSpeechStream,
+    resetSpeechRecognition,
+  ])
 
   return {
     state,

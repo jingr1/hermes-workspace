@@ -44,7 +44,10 @@ const ROLE_GUIDANCE: Record<string, string> = {
 
 function guidanceFor(stage: PipelineStage): string {
   if (stage.kind === 'review') return ROLE_GUIDANCE.review
-  return ROLE_GUIDANCE[stage.key] ?? `Execute stage "${stage.key}" per the task spec.`
+  return (
+    ROLE_GUIDANCE[stage.key] ??
+    `Execute stage "${stage.key}" per the task spec.`
+  )
 }
 
 /**
@@ -78,7 +81,11 @@ export function generateStageBrief(input: {
     guidanceFor(stage),
   ]
   if (stage.dependsOn.length > 0) {
-    lines.push(``, `## Depends on (must be complete)`, ...stage.dependsOn.map((d) => `- ${d}`))
+    lines.push(
+      ``,
+      `## Depends on (must be complete)`,
+      ...stage.dependsOn.map((d) => `- ${d}`),
+    )
   }
   if (input.upstreamSummary) {
     lines.push(``, `## Upstream handoff`, input.upstreamSummary)
@@ -104,6 +111,9 @@ export function generateStageBrief(input: {
  * Is this stage's brief stale relative to the mission's current specVersion?
  * Stale briefs must NOT be dispatched silently.
  */
-export function isBriefStale(briefSpecVersion: number, missionSpecVersion: number): boolean {
+export function isBriefStale(
+  briefSpecVersion: number,
+  missionSpecVersion: number,
+): boolean {
   return briefSpecVersion !== missionSpecVersion
 }

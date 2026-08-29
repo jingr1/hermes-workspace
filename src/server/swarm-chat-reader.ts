@@ -159,7 +159,11 @@ print(json.dumps({
 }))
 `
 
-export function readWorkerMessages(profilePath: string, limit: number, dispatchedAfterMs = 0): SwarmChatReadResult {
+export function readWorkerMessages(
+  profilePath: string,
+  limit: number,
+  dispatchedAfterMs = 0,
+): SwarmChatReadResult {
   const dbPath = join(profilePath, 'state.db')
   if (!existsSync(dbPath)) {
     return {
@@ -172,7 +176,13 @@ export function readWorkerMessages(profilePath: string, limit: number, dispatche
   try {
     const raw = execFileSync(
       'python3',
-      ['-c', PYTHON_SCRIPT, dbPath, String(limit), String(Math.floor(dispatchedAfterMs))],
+      [
+        '-c',
+        PYTHON_SCRIPT,
+        dbPath,
+        String(limit),
+        String(Math.floor(dispatchedAfterMs)),
+      ],
       { encoding: 'utf-8', timeout: 5_000 },
     )
     const parsed = JSON.parse(raw) as {

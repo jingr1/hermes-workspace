@@ -27,12 +27,12 @@ Operations 页面
 
 ### 2.2 元素与状态
 
-| 元素 | 说明 | 交互 |
-|---|---|---|
-| 标题区 | 标题 "Operations" + 副标题 "Your persistent agent team" | 静态 |
-| View Switch | Overview / Outputs 两个 tab | 切换主视图区域 |
-| New Agent | 主按钮 | 打开 New Agent Modal |
-| Settings | 次按钮 | 打开 Operations Settings Modal |
+| 元素        | 说明                                                    | 交互                           |
+| ----------- | ------------------------------------------------------- | ------------------------------ |
+| 标题区      | 标题 "Operations" + 副标题 "Your persistent agent team" | 静态                           |
+| View Switch | Overview / Outputs 两个 tab                             | 切换主视图区域                 |
+| New Agent   | 主按钮                                                  | 打开 New Agent Modal           |
+| Settings    | 次按钮                                                  | 打开 Operations Settings Modal |
 
 ### 2.3 View Switch 行为
 
@@ -51,14 +51,14 @@ Operations 页面
 
 ### 3.2 统计卡片
 
-| 卡片 | 字段 | 计算方式 | 点击行为 |
-|---|---|---|---|
-| Active | 数量 | status === 'active' 的 agent 数 | 过滤 Agent Grid，只显示 active |
-| Idle | 数量 | status === 'idle' 的 agent 数 | 过滤显示 idle |
-| Error | 数量 | status === 'error' 的 agent 数 | 过滤显示 error |
-| Needs Setup | 数量 | needsSetup === true 的 agent 数 | 过滤显示 needs setup |
-| Tokens | 本周 token 数 | 后端计算或 dashboard 数据 | 展示详情 tooltip |
-| Cost | 本周估算成本 | 后端计算或 dashboard 数据 | 展示详情 tooltip |
+| 卡片        | 字段          | 计算方式                        | 点击行为                       |
+| ----------- | ------------- | ------------------------------- | ------------------------------ |
+| Active      | 数量          | status === 'active' 的 agent 数 | 过滤 Agent Grid，只显示 active |
+| Idle        | 数量          | status === 'idle' 的 agent 数   | 过滤显示 idle                  |
+| Error       | 数量          | status === 'error' 的 agent 数  | 过滤显示 error                 |
+| Needs Setup | 数量          | needsSetup === true 的 agent 数 | 过滤显示 needs setup           |
+| Tokens      | 本周 token 数 | 后端计算或 dashboard 数据       | 展示详情 tooltip               |
+| Cost        | 本周估算成本  | 后端计算或 dashboard 数据       | 展示详情 tooltip               |
 
 ### 3.3 空状态
 
@@ -69,12 +69,12 @@ Operations 页面
 
 ### 4.1 响应式网格
 
-| 届宽 | 列数 |
-|---|---|
-| < 640px | 1 列 |
-| 640px - 1024px | 2 列 |
+| 届宽            | 列数 |
+| --------------- | ---- |
+| < 640px         | 1 列 |
+| 640px - 1024px  | 2 列 |
 | 1024px - 1440px | 3 列 |
-| >= 1440px | 4 列 |
+| >= 1440px       | 4 列 |
 
 ### 4.2 Agent Card 结构
 
@@ -102,44 +102,44 @@ Operations 页面
 
 #### 区域 A：顶部工具栏
 
-| 元素 | 说明 | 交互 |
-|---|---|---|
-| Cron 计数器 | 属于该 agent 的 cron job 数量 | 点击展开/折叠 Cron Mini Panel |
-| Agent 名称 | 展示 name（不带 emoji） | 点击整个卡片打开 Agent Detail |
-| 状态指示点 | active=green pulse, idle=gray, error=red | hover 显示状态文字 |
-| 运行按钮 | ▶ / ⏸ | 点击发起 "Run your primary task now"；如果 needsSetup 则打开详情 |
-| 设置按钮 | ⚙️ | 打开 Agent Detail Drawer |
+| 元素        | 说明                                     | 交互                                                             |
+| ----------- | ---------------------------------------- | ---------------------------------------------------------------- |
+| Cron 计数器 | 属于该 agent 的 cron job 数量            | 点击展开/折叠 Cron Mini Panel                                    |
+| Agent 名称  | 展示 name（不带 emoji）                  | 点击整个卡片打开 Agent Detail                                    |
+| 状态指示点  | active=green pulse, idle=gray, error=red | hover 显示状态文字                                               |
+| 运行按钮    | ▶ / ⏸                                    | 点击发起 "Run your primary task now"；如果 needsSetup 则打开详情 |
+| 设置按钮    | ⚙️                                       | 打开 Agent Detail Drawer                                         |
 
 #### 区域 B：身份区
 
-| 元素 | 字段 | 空状态 |
-|---|---|---|
-| Avatar | `meta.emoji` + `meta.color` 生成的 PixelAvatar | 默认 🤖 |
-| 名称 | `agent.name` | "Unnamed agent" |
-| 描述 | `meta.description` 或 `agent.description` | "No description" |
+| 元素   | 字段                                           | 空状态           |
+| ------ | ---------------------------------------------- | ---------------- |
+| Avatar | `meta.emoji` + `meta.color` 生成的 PixelAvatar | 默认 🤖          |
+| 名称   | `agent.name`                                   | "Unnamed agent"  |
+| 描述   | `meta.description` 或 `agent.description`      | "No description" |
 
 #### 区域 C：能力与资源
 
-| 元素 | 字段 | 空状态 /错误状态 |
-|---|---|---|
-| Skills | `capabilities.skills.length` | "0 skills" |
-| MCP | `capabilities.mcpServers.length` | "0 MCP" |
-| Workspace | `resources.workspace` | "No workspace" |
-| Model | `shortModel` | "No model" 高亮 |
+| 元素      | 字段                             | 空状态 /错误状态 |
+| --------- | -------------------------------- | ---------------- |
+| Skills    | `capabilities.skills.length`     | "0 skills"       |
+| MCP       | `capabilities.mcpServers.length` | "0 MCP"          |
+| Workspace | `resources.workspace`            | "No workspace"   |
+| Model     | `shortModel`                     | "No model" 高亮  |
 
 #### 区域 D：活动摘要
 
-| 元素 | 字段 | 说明 |
-|---|---|---|
-| 状态标签 | `status` + `activityLabel` | 例如 "Active · 2m ago" |
-| 最近 output | `recentOutputs[0].summary` | 超长时截断并加 "..." |
+| 元素        | 字段                       | 说明                   |
+| ----------- | -------------------------- | ---------------------- |
+| 状态标签    | `status` + `activityLabel` | 例如 "Active · 2m ago" |
+| 最近 output | `recentOutputs[0].summary` | 超长时截断并加 "..."   |
 
 #### 区域 E：快捷操作
 
-| 按钮 | 状态 | 交互 |
-|---|---|---|
-| Run task | 正常 / disabled（needsSetup） | 发送 "Run your primary task now" 到 sessionKey |
-| Open chat | 正常 | 在卡片内展开 Inline Chat（保留现有） |
+| 按钮      | 状态                          | 交互                                           |
+| --------- | ----------------------------- | ---------------------------------------------- |
+| Run task  | 正常 / disabled（needsSetup） | 发送 "Run your primary task now" 到 sessionKey |
+| Open chat | 正常                          | 在卡片内展开 Inline Chat（保留现有）           |
 
 ### 4.4 Cron Mini Panel
 
@@ -182,12 +182,12 @@ Operations 页面
 
 ### 5.2 活动项字段
 
-| 字段 | 说明 |
-|---|---|
-| Agent emoji + name | 来源 agent |
-| Summary | output 摘要，来自 session 最后一条消息或 cron deliverySummary |
-| Timestamp | 相对时间 |
-| Source badge | session / cron |
+| 字段               | 说明                                                          |
+| ------------------ | ------------------------------------------------------------- |
+| Agent emoji + name | 来源 agent                                                    |
+| Summary            | output 摘要，来自 session 最后一条消息或 cron deliverySummary |
+| Timestamp          | 相对时间                                                      |
+| Source badge       | session / cron                                                |
 
 ### 5.3 空状态
 
@@ -211,12 +211,12 @@ Operations 页面
 
 ### 6.2 筛选器
 
-| 筛选器 | 选项 |
-|---|---|
-| Agent | All agents / 具体 agent 列表 |
-| Source | All / session / cron |
-| Time | Last 24h / 7 days / 30 days / All time |
-| Search | 按 summary 关键词搜索 |
+| 筛选器 | 选项                                   |
+| ------ | -------------------------------------- |
+| Agent  | All agents / 具体 agent 列表           |
+| Source | All / session / cron                   |
+| Time   | Last 24h / 7 days / 30 days / All time |
+| Search | 按 summary 关键词搜索                  |
 
 ## 7. New Agent Modal
 
@@ -251,24 +251,24 @@ Operations 页面
 
 ### 7.3 Step 2: Configure Identity
 
-| 字段 | 类型 | 验证 |
-|---|---|---|
-| Name | input | 必填，`[a-z0-9_-]+`，不能为 default |
-| Emoji | input | 可空，默认 🤖 |
-| Description | input | 可空 |
-| System Prompt | textarea | 可空 |
-| Color | color picker | 可空，默认从 name hash |
+| 字段          | 类型         | 验证                                |
+| ------------- | ------------ | ----------------------------------- |
+| Name          | input        | 必填，`[a-z0-9_-]+`，不能为 default |
+| Emoji         | input        | 可空，默认 🤖                       |
+| Description   | input        | 可空                                |
+| System Prompt | textarea     | 可空                                |
+| Color         | color picker | 可空，默认从 name hash              |
 
 ### 7.4 Step 3: Configure Capabilities
 
-| 字段 | 类型 | 说明 |
-|---|---|---|
-| Provider | dropdown | 从l已配置 providers 中选择 |
-| Model | dropdown | 根据 provider 联动过滤 |
-| Workspace | path input | 可空，默认当前 workspace |
-| Skills | multi-select | 从已安装 skills 中选择（默认加载模板推荐） |
-| MCP Servers | multi-select | 从已配置 MCP 中选择 |
-| Toolsets | chips | 默认根据模板，可手动增减 |
+| 字段        | 类型         | 说明                                       |
+| ----------- | ------------ | ------------------------------------------ |
+| Provider    | dropdown     | 从l已配置 providers 中选择                 |
+| Model       | dropdown     | 根据 provider 联动过滤                     |
+| Workspace   | path input   | 可空，默认当前 workspace                   |
+| Skills      | multi-select | 从已安装 skills 中选择（默认加载模板推荐） |
+| MCP Servers | multi-select | 从已配置 MCP 中选择                        |
+| Toolsets    | chips        | 默认根据模板，可手动增减                   |
 
 ### 7.5 创建完成
 
@@ -302,29 +302,30 @@ Operations 页面
 
 ### 8.2 Tab: Identity
 
-| 字段 | 类型 | 说明 |
-|---|---|---|
-| Emoji | input | |
-| Name | input | 只读（避免改名影响路径），提供 Rename 功能 |
-| Description | input | |
-| System Prompt | textarea | 最少 3 行，可自动扩展 |
-| Color | color picker | 影响 avatar 和卡片颜色 |
+| 字段          | 类型           | 说明                                              |
+| ------------- | -------------- | ------------------------------------------------- |
+| Emoji         | input          |                                                   |
+| Name          | input          | 只读（避免改名影响路径），提供 Rename 功能        |
+| Description   | input          |                                                   |
+| System Prompt | textarea       | 最少 3 行，可自动扩展                             |
+| Color         | color picker   | 影响 avatar 和卡片颜色                            |
 | Role Template | readonly badge | 显示当前使用的模板，可 "Apply different template" |
 
 Rename 功能：
+
 - 点击 name 旁边的 edit icon，弹出 Rename Modal。
 - 调用 `/api/profiles/rename`。
 
 ### 8.3 Tab: Model & Provider
 
-| 字段 | 类型 | 说明 |
-|---|---|---|
-| Provider | dropdown | 可与 `/api/models` 联动 |
-| Model | dropdown | 根据 provider 联动 |
-| Fallback Model | dropdown | 可选 |
-| Temperature | number input | 高级，默认不展示 |
-| Max Tokens | number input | 高级，默认不展示 |
-| 检测按钮 | button | "Test connection" 验证 provider/model 可用 |
+| 字段           | 类型         | 说明                                       |
+| -------------- | ------------ | ------------------------------------------ |
+| Provider       | dropdown     | 可与 `/api/models` 联动                    |
+| Model          | dropdown     | 根据 provider 联动                         |
+| Fallback Model | dropdown     | 可选                                       |
+| Temperature    | number input | 高级，默认不展示                           |
+| Max Tokens     | number input | 高级，默认不展示                           |
+| 检测按钮       | button       | "Test connection" 验证 provider/model 可用 |
 
 ### 8.4 Tab: Capabilities（核心）
 
@@ -368,11 +369,11 @@ Toolsets
 
 #### Workspace & Memory Section
 
-| 字段 | 类型 | 说明 |
-|---|---|---|
-| Workspace | path input + picker | 默认当前 workspace |
-| Memory paths | multi path input | wiki/memory 等路径 |
-| Environment | readonly | 显示 `.env` 是否存在，提供 "Edit .env" 链接（如果支持） |
+| 字段         | 类型                | 说明                                                    |
+| ------------ | ------------------- | ------------------------------------------------------- |
+| Workspace    | path input + picker | 默认当前 workspace                                      |
+| Memory paths | multi path input    | wiki/memory 等路径                                      |
+| Environment  | readonly            | 显示 `.env` 是否存在，提供 "Edit .env" 链接（如果支持） |
 
 ### 8.5 Tab: Schedule
 
@@ -390,33 +391,33 @@ Toolsets
 
 ### 9.1 字段
 
-| 字段 | 类型 | 说明 |
-|---|---|---|
-| Default model for new agents | dropdown | 新建 agent 时的默认 model |
-| Activity feed length | number | 5-20，默认 5 |
-| Auto-approve | checkbox | 保留，但默认关闭，用于未来 workflow 自动化 |
-| Default workspace for new agents | path input | 可选 |
-| Show token/cost metrics | checkbox | 控制 Team Overview 中是否显示成本卡片 |
+| 字段                             | 类型       | 说明                                       |
+| -------------------------------- | ---------- | ------------------------------------------ |
+| Default model for new agents     | dropdown   | 新建 agent 时的默认 model                  |
+| Activity feed length             | number     | 5-20，默认 5                               |
+| Auto-approve                     | checkbox   | 保留，但默认关闭，用于未来 workflow 自动化 |
+| Default workspace for new agents | path input | 可选                                       |
+| Show token/cost metrics          | checkbox   | 控制 Team Overview 中是否显示成本卡片      |
 
 ## 10. 组件列表
 
 ### 10.1 新增/改动组件
 
-| 组件 | 路径 | 说明 |
-|---|---|---|
-| `TeamOverview` | `src/screens/agents/components/team-overview.tsx` | 团队统计卡片 |
-| `AgentGrid` | 在 `operations-screen.tsx` 内 | agent 卡片网格，支持筛选 |
-| `OperationsAgentCard` | 现有，大幅扩展 | agent 卡片 |
-| `AgentDetailDrawer` | 替换 `OperationsAgentDetail` | 右侧抽屏详情 |
-| `IdentityTab` | `src/screens/agents/components/tabs/identity-tab.tsx` | identity 配置 |
-| `ModelProviderTab` | `src/screens/agents/components/tabs/model-provider-tab.tsx` | model/provider 配置 |
-| `CapabilitiesTab` | `src/screens/agents/components/tabs/capabilities-tab.tsx` | skills/MCP/toolsets/workspace/memory |
-| `ScheduleTab` | `src/screens/agents/components/tabs/schedule-tab.tsx` | cron jobs |
-| `ActivityTab` | `src/screens/agents/components/tabs/activity-tab.tsx` | 该 agent 的 outputs |
-| `NewAgentModal` | 现有，改为三步骤 | 创建 agent |
-| `TemplateGallery` | `src/screens/agents/components/template-gallery.tsx` | 模板选择 |
-| `OutputsView` | 现有 `FullOutputsView`，扩展 | 全屏 outputs |
-| `OperationsSettingsModal` | 现有，扩展 | 设置 |
+| 组件                      | 路径                                                        | 说明                                 |
+| ------------------------- | ----------------------------------------------------------- | ------------------------------------ |
+| `TeamOverview`            | `src/screens/agents/components/team-overview.tsx`           | 团队统计卡片                         |
+| `AgentGrid`               | 在 `operations-screen.tsx` 内                               | agent 卡片网格，支持筛选             |
+| `OperationsAgentCard`     | 现有，大幅扩展                                              | agent 卡片                           |
+| `AgentDetailDrawer`       | 替换 `OperationsAgentDetail`                                | 右侧抽屏详情                         |
+| `IdentityTab`             | `src/screens/agents/components/tabs/identity-tab.tsx`       | identity 配置                        |
+| `ModelProviderTab`        | `src/screens/agents/components/tabs/model-provider-tab.tsx` | model/provider 配置                  |
+| `CapabilitiesTab`         | `src/screens/agents/components/tabs/capabilities-tab.tsx`   | skills/MCP/toolsets/workspace/memory |
+| `ScheduleTab`             | `src/screens/agents/components/tabs/schedule-tab.tsx`       | cron jobs                            |
+| `ActivityTab`             | `src/screens/agents/components/tabs/activity-tab.tsx`       | 该 agent 的 outputs                  |
+| `NewAgentModal`           | 现有，改为三步骤                                            | 创建 agent                           |
+| `TemplateGallery`         | `src/screens/agents/components/template-gallery.tsx`        | 模板选择                             |
+| `OutputsView`             | 现有 `FullOutputsView`，扩展                                | 全屏 outputs                         |
+| `OperationsSettingsModal` | 现有，扩展                                                  | 设置                                 |
 
 ### 10.2 可复用现有组件
 
@@ -435,23 +436,23 @@ Toolsets
 
 ### 11.2 错误状态
 
-| 场景 | 表现 | 处理 |
-|---|---|---|
-| profile 列表加载失败 | 页面中央错误提示 + 重试按钮 | 重新获取 |
-| 单个 agent 配置保存失败 | Toast error | 保留 draft，允许重试 |
-| model/provider 检测失败 | 显示警告条 | 保存仍然允许，但提示用户 |
-| MCP server 健康异常 | chip 上显示 ⚠️ | 点击展开详情和日志 |
+| 场景                    | 表现                        | 处理                     |
+| ----------------------- | --------------------------- | ------------------------ |
+| profile 列表加载失败    | 页面中央错误提示 + 重试按钮 | 重新获取                 |
+| 单个 agent 配置保存失败 | Toast error                 | 保留 draft，允许重试     |
+| model/provider 检测失败 | 显示警告条                  | 保存仍然允许，但提示用户 |
+| MCP server 健康异常     | chip 上显示 ⚠️              | 点击展开详情和日志       |
 
 ### 11.3 空状态
 
-| 组件 | 空状态 |
-|---|---|
-| Agent Grid | "No agents yet. Create your first agent to get started." |
-| Skills Section | "No skills enabled." + [Add skill] |
-| MCP Section | "No MCP servers configured." + [Add MCP] |
-| Schedule Tab | "No scheduled jobs." + [Add job] |
-| Activity Tab | "No activity yet." |
-| Outputs View | "No outputs match your filters." |
+| 组件           | 空状态                                                   |
+| -------------- | -------------------------------------------------------- |
+| Agent Grid     | "No agents yet. Create your first agent to get started." |
+| Skills Section | "No skills enabled." + [Add skill]                       |
+| MCP Section    | "No MCP servers configured." + [Add MCP]                 |
+| Schedule Tab   | "No scheduled jobs." + [Add job]                         |
+| Activity Tab   | "No activity yet."                                       |
+| Outputs View   | "No outputs match your filters."                         |
 
 ## 12. 交互流程总结
 

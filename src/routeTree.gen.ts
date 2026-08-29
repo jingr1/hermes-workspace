@@ -178,6 +178,7 @@ import { Route as ApiKnowledgeGraphRouteImport } from './routes/api/knowledge/gr
 import { Route as ApiKnowledgeConfigRouteImport } from './routes/api/knowledge/config'
 import { Route as ApiHermesworldReservationsRouteImport } from './routes/api/hermesworld/reservations'
 import { Route as ApiHermesTasksTaskIdRouteImport } from './routes/api/hermes-tasks.$taskId'
+import { Route as ApiGitDiffRouteImport } from './routes/api/git/diff'
 import { Route as ApiExternalMemorySearchRouteImport } from './routes/api/external-memory/search'
 import { Route as ApiExternalMemoryProvidersRouteImport } from './routes/api/external-memory/providers'
 import { Route as ApiExternalMemoryCandidatesRouteImport } from './routes/api/external-memory/candidates'
@@ -1048,6 +1049,11 @@ const ApiHermesTasksTaskIdRoute = ApiHermesTasksTaskIdRouteImport.update({
   path: '/$taskId',
   getParentRoute: () => ApiHermesTasksRoute,
 } as any)
+const ApiGitDiffRoute = ApiGitDiffRouteImport.update({
+  id: '/api/git/diff',
+  path: '/api/git/diff',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiExternalMemorySearchRoute = ApiExternalMemorySearchRouteImport.update({
   id: '/api/external-memory/search',
   path: '/api/external-memory/search',
@@ -1265,6 +1271,7 @@ export interface FileRoutesByFullPath {
   '/api/external-memory/candidates': typeof ApiExternalMemoryCandidatesRoute
   '/api/external-memory/providers': typeof ApiExternalMemoryProvidersRoute
   '/api/external-memory/search': typeof ApiExternalMemorySearchRoute
+  '/api/git/diff': typeof ApiGitDiffRoute
   '/api/hermes-tasks/$taskId': typeof ApiHermesTasksTaskIdRoute
   '/api/hermesworld/reservations': typeof ApiHermesworldReservationsRouteWithChildren
   '/api/knowledge/config': typeof ApiKnowledgeConfigRoute
@@ -1452,6 +1459,7 @@ export interface FileRoutesByTo {
   '/api/external-memory/candidates': typeof ApiExternalMemoryCandidatesRoute
   '/api/external-memory/providers': typeof ApiExternalMemoryProvidersRoute
   '/api/external-memory/search': typeof ApiExternalMemorySearchRoute
+  '/api/git/diff': typeof ApiGitDiffRoute
   '/api/hermes-tasks/$taskId': typeof ApiHermesTasksTaskIdRoute
   '/api/hermesworld/reservations': typeof ApiHermesworldReservationsRouteWithChildren
   '/api/knowledge/config': typeof ApiKnowledgeConfigRoute
@@ -1641,6 +1649,7 @@ export interface FileRoutesById {
   '/api/external-memory/candidates': typeof ApiExternalMemoryCandidatesRoute
   '/api/external-memory/providers': typeof ApiExternalMemoryProvidersRoute
   '/api/external-memory/search': typeof ApiExternalMemorySearchRoute
+  '/api/git/diff': typeof ApiGitDiffRoute
   '/api/hermes-tasks/$taskId': typeof ApiHermesTasksTaskIdRoute
   '/api/hermesworld/reservations': typeof ApiHermesworldReservationsRouteWithChildren
   '/api/knowledge/config': typeof ApiKnowledgeConfigRoute
@@ -1831,6 +1840,7 @@ export interface FileRouteTypes {
     | '/api/external-memory/candidates'
     | '/api/external-memory/providers'
     | '/api/external-memory/search'
+    | '/api/git/diff'
     | '/api/hermes-tasks/$taskId'
     | '/api/hermesworld/reservations'
     | '/api/knowledge/config'
@@ -2018,6 +2028,7 @@ export interface FileRouteTypes {
     | '/api/external-memory/candidates'
     | '/api/external-memory/providers'
     | '/api/external-memory/search'
+    | '/api/git/diff'
     | '/api/hermes-tasks/$taskId'
     | '/api/hermesworld/reservations'
     | '/api/knowledge/config'
@@ -2206,6 +2217,7 @@ export interface FileRouteTypes {
     | '/api/external-memory/candidates'
     | '/api/external-memory/providers'
     | '/api/external-memory/search'
+    | '/api/git/diff'
     | '/api/hermes-tasks/$taskId'
     | '/api/hermesworld/reservations'
     | '/api/knowledge/config'
@@ -2387,6 +2399,7 @@ export interface RootRouteChildren {
   ApiExternalMemoryCandidatesRoute: typeof ApiExternalMemoryCandidatesRoute
   ApiExternalMemoryProvidersRoute: typeof ApiExternalMemoryProvidersRoute
   ApiExternalMemorySearchRoute: typeof ApiExternalMemorySearchRoute
+  ApiGitDiffRoute: typeof ApiGitDiffRoute
   ApiHermesworldReservationsRoute: typeof ApiHermesworldReservationsRouteWithChildren
   ApiKnowledgeConfigRoute: typeof ApiKnowledgeConfigRoute
   ApiKnowledgeGraphRoute: typeof ApiKnowledgeGraphRoute
@@ -3610,6 +3623,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiHermesTasksTaskIdRouteImport
       parentRoute: typeof ApiHermesTasksRoute
     }
+    '/api/git/diff': {
+      id: '/api/git/diff'
+      path: '/api/git/diff'
+      fullPath: '/api/git/diff'
+      preLoaderRoute: typeof ApiGitDiffRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/external-memory/search': {
       id: '/api/external-memory/search'
       path: '/api/external-memory/search'
@@ -4086,6 +4106,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiExternalMemoryCandidatesRoute: ApiExternalMemoryCandidatesRoute,
   ApiExternalMemoryProvidersRoute: ApiExternalMemoryProvidersRoute,
   ApiExternalMemorySearchRoute: ApiExternalMemorySearchRoute,
+  ApiGitDiffRoute: ApiGitDiffRoute,
   ApiHermesworldReservationsRoute: ApiHermesworldReservationsRouteWithChildren,
   ApiKnowledgeConfigRoute: ApiKnowledgeConfigRoute,
   ApiKnowledgeGraphRoute: ApiKnowledgeGraphRoute,

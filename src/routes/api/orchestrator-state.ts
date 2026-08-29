@@ -18,10 +18,17 @@ export const Route = createFileRoute('/api/orchestrator-state')({
         const url = new URL(request.url)
         const missionId = url.searchParams.get('missionId')?.trim()
         if (!missionId) {
-          return json({ ok: false, error: 'missionId required' }, { status: 400 })
+          return json(
+            { ok: false, error: 'missionId required' },
+            { status: 400 },
+          )
         }
 
-        const result = runLanggraphSync(['--get-state', '--mission-id', missionId])
+        const result = runLanggraphSync([
+          '--get-state',
+          '--mission-id',
+          missionId,
+        ])
         if (!result.ok) {
           const python = resolveLanggraphPythonBin()
           return json(
@@ -37,7 +44,10 @@ export const Route = createFileRoute('/api/orchestrator-state')({
         try {
           const state = parseJsonFromStdout(result.stdout)
           if (state === null) {
-            return json({ ok: false, error: 'Mission state not found' }, { status: 404 })
+            return json(
+              { ok: false, error: 'Mission state not found' },
+              { status: 404 },
+            )
           }
           return json({ ok: true, state })
         } catch (e) {

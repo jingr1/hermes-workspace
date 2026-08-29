@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowDown01Icon, Cancel01Icon, PlusSignIcon } from '@hugeicons/core-free-icons'
+import {
+  ArrowDown01Icon,
+  Cancel01Icon,
+  PlusSignIcon,
+} from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Button } from '@/components/ui/button'
 import { fetchModels, type GatewayModelCatalogEntry } from '@/lib/gateway-api'
@@ -42,11 +46,15 @@ type AvailableModel = {
   name: string
 }
 
-function normalizeModel(model: GatewayModelCatalogEntry): AvailableModel | null {
+function normalizeModel(
+  model: GatewayModelCatalogEntry,
+): AvailableModel | null {
   if (typeof model === 'string') {
     return {
       id: model,
-      provider: model.includes('/') ? (model.split('/')[0] ?? 'model') : 'model',
+      provider: model.includes('/')
+        ? (model.split('/')[0] ?? 'model')
+        : 'model',
       name: model.split('/').pop() ?? model,
     }
   }
@@ -57,7 +65,12 @@ function normalizeModel(model: GatewayModelCatalogEntry): AvailableModel | null 
   return {
     id,
     provider: model.provider ?? id.split('/')[0] ?? 'model',
-    name: model.label ?? model.displayName ?? model.name ?? id.split('/').pop() ?? id,
+    name:
+      model.label ??
+      model.displayName ??
+      model.name ??
+      id.split('/').pop() ??
+      id,
   }
 }
 
@@ -94,13 +107,18 @@ function ModelSelector({
         className="inline-flex min-h-[3rem] w-full items-center justify-between gap-3 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-left text-sm text-[var(--theme-text)] shadow-[0_8px_24px_color-mix(in_srgb,var(--theme-shadow)_18%,transparent)]"
       >
         <span className="truncate">
-          {selected ? `${selected.provider} / ${selected.name}` : 'Default (auto)'}
+          {selected
+            ? `${selected.provider} / ${selected.name}`
+            : 'Default (auto)'}
         </span>
         <HugeiconsIcon
           icon={ArrowDown01Icon}
           size={16}
           strokeWidth={1.8}
-          className={cn('text-[var(--theme-muted)] transition-transform', open && 'rotate-180')}
+          className={cn(
+            'text-[var(--theme-muted)] transition-transform',
+            open && 'rotate-180',
+          )}
         />
       </button>
 
@@ -152,7 +170,8 @@ export function OperationsNewAgentModal({
   isSaving: boolean
 }) {
   const [presetId, setPresetId] = useState<string>('blank')
-  const [presetCapabilities, setPresetCapabilities] = useState<AgentPresetCapabilities | null>(null)
+  const [presetCapabilities, setPresetCapabilities] =
+    useState<AgentPresetCapabilities | null>(null)
   const [name, setName] = useState('')
   const [emoji, setEmoji] = useState('🤖')
   const [model, setModel] = useState(defaultModel)
@@ -290,7 +309,8 @@ export function OperationsNewAgentModal({
                 ))}
               </div>
               <p className="mt-1.5 text-[10px] text-[var(--theme-muted)]">
-                After creating, use the Capabilities tab to install and toggle these.
+                After creating, use the Capabilities tab to install and toggle
+                these.
               </p>
             </div>
           ) : null}
@@ -298,7 +318,9 @@ export function OperationsNewAgentModal({
 
         <div className="mt-4 grid gap-4 md:grid-cols-[1.2fr_0.6fr]">
           <label className="space-y-2">
-            <span className="text-sm font-medium text-[var(--theme-text)]">Name</span>
+            <span className="text-sm font-medium text-[var(--theme-text)]">
+              Name
+            </span>
             <input
               value={name}
               onChange={(event) => setName(event.target.value)}
@@ -308,7 +330,9 @@ export function OperationsNewAgentModal({
           </label>
 
           <label className="space-y-2">
-            <span className="text-sm font-medium text-[var(--theme-text)]">Emoji</span>
+            <span className="text-sm font-medium text-[var(--theme-text)]">
+              Emoji
+            </span>
             <input
               value={emoji}
               onChange={(event) => setEmoji(event.target.value)}
@@ -319,12 +343,16 @@ export function OperationsNewAgentModal({
         </div>
 
         <label className="mt-4 block space-y-2">
-          <span className="text-sm font-medium text-[var(--theme-text)]">Model</span>
+          <span className="text-sm font-medium text-[var(--theme-text)]">
+            Model
+          </span>
           <ModelSelector value={model} onChange={setModel} models={models} />
         </label>
 
         <label className="mt-4 block space-y-2">
-          <span className="text-sm font-medium text-[var(--theme-text)]">Description</span>
+          <span className="text-sm font-medium text-[var(--theme-text)]">
+            Description
+          </span>
           <input
             value={description}
             onChange={(event) => setDescription(event.target.value)}

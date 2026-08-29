@@ -204,7 +204,12 @@ function ThinkingBubble({
 
   // Build a meaningful status label from live activity
   const activeToolNames = activeToolCalls
-    .filter((tc) => tc.phase !== 'done' && tc.phase !== 'complete' && tc.phase !== 'completed')
+    .filter(
+      (tc) =>
+        tc.phase !== 'done' &&
+        tc.phase !== 'complete' &&
+        tc.phase !== 'completed',
+    )
     .map((tc) => tc.name.replace(/_/g, ' '))
   const liveToolNames = liveToolActivity.map((a) => a.name.replace(/_/g, ' '))
   const uniqueNames = [...new Set([...activeToolNames, ...liveToolNames])]
@@ -392,10 +397,10 @@ function StatusLine() {
   return (
     <div className="flex items-center gap-2 text-[11px] text-primary-400 dark:text-primary-500 py-0.5">
       <span className="inline-block size-1.5 rounded-full bg-amber-400 animate-pulse" />
-      <span className="opacity-80">
-        {heartbeatActivity || 'Working…'}
+      <span className="opacity-80">{heartbeatActivity || 'Working…'}</span>
+      <span aria-hidden="true" className="opacity-40">
+        ·
       </span>
-      <span aria-hidden="true" className="opacity-40">·</span>
       <span className="tabular-nums opacity-50 font-mono">{elapsedLabel}</span>
     </div>
   )
@@ -428,7 +433,9 @@ function shouldHideSystemInjectedUserMessage(text: string): boolean {
   // Only hide messages that begin with known system-injected prompts. User
   // context summaries may quote these phrases later in the message and must
   // remain visible/persistent in the chat UI.
-  return HIDDEN_SYSTEM_USER_PREFIXES.some((prefix) => trimmed.startsWith(prefix))
+  return HIDDEN_SYSTEM_USER_PREFIXES.some((prefix) =>
+    trimmed.startsWith(prefix),
+  )
 }
 
 function getChronologyRank(message: ChatMessage): number {
@@ -548,7 +555,10 @@ export function buildDisplayEntries(
       attachedToolMessages: [],
     }
 
-    if (message.role === 'assistant' && pendingAssistantToolMessages.length > 0) {
+    if (
+      message.role === 'assistant' &&
+      pendingAssistantToolMessages.length > 0
+    ) {
       entry.attachedToolMessages.push(...pendingAssistantToolMessages)
       pendingAssistantToolMessages = []
     }
@@ -563,13 +573,10 @@ export function buildDisplayEntries(
     // the final messages in the thread are all tool-only) should NOT be
     // attached — they will be summarised by getTrailingToolOnlyTurnSummary
     // instead.
-    const allPendingAreToolOnly = pendingAssistantToolMessages.every(
-      (m) => isAssistantToolCallOnlyMessage(m),
+    const allPendingAreToolOnly = pendingAssistantToolMessages.every((m) =>
+      isAssistantToolCallOnlyMessage(m),
     )
-    if (
-      previousEntry?.message.role === 'assistant' &&
-      !allPendingAreToolOnly
-    ) {
+    if (previousEntry?.message.role === 'assistant' && !allPendingAreToolOnly) {
       previousEntry.attachedToolMessages.push(...pendingAssistantToolMessages)
     }
   }
@@ -594,7 +601,9 @@ export function getTrailingToolOnlyTurnSummary(
     const msg = messages[i]
     if (msg.role === 'assistant') {
       const hasText = Array.isArray(msg.content)
-        ? msg.content.some((part: any) => part.type === 'text' && part.text?.trim())
+        ? msg.content.some(
+            (part: any) => part.type === 'text' && part.text?.trim(),
+          )
         : typeof (msg as any).text === 'string' && (msg as any).text.trim()
       if (hasText) {
         lastTextAssistantIdx = i
@@ -607,8 +616,11 @@ export function getTrailingToolOnlyTurnSummary(
   const lastMsg = messages[messages.length - 1]
   if (lastMsg?.role === 'assistant') {
     const hasText = Array.isArray(lastMsg.content)
-      ? lastMsg.content.some((part: any) => part.type === 'text' && part.text?.trim())
-      : typeof (lastMsg as any).text === 'string' && (lastMsg as any).text.trim()
+      ? lastMsg.content.some(
+          (part: any) => part.type === 'text' && part.text?.trim(),
+        )
+      : typeof (lastMsg as any).text === 'string' &&
+        (lastMsg as any).text.trim()
     if (hasText) return null
   }
 
@@ -627,7 +639,10 @@ export function getTrailingToolOnlyTurnSummary(
         }
       }
     }
-    if ((msg.role === 'tool' || msg.role === 'toolResult') && (msg as any).toolName) {
+    if (
+      (msg.role === 'tool' || msg.role === 'toolResult') &&
+      (msg as any).toolName
+    ) {
       toolNames.add((msg as any).toolName)
     }
   }
@@ -1116,7 +1131,7 @@ function ChatMessageListComponent({
   )
 
   // Soft windowing + progressive mount: first paint only recent messages,
-  // then grow on rAF so markdown/shiki work doesn't hitch the history reveal.
+  // then grow on rAF so markdown/prism work doesn't hitch the history reveal.
   // Show enough of a typical session on first paint; grow for longer threads.
   const INITIAL_RENDER_WINDOW = 24
   const MESSAGE_RENDER_WINDOW = 64
@@ -1124,7 +1139,9 @@ function ChatMessageListComponent({
   const [earlierPages, setEarlierPages] = useState(0)
   const [renderBudget, setRenderBudget] = useState(INITIAL_RENDER_WINDOW)
   const transcriptEpoch = useMemo(() => {
-    const first = displayEntries[0]?.message as { id?: string | number } | undefined
+    const first = displayEntries[0]?.message as
+      | { id?: string | number }
+      | undefined
     const last = displayEntries[displayEntries.length - 1]?.message as
       | { id?: string | number }
       | undefined
@@ -1133,7 +1150,7 @@ function ChatMessageListComponent({
   useEffect(() => {
     setEarlierPages(0)
     setRenderBudget(INITIAL_RENDER_WINDOW)
-  }, [transcriptEpoch])
+  }, [sessionKey])
 
   const maxWindow = MESSAGE_RENDER_WINDOW * (1 + earlierPages)
   useEffect(() => {
@@ -1375,19 +1392,13 @@ function ChatMessageListComponent({
                 ? 'calling'
                 : toolCall.phase === 'failed' || toolCall.phase === 'error'
                   ? 'error'
-                  : toolCall.phase === 'calling' ||
-                      toolCall.phase === 'running'
+                  : toolCall.phase === 'calling' || toolCall.phase === 'running'
                     ? toolCall.phase
                     : 'calling',
           args: tcAny.args,
           preview:
-            typeof tcAny.preview === 'string'
-              ? (tcAny.preview)
-              : undefined,
-          result:
-            typeof tcAny.result === 'string'
-              ? (tcAny.result)
-              : undefined,
+            typeof tcAny.preview === 'string' ? tcAny.preview : undefined,
+          result: typeof tcAny.result === 'string' ? tcAny.result : undefined,
         }
       })
     }
@@ -2120,37 +2131,39 @@ function ChatMessageListComponent({
                     <div className="min-w-0 flex-1 pt-1">
                       {normalizedStreamingToolCalls.length > 0 ? (
                         <TuiActivityCard
-                          toolSections={normalizedStreamingToolCalls.slice(-3).map((tc) => {
-                            const phase = tc.phase
-                            const state =
-                              phase === 'error'
-                                ? ('output-error' as const)
-                                : phase === 'done'
-                                  ? ('output-available' as const)
-                                  : phase === 'running'
-                                    ? ('input-streaming' as const)
-                                    : ('input-available' as const)
-                            return {
-                              key: tc.id,
-                              type: tc.name,
-                              input:
-                                tc.args &&
-                                typeof tc.args === 'object' &&
-                                !Array.isArray(tc.args)
-                                  ? (tc.args as Record<string, unknown>)
-                                  : undefined,
-                              preview: tc.preview,
-                              outputText:
-                                state === 'output-available'
-                                  ? tc.result || ''
-                                  : '',
-                              errorText:
-                                state === 'output-error'
-                                  ? tc.result || 'Tool failed'
-                                  : undefined,
-                              state,
-                            }
-                          })}
+                          toolSections={normalizedStreamingToolCalls
+                            .slice(-3)
+                            .map((tc) => {
+                              const phase = tc.phase
+                              const state =
+                                phase === 'error'
+                                  ? ('output-error' as const)
+                                  : phase === 'done'
+                                    ? ('output-available' as const)
+                                    : phase === 'running'
+                                      ? ('input-streaming' as const)
+                                      : ('input-available' as const)
+                              return {
+                                key: tc.id,
+                                type: tc.name,
+                                input:
+                                  tc.args &&
+                                  typeof tc.args === 'object' &&
+                                  !Array.isArray(tc.args)
+                                    ? (tc.args as Record<string, unknown>)
+                                    : undefined,
+                                preview: tc.preview,
+                                outputText:
+                                  state === 'output-available'
+                                    ? tc.result || ''
+                                    : '',
+                                errorText:
+                                  state === 'output-error'
+                                    ? tc.result || 'Tool failed'
+                                    : undefined,
+                                state,
+                              }
+                            })}
                           thinking={null}
                           isStreaming={true}
                           formatLabel={(name) => name.replace(/_/g, ' ')}

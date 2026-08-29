@@ -12,7 +12,11 @@ describe('collab-db', () => {
   })
 
   afterEach(() => {
-    try { rmSync(tempRoot, { recursive: true, force: true }) } catch { /* ignore */ }
+    try {
+      rmSync(tempRoot, { recursive: true, force: true })
+    } catch {
+      /* ignore */
+    }
   })
 
   it('creates collab.db with schema_migrations and all tables', () => {

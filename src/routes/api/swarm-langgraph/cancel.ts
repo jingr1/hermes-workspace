@@ -24,13 +24,20 @@ export const Route = createFileRoute('/api/swarm-langgraph/cancel')({
         try {
           body = (await request.json()) as CancelBody
         } catch {
-          return json({ ok: false, error: 'Invalid JSON body' }, { status: 400 })
+          return json(
+            { ok: false, error: 'Invalid JSON body' },
+            { status: 400 },
+          )
         }
         const missionId = cleanString(body.missionId)
         if (!missionId) {
-          return json({ ok: false, error: 'missionId required' }, { status: 400 })
+          return json(
+            { ok: false, error: 'missionId required' },
+            { status: 400 },
+          )
         }
-        const reason = cleanString(body.reason) ?? 'Cancelled from Swarm LangGraph UI'
+        const reason =
+          cleanString(body.reason) ?? 'Cancelled from Swarm LangGraph UI'
         const useMock = new URL(request.url).searchParams.get('mock') === '1'
 
         const cancelled = cancelSwarmMission({

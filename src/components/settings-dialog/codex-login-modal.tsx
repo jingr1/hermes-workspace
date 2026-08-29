@@ -38,7 +38,10 @@ export function CodexLoginModal({ open, onClose, onSuccess }: Props) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'poll', session_id: sid }),
           })
-          const data = (await res.json()) as { status: string; error: string | null }
+          const data = (await res.json()) as {
+            status: string
+            error: string | null
+          }
           if (closedRef.current) return
           if (data.status === 'pending') {
             pollRef.current = setTimeout(poll, 3000)
@@ -80,7 +83,8 @@ export function CodexLoginModal({ open, onClose, onSuccess }: Props) {
         verification_url?: string
         error?: string
       }
-      if (!res.ok || !data.ok) throw new Error(data.error || 'Could not start Codex login')
+      if (!res.ok || !data.ok)
+        throw new Error(data.error || 'Could not start Codex login')
       setUserCode(data.user_code || '')
       setVerificationUrl(data.verification_url || '')
       setSessionId(data.session_id || '')
@@ -109,7 +113,9 @@ export function CodexLoginModal({ open, onClose, onSuccess }: Props) {
   const copyCode = async () => {
     try {
       await navigator.clipboard.writeText(userCode)
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   return (
@@ -132,16 +138,25 @@ export function CodexLoginModal({ open, onClose, onSuccess }: Props) {
           </div>
         ) : status === 'waiting' ? (
           <div className="space-y-4">
-            <p className="text-center text-sm" style={{ color: 'var(--theme-muted)' }}>
-              Enter the code below on the OpenAI authorization page, then wait for approval.
+            <p
+              className="text-center text-sm"
+              style={{ color: 'var(--theme-muted)' }}
+            >
+              Enter the code below on the OpenAI authorization page, then wait
+              for approval.
             </p>
             <button
               type="button"
               onClick={() => void copyCode()}
               className="mx-auto flex items-center gap-3 rounded-lg border px-5 py-3 transition-colors hover:border-accent-500"
-              style={{ borderColor: 'var(--theme-border)', background: 'var(--theme-bg)' }}
+              style={{
+                borderColor: 'var(--theme-border)',
+                background: 'var(--theme-bg)',
+              }}
             >
-              <span className="font-mono text-2xl font-bold tracking-[4px]">{userCode}</span>
+              <span className="font-mono text-2xl font-bold tracking-[4px]">
+                {userCode}
+              </span>
               <svg
                 width="16"
                 height="16"
@@ -157,7 +172,9 @@ export function CodexLoginModal({ open, onClose, onSuccess }: Props) {
             {verificationUrl ? (
               <Button
                 className="w-full"
-                onClick={() => window.open(verificationUrl, '_blank', 'noopener,noreferrer')}
+                onClick={() =>
+                  window.open(verificationUrl, '_blank', 'noopener,noreferrer')
+                }
               >
                 Open OpenAI authorization page
               </Button>
@@ -180,7 +197,9 @@ export function CodexLoginModal({ open, onClose, onSuccess }: Props) {
           </div>
         ) : status === 'expired' ? (
           <div className="flex min-h-[120px] flex-col items-center justify-center gap-3">
-            <p className="text-sm text-red-400">Authorization expired. Please try again.</p>
+            <p className="text-sm text-red-400">
+              Authorization expired. Please try again.
+            </p>
             <Button size="sm" onClick={() => void startLogin()}>
               Retry
             </Button>

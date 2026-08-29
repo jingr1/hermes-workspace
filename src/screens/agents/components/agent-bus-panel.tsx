@@ -90,7 +90,8 @@ function StatTile({
         tone === 'good' && 'border-emerald-200 bg-emerald-50 text-emerald-900',
         tone === 'warn' && 'border-amber-200 bg-amber-50 text-amber-950',
         tone === 'bad' && 'border-red-200 bg-red-50 text-red-900',
-        tone === 'neutral' && 'border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)]',
+        tone === 'neutral' &&
+          'border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)]',
       )}
     >
       <div className="text-2xl font-semibold leading-none">{value}</div>
@@ -109,17 +110,43 @@ export function AgentBusPanel({ data }: { data: AgentBusData }) {
   const summary = (() => {
     const swarmCrew = crew.filter((member) => member.id !== 'workspace')
     const total = swarmCrew.length || workers.length
-    const online = swarmCrew.filter((member) => member.gatewayState === 'running' && member.processAlive).length
-    const down = swarmCrew.filter((member) => member.profileFound && member.gatewayState !== 'running' && !member.processAlive).length
-    const noEndpoint = swarmCrew.filter((member) => member.profileFound && member.gatewayState === 'unknown').length
-    const nonOperational = workers.filter((worker) => worker.modelAuthStatus !== 'ready').length
-    const events = (healthSummary.totalAuthErrors24h ?? 0) + (healthSummary.totalFallbacks24h ?? 0)
+    const online = swarmCrew.filter(
+      (member) => member.gatewayState === 'running' && member.processAlive,
+    ).length
+    const down = swarmCrew.filter(
+      (member) =>
+        member.profileFound &&
+        member.gatewayState !== 'running' &&
+        !member.processAlive,
+    ).length
+    const noEndpoint = swarmCrew.filter(
+      (member) => member.profileFound && member.gatewayState === 'unknown',
+    ).length
+    const nonOperational = workers.filter(
+      (worker) => worker.modelAuthStatus !== 'ready',
+    ).length
+    const events =
+      (healthSummary.totalAuthErrors24h ?? 0) +
+      (healthSummary.totalFallbacks24h ?? 0)
     const needsHuman = entries.filter((entry) => entry.needsHuman).length
-    return { total, online, down, noEndpoint, nonOperational, events, needsHuman }
+    return {
+      total,
+      online,
+      down,
+      noEndpoint,
+      nonOperational,
+      events,
+      needsHuman,
+    }
   })()
 
   const issues = workers
-    .filter((worker) => worker.modelAuthStatus !== 'ready' || worker.recentAuthErrors > 0 || worker.fallbackActive)
+    .filter(
+      (worker) =>
+        worker.modelAuthStatus !== 'ready' ||
+        worker.recentAuthErrors > 0 ||
+        worker.fallbackActive,
+    )
     .map((worker) => ({
       id: worker.workerId,
       name: worker.displayName,
@@ -129,7 +156,10 @@ export function AgentBusPanel({ data }: { data: AgentBusData }) {
     }))
 
   const missions = entries
-    .filter((entry) => entry.currentTask || entry.state === 'executing' || entry.needsHuman)
+    .filter(
+      (entry) =>
+        entry.currentTask || entry.state === 'executing' || entry.needsHuman,
+    )
     .map((entry) => ({
       id: entry.workerId,
       displayName: entry.displayName,
@@ -140,7 +170,10 @@ export function AgentBusPanel({ data }: { data: AgentBusData }) {
     }))
     .sort((left, right) => (right.lastOutputAt ?? 0) - (left.lastOutputAt ?? 0))
 
-  async function runAction(body: Record<string, unknown>, successMessage: string) {
+  async function runAction(
+    body: Record<string, unknown>,
+    successMessage: string,
+  ) {
     setAction({ status: 'running', message: 'Executing safe action...' })
     try {
       const res = await fetch('/api/swarm-dispatch', {
@@ -148,7 +181,15 @@ export function AgentBusPanel({ data }: { data: AgentBusData }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      const payload = (await res.json()) as { ok?: boolean; error?: string; results?: Array<{ ok: boolean; workerId: string; error?: string | null }> }
+      const payload = (await res.json()) as {
+        ok?: boolean
+        error?: string
+        results?: Array<{
+          ok: boolean
+          workerId: string
+          error?: string | null
+        }>
+      }
       if (!res.ok) {
         const detail = payload.error || `HTTP ${res.status}`
         throw new Error(detail)
@@ -158,7 +199,9 @@ export function AgentBusPanel({ data }: { data: AgentBusData }) {
       const failed = workerResults.length - succeeded
       if (failed > 0) {
         const failedWorkers = workerResults.filter((r) => !r.ok)
-        const errorLines = failedWorkers.map((r) => `${r.workerId}: ${r.error || 'unknown error'}`)
+        const errorLines = failedWorkers.map(
+          (r) => `${r.workerId}: ${r.error || 'unknown error'}`,
+        )
         setAction({
           status: 'error',
           message: `${succeeded}/${workerResults.length} succeeded, ${failed} failed — ${errorLines.join('; ')}`,
@@ -195,19 +238,47 @@ export function AgentBusPanel({ data }: { data: AgentBusData }) {
 
       <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7">
         <StatTile label="total" value={summary.total} />
-        <StatTile label="online" value={summary.online} tone={(summary.online ?? 0) > 0 ? 'good' : 'neutral'} />
-        <StatTile label="down" value={summary.down} tone={(summary.down ?? 0) > 0 ? 'bad' : 'good'} />
-        <StatTile label="no endpoint" value={summary.noEndpoint} tone={(summary.noEndpoint ?? 0) > 0 ? 'warn' : 'good'} />
-        <StatTile label="non op." value={summary.nonOperational} tone={(summary.nonOperational ?? 0) > 0 ? 'warn' : 'good'} />
-        <StatTile label="needs human" value={summary.needsHuman} tone={(summary.needsHuman ?? 0) > 0 ? 'warn' : 'good'} />
-        <StatTile label="events" value={summary.events} tone={(summary.events ?? 0) > 0 ? 'bad' : 'good'} />
+        <StatTile
+          label="online"
+          value={summary.online}
+          tone={(summary.online ?? 0) > 0 ? 'good' : 'neutral'}
+        />
+        <StatTile
+          label="down"
+          value={summary.down}
+          tone={(summary.down ?? 0) > 0 ? 'bad' : 'good'}
+        />
+        <StatTile
+          label="no endpoint"
+          value={summary.noEndpoint}
+          tone={(summary.noEndpoint ?? 0) > 0 ? 'warn' : 'good'}
+        />
+        <StatTile
+          label="non op."
+          value={summary.nonOperational}
+          tone={(summary.nonOperational ?? 0) > 0 ? 'warn' : 'good'}
+        />
+        <StatTile
+          label="needs human"
+          value={summary.needsHuman}
+          tone={(summary.needsHuman ?? 0) > 0 ? 'warn' : 'good'}
+        />
+        <StatTile
+          label="events"
+          value={summary.events}
+          tone={(summary.events ?? 0) > 0 ? 'bad' : 'good'}
+        />
       </div>
 
       <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-4">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold text-[var(--theme-text)]">Active Issues</h3>
-            <span className="text-xs text-[var(--theme-muted)]">{issues.length} items</span>
+            <h3 className="text-sm font-semibold text-[var(--theme-text)]">
+              Active Issues
+            </h3>
+            <span className="text-xs text-[var(--theme-muted)]">
+              {issues.length} items
+            </span>
           </div>
           <div className="mt-3 space-y-2">
             {issues.length ? (
@@ -226,7 +297,8 @@ export function AgentBusPanel({ data }: { data: AgentBusData }) {
                   </div>
                   {issue.authErrors > 0 ? (
                     <p className="mt-1 text-xs text-[var(--theme-muted)]">
-                      {issue.authErrors} auth error{issue.authErrors === 1 ? '' : 's'} in the last 24h
+                      {issue.authErrors} auth error
+                      {issue.authErrors === 1 ? '' : 's'} in the last 24h
                     </p>
                   ) : null}
                 </div>
@@ -241,8 +313,12 @@ export function AgentBusPanel({ data }: { data: AgentBusData }) {
 
         <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-4">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold text-[var(--theme-text)]">Recent Missions</h3>
-            <span className="text-xs text-[var(--theme-muted)]">{missions.length} active</span>
+            <h3 className="text-sm font-semibold text-[var(--theme-text)]">
+              Recent Missions
+            </h3>
+            <span className="text-xs text-[var(--theme-muted)]">
+              {missions.length} active
+            </span>
           </div>
           <div className="mt-3 space-y-2">
             {missions.map((mission) => (
@@ -280,7 +356,9 @@ export function AgentBusPanel({ data }: { data: AgentBusData }) {
       <div className="mt-5 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-[var(--theme-text)]">Safe Actions</h3>
+            <h3 className="text-sm font-semibold text-[var(--theme-text)]">
+              Safe Actions
+            </h3>
             <p className="mt-1 text-xs text-[var(--theme-muted)]">
               Non-destructive diagnostics against the live Swarm pool.
             </p>
@@ -290,7 +368,11 @@ export function AgentBusPanel({ data }: { data: AgentBusData }) {
               type="button"
               onClick={() =>
                 runAction(
-                  { workerIds: workers.map((w) => w.workerId), prompt: 'Reply with exactly: PING_OK', timeoutSeconds: 60 },
+                  {
+                    workerIds: workers.map((w) => w.workerId),
+                    prompt: 'Reply with exactly: PING_OK',
+                    timeoutSeconds: 60,
+                  },
                   `Pinged ${workers.length} worker${workers.length === 1 ? '' : 's'}.`,
                 )
               }

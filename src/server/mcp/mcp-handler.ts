@@ -1,5 +1,10 @@
 import { getSwarmMission } from '../swarm-missions'
-import { isToolAllowed, resolveRunTokenDetailed, revokeRunTokensForRun } from './run-tokens'
+import { getProject } from '../task-pipeline/projects'
+import {
+  isToolAllowed,
+  resolveRunTokenDetailed,
+  revokeRunTokensForRun,
+} from './run-tokens'
 import { TASK_RUN_STATUSES, completeTaskRun, startTaskRun } from './task-runs'
 import * as toolGroups from './tool-groups'
 import type { RunToken } from './run-tokens'
@@ -33,6 +38,8 @@ export type RunTerminalEvent = {
   summary: string | null
   blocker: string | null
   nextAction: string | null
+  /** Git head sha reported by the agent for worktree-mode runs (P2b). */
+  headSha?: string | null
 }
 
 /**
@@ -43,7 +50,9 @@ export type RunTerminalEvent = {
  */
 let onRunTerminal: ((event: RunTerminalEvent) => void) | null = null
 
-export function setOnRunTerminalHook(hook: ((event: RunTerminalEvent) => void) | null): void {
+export function setOnRunTerminalHook(
+  hook: ((event: RunTerminalEvent) => void) | null,
+): void {
   onRunTerminal = hook
 }
 
@@ -60,7 +69,12 @@ const ERROR_CODES = {
   OWNERSHIP_MISMATCH: -32006,
 } as const
 
-function errorResponse(id: string | number, code: number, message: string, data?: unknown): McpResponse {
+function errorResponse(
+  id: string | number,
+  code: number,
+  message: string,
+  data?: unknown,
+): McpResponse {
   return { jsonrpc: '2.0', id, error: { code, message, data } }
 }
 
@@ -85,24 +99,47 @@ function scopeMismatch(
   return value !== expected
 }
 
-function requireWriteToken(id: string | number, token: RunToken, tool: string): McpResponse | null {
+function requireWriteToken(
+  id: string | number,
+  token: RunToken,
+  tool: string,
+): McpResponse | null {
   if (token.kind !== 'run_write') {
-    return errorResponse(id, ERROR_CODES.FORBIDDEN, `${tool} requires a run_write token`)
+    return errorResponse(
+      id,
+      ERROR_CODES.FORBIDDEN,
+      `${tool} requires a run_write token`,
+    )
   }
   if (!isToolAllowed(token, tool)) {
-    return errorResponse(id, ERROR_CODES.FORBIDDEN, `${tool} not allowed for this token`)
+    return errorResponse(
+      id,
+      ERROR_CODES.FORBIDDEN,
+      `${tool} not allowed for this token`,
+    )
   }
   return null
 }
 
-export async function handleMcpRequest(request: McpRequest, dbPath?: string): Promise<McpResponse> {
+export async function handleMcpRequest(
+  request: McpRequest,
+  dbPath?: string,
+): Promise<McpResponse> {
   const { id, method, params } = request
 
   if (request.jsonrpc !== '2.0') {
-    return errorResponse(id, ERROR_CODES.INVALID_REQUEST, 'Invalid JSON-RPC version')
+    return errorResponse(
+      id,
+      ERROR_CODES.INVALID_REQUEST,
+      'Invalid JSON-RPC version',
+    )
   }
   if (typeof method !== 'string' || method.length === 0) {
-    return errorResponse(id, ERROR_CODES.INVALID_REQUEST, 'method must be a non-empty string')
+    return errorResponse(
+      id,
+      ERROR_CODES.INVALID_REQUEST,
+      'method must be a non-empty string',
+    )
   }
 
   const token = typeof params?.token === 'string' ? params.token : null
@@ -117,9 +154,17 @@ export async function handleMcpRequest(request: McpRequest, dbPath?: string): Pr
     const reason: 'unknown' | 'expired' | 'revoked' = resolved.reason
     switch (reason) {
       case 'expired':
-        return errorResponse(id, ERROR_CODES.TOKEN_EXPIRED, 'Token expired; request a new run token from the dispatcher')
+        return errorResponse(
+          id,
+          ERROR_CODES.TOKEN_EXPIRED,
+          'Token expired; request a new run token from the dispatcher',
+        )
       case 'revoked':
-        return errorResponse(id, ERROR_CODES.TOKEN_REVOKED, 'Token revoked (run ended or reassigned); if you are still working, request reassignment')
+        return errorResponse(
+          id,
+          ERROR_CODES.TOKEN_REVOKED,
+          'Token revoked (run ended or reassigned); if you are still working, request reassignment',
+        )
       default:
         return errorResponse(id, ERROR_CODES.FORBIDDEN, 'Invalid token')
     }
@@ -137,7 +182,11 @@ export async function handleMcpRequest(request: McpRequest, dbPath?: string): Pr
     // ── P1 步骤 4 tool groups ──
     case 'kanban_get': {
       if (!isToolAllowed(ctx.token, 'kanban_get')) {
-        return errorResponse(id, ERROR_CODES.FORBIDDEN, 'kanban_get not allowed for this token')
+        return errorResponse(
+          id,
+          ERROR_CODES.FORBIDDEN,
+          'kanban_get not allowed for this token',
+        )
       }
       return toolGroups.handleKanbanGet(id, ctx, toolDeps)
     }
@@ -158,7 +207,11 @@ export async function handleMcpRequest(request: McpRequest, dbPath?: string): Pr
     }
     case 'member_work_sync_status': {
       if (!isToolAllowed(ctx.token, 'member_work_sync_status')) {
-        return errorResponse(id, ERROR_CODES.FORBIDDEN, 'member_work_sync_status not allowed for this token')
+        return errorResponse(
+          id,
+          ERROR_CODES.FORBIDDEN,
+          'member_work_sync_status not allowed for this token',
+        )
       }
       return toolGroups.handleSyncStatus(id, ctx, toolDeps)
     }
@@ -168,7 +221,11 @@ export async function handleMcpRequest(request: McpRequest, dbPath?: string): Pr
       return toolGroups.handleSyncReport(id, params, ctx, toolDeps)
     }
     default:
-      return errorResponse(id, ERROR_CODES.METHOD_NOT_FOUND, `Unknown method: ${method}`)
+      return errorResponse(
+        id,
+        ERROR_CODES.METHOD_NOT_FOUND,
+        `Unknown method: ${method}`,
+      )
   }
 }
 
@@ -183,27 +240,56 @@ const toolDeps: toolGroups.ToolDeps = {
   },
 }
 
-function handleTaskGet(id: string | number, params: Record<string, unknown> | undefined, ctx: McpContext): McpResponse {
+function handleTaskGet(
+  id: string | number,
+  params: Record<string, unknown> | undefined,
+  ctx: McpContext,
+): McpResponse {
   if (!isToolAllowed(ctx.token, 'task_get')) {
-    return errorResponse(id, ERROR_CODES.FORBIDDEN, 'task_get not allowed for this token')
+    return errorResponse(
+      id,
+      ERROR_CODES.FORBIDDEN,
+      'task_get not allowed for this token',
+    )
   }
   if (scopeMismatch(params, 'assignmentId', ctx.token.assignmentId)) {
-    return errorResponse(id, ERROR_CODES.OWNERSHIP_MISMATCH, 'params.assignmentId does not match token scope')
+    return errorResponse(
+      id,
+      ERROR_CODES.OWNERSHIP_MISMATCH,
+      'params.assignmentId does not match token scope',
+    )
   }
-  if (scopeMismatch(params, 'missionId', ctx.token.taskId) || scopeMismatch(params, 'taskId', ctx.token.taskId)) {
-    return errorResponse(id, ERROR_CODES.OWNERSHIP_MISMATCH, 'params.taskId/missionId does not match token scope')
+  if (
+    scopeMismatch(params, 'missionId', ctx.token.taskId) ||
+    scopeMismatch(params, 'taskId', ctx.token.taskId)
+  ) {
+    return errorResponse(
+      id,
+      ERROR_CODES.OWNERSHIP_MISMATCH,
+      'params.taskId/missionId does not match token scope',
+    )
   }
 
   // token.taskId carries the missionId for task tools (see RunToken.taskId).
   const missionId = ctx.token.taskId
   const mission = getSwarmMission(missionId)
   if (!mission) {
-    return errorResponse(id, ERROR_CODES.INVALID_PARAMS, `Mission not found: ${missionId}`)
+    return errorResponse(
+      id,
+      ERROR_CODES.INVALID_PARAMS,
+      `Mission not found: ${missionId}`,
+    )
   }
 
-  const assignment = mission.assignments.find((item) => item.id === ctx.token.assignmentId)
+  const assignment = mission.assignments.find(
+    (item) => item.id === ctx.token.assignmentId,
+  )
   if (!assignment) {
-    return errorResponse(id, ERROR_CODES.INVALID_PARAMS, `Assignment not found: ${ctx.token.assignmentId}`)
+    return errorResponse(
+      id,
+      ERROR_CODES.INVALID_PARAMS,
+      `Assignment not found: ${ctx.token.assignmentId}`,
+    )
   }
 
   return successResponse(id, {
@@ -219,42 +305,80 @@ function handleTaskGet(id: string | number, params: Record<string, unknown> | un
     },
     // Plan (行 805): tool responses embed the next step so the protocol
     // survives context compaction.
-    nextRequiredAction: 'Call task_start to begin this run before doing any work.',
+    nextRequiredAction:
+      'Call task_start to begin this run before doing any work.',
     nextRequiredToolCall: { tool: 'task_start', params: {} },
   })
 }
 
-function handleTaskStart(id: string | number, params: Record<string, unknown> | undefined, ctx: McpContext): McpResponse {
+function handleTaskStart(
+  id: string | number,
+  params: Record<string, unknown> | undefined,
+  ctx: McpContext,
+): McpResponse {
   const gate = requireWriteToken(id, ctx.token, 'task_start')
   if (gate) return gate
   if (scopeMismatch(params, 'assignmentId', ctx.token.assignmentId)) {
-    return errorResponse(id, ERROR_CODES.OWNERSHIP_MISMATCH, 'params.assignmentId does not match token scope')
+    return errorResponse(
+      id,
+      ERROR_CODES.OWNERSHIP_MISMATCH,
+      'params.assignmentId does not match token scope',
+    )
   }
-  if (scopeMismatch(params, 'missionId', ctx.token.taskId) || scopeMismatch(params, 'taskId', ctx.token.taskId)) {
-    return errorResponse(id, ERROR_CODES.OWNERSHIP_MISMATCH, 'params.taskId/missionId does not match token scope')
+  if (
+    scopeMismatch(params, 'missionId', ctx.token.taskId) ||
+    scopeMismatch(params, 'taskId', ctx.token.taskId)
+  ) {
+    return errorResponse(
+      id,
+      ERROR_CODES.OWNERSHIP_MISMATCH,
+      'params.taskId/missionId does not match token scope',
+    )
   }
 
   const missionId = ctx.token.taskId
   const mission = getSwarmMission(missionId)
   if (!mission) {
-    return errorResponse(id, ERROR_CODES.INVALID_PARAMS, `Mission not found: ${missionId}`)
+    return errorResponse(
+      id,
+      ERROR_CODES.INVALID_PARAMS,
+      `Mission not found: ${missionId}`,
+    )
   }
 
-  const assignment = mission.assignments.find((item) => item.id === ctx.token.assignmentId)
+  const assignment = mission.assignments.find(
+    (item) => item.id === ctx.token.assignmentId,
+  )
   if (!assignment) {
-    return errorResponse(id, ERROR_CODES.INVALID_PARAMS, `Assignment not found: ${ctx.token.assignmentId}`)
+    return errorResponse(
+      id,
+      ERROR_CODES.INVALID_PARAMS,
+      `Assignment not found: ${ctx.token.assignmentId}`,
+    )
   }
 
   // Ownership: token.participantId must match assignment.workerId
   if (assignment.workerId !== ctx.token.participantId) {
-    return errorResponse(id, ERROR_CODES.OWNERSHIP_MISMATCH, 'Token does not own this assignment')
+    return errorResponse(
+      id,
+      ERROR_CODES.OWNERSHIP_MISMATCH,
+      'Token does not own this assignment',
+    )
   }
 
   // Token granularity = one run: the run record's id IS the token's runId,
   // assigned by the dispatcher at issue time. Re-using the same token for a
   // second task_start hits the PRIMARY KEY conflict → idempotent duplicate.
   try {
-    const run = startTaskRun({
+    const gitContext = ctx.token.context as
+      | {
+          projectId?: string
+          baseRef?: string
+          worktreePath?: string
+          branch?: string
+        }
+      | undefined
+    let run = startTaskRun({
       runId: ctx.token.runId,
       taskId: mission.id,
       missionId: mission.id,
@@ -263,12 +387,36 @@ function handleTaskStart(id: string | number, params: Record<string, unknown> | 
       runtime: 'mcp',
       dbPath: ctx.dbPath,
     })
+    if (gitContext?.projectId && gitContext?.worktreePath) {
+      // P2b: record worktree metadata so task_complete/advance can compute git fields.
+      const project = getProject(gitContext.projectId)
+      if (project) {
+        run = startTaskRun({
+          runId: ctx.token.runId,
+          taskId: mission.id,
+          missionId: mission.id,
+          assignmentId: assignment.id,
+          agentId: ctx.token.participantId,
+          runtime: 'mcp',
+          projectId: gitContext.projectId,
+          branch: gitContext.branch ?? null,
+          baseRef: gitContext.baseRef ?? null,
+          worktreePath: gitContext.worktreePath,
+          dbPath: ctx.dbPath,
+        })
+      }
+    }
+
     return successResponse(id, {
       runId: run.id,
       status: 'running',
       startedAt: run.startedAt,
-      nextRequiredAction: 'Work the assignment, then call task_complete with this runId (and blocker/nextAction if stuck).',
-      nextRequiredToolCall: { tool: 'task_complete', params: { runId: run.id } },
+      nextRequiredAction:
+        'Work the assignment, then call task_complete with this runId (and blocker/nextAction if stuck).',
+      nextRequiredToolCall: {
+        tool: 'task_complete',
+        params: { runId: run.id },
+      },
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -279,33 +427,66 @@ function handleTaskStart(id: string | number, params: Record<string, unknown> | 
         `Run already started: ${ctx.token.runId}. This token is bound to one run; request a new token for another attempt.`,
       )
     }
-    return errorResponse(id, ERROR_CODES.INTERNAL_ERROR, `Failed to start run: ${message}`)
+    return errorResponse(
+      id,
+      ERROR_CODES.INTERNAL_ERROR,
+      `Failed to start run: ${message}`,
+    )
   }
 }
 
-function handleTaskComplete(id: string | number, params: Record<string, unknown> | undefined, ctx: McpContext): McpResponse {
+function handleTaskComplete(
+  id: string | number,
+  params: Record<string, unknown> | undefined,
+  ctx: McpContext,
+): McpResponse {
   const gate = requireWriteToken(id, ctx.token, 'task_complete')
   if (gate) return gate
   if (scopeMismatch(params, 'assignmentId', ctx.token.assignmentId)) {
-    return errorResponse(id, ERROR_CODES.OWNERSHIP_MISMATCH, 'params.assignmentId does not match token scope')
+    return errorResponse(
+      id,
+      ERROR_CODES.OWNERSHIP_MISMATCH,
+      'params.assignmentId does not match token scope',
+    )
   }
-  if (scopeMismatch(params, 'missionId', ctx.token.taskId) || scopeMismatch(params, 'taskId', ctx.token.taskId)) {
-    return errorResponse(id, ERROR_CODES.OWNERSHIP_MISMATCH, 'params.taskId/missionId does not match token scope')
+  if (
+    scopeMismatch(params, 'missionId', ctx.token.taskId) ||
+    scopeMismatch(params, 'taskId', ctx.token.taskId)
+  ) {
+    return errorResponse(
+      id,
+      ERROR_CODES.OWNERSHIP_MISMATCH,
+      'params.taskId/missionId does not match token scope',
+    )
   }
 
   const missionId = ctx.token.taskId
   const mission = getSwarmMission(missionId)
   if (!mission) {
-    return errorResponse(id, ERROR_CODES.INVALID_PARAMS, `Mission not found: ${missionId}`)
+    return errorResponse(
+      id,
+      ERROR_CODES.INVALID_PARAMS,
+      `Mission not found: ${missionId}`,
+    )
   }
 
-  const assignment = mission.assignments.find((item) => item.id === ctx.token.assignmentId)
+  const assignment = mission.assignments.find(
+    (item) => item.id === ctx.token.assignmentId,
+  )
   if (!assignment) {
-    return errorResponse(id, ERROR_CODES.INVALID_PARAMS, `Assignment not found: ${ctx.token.assignmentId}`)
+    return errorResponse(
+      id,
+      ERROR_CODES.INVALID_PARAMS,
+      `Assignment not found: ${ctx.token.assignmentId}`,
+    )
   }
 
   if (assignment.workerId !== ctx.token.participantId) {
-    return errorResponse(id, ERROR_CODES.OWNERSHIP_MISMATCH, 'Token does not own this assignment')
+    return errorResponse(
+      id,
+      ERROR_CODES.OWNERSHIP_MISMATCH,
+      'Token does not own this assignment',
+    )
   }
 
   const runId = typeof params?.runId === 'string' ? params.runId : null
@@ -315,18 +496,28 @@ function handleTaskComplete(id: string | number, params: Record<string, unknown>
   // The token is bound to exactly one run; completing a different runId is a
   // confused-agent signal, reject it.
   if (runId !== ctx.token.runId) {
-    return errorResponse(id, ERROR_CODES.OWNERSHIP_MISMATCH, 'runId does not match token scope')
+    return errorResponse(
+      id,
+      ERROR_CODES.OWNERSHIP_MISMATCH,
+      'runId does not match token scope',
+    )
   }
 
   const summary = typeof params?.summary === 'string' ? params.summary : null
   const blocker = typeof params?.blocker === 'string' ? params.blocker : null
-  const nextAction = typeof params?.nextAction === 'string' ? params.nextAction : null
+  const nextAction =
+    typeof params?.nextAction === 'string' ? params.nextAction : null
+  const headSha = typeof params?.headSha === 'string' ? params.headSha : null
 
   // Explicit status wins; fall back to the legacy blocker→blocked / done rule.
-  const explicitStatus = typeof params?.status === 'string' ? params.status : null
+  const explicitStatus =
+    typeof params?.status === 'string' ? params.status : null
   let status: TaskRunStatus
   if (explicitStatus !== null) {
-    if (!TASK_RUN_STATUSES.includes(explicitStatus as TaskRunStatus) || explicitStatus === 'running') {
+    if (
+      !TASK_RUN_STATUSES.includes(explicitStatus as TaskRunStatus) ||
+      explicitStatus === 'running'
+    ) {
       return errorResponse(
         id,
         ERROR_CODES.INVALID_PARAMS,
@@ -348,6 +539,7 @@ function handleTaskComplete(id: string | number, params: Record<string, unknown>
     summary,
     blocker,
     nextAction,
+    headSha,
     dbPath: ctx.dbPath,
   })
 
@@ -376,6 +568,7 @@ function handleTaskComplete(id: string | number, params: Record<string, unknown>
       summary,
       blocker,
       nextAction,
+      headSha,
     })
   } catch (error) {
     console.error('[mcp] onRunTerminal hook failed', error)

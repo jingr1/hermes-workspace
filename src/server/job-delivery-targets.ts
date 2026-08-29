@@ -87,8 +87,8 @@ function listPlatformTargets(
   platforms: Record<string, Array<Record<string, unknown>>>,
 ): Array<JobDeliveryTarget> {
   const targets: Array<JobDeliveryTarget> = []
-  for (const [platform, channels] of Object.entries(platforms).sort(([a], [b]) =>
-    a.localeCompare(b),
+  for (const [platform, channels] of Object.entries(platforms).sort(
+    ([a], [b]) => a.localeCompare(b),
   )) {
     if (!Array.isArray(channels)) continue
     for (const channel of channels) {

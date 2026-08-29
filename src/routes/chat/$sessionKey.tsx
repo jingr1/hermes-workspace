@@ -150,7 +150,13 @@ function ChatRoute() {
         replace: true,
       })
     },
-    [activeFriendlyId, activeProfileName, forcedSessionKey, navigate, queryClient],
+    [
+      activeFriendlyId,
+      activeProfileName,
+      forcedSessionKey,
+      navigate,
+      queryClient,
+    ],
   )
 
   return (

@@ -4,7 +4,15 @@ import path from 'node:path'
 import { createRequire } from 'node:module'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { listProfiles, readProfile, updateProfileConfig, getMessagesForProfile, updateProfileModelProvider, updateAllProfilesModelProvider, readModelProviderFromConfig } from './profiles-browser'
+import {
+  listProfiles,
+  readProfile,
+  updateProfileConfig,
+  getMessagesForProfile,
+  updateProfileModelProvider,
+  updateAllProfilesModelProvider,
+  readModelProviderFromConfig,
+} from './profiles-browser'
 
 const nodeRequire = createRequire(import.meta.url)
 
@@ -12,7 +20,9 @@ describe('listProfiles', () => {
   let tempHome: string
 
   beforeEach(() => {
-    tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-workspace-profiles-'))
+    tempHome = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'hermes-workspace-profiles-'),
+    )
     vi.spyOn(os, 'homedir').mockReturnValue(tempHome)
     delete process.env.HERMES_HOME
     delete process.env.CLAUDE_HOME
@@ -29,7 +39,11 @@ describe('listProfiles', () => {
     const namedProfileRoot = path.join(profilesRoot, 'jarvis')
 
     fs.mkdirSync(namedProfileRoot, { recursive: true })
-    fs.writeFileSync(path.join(hermesRoot, 'active_profile'), 'jarvis\n', 'utf-8')
+    fs.writeFileSync(
+      path.join(hermesRoot, 'active_profile'),
+      'jarvis\n',
+      'utf-8',
+    )
     fs.writeFileSync(
       path.join(hermesRoot, 'config.yaml'),
       'model: default-model\ndescription: Default operator\n',
@@ -46,10 +60,18 @@ describe('listProfiles', () => {
 
     expect(names).toContain('default')
     expect(names).toContain('jarvis')
-    expect(profiles.find((profile) => profile.name === 'default')?.active).toBe(false)
-    expect(profiles.find((profile) => profile.name === 'jarvis')?.active).toBe(true)
-    expect(profiles.find((profile) => profile.name === 'default')?.description).toBe('Default operator')
-    expect(profiles.find((profile) => profile.name === 'jarvis')?.description).toBe('Named operator')
+    expect(profiles.find((profile) => profile.name === 'default')?.active).toBe(
+      false,
+    )
+    expect(profiles.find((profile) => profile.name === 'jarvis')?.active).toBe(
+      true,
+    )
+    expect(
+      profiles.find((profile) => profile.name === 'default')?.description,
+    ).toBe('Default operator')
+    expect(
+      profiles.find((profile) => profile.name === 'jarvis')?.description,
+    ).toBe('Named operator')
   })
 
   it('skips profiles/default so only the root-backed default card renders', () => {
@@ -71,14 +93,18 @@ describe('listProfiles', () => {
     )
 
     const profiles = listProfiles()
-    const defaultProfiles = profiles.filter((profile) => profile.name === 'default')
+    const defaultProfiles = profiles.filter(
+      (profile) => profile.name === 'default',
+    )
 
     expect(defaultProfiles).toHaveLength(1)
     expect(defaultProfiles[0]?.path).toBe(hermesRoot)
     expect(defaultProfiles[0]?.model).toBe('root-model')
     expect(defaultProfiles[0]?.provider).toBe('openai')
     expect(defaultProfiles[0]?.description).toBe('Root default')
-    expect(profiles.find((profile) => profile.name === 'builder')?.provider).toBe('anthropic')
+    expect(
+      profiles.find((profile) => profile.name === 'builder')?.provider,
+    ).toBe('anthropic')
   })
 
   it('reads and updates profile descriptions from config.yaml', () => {
@@ -110,8 +136,16 @@ describe('listProfiles', () => {
     fs.mkdirSync(soulProfileRoot, { recursive: true })
     fs.mkdirSync(configProfileRoot, { recursive: true })
 
-    fs.writeFileSync(path.join(hermesRoot, 'config.yaml'), 'model: root-model\n', 'utf-8')
-    fs.writeFileSync(path.join(soulProfileRoot, 'config.yaml'), 'model: named-model\n', 'utf-8')
+    fs.writeFileSync(
+      path.join(hermesRoot, 'config.yaml'),
+      'model: root-model\n',
+      'utf-8',
+    )
+    fs.writeFileSync(
+      path.join(soulProfileRoot, 'config.yaml'),
+      'model: named-model\n',
+      'utf-8',
+    )
     fs.writeFileSync(
       path.join(soulProfileRoot, 'SOUL.md'),
       'You are Leelo, executive assistant.',
@@ -130,12 +164,12 @@ describe('listProfiles', () => {
 
     const profiles = listProfiles()
 
-    expect(profiles.find((profile) => profile.name === 'leelo')?.systemPrompt).toBe(
-      'You are Leelo, executive assistant.',
-    )
-    expect(profiles.find((profile) => profile.name === 'ops')?.systemPrompt).toBe(
-      'Config prompt wins',
-    )
+    expect(
+      profiles.find((profile) => profile.name === 'leelo')?.systemPrompt,
+    ).toBe('You are Leelo, executive assistant.')
+    expect(
+      profiles.find((profile) => profile.name === 'ops')?.systemPrompt,
+    ).toBe('Config prompt wins')
     expect(readProfile('leelo').systemPrompt).toBe(
       'You are Leelo, executive assistant.',
     )
@@ -147,7 +181,9 @@ describe('getMessagesForProfile', () => {
   let tempHome: string
 
   beforeEach(() => {
-    tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-workspace-messages-'))
+    tempHome = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'hermes-workspace-messages-'),
+    )
     vi.spyOn(os, 'homedir').mockReturnValue(tempHome)
     delete process.env.HERMES_HOME
     delete process.env.CLAUDE_HOME
@@ -235,7 +271,9 @@ describe('profile model/provider updates', () => {
   let tempHome: string
 
   beforeEach(() => {
-    tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-workspace-profiles-mp-'))
+    tempHome = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'hermes-workspace-profiles-mp-'),
+    )
     vi.spyOn(os, 'homedir').mockReturnValue(tempHome)
     delete process.env.HERMES_HOME
     delete process.env.CLAUDE_HOME
@@ -272,13 +310,21 @@ describe('profile model/provider updates', () => {
     const writerRoot = path.join(hermesRoot, 'profiles', 'writer')
     fs.mkdirSync(developerRoot, { recursive: true })
     fs.mkdirSync(writerRoot, { recursive: true })
-    fs.writeFileSync(path.join(hermesRoot, 'config.yaml'), 'model: root-model\nprovider: openai\n', 'utf-8')
+    fs.writeFileSync(
+      path.join(hermesRoot, 'config.yaml'),
+      'model: root-model\nprovider: openai\n',
+      'utf-8',
+    )
     fs.writeFileSync(
       path.join(developerRoot, 'config.yaml'),
       'model:\n  default: old-dev\n  provider: tokenx\n',
       'utf-8',
     )
-    fs.writeFileSync(path.join(writerRoot, 'config.yaml'), 'model: old-writer\nprovider: anthropic\n', 'utf-8')
+    fs.writeFileSync(
+      path.join(writerRoot, 'config.yaml'),
+      'model: old-writer\nprovider: anthropic\n',
+      'utf-8',
+    )
 
     const result = updateAllProfilesModelProvider('tokenx', 'Kimi-K2.7-Code')
     expect(result.updated.every((entry) => entry.ok)).toBe(true)
@@ -291,7 +337,9 @@ describe('profile model/provider updates', () => {
       model: 'Kimi-K2.7-Code',
       provider: 'tokenx',
     })
-    expect(readModelProviderFromConfig(readProfile('developer').config)).toEqual({
+    expect(
+      readModelProviderFromConfig(readProfile('developer').config),
+    ).toEqual({
       model: 'Kimi-K2.7-Code',
       provider: 'tokenx',
     })
@@ -305,7 +353,11 @@ describe('profile model/provider updates', () => {
     const hermesRoot = path.join(tempHome, '.hermes')
     const developerRoot = path.join(hermesRoot, 'profiles', 'developer')
     fs.mkdirSync(developerRoot, { recursive: true })
-    fs.writeFileSync(path.join(hermesRoot, 'config.yaml'), 'model: root-model\nprovider: openai\n', 'utf-8')
+    fs.writeFileSync(
+      path.join(hermesRoot, 'config.yaml'),
+      'model: root-model\nprovider: openai\n',
+      'utf-8',
+    )
     fs.writeFileSync(
       path.join(developerRoot, 'config.yaml'),
       'model:\n  default: Kimi-K2.7-Code\n  provider: custom:tokenx\n',

@@ -16,7 +16,9 @@ import {
 import { isAuthenticated } from '../../server/auth-middleware'
 
 const CONFIG_PATH = path.join(
-  process.env.HERMES_HOME ?? process.env.CLAUDE_HOME ?? path.join(os.homedir(), '.hermes'),
+  process.env.HERMES_HOME ??
+    process.env.CLAUDE_HOME ??
+    path.join(os.homedir(), '.hermes'),
   'config.yaml',
 )
 
@@ -66,10 +68,7 @@ export const Route = createFileRoute('/api/connection-status')({
 
         const chatReady = caps.chatCompletions
         const enhancedReady =
-          chatReady &&
-          caps.sessions &&
-          caps.skills &&
-          caps.config
+          chatReady && caps.sessions && caps.skills && caps.config
 
         let status: ConnectionStatus['status']
         let label: ConnectionStatus['label']
@@ -88,7 +87,8 @@ export const Route = createFileRoute('/api/connection-status')({
         } else if (chatReady && modelConfigured) {
           status = 'connected'
           label = 'Connected'
-          detail = 'Core chat is ready. Sessions, Skills, Config, and Jobs are served from the local profile directory.'
+          detail =
+            'Core chat is ready. Sessions, Skills, Config, and Jobs are served from the local profile directory.'
         } else {
           status = 'partial'
           label = 'Partial'

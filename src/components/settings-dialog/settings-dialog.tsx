@@ -25,7 +25,7 @@ import type { AccentColor, SettingsThemeMode } from '@/hooks/use-settings'
 import type { LoaderStyle } from '@/hooks/use-chat-settings'
 import type { BrailleSpinnerPreset } from '@/components/ui/braille-spinner'
 import type { ThemeId } from '@/lib/theme'
-import type {LocaleId} from '@/lib/i18n';
+import type { LocaleId } from '@/lib/i18n'
 import { GROQ_STT_MODELS, STT_PROVIDER_OPTIONS } from '@/lib/stt-config'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -65,7 +65,7 @@ import {
   DialogRoot,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { LOCALE_LABELS,  getLocale, setLocale } from '@/lib/i18n'
+import { LOCALE_LABELS, getLocale, setLocale } from '@/lib/i18n'
 
 export {
   getOAuthStartButtonLabel,
@@ -259,8 +259,12 @@ function HermesContent() {
               providerId,
               modelId,
             )
-            void queryClient.invalidateQueries({ queryKey: ['profiles', 'chat'] })
-            void queryClient.invalidateQueries({ queryKey: ['claude', 'models'] })
+            void queryClient.invalidateQueries({
+              queryKey: ['profiles', 'chat'],
+            })
+            void queryClient.invalidateQueries({
+              queryKey: ['claude', 'models'],
+            })
             return message
           }}
         />
@@ -606,52 +610,52 @@ const ENTERPRISE_THEMES = THEMES.map((theme) => ({
                     text: '#16315F',
                   }
                 : theme.id === 'claude-classic'
-              ? {
-                  bg: '#0d0f12',
-                  panel: '#1a1f26',
-                  border: '#2a313b',
-                  accent: '#b98a44',
-                  text: '#eceff4',
-                }
-              : theme.id === 'claude-classic-light'
-                ? {
-                    bg: '#F5F2ED',
-                    panel: '#FCFAF7',
-                    border: '#D8CCBC',
-                    accent: '#b98a44',
-                    text: '#1a1f26',
-                  }
-                : theme.id === 'claude-slate'
                   ? {
-                      bg: '#0d1117',
-                      panel: '#1c2128',
-                      border: '#30363d',
-                      accent: '#7eb8f6',
-                      text: '#c9d1d9',
+                      bg: '#0d0f12',
+                      panel: '#1a1f26',
+                      border: '#2a313b',
+                      accent: '#b98a44',
+                      text: '#eceff4',
                     }
-                  : theme.id === 'webui'
+                  : theme.id === 'claude-classic-light'
                     ? {
-                        bg: '#0D0D1A',
-                        panel: '#1A1A2E',
-                        border: '#2A2A45',
-                        accent: '#FFD700',
-                        text: '#FFF8DC',
+                        bg: '#F5F2ED',
+                        panel: '#FCFAF7',
+                        border: '#D8CCBC',
+                        accent: '#b98a44',
+                        text: '#1a1f26',
                       }
-                    : theme.id === 'webui-light'
+                    : theme.id === 'claude-slate'
                       ? {
-                          bg: '#FEFCF7',
-                          panel: '#FAF7F0',
-                          border: '#E0D8C8',
-                          accent: '#B8860B',
-                          text: '#1A1610',
+                          bg: '#0d1117',
+                          panel: '#1c2128',
+                          border: '#30363d',
+                          accent: '#7eb8f6',
+                          text: '#c9d1d9',
                         }
-                      : {
-                          bg: '#F6F8FA',
-                          panel: '#FFFFFF',
-                          border: '#D0D7DE',
-                          accent: '#3b82f6',
-                          text: '#24292f',
-                        },
+                      : theme.id === 'webui'
+                        ? {
+                            bg: '#0D0D1A',
+                            panel: '#1A1A2E',
+                            border: '#2A2A45',
+                            accent: '#FFD700',
+                            text: '#FFF8DC',
+                          }
+                        : theme.id === 'webui-light'
+                          ? {
+                              bg: '#FEFCF7',
+                              panel: '#FAF7F0',
+                              border: '#E0D8C8',
+                              accent: '#B8860B',
+                              text: '#1A1610',
+                            }
+                          : {
+                              bg: '#F6F8FA',
+                              panel: '#FFFFFF',
+                              border: '#D0D7DE',
+                              accent: '#3b82f6',
+                              text: '#24292f',
+                            },
 }))
 
 function ThemeSwatch({
@@ -1280,8 +1284,7 @@ function VoiceContent() {
 
   const ttsProvider = String(tts.provider || 'edge')
   const sttProvider = String(stt.provider || 'local')
-  const sttGroq =
-    (stt.groq as Record<string, unknown> | undefined) || {}
+  const sttGroq = (stt.groq as Record<string, unknown> | undefined) || {}
 
   return (
     <div className="space-y-4">
@@ -1385,7 +1388,10 @@ function VoiceContent() {
                 ))}
               </select>
             </Row>
-            <Row label="Language" description="Optional BCP-47 code, e.g. en or en-US.">
+            <Row
+              label="Language"
+              description="Optional BCP-47 code, e.g. en or en-US."
+            >
               <Input
                 value={String(stt.language || '')}
                 onChange={(e) => saveStt('language', e.target.value)}
@@ -1656,7 +1662,8 @@ export function SettingsDialog({
           </SettingsErrorBoundary>
 
           <div className="sticky bottom-0 z-10 border-t border-primary-200 bg-primary-50/60 px-4 py-3 text-xs text-primary-500 dark:text-neutral-400 md:rounded-b-2xl md:px-5">
-            Most changes save automatically; the default model commits only when you click Set as default.{' '}
+            Most changes save automatically; the default model commits only when
+            you click Set as default.{' '}
             <a
               href="/settings"
               className="ml-2 font-medium underline underline-offset-2 hover:text-primary-700 dark:hover:text-neutral-200"

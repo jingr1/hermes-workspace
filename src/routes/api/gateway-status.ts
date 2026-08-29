@@ -19,10 +19,8 @@ export const Route = createFileRoute('/api/gateway-status')({
         const capabilities = await ensureGatewayCoreProbed()
         let pool: unknown = null
         try {
-          const {
-            getGatewayPoolStatus,
-            isGatewayPoolEnabled,
-          } = await import('../../server/gateway-pool')
+          const { getGatewayPoolStatus, isGatewayPoolEnabled } =
+            await import('../../server/gateway-pool')
           if (isGatewayPoolEnabled()) {
             pool = {
               enabled: true,

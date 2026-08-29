@@ -53,7 +53,9 @@ export function ChatPanel() {
   const sessionsQuery = useQuery({
     queryKey: chatQueryKeys.sessionsForProfile(activeProfileName),
     queryFn: async () => {
-      const res = await fetch(`/api/sessions?profile=${encodeURIComponent(activeProfileName)}`)
+      const res = await fetch(
+        `/api/sessions?profile=${encodeURIComponent(activeProfileName)}`,
+      )
       if (!res.ok) return []
       const data = await res.json()
       return Array.isArray(data?.sessions)

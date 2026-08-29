@@ -21,7 +21,10 @@ function restoreStash(text: string, stash: Array<string>): string {
   )
 }
 
-function withProtectedCode(text: string, transform: (prose: string) => string): string {
+function withProtectedCode(
+  text: string,
+  transform: (prose: string) => string,
+): string {
   const stash: Array<string> = []
   const remember = (block: string): string => {
     stash.push(block)

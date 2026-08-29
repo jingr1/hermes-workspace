@@ -22,7 +22,11 @@ import { Button } from '@/components/ui/button'
 import type { GatewayModelCatalogEntry } from '@/lib/gateway-api'
 import { formatRelativeTime } from '@/screens/dashboard/lib/formatters'
 import { cn } from '@/lib/utils'
-import type { OperationsAgent, AgentSkillItem, AgentMcpItem } from '../hooks/use-operations'
+import type {
+  OperationsAgent,
+  AgentSkillItem,
+  AgentMcpItem,
+} from '../hooks/use-operations'
 
 // Fetch models from the local filesystem endpoint — no gateway dependency.
 // Falls back gracefully when /api/models (gateway-backed) is unreachable.
@@ -31,8 +35,12 @@ async function fetchModelsLocal(): Promise<{
   models?: Array<GatewayModelCatalogEntry>
 }> {
   const response = await fetch('/api/models')
-  if (!response.ok) throw new Error(`Failed to load models (${response.status})`)
-  return (await response.json()) as { ok?: boolean; models?: Array<GatewayModelCatalogEntry> }
+  if (!response.ok)
+    throw new Error(`Failed to load models (${response.status})`)
+  return (await response.json()) as {
+    ok?: boolean
+    models?: Array<GatewayModelCatalogEntry>
+  }
 }
 
 type AvailableModel = {
@@ -51,11 +59,15 @@ const TABS: Array<{ id: Tab; label: string; icon: typeof UserSquareIcon }> = [
   { id: 'activity', label: 'Activity', icon: ViewIcon },
 ]
 
-function normalizeModel(model: GatewayModelCatalogEntry): AvailableModel | null {
+function normalizeModel(
+  model: GatewayModelCatalogEntry,
+): AvailableModel | null {
   if (typeof model === 'string') {
     return {
       id: model,
-      provider: model.includes('/') ? (model.split('/')[0] ?? 'model') : 'model',
+      provider: model.includes('/')
+        ? (model.split('/')[0] ?? 'model')
+        : 'model',
       name: model.split('/').pop() ?? model,
     }
   }
@@ -67,7 +79,11 @@ function normalizeModel(model: GatewayModelCatalogEntry): AvailableModel | null 
     id,
     provider: model.provider ?? id.split('/')[0] ?? 'model',
     name:
-      model.label ?? model.displayName ?? model.name ?? id.split('/').pop() ?? id,
+      model.label ??
+      model.displayName ??
+      model.name ??
+      id.split('/').pop() ??
+      id,
   }
 }
 
@@ -103,7 +119,9 @@ function ModelSelector({
       const valueProvider = value.slice(0, slashIndex)
       const valueModelId = value.slice(slashIndex + 1)
       const exactMatch = models.find(
-        (m) => m.provider === valueProvider && (m.id === value || m.id === valueModelId),
+        (m) =>
+          m.provider === valueProvider &&
+          (m.id === value || m.id === valueModelId),
       )
       if (exactMatch) return exactMatch
     }
@@ -124,7 +142,9 @@ function ModelSelector({
         className="inline-flex min-h-[3rem] w-full items-center justify-between gap-3 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-left text-sm text-[var(--theme-text)] shadow-[0_8px_24px_color-mix(in_srgb,var(--theme-shadow)_18%,transparent)]"
       >
         <span className="truncate">
-          {selected ? `${selected.provider} / ${selected.name}` : 'Default (auto)'}
+          {selected
+            ? `${selected.provider} / ${selected.name}`
+            : 'Default (auto)'}
         </span>
         <HugeiconsIcon
           icon={ArrowDown01Icon}
@@ -148,7 +168,9 @@ function ModelSelector({
               }}
               className={cn(
                 'flex w-full rounded-xl px-3 py-2.5 text-left text-sm',
-                !value ? 'bg-[var(--theme-accent-soft)]' : 'hover:bg-[var(--theme-bg)]',
+                !value
+                  ? 'bg-[var(--theme-accent-soft)]'
+                  : 'hover:bg-[var(--theme-bg)]',
               )}
             >
               Default (auto)
@@ -205,7 +227,9 @@ function IdentityTab({
     <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-[1.2fr_0.6fr]">
         <label className="space-y-2">
-          <span className="text-sm font-medium text-[var(--theme-text)]">Name</span>
+          <span className="text-sm font-medium text-[var(--theme-text)]">
+            Name
+          </span>
           <input
             value={name}
             onChange={(event) => onName(event.target.value)}
@@ -213,7 +237,9 @@ function IdentityTab({
           />
         </label>
         <label className="space-y-2">
-          <span className="text-sm font-medium text-[var(--theme-text)]">Emoji</span>
+          <span className="text-sm font-medium text-[var(--theme-text)]">
+            Emoji
+          </span>
           <input
             value={emoji}
             onChange={(event) => onEmoji(event.target.value)}
@@ -222,7 +248,9 @@ function IdentityTab({
         </label>
       </div>
       <label className="block space-y-2">
-        <span className="text-sm font-medium text-[var(--theme-text)]">Description</span>
+        <span className="text-sm font-medium text-[var(--theme-text)]">
+          Description
+        </span>
         <input
           value={description}
           onChange={(event) => onDescription(event.target.value)}
@@ -231,7 +259,9 @@ function IdentityTab({
         />
       </label>
       <label className="block space-y-2">
-        <span className="text-sm font-medium text-[var(--theme-text)]">System Prompt</span>
+        <span className="text-sm font-medium text-[var(--theme-text)]">
+          System Prompt
+        </span>
         <textarea
           value={systemPrompt}
           onChange={(event) => onSystemPrompt(event.target.value)}
@@ -260,7 +290,9 @@ function ModelTab({
   return (
     <div className="space-y-4">
       <label className="block space-y-2">
-        <span className="text-sm font-medium text-[var(--theme-text)]">Model</span>
+        <span className="text-sm font-medium text-[var(--theme-text)]">
+          Model
+        </span>
         <ModelSelector value={model} onChange={onModel} models={models} />
       </label>
       <div className="grid gap-3 md:grid-cols-2">
@@ -293,8 +325,10 @@ function ModelTab({
       </div>
       <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3">
         <p className="text-xs text-[var(--theme-muted)]">
-          Fallback models and advanced parameters (temperature, max_tokens) can be
-          configured by editing the profile's <code className="text-[var(--theme-text)]">config.yaml</code> directly.
+          Fallback models and advanced parameters (temperature, max_tokens) can
+          be configured by editing the profile's{' '}
+          <code className="text-[var(--theme-text)]">config.yaml</code>{' '}
+          directly.
         </p>
       </div>
     </div>
@@ -311,9 +345,17 @@ function CapabilitiesTab({
   isRemovingMcp,
 }: {
   agent: OperationsAgent
-  onToggleSkill: (input: { profile: string; name: string; enabled: boolean }) => Promise<unknown>
+  onToggleSkill: (input: {
+    profile: string
+    name: string
+    enabled: boolean
+  }) => Promise<unknown>
   isTogglingSkill: boolean
-  onToggleMcp: (input: { profile: string; server: string; enabled: boolean }) => Promise<unknown>
+  onToggleMcp: (input: {
+    profile: string
+    server: string
+    enabled: boolean
+  }) => Promise<unknown>
   isTogglingMcp: boolean
   onRemoveMcp: (input: { profile: string; server: string }) => Promise<unknown>
   isRemovingMcp: boolean
@@ -323,8 +365,12 @@ function CapabilitiesTab({
 
   // Local optimistic state — gives immediate visual feedback before the server
   // round-trip completes. Synced from server data whenever capabilities refresh.
-  const [localSkills, setLocalSkills] = useState<AgentSkillItem[]>(agent.capabilities.skills)
-  const [localMcp, setLocalMcp] = useState<AgentMcpItem[]>(agent.capabilities.mcpServers)
+  const [localSkills, setLocalSkills] = useState<AgentSkillItem[]>(
+    agent.capabilities.skills,
+  )
+  const [localMcp, setLocalMcp] = useState<AgentMcpItem[]>(
+    agent.capabilities.mcpServers,
+  )
 
   // Keep local state in sync when SWITCHING to a different agent.
   // Intentionally depend on agent.id (not agent.capabilities.skills) because
@@ -356,16 +402,26 @@ function CapabilitiesTab({
     setInlineError(null)
     // Optimistic update
     setLocalSkills((prev) =>
-      prev.map((s) => (s.name === skill.name ? { ...s, enabled: !s.enabled } : s)),
+      prev.map((s) =>
+        s.name === skill.name ? { ...s, enabled: !s.enabled } : s,
+      ),
     )
     try {
-      await onToggleSkill({ profile: agent.id, name: skill.name, enabled: !skill.enabled })
+      await onToggleSkill({
+        profile: agent.id,
+        name: skill.name,
+        enabled: !skill.enabled,
+      })
     } catch (err) {
       // Rollback
       setLocalSkills((prev) =>
-        prev.map((s) => (s.name === skill.name ? { ...s, enabled: skill.enabled } : s)),
+        prev.map((s) =>
+          s.name === skill.name ? { ...s, enabled: skill.enabled } : s,
+        ),
       )
-      setInlineError(err instanceof Error ? err.message : 'Failed to toggle skill')
+      setInlineError(
+        err instanceof Error ? err.message : 'Failed to toggle skill',
+      )
     }
   }
 
@@ -373,16 +429,26 @@ function CapabilitiesTab({
     setInlineError(null)
     // Optimistic update
     setLocalMcp((prev) =>
-      prev.map((m) => (m.name === mcp.name ? { ...m, enabled: !m.enabled } : m)),
+      prev.map((m) =>
+        m.name === mcp.name ? { ...m, enabled: !m.enabled } : m,
+      ),
     )
     try {
-      await onToggleMcp({ profile: agent.id, server: mcp.name, enabled: !mcp.enabled })
+      await onToggleMcp({
+        profile: agent.id,
+        server: mcp.name,
+        enabled: !mcp.enabled,
+      })
     } catch (err) {
       // Rollback
       setLocalMcp((prev) =>
-        prev.map((m) => (m.name === mcp.name ? { ...m, enabled: mcp.enabled } : m)),
+        prev.map((m) =>
+          m.name === mcp.name ? { ...m, enabled: mcp.enabled } : m,
+        ),
       )
-      setInlineError(err instanceof Error ? err.message : 'Failed to toggle MCP server')
+      setInlineError(
+        err instanceof Error ? err.message : 'Failed to toggle MCP server',
+      )
     }
   }
 
@@ -396,7 +462,9 @@ function CapabilitiesTab({
     } catch (err) {
       // Rollback
       setLocalMcp((prev) => [...prev, mcp])
-      setInlineError(err instanceof Error ? err.message : 'Failed to remove MCP server')
+      setInlineError(
+        err instanceof Error ? err.message : 'Failed to remove MCP server',
+      )
     }
   }
 
@@ -405,13 +473,20 @@ function CapabilitiesTab({
       {/* Inline error banner */}
       {inlineError ? (
         <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
-          <HugeiconsIcon icon={Alert01Icon} size={16} strokeWidth={1.8} className="mt-0.5 shrink-0" />
+          <HugeiconsIcon
+            icon={Alert01Icon}
+            size={16}
+            strokeWidth={1.8}
+            className="mt-0.5 shrink-0"
+          />
           <div className="min-w-0">
             <p className="font-medium">Action failed</p>
             <p className="mt-0.5 text-xs">{inlineError}</p>
-            {inlineError.includes('503') || inlineError.includes('unavailable') ? (
+            {inlineError.includes('503') ||
+            inlineError.includes('unavailable') ? (
               <p className="mt-1 text-xs opacity-75">
-                This action requires the Hermes Dashboard to be connected (port 9119).
+                This action requires the Hermes Dashboard to be connected (port
+                9119).
               </p>
             ) : null}
           </div>
@@ -430,7 +505,12 @@ function CapabilitiesTab({
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <HugeiconsIcon icon={PuzzleIcon} size={16} strokeWidth={1.8} className="text-[var(--theme-accent)]" />
+            <HugeiconsIcon
+              icon={PuzzleIcon}
+              size={16}
+              strokeWidth={1.8}
+              className="text-[var(--theme-accent)]"
+            />
             <h3 className="text-sm font-semibold text-[var(--theme-text)]">
               Skills ({enabledSkills.length}/{localSkills.length} enabled)
             </h3>
@@ -445,7 +525,8 @@ function CapabilitiesTab({
 
         {localSkills.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-6 text-sm text-[var(--theme-muted)]">
-            No skills installed in this profile. Visit the Skills page to add some.
+            No skills installed in this profile. Visit the Skills page to add
+            some.
           </div>
         ) : (
           <>
@@ -465,12 +546,18 @@ function CapabilitiesTab({
                     type="button"
                     role="switch"
                     aria-checked={skill.enabled}
-                    aria-label={skill.enabled ? `Disable ${skill.name}` : `Enable ${skill.name}`}
+                    aria-label={
+                      skill.enabled
+                        ? `Disable ${skill.name}`
+                        : `Enable ${skill.name}`
+                    }
                     onClick={() => void handleToggleSkill(skill)}
                     disabled={isTogglingSkill}
                     className={cn(
                       'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)] disabled:opacity-50',
-                      skill.enabled ? 'bg-[var(--theme-accent)]' : 'bg-primary-200',
+                      skill.enabled
+                        ? 'bg-[var(--theme-accent)]'
+                        : 'bg-primary-200',
                     )}
                   >
                     <span
@@ -513,9 +600,15 @@ function CapabilitiesTab({
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <HugeiconsIcon icon={Link01Icon} size={16} strokeWidth={1.8} className="text-[var(--theme-accent)]" />
+            <HugeiconsIcon
+              icon={Link01Icon}
+              size={16}
+              strokeWidth={1.8}
+              className="text-[var(--theme-accent)]"
+            />
             <h3 className="text-sm font-semibold text-[var(--theme-text)]">
-              MCP Servers ({localMcp.filter((m) => m.enabled).length}/{localMcp.length})
+              MCP Servers ({localMcp.filter((m) => m.enabled).length}/
+              {localMcp.length})
             </h3>
           </div>
           <Link
@@ -528,7 +621,8 @@ function CapabilitiesTab({
 
         {localMcp.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-6 text-sm text-[var(--theme-muted)]">
-            No MCP servers configured for this profile. Visit the MCP page to add some.
+            No MCP servers configured for this profile. Visit the MCP page to
+            add some.
           </div>
         ) : (
           <div className="space-y-1.5">
@@ -541,7 +635,9 @@ function CapabilitiesTab({
                   type="button"
                   role="switch"
                   aria-checked={mcp.enabled}
-                  aria-label={mcp.enabled ? `Disable ${mcp.name}` : `Enable ${mcp.name}`}
+                  aria-label={
+                    mcp.enabled ? `Disable ${mcp.name}` : `Enable ${mcp.name}`
+                  }
                   onClick={() => void handleToggleMcp(mcp)}
                   disabled={isTogglingMcp}
                   className={cn(
@@ -564,7 +660,11 @@ function CapabilitiesTab({
                     <p className="truncate text-xs text-red-500">{mcp.error}</p>
                   ) : (
                     <p className="text-xs text-[var(--theme-muted)]">
-                      {mcp.status === 'ok' ? 'Connected' : mcp.status === 'error' ? 'Error' : 'Disabled'}
+                      {mcp.status === 'ok'
+                        ? 'Connected'
+                        : mcp.status === 'error'
+                          ? 'Error'
+                          : 'Disabled'}
                     </p>
                   )}
                 </div>
@@ -586,14 +686,20 @@ function CapabilitiesTab({
       {/* Toolsets section */}
       <section className="space-y-3">
         <div className="flex items-center gap-2">
-          <HugeiconsIcon icon={ToolsIcon} size={16} strokeWidth={1.8} className="text-[var(--theme-accent)]" />
+          <HugeiconsIcon
+            icon={ToolsIcon}
+            size={16}
+            strokeWidth={1.8}
+            className="text-[var(--theme-accent)]"
+          />
           <h3 className="text-sm font-semibold text-[var(--theme-text)]">
             Toolsets
           </h3>
         </div>
         {toolsets.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-4 text-sm text-[var(--theme-muted)]">
-            No toolsets explicitly enabled — this profile uses the default toolset.
+            No toolsets explicitly enabled — this profile uses the default
+            toolset.
           </div>
         ) : (
           <div className="flex flex-wrap gap-2">
@@ -613,7 +719,12 @@ function CapabilitiesTab({
       {/* Resources section */}
       <section className="space-y-3">
         <div className="flex items-center gap-2">
-          <HugeiconsIcon icon={Folder01Icon} size={16} strokeWidth={1.8} className="text-[var(--theme-accent)]" />
+          <HugeiconsIcon
+            icon={Folder01Icon}
+            size={16}
+            strokeWidth={1.8}
+            className="text-[var(--theme-accent)]"
+          />
           <h3 className="text-sm font-semibold text-[var(--theme-text)]">
             Resources
           </h3>
@@ -623,7 +734,10 @@ function CapabilitiesTab({
             <p className="text-xs font-medium uppercase tracking-wider text-[var(--theme-muted)]">
               Workspace
             </p>
-            <p className="mt-1 truncate text-sm text-[var(--theme-text)]" title={agent.resources.workspace}>
+            <p
+              className="mt-1 truncate text-sm text-[var(--theme-text)]"
+              title={agent.resources.workspace}
+            >
               {agent.resources.workspace || '— not set —'}
             </p>
           </div>
@@ -690,7 +804,9 @@ function ScheduleTab({
                     )}
                   />
                   <p className="text-sm font-medium text-[var(--theme-text)]">
-                    {job.name.replace(`ops:${agent.id}:`, '').replace(/-/g, ' ')}
+                    {job.name
+                      .replace(`ops:${agent.id}:`, '')
+                      .replace(/-/g, ' ')}
                   </p>
                 </div>
                 <p className="mt-0.5 text-xs text-[var(--theme-muted)]">
@@ -699,7 +815,11 @@ function ScheduleTab({
               </div>
               <div className="text-xs text-[var(--theme-muted)] md:text-right">
                 <p className="inline-flex items-center gap-1.5">
-                  <HugeiconsIcon icon={Clock01Icon} size={12} strokeWidth={1.8} />
+                  <HugeiconsIcon
+                    icon={Clock01Icon}
+                    size={12}
+                    strokeWidth={1.8}
+                  />
                   {job.schedule}
                 </p>
                 <p className="mt-0.5">
@@ -782,7 +902,10 @@ function ActivityTab({ agent }: { agent: OperationsAgent }) {
                 {session.title || session.initialMessage || session.key}
               </p>
               <p className="mt-0.5 text-xs text-[var(--theme-muted)]">
-                {session.status} · {session.updatedAt ? formatRelativeTime(new Date(session.updatedAt).getTime()) : 'unknown'}
+                {session.status} ·{' '}
+                {session.updatedAt
+                  ? formatRelativeTime(new Date(session.updatedAt).getTime())
+                  : 'unknown'}
               </p>
             </a>
           ))}
@@ -825,9 +948,17 @@ export function OperationsAgentDetail({
   onDelete: (agentId: string) => Promise<unknown>
   isSaving: boolean
   isDeleting: boolean
-  onToggleSkill: (input: { profile: string; name: string; enabled: boolean }) => Promise<unknown>
+  onToggleSkill: (input: {
+    profile: string
+    name: string
+    enabled: boolean
+  }) => Promise<unknown>
   isTogglingSkill: boolean
-  onToggleMcp: (input: { profile: string; server: string; enabled: boolean }) => Promise<unknown>
+  onToggleMcp: (input: {
+    profile: string
+    server: string
+    enabled: boolean
+  }) => Promise<unknown>
   isTogglingMcp: boolean
   onRemoveMcp: (input: { profile: string; server: string }) => Promise<unknown>
   isRemovingMcp: boolean
@@ -905,7 +1036,11 @@ export function OperationsAgentDetail({
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[var(--theme-border)] px-5 py-4 sm:px-6">
           <div className="flex items-start gap-3">
             <div className="flex size-11 items-center justify-center rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-accent)]">
-              <HugeiconsIcon icon={Settings01Icon} size={20} strokeWidth={1.8} />
+              <HugeiconsIcon
+                icon={Settings01Icon}
+                size={20}
+                strokeWidth={1.8}
+              />
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--theme-muted)]">
@@ -915,7 +1050,9 @@ export function OperationsAgentDetail({
                 {agent.meta.emoji} {agent.name}
               </h2>
               <p className="mt-1 text-sm text-[var(--theme-muted-2)]">
-                {agent.meta.description || agent.description || 'No description'}
+                {agent.meta.description ||
+                  agent.description ||
+                  'No description'}
               </p>
             </div>
           </div>

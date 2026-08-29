@@ -1255,7 +1255,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // returns the complete message after the realtime buffer had a
         // partial version.
         if (rtText.length > 0 && histText.length > 0) {
-          if (histText.startsWith(rtText) || rtText.startsWith(histText)) return true
+          if (histText.startsWith(rtText) || rtText.startsWith(histText))
+            return true
         }
       }
 

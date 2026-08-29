@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { isAuthenticated } from '../../server/auth-middleware'
-import { ensureGatewayEnhancedProbed, ensureGatewayProbed } from '../../server/gateway-capabilities'
+import {
+  ensureGatewayEnhancedProbed,
+  ensureGatewayProbed,
+} from '../../server/gateway-capabilities'
 import { Route } from './mcp/$name.logs'
 
 // Vitest module-level mocks for the SSE logs route. These let us synthesize

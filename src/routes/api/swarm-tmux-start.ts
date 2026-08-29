@@ -85,28 +85,48 @@ function tmuxKillSession(tmuxBin: string, name: string): Promise<void> {
   })
 }
 
-function captureTmuxPane(tmuxBin: string, sessionName: string): Promise<string> {
+function captureTmuxPane(
+  tmuxBin: string,
+  sessionName: string,
+): Promise<string> {
   return new Promise((resolve) => {
-    execFile(tmuxBin, ['capture-pane', '-p', '-t', sessionName, '-S', '-120'], (error, stdout) => {
-      resolve(error ? '' : stdout.toString().trim())
-    })
+    execFile(
+      tmuxBin,
+      ['capture-pane', '-p', '-t', sessionName, '-S', '-120'],
+      (error, stdout) => {
+        resolve(error ? '' : stdout.toString().trim())
+      },
+    )
   })
 }
 
-function getPaneCurrentCommand(tmuxBin: string, sessionName: string): Promise<string> {
+function getPaneCurrentCommand(
+  tmuxBin: string,
+  sessionName: string,
+): Promise<string> {
   return new Promise((resolve) => {
-    execFile(tmuxBin, ['list-panes', '-t', sessionName, '-F', '#{pane_current_command}'], (error, stdout) => {
-      resolve(error ? '' : stdout.toString().trim().split('\n')[0] || '')
-    })
+    execFile(
+      tmuxBin,
+      ['list-panes', '-t', sessionName, '-F', '#{pane_current_command}'],
+      (error, stdout) => {
+        resolve(error ? '' : stdout.toString().trim().split('\n')[0] || '')
+      },
+    )
   })
 }
 
-async function sessionHasHermesTui(tmuxBin: string, sessionName: string): Promise<boolean> {
+async function sessionHasHermesTui(
+  tmuxBin: string,
+  sessionName: string,
+): Promise<boolean> {
   const pane = await captureTmuxPane(tmuxBin, sessionName)
   return tmuxPaneLooksLikeHermesTui(pane)
 }
 
-async function sessionHasShellReady(tmuxBin: string, sessionName: string): Promise<boolean> {
+async function sessionHasShellReady(
+  tmuxBin: string,
+  sessionName: string,
+): Promise<boolean> {
   const pane = await captureTmuxPane(tmuxBin, sessionName)
   const paneCommand = await getPaneCurrentCommand(tmuxBin, sessionName)
   return tmuxPaneLooksLikeShellReady(pane, paneCommand)
@@ -158,21 +178,14 @@ function startSession(
   const hermesBin = resolveHermesBin()
   const ghToken = resolveGithubToken()
   const runtimeModel = resolveWorkerRuntimeModel(workerId)
-  const startCommand = transport === 'cli'
-    ? `${handoffEnv}${buildHermesTmuxShellCommand({ profilePath, hermesBin, ghToken, runtimeModel })}`
-    : `${handoffEnv}${buildHermesTmuxTuiCommand({ profilePath, hermesBin, ghToken, runtimeModel })}`
+  const startCommand =
+    transport === 'cli'
+      ? `${handoffEnv}${buildHermesTmuxShellCommand({ profilePath, hermesBin, ghToken, runtimeModel })}`
+      : `${handoffEnv}${buildHermesTmuxTuiCommand({ profilePath, hermesBin, ghToken, runtimeModel })}`
   return new Promise((resolve) => {
     const child = execFile(
       tmuxBin,
-      [
-        'new-session',
-        '-d',
-        '-s',
-        sessionName,
-        '-c',
-        cwd,
-        startCommand,
-      ],
+      ['new-session', '-d', '-s', sessionName, '-c', cwd, startCommand],
       { timeout: 8_000 },
       async (error, _stdout, stderr) => {
         if (error) {
@@ -193,9 +206,10 @@ function startSession(
           })
           return
         }
-        const isReady = transport === 'cli'
-          ? () => sessionHasShellReady(tmuxBin, sessionName)
-          : () => sessionHasHermesTui(tmuxBin, sessionName)
+        const isReady =
+          transport === 'cli'
+            ? () => sessionHasShellReady(tmuxBin, sessionName)
+            : () => sessionHasHermesTui(tmuxBin, sessionName)
         const maxRetries = 10
         let ready = false
         for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -234,9 +248,13 @@ async function injectHandoffPrompt(
     `Read it (and matching .md file) to re-ground, then wait for the next assignment.`
   try {
     await new Promise<void>((resolve, reject) => {
-      const child = execFile(tmuxBin, ['load-buffer', '-b', `swarm-start-${workerId}`, '-'], {
-        encoding: 'utf8',
-      })
+      const child = execFile(
+        tmuxBin,
+        ['load-buffer', '-b', `swarm-start-${workerId}`, '-'],
+        {
+          encoding: 'utf8',
+        },
+      )
       child.stdin?.write(prompt)
       child.stdin?.end()
       child.on('close', (code) => {
@@ -254,16 +272,23 @@ async function injectHandoffPrompt(
         (err) => {
           if (err) return reject(err)
           setTimeout(() => {
-            execFile(tmuxBin, ['send-keys', '-t', target, 'Enter'], (enterErr) => {
-              if (enterErr) return reject(enterErr)
-              resolve()
-            })
+            execFile(
+              tmuxBin,
+              ['send-keys', '-t', target, 'Enter'],
+              (enterErr) => {
+                if (enterErr) return reject(enterErr)
+                resolve()
+              },
+            )
           }, 150)
         },
       )
     })
   } catch (err) {
-    console.error(`[swarm-tmux-start] failed to inject handoff for ${workerId}:`, err)
+    console.error(
+      `[swarm-tmux-start] failed to inject handoff for ${workerId}:`,
+      err,
+    )
   }
 }
 
@@ -350,12 +375,13 @@ export const Route = createFileRoute('/api/swarm-tmux-start')({
         const sessionName = `swarm-${workerId}`
         const transportMode = resolveTmuxTransportMode()
         const sessionExists = await tmuxHasSession(tmuxBin, sessionName)
-        const sessionUsable = sessionExists && (await tmuxSessionUsable(tmuxBin, sessionName))
-        const sessionReady = sessionUsable && (
-          transportMode === 'cli'
+        const sessionUsable =
+          sessionExists && (await tmuxSessionUsable(tmuxBin, sessionName))
+        const sessionReady =
+          sessionUsable &&
+          (transportMode === 'cli'
             ? await sessionHasShellReady(tmuxBin, sessionName)
-            : await sessionHasHermesTui(tmuxBin, sessionName)
-        )
+            : await sessionHasHermesTui(tmuxBin, sessionName))
         if (sessionUsable && sessionReady) {
           return json({
             workerId,

@@ -148,7 +148,9 @@ async function uploadFilesToPath(
       body: form,
     })
     if (!res.ok) {
-      const data = (await res.json().catch(() => null)) as { error?: string } | null
+      const data = (await res.json().catch(() => null)) as {
+        error?: string
+      } | null
       throw new Error(data?.error || `Upload failed (${res.status})`)
     }
   }
@@ -193,7 +195,9 @@ async function collectOsDropFiles(
 ): Promise<Array<{ file: File; relativePath: string }>> {
   const items = Array.from(dataTransfer.items || [])
   const hasEntries = items.some(
-    (item) => typeof (item as DataTransferItem & { webkitGetAsEntry?: () => unknown }).webkitGetAsEntry === 'function',
+    (item) =>
+      typeof (item as DataTransferItem & { webkitGetAsEntry?: () => unknown })
+        .webkitGetAsEntry === 'function',
   )
   if (!hasEntries) {
     return Array.from(dataTransfer.files || []).map((file) => ({
@@ -545,8 +549,7 @@ export function FileExplorerSidebar({
         })
         if (
           previewPath === entry.path ||
-          (entry.type === 'folder' &&
-            previewPath?.startsWith(`${entry.path}/`))
+          (entry.type === 'folder' && previewPath?.startsWith(`${entry.path}/`))
         ) {
           setPreviewPath(null)
         }
@@ -578,7 +581,9 @@ export function FileExplorerSidebar({
       const anchor = document.createElement('a')
       anchor.href = url
       anchor.download =
-        entry.type === 'folder' ? `${entry.name || 'workspace'}.zip` : entry.name
+        entry.type === 'folder'
+          ? `${entry.name || 'workspace'}.zip`
+          : entry.name
       anchor.click()
       URL.revokeObjectURL(url)
     },
@@ -615,9 +620,7 @@ export function FileExplorerSidebar({
           path: entry.path || '.',
         })
         toast(
-          data?.remote
-            ? 'Opening remote path in editor'
-            : 'Opened in editor',
+          data?.remote ? 'Opening remote path in editor' : 'Opened in editor',
         )
       } catch (err) {
         toast(err instanceof Error ? err.message : String(err), {
@@ -639,7 +642,9 @@ export function FileExplorerSidebar({
           error?: string
         } | null
         if (!res.ok || !data?.path) {
-          throw new Error(data?.error || `Failed to resolve path (${res.status})`)
+          throw new Error(
+            data?.error || `Failed to resolve path (${res.status})`,
+          )
         }
         await copyText(data.path)
         toast('Path copied')
@@ -674,7 +679,9 @@ export function FileExplorerSidebar({
         await uploadFilesToPath(workspaceProfileName, targetPath, files)
         await refresh()
         toast(
-          files.length === 1 ? 'Uploaded 1 file' : `Uploaded ${files.length} files`,
+          files.length === 1
+            ? 'Uploaded 1 file'
+            : `Uploaded ${files.length} files`,
         )
       } catch (err) {
         setCrudError(err instanceof Error ? err.message : String(err))
@@ -882,10 +889,7 @@ export function FileExplorerSidebar({
       const isRenaming = renamingPath === entry.path
 
       return (
-          <div
-            key={entry.path}
-            data-file-row
-          >
+        <div key={entry.path} data-file-row>
           <div
             draggable={!isRenaming}
             onDragStart={(event) => {
@@ -968,7 +972,8 @@ export function FileExplorerSidebar({
               'hover:bg-primary-200',
               isActiveFile &&
                 'bg-accent-100 font-medium text-accent-800 hover:bg-accent-100',
-              isDropTarget && 'bg-accent-50 outline outline-1 outline-accent-400',
+              isDropTarget &&
+                'bg-accent-50 outline outline-1 outline-accent-400',
             )}
             style={{ paddingLeft: padding }}
           >
@@ -1059,18 +1064,15 @@ export function FileExplorerSidebar({
     ],
   )
 
-  const handleTreeDragOver = useCallback(
-    (event: React.DragEvent) => {
-      if (isWorkspaceMoveDrag(event) || isOsFilesDrag(event)) {
-        event.preventDefault()
-        event.dataTransfer.dropEffect = isWorkspaceMoveDrag(event)
-          ? 'move'
-          : 'copy'
-        setDropTargetPath('')
-      }
-    },
-    [],
-  )
+  const handleTreeDragOver = useCallback((event: React.DragEvent) => {
+    if (isWorkspaceMoveDrag(event) || isOsFilesDrag(event)) {
+      event.preventDefault()
+      event.dataTransfer.dropEffect = isWorkspaceMoveDrag(event)
+        ? 'move'
+        : 'copy'
+      setDropTargetPath('')
+    }
+  }, [])
 
   const handleTreeDrop = useCallback(
     (event: React.DragEvent) => {
@@ -1185,7 +1187,9 @@ export function FileExplorerSidebar({
       className={cn(
         'bg-primary-100 relative h-full flex flex-col opacity-100',
         resizing ? '' : 'transition-[width] duration-200 ease-out',
-        side === 'right' ? 'border-l border-primary-200' : 'border-r border-primary-200',
+        side === 'right'
+          ? 'border-l border-primary-200'
+          : 'border-r border-primary-200',
         className,
       )}
       style={{ width: panelWidth }}
@@ -1200,7 +1204,9 @@ export function FileExplorerSidebar({
         className={cn(
           'absolute top-0 z-20 h-full w-1.5 cursor-col-resize touch-none',
           'hover:bg-accent-400/40 active:bg-accent-500/50',
-          side === 'right' ? 'left-0 -translate-x-1/2' : 'right-0 translate-x-1/2',
+          side === 'right'
+            ? 'left-0 -translate-x-1/2'
+            : 'right-0 translate-x-1/2',
           resizing && 'bg-accent-500/50',
         )}
       />
@@ -1208,7 +1214,11 @@ export function FileExplorerSidebar({
       <div className="flex items-center justify-between h-12 px-3 border-b border-primary-200">
         <div
           className="min-w-0 truncate text-sm font-semibold text-primary-900"
-          title={previewActive && previewPath ? previewPath : workspacePath || undefined}
+          title={
+            previewActive && previewPath
+              ? previewPath
+              : workspacePath || undefined
+          }
         >
           {previewActive && previewPath
             ? previewPath.split(/[\\/]/).pop() || previewPath
@@ -1291,7 +1301,9 @@ export function FileExplorerSidebar({
               className="w-full rounded-md border border-primary-200 bg-primary-50 px-2 py-1 text-sm text-primary-900 placeholder:text-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-300"
             />
             {crudError ? (
-              <p className="mt-1.5 text-xs text-red-700 text-pretty">{crudError}</p>
+              <p className="mt-1.5 text-xs text-red-700 text-pretty">
+                {crudError}
+              </p>
             ) : null}
           </div>
 
@@ -1326,8 +1338,12 @@ export function FileExplorerSidebar({
                   entry: { name: workspaceLabel, path: '', type: 'folder' },
                 })
               }}
-            >              {loading ? (
-                <div className="px-3 py-2 text-xs text-primary-500">Loading…</div>
+            >
+              {' '}
+              {loading ? (
+                <div className="px-3 py-2 text-xs text-primary-500">
+                  Loading…
+                </div>
               ) : !workspacePath ? (
                 <div className="flex flex-col items-center justify-center gap-3 px-4 py-8 text-center">
                   <div className="flex size-10 items-center justify-center rounded-xl border border-primary-200 bg-primary-100/60">
@@ -1565,7 +1581,8 @@ export function FileExplorerSidebar({
                   setContextMenu(null)
                 }}
               >
-                <HugeiconsIcon icon={Download01Icon} size={16} /> Download folder
+                <HugeiconsIcon icon={Download01Icon} size={16} /> Download
+                folder
               </button>
             </>
           ) : (

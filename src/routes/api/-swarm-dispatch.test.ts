@@ -23,7 +23,9 @@ describe('resolveWaitForCheckpoint', () => {
   it('does not wait when explicitly async', () => {
     expect(resolveWaitForCheckpoint({ waitForCheckpoint: false })).toBe(false)
     expect(resolveWaitForCheckpoint({ allowAsync: true })).toBe(false)
-    expect(resolveWaitForCheckpoint({ waitForCheckpoint: false, allowAsync: true })).toBe(false)
+    expect(
+      resolveWaitForCheckpoint({ waitForCheckpoint: false, allowAsync: true }),
+    ).toBe(false)
   })
 })
 
@@ -33,11 +35,13 @@ describe('resolveDeliveryMode', () => {
   const originalTmuxMode = process.env.HERMES_SWARM_TMUX_MODE
 
   afterEach(() => {
-    if (originalForceOneshot === undefined) delete process.env.HERMES_SWARM_FORCE_ONESHOT
+    if (originalForceOneshot === undefined)
+      delete process.env.HERMES_SWARM_FORCE_ONESHOT
     else process.env.HERMES_SWARM_FORCE_ONESHOT = originalForceOneshot
     if (originalTmuxBin === undefined) delete process.env.TMUX_BIN
     else process.env.TMUX_BIN = originalTmuxBin
-    if (originalTmuxMode === undefined) delete process.env.HERMES_SWARM_TMUX_MODE
+    if (originalTmuxMode === undefined)
+      delete process.env.HERMES_SWARM_TMUX_MODE
     else process.env.HERMES_SWARM_TMUX_MODE = originalTmuxMode
   })
 
@@ -71,10 +75,22 @@ describe('resolveDeliveryMode', () => {
 
   it('honors explicit request overrides', () => {
     process.env.TMUX_BIN = '/usr/bin/tmux'
-    expect(resolveDeliveryMode('oneshot')).toEqual({ mode: 'oneshot', fallback: null })
-    expect(resolveDeliveryMode('tmux-tui')).toEqual({ mode: 'tmux-tui', fallback: null })
-    expect(resolveDeliveryMode('tmux-cli')).toEqual({ mode: 'tmux-cli', fallback: null })
-    expect(resolveDeliveryMode('tmux')).toEqual({ mode: 'tmux-tui', fallback: null })
+    expect(resolveDeliveryMode('oneshot')).toEqual({
+      mode: 'oneshot',
+      fallback: null,
+    })
+    expect(resolveDeliveryMode('tmux-tui')).toEqual({
+      mode: 'tmux-tui',
+      fallback: null,
+    })
+    expect(resolveDeliveryMode('tmux-cli')).toEqual({
+      mode: 'tmux-cli',
+      fallback: null,
+    })
+    expect(resolveDeliveryMode('tmux')).toEqual({
+      mode: 'tmux-tui',
+      fallback: null,
+    })
   })
 
   it('warns once when deprecated HERMES_SWARM_USE_LIVE is set', () => {
@@ -107,7 +123,9 @@ describe('checkpointFromRuntimeSnapshot', () => {
     expect(checkpoint).not.toBeNull()
     expect(checkpoint?.stateLabel).toBe('DONE')
     expect(checkpoint?.checkpointStatus).toBe('done')
-    expect(checkpoint?.result).toBe('Structured checkpoint returned to RouterChat')
+    expect(checkpoint?.result).toBe(
+      'Structured checkpoint returned to RouterChat',
+    )
     expect(checkpoint?.nextAction).toBe('Verify in UI flow')
     expect(checkpoint?.raw).toContain('STATE: DONE')
   })
@@ -132,9 +150,30 @@ describe('checkpointFromRuntimeSnapshot', () => {
 
 describe('dispatchBlockReason', () => {
   it('turns failed or timed-out dispatch results into mission blocker text', () => {
-    expect(dispatchBlockReason({ ok: false, error: 'Command failed: worker exited', output: '', checkpointStatus: undefined })).toBe('Command failed: worker exited')
-    expect(dispatchBlockReason({ ok: true, error: null, output: 'Delivered', checkpointStatus: 'timeout' })).toBe('No fresh checkpoint before poll timeout.')
-    expect(dispatchBlockReason({ ok: true, error: null, output: 'Checkpoint DONE', checkpointStatus: 'checkpointed' })).toBeNull()
+    expect(
+      dispatchBlockReason({
+        ok: false,
+        error: 'Command failed: worker exited',
+        output: '',
+        checkpointStatus: undefined,
+      }),
+    ).toBe('Command failed: worker exited')
+    expect(
+      dispatchBlockReason({
+        ok: true,
+        error: null,
+        output: 'Delivered',
+        checkpointStatus: 'timeout',
+      }),
+    ).toBe('No fresh checkpoint before poll timeout.')
+    expect(
+      dispatchBlockReason({
+        ok: true,
+        error: null,
+        output: 'Checkpoint DONE',
+        checkpointStatus: 'checkpointed',
+      }),
+    ).toBeNull()
   })
 })
 
@@ -154,7 +193,13 @@ describe('runtimeSnapshotIsFresh', () => {
     }
     const dispatchedAt = 1_746_000_000_000
 
-    expect(runtimeSnapshotIsFresh(baseline, runtimeCheckpointSignature(baseline), dispatchedAt)).toBe(false)
+    expect(
+      runtimeSnapshotIsFresh(
+        baseline,
+        runtimeCheckpointSignature(baseline),
+        dispatchedAt,
+      ),
+    ).toBe(false)
 
     const updated = {
       ...baseline,
@@ -166,7 +211,13 @@ describe('runtimeSnapshotIsFresh', () => {
       checkpointTimestamp: 1_746_000_001_000,
     }
 
-    expect(runtimeSnapshotIsFresh(updated, runtimeCheckpointSignature(baseline), dispatchedAt)).toBe(true)
+    expect(
+      runtimeSnapshotIsFresh(
+        updated,
+        runtimeCheckpointSignature(baseline),
+        dispatchedAt,
+      ),
+    ).toBe(true)
   })
 })
 
@@ -210,7 +261,9 @@ describe('buildHermesTmuxExecCommand', () => {
       hermesBin: '/usr/bin/hermes',
     })
     expect(command).toContain("exec '/usr/bin/hermes' chat --tui")
-    expect(command).toContain("HERMES_HOME='/home/user/.hermes/profiles/researcher'")
+    expect(command).toContain(
+      "HERMES_HOME='/home/user/.hermes/profiles/researcher'",
+    )
   })
 })
 
@@ -306,8 +359,12 @@ describe('buildWorkerPrompt', () => {
 
     expect(prompt).toContain('Worker: Builder — Primary Builder')
     expect(prompt).toContain('Machine ID: swarm5')
-    expect(prompt).toContain('Mission: Ship focused product slices with tests and clean diffs.')
-    expect(prompt).toContain('Capabilities: code-editing, ui-implementation, build-verification')
+    expect(prompt).toContain(
+      'Mission: Ship focused product slices with tests and clean diffs.',
+    )
+    expect(prompt).toContain(
+      'Capabilities: code-editing, ui-implementation, build-verification',
+    )
     expect(prompt).toContain('Skills: swarm-ui-worker, swarm-worker-core')
   })
 

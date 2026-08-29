@@ -1,9 +1,16 @@
 import { ensureCollabDb, getCollabDbPath } from '../collab-db'
 import { openSqliteDatabase } from '../sqlite-helper'
-import {  getSwarmMission } from '../swarm-missions'
-import type {SwarmMissionAssignment} from '../swarm-missions';
+import { getSwarmMission } from '../swarm-missions'
+import { existsSync } from 'node:fs'
+import type { SwarmMissionAssignment } from '../swarm-missions'
 
-export type TaskRunStatus = 'running' | 'done' | 'blocked' | 'needs_input' | 'failed' | 'cancelled'
+export type TaskRunStatus =
+  | 'running'
+  | 'done'
+  | 'blocked'
+  | 'needs_input'
+  | 'failed'
+  | 'cancelled'
 
 export const TASK_RUN_STATUSES: ReadonlyArray<TaskRunStatus> = [
   'running',
@@ -69,12 +76,14 @@ export function startTaskRun(input: {
   const startedAt = now()
   const db = openSqliteDatabase(dbPath, false)
   try {
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO task_runs
       (id, task_id, mission_id, assignment_id, room_id, agent_id, runtime, status, started_at, ended_at,
        summary, blocker, next_action, log_path, checkpoint_json, project_id, branch, base_ref, head_sha, worktree_path, files_changed)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?, ?, NULL, ?, NULL)
-    `).run(
+    `,
+    ).run(
       id,
       input.taskId,
       input.missionId,
@@ -143,28 +152,32 @@ export function completeTaskRun(input: {
   const dbPath = input.dbPath ?? getCollabDbPath()
   const db = openSqliteDatabase(dbPath, false)
   try {
-    const result = db.prepare(`
+    const result = db
+      .prepare(
+        `
       UPDATE task_runs
       SET status = ?, ended_at = ?, summary = ?, blocker = ?, next_action = ?, log_path = ?, checkpoint_json = ?, head_sha = ?, files_changed = ?
       WHERE id = ? AND status = 'running'
         AND (? IS NULL OR assignment_id = ?)
         AND (? IS NULL OR agent_id = ?)
-    `).run(
-      input.status,
-      now(),
-      input.summary ?? null,
-      input.blocker ?? null,
-      input.nextAction ?? null,
-      input.logPath ?? null,
-      input.checkpointJson ?? null,
-      input.headSha ?? null,
-      input.filesChanged ?? null,
-      input.runId,
-      input.assignmentId ?? null,
-      input.assignmentId ?? null,
-      input.agentId ?? null,
-      input.agentId ?? null,
-    )
+    `,
+      )
+      .run(
+        input.status,
+        now(),
+        input.summary ?? null,
+        input.blocker ?? null,
+        input.nextAction ?? null,
+        input.logPath ?? null,
+        input.checkpointJson ?? null,
+        input.headSha ?? null,
+        input.filesChanged ?? null,
+        input.runId,
+        input.assignmentId ?? null,
+        input.assignmentId ?? null,
+        input.agentId ?? null,
+        input.agentId ?? null,
+      )
     return result.changes > 0
   } finally {
     db.close()
@@ -206,6 +219,23 @@ export function getTaskRun(runId: string, dbPath?: string): TaskRun | null {
   }
 }
 
+export function countRunningRunsForAgent(agentId: string, dbPath?: string): number {
+  const path = dbPath ?? getCollabDbPath()
+  if (!existsSync(path)) return 0
+  const db = openSqliteDatabase(path, true)
+  try {
+    const rows = db
+      .prepare(
+        "SELECT COUNT(*) as count FROM task_runs WHERE agent_id = ? AND status = 'running'",
+      )
+      .all(agentId)
+    if (rows.length === 0) return 0
+    return Number(rows[0].count)
+  } finally {
+    db.close()
+  }
+}
+
 export function getTaskForAgent(input: {
   missionId: string
   assignmentId: string
@@ -213,7 +243,9 @@ export function getTaskForAgent(input: {
 }): { task: SwarmMissionAssignment; missionTitle: string } | null {
   const mission = getSwarmMission(input.missionId)
   if (!mission) return null
-  const assignment = mission.assignments.find((item) => item.id === input.assignmentId)
+  const assignment = mission.assignments.find(
+    (item) => item.id === input.assignmentId,
+  )
   if (!assignment) return null
   if (assignment.workerId !== input.agentId) return null
   return { task: assignment, missionTitle: mission.title }

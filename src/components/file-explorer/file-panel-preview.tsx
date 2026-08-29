@@ -190,7 +190,9 @@ export function FilePanelPreview({
   )
 
   return (
-    <div className={cn('flex h-full min-h-0 flex-col bg-primary-50', className)}>
+    <div
+      className={cn('flex h-full min-h-0 flex-col bg-primary-50', className)}
+    >
       <div className="flex shrink-0 items-center gap-1 border-b border-primary-200 px-2 py-1.5">
         <div className="min-w-0 flex-1">
           <div
@@ -226,7 +228,13 @@ export function FilePanelPreview({
             title={editing ? (dirty ? 'Save' : 'Done') : 'Edit'}
           >
             <HugeiconsIcon icon={Pen01Icon} size={13} />
-            {editing ? (dirty ? (saving ? 'Saving…' : 'Save') : 'Done') : 'Edit'}
+            {editing
+              ? dirty
+                ? saving
+                  ? 'Saving…'
+                  : 'Save'
+                : 'Done'
+              : 'Edit'}
           </Button>
         ) : null}
         {kind === 'html' || kind === 'pdf' || kind === 'image' ? (
@@ -235,7 +243,9 @@ export function FilePanelPreview({
             variant="ghost"
             title="Open in browser"
             aria-label="Open in browser"
-            onClick={() => window.open(viewUrl, '_blank', 'noopener,noreferrer')}
+            onClick={() =>
+              window.open(viewUrl, '_blank', 'noopener,noreferrer')
+            }
           >
             <HugeiconsIcon icon={ExternalLink} size={14} />
           </Button>
@@ -345,9 +355,7 @@ export function FilePanelPreview({
             </div>
           ) : (
             <div className="px-2 py-4 text-xs text-primary-500">
-              {csvPreview && !csvPreview.ok
-                ? csvPreview.error
-                : 'No CSV data'}
+              {csvPreview && !csvPreview.ok ? csvPreview.error : 'No CSV data'}
             </div>
           )
         ) : kind === 'markdown' && !editing && !markdownAsPlain ? (

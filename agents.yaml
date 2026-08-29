@@ -31,7 +31,7 @@ agents:
     runtime: claude-code
     displayName: Claude Code
     command: claude
-    args: ["-p"]
+    args: ['-p']
     mentionName: claude
   - id: codex-impl
     runtime: codex

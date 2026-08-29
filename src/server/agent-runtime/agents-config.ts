@@ -29,6 +29,7 @@ export type AgentDeclaration = {
   args?: Array<string>
   execution: AgentExecution
   capabilities: Array<string>
+  maxConcurrentTasks?: number
   mentionName?: string
   displayName?: string
 }
@@ -42,19 +43,53 @@ export type AgentsRegistry = {
   orphanProfiles: Array<string>
 }
 
-const RUNTIMES: ReadonlyArray<AgentRuntimeKind> = ['hermes', 'claude-code', 'codex', 'deepseek-harness']
+const RUNTIMES: ReadonlyArray<AgentRuntimeKind> = [
+  'hermes',
+  'claude-code',
+  'codex',
+  'deepseek-harness',
+]
 
 export function getAgentsYamlPath(repoRoot?: string): string {
   return path.join(repoRoot ?? process.cwd(), 'agents.yaml')
 }
 
-/** Read a hermes profile's terminal.backend for execution auto-detection. */
-function detectExecutionFromProfile(profileId: string): AgentExecution | null {
-  const configPath = path.join(homedir(), '.hermes', 'profiles', profileId, 'config.yaml')
+/** Read a hermes profile's terminal.ssh_host (P2b ssh locality). */
+export function getProfileSshHost(profileId: string): string | null {
+  const configPath = path.join(
+    homedir(),
+    '.hermes',
+    'profiles',
+    profileId,
+    'config.yaml',
+  )
   try {
     const raw = fs.readFileSync(configPath, 'utf-8')
     const parsed = YAML.parse(raw) as Record<string, unknown> | null
-    const backend = (parsed?.terminal as Record<string, unknown> | undefined)?.backend
+    const sshHost = (parsed?.terminal as Record<string, unknown> | undefined)
+      ?.ssh_host
+    return typeof sshHost === 'string' ? sshHost : null
+  } catch {
+    return null
+  }
+}
+
+/** Read a hermes profile's terminal.backend for execution auto-detection. */
+export function detectExecutionFromProfile(
+  profileId: string,
+): AgentExecution | null {
+  const configPath = path.join(
+    homedir(),
+    '.hermes',
+    'profiles',
+    profileId,
+    'config.yaml',
+  )
+  try {
+    const raw = fs.readFileSync(configPath, 'utf-8')
+    const parsed = YAML.parse(raw) as Record<string, unknown> | null
+    const backend = (parsed?.terminal as Record<string, unknown> | undefined)
+      ?.backend
     if (backend === 'ssh') return 'ssh'
     if (typeof backend === 'string') return 'local'
     return null
@@ -83,10 +118,17 @@ export function loadAgentsRegistry(input?: {
   rawYaml?: string
 }): AgentsRegistry {
   const filePath = getAgentsYamlPath(input?.repoRoot)
-  const raw = input?.rawYaml ?? (fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : null)
+  const raw =
+    input?.rawYaml ??
+    (fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : null)
   if (raw === null) {
     // No agents.yaml: empty registry, every hermes profile is an orphan.
-    return { version: 1, agents: [], byId: new Map(), orphanProfiles: listHermesProfiles() }
+    return {
+      version: 1,
+      agents: [],
+      byId: new Map(),
+      orphanProfiles: listHermesProfiles(),
+    }
   }
 
   const doc = YAML.parse(raw) as {
@@ -113,7 +155,10 @@ export function loadAgentsRegistry(input?: {
     if (entry.execution === 'ssh' || entry.execution === 'local') {
       execution = entry.execution
     } else {
-      execution = (entry.profile ? detectExecutionFromProfile(String(entry.profile)) : null) ?? 'local'
+      execution =
+        (entry.profile
+          ? detectExecutionFromProfile(String(entry.profile))
+          : null) ?? 'local'
     }
 
     // ssh locality is hermes-only (plan 行 583).
@@ -147,19 +192,27 @@ export function loadAgentsRegistry(input?: {
       args: Array.isArray(entry.args) ? entry.args.map(String) : undefined,
       execution,
       capabilities,
+      maxConcurrentTasks:
+        typeof entry.maxConcurrentTasks === 'number'
+          ? entry.maxConcurrentTasks
+          : 1,
       mentionName: entry.mentionName ? String(entry.mentionName) : undefined,
       displayName: entry.displayName ? String(entry.displayName) : undefined,
     })
   }
 
   if (errors.length > 0) {
-    throw new Error(`agents.yaml validation failed:\n  - ${errors.join('\n  - ')}`)
+    throw new Error(
+      `agents.yaml validation failed:\n  - ${errors.join('\n  - ')}`,
+    )
   }
 
   // Orphan reconciliation (plan 行 130/1249): hermes profiles on disk that
   // no declared agent references. Reported, not silently ignored.
   const declaredProfiles = new Set(agents.map((a) => a.profile).filter(Boolean))
-  const orphanProfiles = listHermesProfiles().filter((p) => !declaredProfiles.has(p))
+  const orphanProfiles = listHermesProfiles().filter(
+    (p) => !declaredProfiles.has(p),
+  )
 
   return {
     version: doc?.version ?? 1,

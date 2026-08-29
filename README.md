@@ -70,20 +70,20 @@ Details: [hermes_langgraph_orchestrator/README.md](./hermes_langgraph_orchestrat
 
 ## 📸 Screenshots
 
-|                 Chat                 |                  Conductor                   |
-| :----------------------------------: | :------------------------------------------: |
+|                 Chat                 |                   Conductor                    |
+| :----------------------------------: | :--------------------------------------------: |
 | ![Chat](./docs/screenshots/chat.png) | ![Conductor](./docs/screenshots/conductor.png) |
 
-|                   Dashboard                  |                  Memory                  |
-| :------------------------------------------: | :--------------------------------------: |
+|                   Dashboard                    |                  Memory                  |
+| :--------------------------------------------: | :--------------------------------------: |
 | ![Dashboard](./docs/screenshots/dashboard.png) | ![Memory](./docs/screenshots/memory.png) |
 
 |                   Terminal                   |                   Settings                   |
 | :------------------------------------------: | :------------------------------------------: |
 | ![Terminal](./docs/screenshots/terminal.png) | ![Settings](./docs/screenshots/settings.png) |
 
-|                  Tasks                  |                 Jobs                 |
-| :--------------------------------------: | :----------------------------------: |
+|                 Tasks                  |                 Jobs                 |
+| :------------------------------------: | :----------------------------------: |
 | ![Tasks](./docs/screenshots/tasks.png) | ![Jobs](./docs/screenshots/jobs.png) |
 
 ---
@@ -92,11 +92,11 @@ Details: [hermes_langgraph_orchestrator/README.md](./hermes_langgraph_orchestrat
 
 Three paths — pick the one that matches you:
 
-| Path | Best for | Time |
-|---|---|---|
+| Path                                         | Best for                                         | Time   |
+| -------------------------------------------- | ------------------------------------------------ | ------ |
 | **🐳 [Docker Compose](#-docker-quickstart)** | Self-hosters, home labs, "give me a compose gig" | ~2 min |
-| **🌐 One-line install** | Local dev on macOS/Linux | ~3 min |
-| **🔌 Attach to existing `hermes-agent`** | You already run Hermes Agent | ~1 min |
+| **🌐 One-line install**                      | Local dev on macOS/Linux                         | ~3 min |
+| **🔌 Attach to existing `hermes-agent`**     | You already run Hermes Agent                     | ~1 min |
 
 ### One-line install
 
@@ -141,13 +141,13 @@ Requirements on the agent side:
 
 - Gateway bound to an address the workspace can reach (typically `API_SERVER_HOST=0.0.0.0` + the port exposed).
 - `API_SERVER_ENABLED=true` in `~/.hermes/.env` (or the agent's env) so the gateway serves core APIs on `:8642`.
-- *(Optional)* `hermes dashboard` on `http://127.0.0.1:9119` for analytics and external link features. Sessions, skills, config, and jobs are now served from the local profile directory without the dashboard.
+- _(Optional)_ `hermes dashboard` on `http://127.0.0.1:9119` for analytics and external link features. Sessions, skills, config, and jobs are now served from the local profile directory without the dashboard.
 - If `API_SERVER_KEY` is set, the workspace must pass the same value via `HERMES_API_TOKEN` — otherwise leave both unset.
 
 Verify both services before opening the workspace:
 
 - `curl http://127.0.0.1:8642/health` should return ok.
-- *(Optional)* `curl http://127.0.0.1:9119/api/status` should return dashboard metadata (only needed if you run the dashboard for analytics).
+- _(Optional)_ `curl http://127.0.0.1:9119/api/status` should return dashboard metadata (only needed if you run the dashboard for analytics).
 - `curl http://127.0.0.1:3000/api/sessions` (after the workspace boots) should return a sessions payload or an empty list.
 
 If `/api/sessions` is already returning data, **do not start another gateway just because the UI still says Offline** — refresh or reprobe the Workspace UI first.
@@ -190,7 +190,7 @@ Hermes Workspace works with any OpenAI-compatible backend. If your backend also 
 - **Node.js 22+** — [nodejs.org](https://nodejs.org/)
 - **An OpenAI-compatible backend** — local, self-hosted, or remote
 - **Optional:** Python 3.11+ if you want to run a Hermes Agent gateway locally
-- **Swarm / LangGraph missions:** Python **≥ 3.10** and a one-time `hermes_langgraph_orchestrator/.venv` (see [orchestrator README](./hermes_langgraph_orchestrator/README.md)); 
+- **Swarm / LangGraph missions:** Python **≥ 3.10** and a one-time `hermes_langgraph_orchestrator/.venv` (see [orchestrator README](./hermes_langgraph_orchestrator/README.md));
 
 #### Step 1: Start your backend
 
@@ -377,6 +377,7 @@ To force a clean relaunch of the tmux session:
 ```
 
 Optional parameters:
+
 - `-Distro <name>` to target a non-default WSL distro
 - `-WorkspacePath </path/in/wsl>` if your clone is not at `~/hermes-workspace`
 - `-SessionName <name>` to use a custom tmux session name
@@ -408,23 +409,23 @@ HERMES_API_URL=http://127.0.0.1:8642
 
 ### Common pairing scenarios
 
-| Scenario | Set this |
-|---|---|
-| Workspace + gateway on the same machine | `HERMES_API_URL=http://127.0.0.1:8642` (optionally add `HERMES_DASHBOARD_URL` for analytics) |
-| Gateway on a remote server (Tailscale / VPN) | Set `HERMES_API_URL` to the reachable IP (e.g. `http://100.x.y.z:8642`) and add `API_SERVER_HOST=0.0.0.0` to the gateway's `~/.hermes/.env` |
-| Already-running `hermes-agent` from upstream installer | Just set `HERMES_API_URL` and skip the one-liner installer |
-| Multiple agent profiles | Profiles live under `~/.hermes/profiles/<name>` — see [API server & multi-profile gateways](#api-server--multi-profile-gateways) below |
+| Scenario                                               | Set this                                                                                                                                    |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Workspace + gateway on the same machine                | `HERMES_API_URL=http://127.0.0.1:8642` (optionally add `HERMES_DASHBOARD_URL` for analytics)                                                |
+| Gateway on a remote server (Tailscale / VPN)           | Set `HERMES_API_URL` to the reachable IP (e.g. `http://100.x.y.z:8642`) and add `API_SERVER_HOST=0.0.0.0` to the gateway's `~/.hermes/.env` |
+| Already-running `hermes-agent` from upstream installer | Just set `HERMES_API_URL` and skip the one-liner installer                                                                                  |
+| Multiple agent profiles                                | Profiles live under `~/.hermes/profiles/<name>` — see [API server & multi-profile gateways](#api-server--multi-profile-gateways) below      |
 
 ### API server & multi-profile gateways
 
 `API_SERVER_ENABLED` controls the OpenAI-compatible HTTP surface (`/health`, `/v1/models`, `/v1/chat/completions`, …) that **Workspace** pairs with. It is **not** required for every Hermes usage.
 
-| Usage | Need `API_SERVER_ENABLED=true`? |
-|---|---|
-| `hermes chat --tui` / classic CLI | No — uses `tui_gateway`, not `api_server` |
-| Cron / kanban dispatcher only | No |
-| Telegram / Discord / other messaging platforms | No — those are separate platform adapters |
-| Workspace, Open WebUI, or any client calling `:8642` HTTP APIs | **Yes** |
+| Usage                                                          | Need `API_SERVER_ENABLED=true`?           |
+| -------------------------------------------------------------- | ----------------------------------------- |
+| `hermes chat --tui` / classic CLI                              | No — uses `tui_gateway`, not `api_server` |
+| Cron / kanban dispatcher only                                  | No                                        |
+| Telegram / Discord / other messaging platforms                 | No — those are separate platform adapters |
+| Workspace, Open WebUI, or any client calling `:8642` HTTP APIs | **Yes**                                   |
 
 **Workspace pairing:** on localhost, Workspace lazy-starts **one API gateway per profile** on a stable port (default `:8642`, then `:8643`…). Switching the profile list only changes which port chat talks to — it does not restart other gateways. Point `HERMES_API_URL` at a remote host to keep single-gateway pairing. Swarm workers still use per-profile `HERMES_HOME` + tmux and do not go through this pool.
 
@@ -452,18 +453,18 @@ gateway:
 
 Example port map (adjust as needed):
 
-| Profile | Port |
-|---|---|
+| Profile               | Port   |
+| --------------------- | ------ |
 | default (`~/.hermes`) | `8642` |
-| architect | `8643` |
-| developer | `8644` |
-| gpuserver | `8645` |
-| learning | `8646` |
-| orchestrator | `8647` |
-| researcher | `8648` |
-| writer | `8649` |
+| architect             | `8643` |
+| developer             | `8644` |
+| gpuserver             | `8645` |
+| learning              | `8646` |
+| orchestrator          | `8647` |
+| researcher            | `8648` |
+| writer                | `8649` |
 
-Disable the pool with `HERMES_GATEWAY_POOL=0` (remote `HERMES_API_URL` already disables it). Multiplex (`gateway.multiplex_profiles: true` on a shared listener) remains an alternative; see Hermes Agent docs: *Running Many Gateways at Once*.
+Disable the pool with `HERMES_GATEWAY_POOL=0` (remote `HERMES_API_URL` already disables it). Multiplex (`gateway.multiplex_profiles: true` on a shared listener) remains an alternative; see Hermes Agent docs: _Running Many Gateways at Once_.
 
 > **Symlinked `.env`:** older swarm bootstrap linked `profiles/<name>/.env` → `~/.hermes/.env`, so every worker inherited `API_SERVER_PORT=8642`. Current `ensureSwarmProfileConfig` **copies** `.env` (strips `API_SERVER_PORT`). If a profile still has a symlink, gateway start **fails with a clear error** — fix by replacing it with a private file; do not re-symlink.
 
@@ -579,14 +580,14 @@ docker compose down && docker compose up -d
 
 ### Troubleshooting Docker
 
-| Symptom | Fix |
-|---|---|
-| `[workspace] refusing to start — HERMES_PASSWORD is unset` | Add `HERMES_PASSWORD=<secret>` to `.env` |
-| Login silently fails (no error, page reloads) | Add `COOKIE_SECURE=0` for HTTP, or `COOKIE_SECURE=1` + HTTPS |
-| `[Api_Server] Refusing to start: binding to 0.0.0.0 requires API_SERVER_KEY` | Add `API_SERVER_KEY=*** to `.env` |
-| `No user allowlists configured. All unauthorized users will be denied.` | Add `GATEWAY_ALLOW_ALL_USERS=true` to `.env` |
-| `CLAUDE_DASHBOARD_TOKEN is not set` warning | Set `CLAUDE_DASHBOARD_TOKEN` to the same value as `API_SERVER_KEY` |
-| 500 Internal Server Error on login after setting all the above | Clear browser cookies for the workspace domain, then retry |
+| Symptom                                                                      | Fix                                                                |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `[workspace] refusing to start — HERMES_PASSWORD is unset`                   | Add `HERMES_PASSWORD=<secret>` to `.env`                           |
+| Login silently fails (no error, page reloads)                                | Add `COOKIE_SECURE=0` for HTTP, or `COOKIE_SECURE=1` + HTTPS       |
+| `[Api_Server] Refusing to start: binding to 0.0.0.0 requires API_SERVER_KEY` | Add `API_SERVER_KEY=*** to `.env`                                  |
+| `No user allowlists configured. All unauthorized users will be denied.`      | Add `GATEWAY_ALLOW_ALL_USERS=true` to `.env`                       |
+| `CLAUDE_DASHBOARD_TOKEN is not set` warning                                  | Set `CLAUDE_DASHBOARD_TOKEN` to the same value as `API_SERVER_KEY` |
+| 500 Internal Server Error on login after setting all the above               | Clear browser cookies for the workspace domain, then retry         |
 
 ### Building from source
 
@@ -615,11 +616,11 @@ ghcr.io/outsourc-e/hermes-workspace:latest
 
 Available tags:
 
-| Tag | What it is |
-|---|---|
-| `latest` | Latest `main` commit (stable; recommended) |
-| `v2.0.0` | Pinned semver tag |
-| `main-<sha>` | Specific commit |
+| Tag          | What it is                                 |
+| ------------ | ------------------------------------------ |
+| `latest`     | Latest `main` commit (stable; recommended) |
+| `v2.0.0`     | Pinned semver tag                          |
+| `main-<sha>` | Specific commit                            |
 
 Minimal Coolify / Easypanel config:
 
@@ -628,8 +629,8 @@ service: hermes-workspace
 image: ghcr.io/outsourc-e/hermes-workspace:latest
 port: 3000
 env:
-  HERMES_API_URL: http://hermes-agent:8642   # point at your gateway
-  HERMES_API_TOKEN: ${API_SERVER_KEY}        # if gateway auth is enabled
+  HERMES_API_URL: http://hermes-agent:8642 # point at your gateway
+  HERMES_API_TOKEN: ${API_SERVER_KEY} # if gateway auth is enabled
 ```
 
 The image is built for `linux/amd64` and `linux/arm64`. Pair it with either
@@ -871,34 +872,34 @@ The Docker setup runs both automatically — no action needed if using `docker c
 
 ### Shipped ✅
 
-| Feature | What it does |
-|---|---|
-| Chat + SSE streaming | Live agent output with tool call rendering |
-| Files + Terminal | Full workspace file browser + cross-platform PTY |
-| Memory + Skills browsers | Edit memory, browse 2,000+ skills with marketplace |
-| Dashboard | Sessions, model mix, cost ledger, attention card |
-| Operations | Multi-agent management with preset personas |
-| Agent View | Live agent panel in chat |
-| Swarm Mode | Persistent tmux-backed worker pool with role dispatch |
-| MCP page | Full catalog + marketplace + sources |
-| Mobile PWA + Tailscale | Install as native-feeling app on any device |
-| Themes | Hermes / Nous / Bronze / Slate / Mono (light + dark) |
-| Capability gates | Graceful 'upstream not ready' placeholders |
-| Multi-provider | OpenAI/OpenAI-compatible, OpenRouter, Google, Ollama, LM Studio, vLLM, Atomic Chat, and other Hermes-supported providers |
+| Feature                  | What it does                                                                                                             |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| Chat + SSE streaming     | Live agent output with tool call rendering                                                                               |
+| Files + Terminal         | Full workspace file browser + cross-platform PTY                                                                         |
+| Memory + Skills browsers | Edit memory, browse 2,000+ skills with marketplace                                                                       |
+| Dashboard                | Sessions, model mix, cost ledger, attention card                                                                         |
+| Operations               | Multi-agent management with preset personas                                                                              |
+| Agent View               | Live agent panel in chat                                                                                                 |
+| Swarm Mode               | Persistent tmux-backed worker pool with role dispatch                                                                    |
+| MCP page                 | Full catalog + marketplace + sources                                                                                     |
+| Mobile PWA + Tailscale   | Install as native-feeling app on any device                                                                              |
+| Themes                   | Hermes / Nous / Bronze / Slate / Mono (light + dark)                                                                     |
+| Capability gates         | Graceful 'upstream not ready' placeholders                                                                               |
+| Multi-provider           | OpenAI/OpenAI-compatible, OpenRouter, Google, Ollama, LM Studio, vLLM, Atomic Chat, and other Hermes-supported providers |
 
 ### In progress 🔨
 
-| Feature | Status |
-|---|---|
-| Conductor missions | Workspace UI is shipped; uses dashboard mission API when available and Workspace-native Swarm fallback otherwise (see [#262](https://github.com/outsourc-e/hermes-workspace/issues/262)) |
-| Native Desktop App (Electron) | Spec'd; PWA install path works today |
+| Feature                       | Status                                                                                                                                                                                   |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Conductor missions            | Workspace UI is shipped; uses dashboard mission API when available and Workspace-native Swarm fallback otherwise (see [#262](https://github.com/outsourc-e/hermes-workspace/issues/262)) |
+| Native Desktop App (Electron) | Spec'd; PWA install path works today                                                                                                                                                     |
 
 ### Coming 🔜
 
-| Feature | Status |
-|---|---|
-| Cloud / Hosted version | Pending infra |
-| Team collaboration | Pending cloud + multi-tenant work |
+| Feature                | Status                            |
+| ---------------------- | --------------------------------- |
+| Cloud / Hosted version | Pending infra                     |
+| Team collaboration     | Pending cloud + multi-tenant work |
 
 ---
 

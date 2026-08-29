@@ -9,8 +9,11 @@
 
 import { execFile } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join } from 'node:path'
 import { SWARM_MEMORY_HANDOFFS } from './swarm-environment'
+import { getSwarmMission } from './swarm-missions'
+import { getProject } from './task-pipeline/projects'
+import { diffRange, localGitContext } from './git-ops'
 import type { ParsedSwarmCheckpoint } from './swarm-checkpoints'
 
 export type SwarmHandoff = {
@@ -66,64 +69,43 @@ function extractFilePaths(filesChangedText: string): Array<string> {
   return [...new Set(paths)]
 }
 
-function findGitRepoRoot(filePath: string): string | null {
-  let dir = resolve(dirname(filePath))
-  while (dir !== '/') {
-    if (existsSync(join(dir, '.git'))) return dir
-    const parent = dirname(dir)
-    if (parent === dir) break
-    dir = parent
-  }
-  return null
-}
+async function runGitDiff(
+  workerId: string,
+  runtime: Record<string, unknown>,
+): Promise<string> {
+  const missionId =
+    typeof runtime.currentMissionId === 'string'
+      ? runtime.currentMissionId
+      : null
+  if (!missionId) return ''
+  const mission = getSwarmMission(missionId)
+  if (!mission || !mission.projectId) return ''
+  const project = getProject(mission.projectId)
+  if (!project) return ''
 
-async function runGitDiff(filePaths: Array<string>): Promise<string> {
-  if (filePaths.length === 0) return ''
+  const assignmentId =
+    typeof runtime.currentAssignmentId === 'string'
+      ? runtime.currentAssignmentId
+      : null
+  const assignment = assignmentId
+    ? mission.assignments.find((a) => a.id === assignmentId)
+    : mission.assignments.find(
+        (a) => a.workerId === workerId && (a.baseRef || a.headSha),
+      )
+  const baseRef = assignment?.baseRef ?? null
+  const headSha = assignment?.headSha ?? null
+  if (!baseRef || !headSha) return ''
 
-  // Group files by git repo root so we can run one diff per repo.
-  const byRepo = new Map<string, Array<string>>()
-  for (const filePath of filePaths) {
-    if (!existsSync(filePath)) continue
-    const repoRoot = findGitRepoRoot(filePath)
-    if (!repoRoot) continue
-    const relative = filePath.slice(repoRoot.length + 1)
-    const list = byRepo.get(repoRoot) ?? []
-    list.push(relative)
-    byRepo.set(repoRoot, list)
-  }
-
-  const parts: Array<string> = []
-  for (const [repoRoot, relatives] of byRepo) {
-    try {
-      const diff = await new Promise<string>((fulfill, reject) => {
-        execFile(
-          'git',
-          ['-C', repoRoot, 'diff', 'HEAD', '--', ...relatives],
-          { encoding: 'utf8', maxBuffer: 2 * 1024 * 1024, timeout: 10_000 },
-          (error, stdout) => {
-            if (error) {
-              // git diff returns non-zero when there is no diff in some setups;
-              // trust stdout if present.
-              if (stdout) return fulfill(stdout)
-              return reject(error)
-            }
-            fulfill(stdout)
-          },
-        )
-      })
-      if (diff.trim()) {
-        parts.push(`# repo: ${repoRoot}\n${diff}`)
-      }
-    } catch {
-      /* ignore git errors */
+  try {
+    const ctx = localGitContext(project, missionId)
+    const diff = await diffRange(ctx, baseRef, headSha)
+    if (diff.length > MAX_GIT_DIFF_CHARS) {
+      return diff.slice(0, MAX_GIT_DIFF_CHARS) + '\n\n... (truncated)'
     }
+    return diff
+  } catch {
+    return ''
   }
-
-  const combined = parts.join('\n\n---\n\n')
-  if (combined.length > MAX_GIT_DIFF_CHARS) {
-    return combined.slice(0, MAX_GIT_DIFF_CHARS) + '\n\n... (truncated)'
-  }
-  return combined
 }
 
 async function captureTerminalOutput(workerId: string): Promise<string> {
@@ -132,7 +114,14 @@ async function captureTerminalOutput(workerId: string): Promise<string> {
     const output = await new Promise<string>((fulfill, reject) => {
       execFile(
         'tmux',
-        ['capture-pane', '-t', sessionName, '-p', '-S', `-${TMUX_CAPTURE_LINES}`],
+        [
+          'capture-pane',
+          '-t',
+          sessionName,
+          '-p',
+          '-S',
+          `-${TMUX_CAPTURE_LINES}`,
+        ],
         { encoding: 'utf8', maxBuffer: 2 * 1024 * 1024, timeout: 10_000 },
         (error, stdout) => {
           if (error) return reject(error)
@@ -153,7 +142,12 @@ async function captureTerminalOutput(workerId: string): Promise<string> {
 function splitCommands(commandsText: string): Array<string> {
   return commandsText
     .split('\n')
-    .map((line) => line.replace(/^[-*]\s+/, '').replace(/^`|`$/g, '').trim())
+    .map((line) =>
+      line
+        .replace(/^[-*]\s+/, '')
+        .replace(/^`|`$/g, '')
+        .trim(),
+    )
     .filter(Boolean)
 }
 
@@ -171,14 +165,20 @@ export async function buildHandoff(
 ): Promise<SwarmHandoff> {
   const filePaths = extractFilePaths(checkpoint.filesChanged ?? '')
   const [gitDiff, recentTerminalOutput] = await Promise.all([
-    runGitDiff(filePaths),
+    runGitDiff(workerId, runtime),
     captureTerminalOutput(workerId),
   ])
 
   return {
     workerId,
-    missionId: typeof runtime.currentMissionId === 'string' ? runtime.currentMissionId : null,
-    assignmentId: typeof runtime.currentAssignmentId === 'string' ? runtime.currentAssignmentId : null,
+    missionId:
+      typeof runtime.currentMissionId === 'string'
+        ? runtime.currentMissionId
+        : null,
+    assignmentId:
+      typeof runtime.currentAssignmentId === 'string'
+        ? runtime.currentAssignmentId
+        : null,
     generatedAt: new Date().toISOString(),
     state: checkpoint.stateLabel,
     result: sanitize(checkpoint.result),
@@ -205,16 +205,24 @@ function handoffToMarkdown(handoff: SwarmHandoff): string {
     handoff.result || '_no result_',
     '',
     '## Files changed',
-    handoff.filesChanged.length ? handoff.filesChanged.map((p) => `- \`${p}\``).join('\n') : '- none',
+    handoff.filesChanged.length
+      ? handoff.filesChanged.map((p) => `- \`${p}\``).join('\n')
+      : '- none',
     '',
     '## Commands run',
-    handoff.commandsRun.length ? handoff.commandsRun.map((c) => `- \`${c}\``).join('\n') : '- none',
+    handoff.commandsRun.length
+      ? handoff.commandsRun.map((c) => `- \`${c}\``).join('\n')
+      : '- none',
     '',
     '## Git diff',
-    handoff.gitDiff ? ['```diff', handoff.gitDiff, '```'].join('\n') : '- no git diff available',
+    handoff.gitDiff
+      ? ['```diff', handoff.gitDiff, '```'].join('\n')
+      : '- no git diff available',
     '',
     '## Recent terminal output',
-    handoff.recentTerminalOutput ? ['```', handoff.recentTerminalOutput, '```'].join('\n') : '- no terminal output captured',
+    handoff.recentTerminalOutput
+      ? ['```', handoff.recentTerminalOutput, '```'].join('\n')
+      : '- no terminal output captured',
     '',
     '## Blockers',
     handoff.blocker || 'none',
@@ -229,7 +237,9 @@ function handoffToMarkdown(handoff: SwarmHandoff): string {
 /**
  * Persist a handoff to the shared swarm handoff directory.
  */
-export async function writeHandoff(handoff: SwarmHandoff): Promise<{ jsonPath: string; markdownPath: string }> {
+export async function writeHandoff(
+  handoff: SwarmHandoff,
+): Promise<{ jsonPath: string; markdownPath: string }> {
   ensureHandoffDir()
   const jsonPath = handoffJsonPath(handoff.workerId)
   const markdownPath = handoffMarkdownPath(handoff.workerId)

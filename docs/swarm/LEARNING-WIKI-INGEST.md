@@ -30,10 +30,10 @@ Orchestrator 派发时注明：`Skill: learning-wiki-ingest`，`Input: missionId
 
 ## 分层原则
 
-| Wiki | Mission 归档 |
-|------|--------------|
+| Wiki                       | Mission 归档              |
+| -------------------------- | ------------------------- |
 | 可复用结论、定义、决策摘要 | 完整 spec、调研、审查记录 |
-| 带引用的关键事实 | handoff 运行时日志 |
+| 带引用的关键事实           | handoff 运行时日志        |
 
 ## Greenlight
 

@@ -2,10 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Editor } from '@monaco-editor/react'
 import { createFileRoute } from '@tanstack/react-router'
 import { HugeiconsIcon } from '@hugeicons/react'
-import {
-  Download01Icon,
-  ExternalLink,
-} from '@hugeicons/core-free-icons'
+import { Download01Icon, ExternalLink } from '@hugeicons/core-free-icons'
 import { Markdown } from '@/components/prompt-kit/markdown'
 import {
   ScrollAreaCorner,

@@ -36,21 +36,31 @@ export const Route = createFileRoute('/api/swarm-langgraph/run')({
         try {
           body = (await request.json()) as RunBody
         } catch {
-          return json({ ok: false, error: 'Invalid JSON body' }, { status: 400 })
+          return json(
+            { ok: false, error: 'Invalid JSON body' },
+            { status: 400 },
+          )
         }
 
         const missionGoal = cleanString(body.missionGoal)
         if (!missionGoal) {
-          return json({ ok: false, error: 'missionGoal required' }, { status: 400 })
+          return json(
+            { ok: false, error: 'missionGoal required' },
+            { status: 400 },
+          )
         }
 
-        const missionId = cleanString(body.missionId) ?? `lg-${Date.now().toString(36)}`
+        const missionId =
+          cleanString(body.missionId) ?? `lg-${Date.now().toString(36)}`
         const workflowId = cleanString(body.workflowId)
         const initialWorkers = cleanString(body.initialWorkers)
-        const maxIterations = typeof body.maxIterations === 'number'
-          ? Math.max(1, Math.min(20, Math.floor(body.maxIterations)))
-          : 5
-        const useMock = body.mock === true || new URL(request.url).searchParams.get('mock') === '1'
+        const maxIterations =
+          typeof body.maxIterations === 'number'
+            ? Math.max(1, Math.min(20, Math.floor(body.maxIterations)))
+            : 5
+        const useMock =
+          body.mock === true ||
+          new URL(request.url).searchParams.get('mock') === '1'
 
         const args = [
           '--execute',

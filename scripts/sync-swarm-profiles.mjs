@@ -29,7 +29,9 @@ function installWorkerWrappers(workers) {
     if (!name) continue
     const profile = w.id
     const profileHomeExpr =
-      profile === 'default' ? '$HOME/.hermes' : `$HOME/.hermes/profiles/${profile}`
+      profile === 'default'
+        ? '$HOME/.hermes'
+        : `$HOME/.hermes/profiles/${profile}`
     const script = `#!/usr/bin/env bash
 set -euo pipefail
 cd '${WS}'
@@ -61,9 +63,12 @@ function renderIdentity(w) {
   const role = w.role?.trim() || 'Worker'
   const specialty = w.specialty?.trim() || 'General execution'
   const model = w.model?.trim() || 'Unspecified'
-  const mission = w.mission?.trim() || 'Execute assigned swarm work and checkpoint progress.'
+  const mission =
+    w.mission?.trim() || 'Execute assigned swarm work and checkpoint progress.'
   const skills = w.skills?.length ? w.skills.join(', ') : 'swarm-worker-core'
-  const capabilities = w.capabilities?.length ? w.capabilities.join(', ') : 'not declared'
+  const capabilities = w.capabilities?.length
+    ? w.capabilities.join(', ')
+    : 'not declared'
   const lines = [
     `# IDENTITY.md — ${name}`,
     '',
@@ -102,7 +107,9 @@ function renderSwarmSoulExtension(w) {
   const name = w.name?.trim() || w.id
   const modes = w.modes?.length ? w.modes.join(', ') : 'none'
   const greenlight = w.greenlightRequiredFor?.length
-    ? w.greenlightRequiredFor.map((g) => `- ${g}: Requires human approval`).join('\n')
+    ? w.greenlightRequiredFor
+        .map((g) => `- ${g}: Requires human approval`)
+        .join('\n')
     : '- none declared'
 
   return [
@@ -138,7 +145,9 @@ function renderSoul(w) {
   const name = w.name?.trim() || w.id
   const modes = w.modes?.length ? w.modes.join(', ') : 'none'
   const greenlight = w.greenlightRequiredFor?.length
-    ? w.greenlightRequiredFor.map((g) => `- ${g}: Requires human approval`).join('\n')
+    ? w.greenlightRequiredFor
+        .map((g) => `- ${g}: Requires human approval`)
+        .join('\n')
     : '- none declared'
 
   const prohibitedById = {
@@ -268,11 +277,11 @@ for (const w of swarm.workers) {
     const cfg = yaml.parse(fs.readFileSync(configPath, 'utf8')) ?? {}
     if (w.tools?.length) {
       const preserve =
-        w.id === 'learning' ? ['hermes-cli', ...(cfg.toolsets ?? [])] : cfg.toolsets
-      cfg.toolsets =
         w.id === 'learning'
-          ? mergeToolsets(preserve, w.tools)
-          : [...w.tools]
+          ? ['hermes-cli', ...(cfg.toolsets ?? [])]
+          : cfg.toolsets
+      cfg.toolsets =
+        w.id === 'learning' ? mergeToolsets(preserve, w.tools) : [...w.tools]
     }
     if (w.id === 'orchestrator' && cfg.kanban) {
       cfg.kanban.orchestrator_profile = 'orchestrator'
@@ -282,7 +291,8 @@ for (const w of swarm.workers) {
   }
 
   const soulPath = path.join(profileDir, 'SOUL.md')
-  const soulContent = w.id === 'learning' ? mergeLearningSoul(w, profileDir) : renderSoul(w)
+  const soulContent =
+    w.id === 'learning' ? mergeLearningSoul(w, profileDir) : renderSoul(w)
   fs.writeFileSync(soulPath, soulContent)
 
   const memDir = path.join(profileDir, 'memory')
@@ -292,13 +302,17 @@ for (const w of swarm.workers) {
   const staleSwarmNest = path.join(profileDir, 'skills', 'swarm')
   if (fs.existsSync(staleSwarmNest)) {
     fs.rmSync(staleSwarmNest, { recursive: true, force: true })
-    results.push(`${w.id}: removed skills/swarm/ nest (fixes /slash name collision)`)
+    results.push(
+      `${w.id}: removed skills/swarm/ nest (fixes /slash name collision)`,
+    )
   }
   if (w.id === 'orchestrator') {
     const staleDispatch = path.join(profileDir, 'skills', 'workspace-dispatch')
     if (fs.existsSync(staleDispatch)) {
       fs.rmSync(staleDispatch, { recursive: true, force: true })
-      results.push(`${w.id}: removed workspace-dispatch from profile (not for CLI orchestrator)`)
+      results.push(
+        `${w.id}: removed workspace-dispatch from profile (not for CLI orchestrator)`,
+      )
     }
   }
   results.push(
@@ -309,9 +323,13 @@ for (const w of swarm.workers) {
 }
 
 const globalSynced = syncGlobalSwarmSkills(swarm.workers)
-results.push(`global: ${globalSynced} swarm skills → ~/.hermes/skills/swarm/ (for /slash commands)`)
+results.push(
+  `global: ${globalSynced} swarm skills → ~/.hermes/skills/swarm/ (for /slash commands)`,
+)
 
 const wrappers = installWorkerWrappers(swarm.workers)
-results.push(`wrappers: ${wrappers.length} → ~/.local/bin/ (${wrappers.join(', ')})`)
+results.push(
+  `wrappers: ${wrappers.length} → ~/.local/bin/ (${wrappers.join(', ')})`,
+)
 
 console.log(results.join('\n'))

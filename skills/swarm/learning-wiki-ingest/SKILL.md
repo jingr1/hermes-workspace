@@ -50,12 +50,12 @@ Note: publish greenlight required before external distribution
 
 ### Parameters
 
-| Param | Required | Default |
-|-------|----------|---------|
-| `missionId` | **yes** | — |
-| `allPending` | no | `false` — never implicit; only when user explicitly requests batch |
-| `dryRun` | no | `false` — orient + plan only, no wiki writes |
-| `skipRawCopy` | no | `false` — set true if raw already ingested |
+| Param         | Required | Default                                                            |
+| ------------- | -------- | ------------------------------------------------------------------ |
+| `missionId`   | **yes**  | —                                                                  |
+| `allPending`  | no       | `false` — never implicit; only when user explicitly requests batch |
+| `dryRun`      | no       | `false` — orient + plan only, no wiki writes                       |
+| `skipRawCopy` | no       | `false` — set true if raw already ingested                         |
 
 Mission root: `memory/swarm/missions/<missionId>/`
 
@@ -91,12 +91,12 @@ If zero candidates: `STATE: DONE` + `RESULT: No pending missions for wiki ingest
 
 ## Preconditions (stop if unmet)
 
-| Check | Action if fail |
-|-------|----------------|
-| `memory/swarm/missions/<missionId>/manifest.json` exists | `STATE: BLOCKED` — create manifest first |
-| `manifest.status` is `archived` (or user explicitly overrides) | warn; proceed only if user confirms |
-| `$WIKI/SCHEMA.md`, `index.md`, `log.md` exist | run `llm-wiki` init or `STATE: BLOCKED` |
-| `wikiIngest.status` is not already `done` | skip unless user requests re-ingest |
+| Check                                                          | Action if fail                           |
+| -------------------------------------------------------------- | ---------------------------------------- |
+| `memory/swarm/missions/<missionId>/manifest.json` exists       | `STATE: BLOCKED` — create manifest first |
+| `manifest.status` is `archived` (or user explicitly overrides) | warn; proceed only if user confirms      |
+| `$WIKI/SCHEMA.md`, `index.md`, `log.md` exist                  | run `llm-wiki` init or `STATE: BLOCKED`  |
+| `wikiIngest.status` is not already `done`                      | skip unless user requests re-ingest      |
 
 ```bash
 WIKI="${WIKI_PATH:-$HOME/wiki}"
@@ -105,12 +105,12 @@ MISSION="memory/swarm/missions/<missionId>"
 
 ## What goes where
 
-| → Wiki (`concepts/`, `entities/`, `comparisons/`) | → Stay in mission archive |
-|---------------------------------------------------|---------------------------|
-| Approved design **summaries** | Full `*-architecture-spec.md` |
-| Definitions, terminology, trade-offs | Raw research reports |
-| Cross-mission lessons learned | Review diffs, handoff terminal logs |
-| Cited facts (high/medium confidence) | `*-latest.json` runtime noise |
+| → Wiki (`concepts/`, `entities/`, `comparisons/`) | → Stay in mission archive           |
+| ------------------------------------------------- | ----------------------------------- |
+| Approved design **summaries**                     | Full `*-architecture-spec.md`       |
+| Definitions, terminology, trade-offs              | Raw research reports                |
+| Cross-mission lessons learned                     | Review diffs, handoff terminal logs |
+| Cited facts (high/medium confidence)              | `*-latest.json` runtime noise       |
 
 Follow `llm-wiki` Page Thresholds in `$WIKI/SCHEMA.md` — no pages for passing mentions.
 
@@ -163,10 +163,10 @@ Use **`llm-wiki` ingest rules** for each page:
 
 Suggested page types from a typical mission:
 
-| Source | Wiki target |
-|--------|-------------|
-| Research report | `concepts/<topic>.md` |
-| Architecture spec | `concepts/<system>.md` (summary only) |
+| Source                | Wiki target                                                        |
+| --------------------- | ------------------------------------------------------------------ |
+| Research report       | `concepts/<topic>.md`                                              |
+| Architecture spec     | `concepts/<system>.md` (summary only)                              |
 | Retrospective lessons | append to existing concept pages or `queries/<mission>-lessons.md` |
 
 WMPC example: `references/wmpc-example.md`
@@ -181,6 +181,7 @@ WMPC example: `references/wmpc-example.md`
 
 ```markdown
 ## [YYYY-MM-DD] ingest | <mission title> (<missionId>)
+
 - raw/articles/<file>.md (copied)
 - concepts/<page>.md (created|updated)
 - source: memory/swarm/missions/<missionId>/
@@ -232,10 +233,10 @@ NEXT_ACTION: none
 
 ## Greenlight
 
-| Action | Greenlight |
-|--------|------------|
-| Write wiki pages locally | none |
-| Update manifest | none |
+| Action                                       | Greenlight                                  |
+| -------------------------------------------- | ------------------------------------------- |
+| Write wiki pages locally                     | none                                        |
+| Update manifest                              | none                                        |
 | External publish (Obsidian Sync, team share) | `publish` — human approval per `swarm.yaml` |
 
 If publish not yet approved: complete ingest, set `BLOCKER: awaiting publish greenlight`.

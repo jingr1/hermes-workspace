@@ -11,7 +11,10 @@ import {
   resolveMainChatSessionId,
 } from '../../server/session-utils'
 import { getLocalSession } from '../../server/local-session-store'
-import { listSessionsForProfile, getActiveProfileName } from '../../server/profiles-browser'
+import {
+  listSessionsForProfile,
+  getActiveProfileName,
+} from '../../server/profiles-browser'
 import { getActiveRunForSession } from '../../server/run-store'
 import { isAuthenticated } from '@/server/auth-middleware'
 import { readContextUsage } from '@/server/context-usage'
@@ -126,7 +129,9 @@ export const Route = createFileRoute('/api/session-status')({
           if (localSession) {
             const contextUsage = await readContextUsage(sessionKey)
             const activeRun = await getActiveRunForSession(sessionKey)
-            const outputTokens = estimateTokensFromText(activeRun?.assistantText ?? '')
+            const outputTokens = estimateTokensFromText(
+              activeRun?.assistantText ?? '',
+            )
             return json({
               ok: true,
               payload: {
@@ -209,7 +214,9 @@ export const Route = createFileRoute('/api/session-status')({
             })
           } catch (sessionErr) {
             const message =
-              sessionErr instanceof Error ? sessionErr.message : String(sessionErr)
+              sessionErr instanceof Error
+                ? sessionErr.message
+                : String(sessionErr)
             // During profile switches the gateway is often briefly unreachable
             // ("fetch failed"). Treat as idle rather than hard-failing the meter.
             if (

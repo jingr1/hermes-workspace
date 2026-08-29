@@ -272,7 +272,7 @@ export async function spawnProfileGateway(
     return {
       ok: false,
       error:
-        "hermes-agent not found. Run the installer: curl -fsSL https://hermes-workspace.com/install.sh | bash",
+        'hermes-agent not found. Run the installer: curl -fsSL https://hermes-workspace.com/install.sh | bash',
     }
   }
 
@@ -320,9 +320,9 @@ export async function spawnProfileGateway(
   const spawnOpts = {
     cwd,
     detached: true,
-    stdio: (
-      logFd === undefined ? 'ignore' : ['ignore', logFd, logFd]
-    ) as import('node:child_process').StdioOptions,
+    stdio: (logFd === undefined
+      ? 'ignore'
+      : ['ignore', logFd, logFd]) as import('node:child_process').StdioOptions,
     env: spawnEnv,
   }
   const setsid = resolve('/usr/bin/setsid')
@@ -382,9 +382,8 @@ export async function startClaudeAgent(
     (options.profileName || getActiveProfileName() || 'default').trim() ||
     'default'
 
-  const { ensureProfileGateway, isGatewayPoolEnabled } = await import(
-    './gateway-pool'
-  )
+  const { ensureProfileGateway, isGatewayPoolEnabled } =
+    await import('./gateway-pool')
   if (isGatewayPoolEnabled()) {
     return ensureProfileGateway(profileName, {
       forceReplace: options.forceReplace,

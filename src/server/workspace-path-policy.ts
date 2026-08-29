@@ -6,10 +6,7 @@ import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs/promises'
 import { existsSync } from 'node:fs'
-import {
-  getActiveProfileName,
-  readProfile,
-} from './profiles-browser'
+import { getActiveProfileName, readProfile } from './profiles-browser'
 
 export type WorkspaceFolderEntry = {
   name: string
@@ -233,7 +230,9 @@ async function isSafeListDirectory(
   }
 }
 
-async function listWindowsWorkspaceDrives(): Promise<Array<WorkspaceFolderEntry>> {
+async function listWindowsWorkspaceDrives(): Promise<
+  Array<WorkspaceFolderEntry>
+> {
   const drives: Array<WorkspaceFolderEntry> = []
   for (let code = 65; code <= 90; code += 1) {
     const root = `${String.fromCharCode(code)}:\\`
@@ -361,9 +360,7 @@ export async function listWorkspaceFolders(
     throw new WorkspaceFolderAccessError(403, 'Access denied')
   }
 
-  const current = rawPath
-    ? toRelativeBrowsePath(fullPath, base)
-    : ''
+  const current = rawPath ? toRelativeBrowsePath(fullPath, base) : ''
 
   try {
     const folders = await listDirectoryEntries(fullPath, base, current)

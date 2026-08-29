@@ -25,7 +25,10 @@ export const Route = createFileRoute('/api/runs/detach')({
         try {
           body = (await request.json()) as DetachBody
         } catch {
-          return json({ ok: false, error: 'Invalid JSON body' }, { status: 400 })
+          return json(
+            { ok: false, error: 'Invalid JSON body' },
+            { status: 400 },
+          )
         }
 
         const runId = (body.runId ?? '').trim()

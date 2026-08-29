@@ -37,27 +37,33 @@ If any missing or `greenlight` not approved → `STATE: BLOCKED` — return to o
 ## Iteration loop (1 … N)
 
 ### Review
+
 - Read last rows of `results_log`
 - `git log --oneline -20`; if last status was `keep`, inspect `git diff HEAD~1`
 
 ### Modify
+
 - **One** focused change to `mutable_target` only
 - Architect: spec/skill/prompt edits. Developer: code/test edits per contract scope.
 
 ### Commit
+
 - `experiment: {description}` prefix
 
 ### Verify + guard
+
 - Run `verify`; compute delta vs previous kept metric
 - Run `guard` if set
 
 ### Decide
+
 - **keep** — improved (correct direction) and guard passed
 - **discard** — worsened → apply `rollback` / `git revert HEAD --no-edit`
 - **crash** / **metric-error** — revert
 - **no-op** — no change
 
 ### Log
+
 Append TSV row every iteration.
 
 ## Prohibited

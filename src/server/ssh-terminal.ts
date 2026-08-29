@@ -97,7 +97,10 @@ export function sshControlPath(ssh: SshTerminalConfig): string {
   return path.join(os.tmpdir(), `hermes-ws-ssh-${token}`)
 }
 
-export function buildSshArgs(ssh: SshTerminalConfig, remoteArgv: string[]): string[] {
+export function buildSshArgs(
+  ssh: SshTerminalConfig,
+  remoteArgv: string[],
+): string[] {
   const args = [
     '-o',
     'BatchMode=yes',
@@ -325,10 +328,14 @@ export async function listActiveWorkspaceFolders(
   if (!remote) {
     return listWorkspaceFolders(subPath)
   }
-  if (String((remote.config.terminal as TerminalConfig)?.backend ?? '')
-    .trim()
-    .toLowerCase() !== 'ssh') {
-    const backend = String((remote.config.terminal as TerminalConfig)?.backend ?? '')
+  if (
+    String((remote.config.terminal as TerminalConfig)?.backend ?? '')
+      .trim()
+      .toLowerCase() !== 'ssh'
+  ) {
+    const backend = String(
+      (remote.config.terminal as TerminalConfig)?.backend ?? '',
+    )
       .trim()
       .toLowerCase()
     throw new WorkspaceFolderAccessError(
@@ -532,9 +539,13 @@ export async function readSshFile(input: {
   }
   const target = ensureRemoteWorkspacePath(input.filePath, input.workspaceRoot)
   rejectUnsafeRemotePath(target)
-  const result = await runSsh(ssh, ['head', '-c', String(MAX_READ_BYTES), '--', target], {
-    timeoutMs: 20_000,
-  })
+  const result = await runSsh(
+    ssh,
+    ['head', '-c', String(MAX_READ_BYTES), '--', target],
+    {
+      timeoutMs: 20_000,
+    },
+  )
   if (result.code !== 0) {
     const detail = result.stderr.trim() || `ssh exited ${result.code}`
     throw new Error(`Cannot read remote file: ${detail}`)
@@ -564,10 +575,14 @@ export async function writeSshFile(input: {
       `Cannot create remote directory: ${mkdir.stderr.trim() || mkdir.code}`,
     )
   }
-  const result = await runSsh(ssh, ['dd', `of=${target}`, 'bs=65536', 'status=none'], {
-    stdin: input.content,
-    timeoutMs: 20_000,
-  })
+  const result = await runSsh(
+    ssh,
+    ['dd', `of=${target}`, 'bs=65536', 'status=none'],
+    {
+      stdin: input.content,
+      timeoutMs: 20_000,
+    },
+  )
   if (result.code !== 0) {
     throw new Error(
       `Cannot write remote file: ${result.stderr.trim() || result.code}`,
@@ -610,7 +625,9 @@ export async function renameSshPath(input: {
   rejectUnsafeRemotePath(to)
   const result = await runSsh(ssh, ['mv', '-f', from, to])
   if (result.code !== 0) {
-    throw new Error(`Cannot rename remote path: ${result.stderr.trim() || result.code}`)
+    throw new Error(
+      `Cannot rename remote path: ${result.stderr.trim() || result.code}`,
+    )
   }
 }
 
@@ -623,14 +640,19 @@ export async function deleteSshPath(input: {
   if (!ssh) {
     throw new Error('SSH terminal is not configured on this profile')
   }
-  const target = ensureRemoteWorkspacePath(input.targetPath, input.workspaceRoot)
+  const target = ensureRemoteWorkspacePath(
+    input.targetPath,
+    input.workspaceRoot,
+  )
   rejectUnsafeRemotePath(target)
   if (target === input.workspaceRoot) {
     throw new Error('Refusing to delete workspace root')
   }
   const result = await runSsh(ssh, ['rm', '-rf', '--', target])
   if (result.code !== 0) {
-    throw new Error(`Cannot delete remote path: ${result.stderr.trim() || result.code}`)
+    throw new Error(
+      `Cannot delete remote path: ${result.stderr.trim() || result.code}`,
+    )
   }
 }
 
@@ -643,7 +665,10 @@ export async function remotePathIsDirectory(input: {
   if (!ssh) {
     throw new Error('SSH terminal is not configured on this profile')
   }
-  const target = ensureRemoteWorkspacePath(input.targetPath, input.workspaceRoot)
+  const target = ensureRemoteWorkspacePath(
+    input.targetPath,
+    input.workspaceRoot,
+  )
   rejectUnsafeRemotePath(target)
   const result = await runSsh(ssh, ['/bin/test', '-d', target])
   return result.code === 0
@@ -698,7 +723,10 @@ export async function zipSshFolder(input: {
   if (!ssh) {
     throw new Error('SSH terminal is not configured on this profile')
   }
-  const target = ensureRemoteWorkspacePath(input.folderPath, input.workspaceRoot)
+  const target = ensureRemoteWorkspacePath(
+    input.folderPath,
+    input.workspaceRoot,
+  )
   rejectUnsafeRemotePath(target)
   const maxFiles = input.maxFiles ?? 5_000
   const maxBytes = input.maxBytes ?? 512 * 1024 * 1024
@@ -712,7 +740,10 @@ export async function zipSshFolder(input: {
     timeoutMs: 60_000,
   })
   if (du.code === 0) {
-    const bytes = Number.parseInt(du.stdout.toString('utf8').trim().split(/\s+/)[0] || '', 10)
+    const bytes = Number.parseInt(
+      du.stdout.toString('utf8').trim().split(/\s+/)[0] || '',
+      10,
+    )
     if (Number.isFinite(bytes) && bytes > maxBytes) {
       throw Object.assign(new Error('folder too large'), {
         code: 'MAX_BYTES',

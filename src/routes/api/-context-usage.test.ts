@@ -27,7 +27,10 @@ import {
   getCapabilities,
 } from '../../server/gateway-capabilities'
 import { listSessions } from '../../server/claude-api'
-import { getLocalMessages, getLocalSession } from '../../server/local-session-store'
+import {
+  getLocalMessages,
+  getLocalSession,
+} from '../../server/local-session-store'
 import {
   computeThresholdTokens,
   estimateContextTokensFromCacheRead,
@@ -118,7 +121,10 @@ describe('context usage estimation', () => {
           // missing context_tokens / context_length — previously painted 0/0
         })
       }
-      if (url.includes('/api/sessions/session-empty') && !url.includes('/runtime')) {
+      if (
+        url.includes('/api/sessions/session-empty') &&
+        !url.includes('/runtime')
+      ) {
         return jsonResponse({
           session: {
             id: 'session-empty',
@@ -262,7 +268,10 @@ describe('context usage estimation', () => {
   })
 
   it('prefers configured dashboard context length for local Workspace-only chats', async () => {
-    vi.mocked(getLocalSession).mockReturnValue({ id: 'local-1', model: null } as any)
+    vi.mocked(getLocalSession).mockReturnValue({
+      id: 'local-1',
+      model: null,
+    } as any)
     vi.mocked(getLocalMessages).mockReturnValue([
       { content: 'x'.repeat(700) },
     ] as any)
@@ -462,7 +471,9 @@ describe('context usage estimation', () => {
       dashboard: { available: true },
     } as any)
 
-    const fetchMock = vi.fn(async () => new Response('not found', { status: 404 }))
+    const fetchMock = vi.fn(
+      async () => new Response('not found', { status: 404 }),
+    )
     vi.stubGlobal('fetch', fetchMock)
     vi.mocked(dashboardFetch).mockImplementation(async (path: string) => {
       if (path.includes('/api/config')) {
@@ -509,7 +520,10 @@ describe('context usage estimation', () => {
   })
 
   it('uses structured message estimation for local sessions instead of string-only content lengths', async () => {
-    vi.mocked(getLocalSession).mockReturnValue({ id: 'local-structured', model: null } as any)
+    vi.mocked(getLocalSession).mockReturnValue({
+      id: 'local-structured',
+      model: null,
+    } as any)
     vi.mocked(getLocalMessages).mockReturnValue([
       {
         content: [{ type: 'tool_result', text: 'x'.repeat(400) }],
@@ -522,7 +536,9 @@ describe('context usage estimation', () => {
       dashboard: { available: true },
     } as any)
 
-    const fetchMock = vi.fn(async () => new Response('not found', { status: 404 }))
+    const fetchMock = vi.fn(
+      async () => new Response('not found', { status: 404 }),
+    )
     vi.stubGlobal('fetch', fetchMock)
     vi.mocked(dashboardFetch).mockImplementation(async (path: string) => {
       if (path.includes('/api/config')) {
@@ -573,45 +589,25 @@ describe('context usage estimation', () => {
   })
 
   it('estimates context from average input tokens per API call', () => {
-    const estimate = estimateContextTokensFromSessionUsage(
-      21019,
-      31360,
-      0,
-      9,
-    )
+    const estimate = estimateContextTokensFromSessionUsage(21019, 31360, 0, 9)
 
     expect(estimate).toBe(5820)
   })
 
   it('sums input, cache_read, and cache_write before averaging', () => {
-    const estimate = estimateContextTokensFromSessionUsage(
-      5000,
-      3000,
-      2000,
-      5,
-    )
+    const estimate = estimateContextTokensFromSessionUsage(5000, 3000, 2000, 5)
 
     expect(estimate).toBe(2000)
   })
 
   it('handles zero API calls by treating as a single call', () => {
-    const estimate = estimateContextTokensFromSessionUsage(
-      10000,
-      0,
-      0,
-      0,
-    )
+    const estimate = estimateContextTokensFromSessionUsage(10000, 0, 0, 0)
 
     expect(estimate).toBe(10000)
   })
 
   it('handles missing or NaN token fields as zero', () => {
-    const estimate = estimateContextTokensFromSessionUsage(
-      NaN,
-      NaN,
-      NaN,
-      5,
-    )
+    const estimate = estimateContextTokensFromSessionUsage(NaN, NaN, NaN, 5)
 
     expect(estimate).toBe(0)
   })
@@ -634,11 +630,15 @@ describe('context window + compression threshold helpers', () => {
   it('prefers gateway effective length over the static model table', () => {
     expect(resolvePreferredContextWindow('gpt-5.4', 512000)).toBe(512000)
     expect(resolvePreferredContextWindow('Kimi-K3', 1_048_576)).toBe(1_048_576)
-    expect(resolvePreferredContextWindow('gpt-5.4', undefined, 272000)).toBe(272000)
+    expect(resolvePreferredContextWindow('gpt-5.4', undefined, 272000)).toBe(
+      272000,
+    )
   })
 
   it('parses compression.threshold from Hermes config and matches agent math', () => {
-    expect(parseCompressionSettings({ compression: { threshold: 0.5 } })).toEqual({
+    expect(
+      parseCompressionSettings({ compression: { threshold: 0.5 } }),
+    ).toEqual({
       thresholdRatio: 0.5,
       thresholdTokensCap: 0,
     })

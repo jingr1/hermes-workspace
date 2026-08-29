@@ -43,10 +43,16 @@ export const Route = createFileRoute('/api/transcribe')({
           const form = await request.formData()
           const file = form.get('file')
           if (!(file instanceof File)) {
-            return json({ ok: false, error: 'Missing audio file.' }, { status: 400 })
+            return json(
+              { ok: false, error: 'Missing audio file.' },
+              { status: 400 },
+            )
           }
           if (file.size <= 0) {
-            return json({ ok: false, error: 'Audio file is empty.' }, { status: 400 })
+            return json(
+              { ok: false, error: 'Audio file is empty.' },
+              { status: 400 },
+            )
           }
           if (file.size > MAX_AUDIO_UPLOAD_BYTES) {
             return json(

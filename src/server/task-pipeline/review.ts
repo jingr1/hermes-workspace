@@ -11,14 +11,12 @@
  * dispatch loop; this module decides what happens AFTER its checkpoint.
  */
 import {
-  
-  
   appendSwarmMissionOrchestratorEvent,
   getSwarmMission,
   markMissionAssignmentReviewed,
-  requeueMissionAssignment
+  requeueMissionAssignment,
 } from '../swarm-missions'
-import type {SwarmMission, SwarmMissionAssignment} from '../swarm-missions';
+import type { SwarmMission, SwarmMissionAssignment } from '../swarm-missions'
 
 export type ReviewOutcome = 'approved' | 'changes_requested'
 
@@ -30,21 +28,30 @@ export type ReviewDecision = {
 const MAX_REWORK = 3
 
 /** Parse REVIEW_OUTCOME from a review stage's checkpoint raw text. */
-export function parseReviewOutcome(raw: string | null | undefined): ReviewDecision | null {
+export function parseReviewOutcome(
+  raw: string | null | undefined,
+): ReviewDecision | null {
   if (!raw) return null
   const match = raw.match(/REVIEW_OUTCOME:\s*(approved|changes_requested)/i)
   if (!match) return null
-  const outcome = match[1].toLowerCase() === 'approved' ? 'approved' : 'changes_requested'
+  const outcome =
+    match[1].toLowerCase() === 'approved' ? 'approved' : 'changes_requested'
   // Everything after the outcome line is reviewer feedback.
   const idx = raw.indexOf(match[0])
   const feedback = raw.slice(idx + match[0].length).trim() || null
   return { outcome, feedback }
 }
 
-function reworkCount(mission: SwarmMission, stageKey: string | null | undefined): number {
+function reworkCount(
+  mission: SwarmMission,
+  stageKey: string | null | undefined,
+): number {
   if (!stageKey) return 0
   return mission.events.filter(
-    (e) => e.type === 'continuation' && typeof e.data?.reworkOf === 'string' && e.data.reworkOf === stageKey,
+    (e) =>
+      e.type === 'continuation' &&
+      typeof e.data?.reworkOf === 'string' &&
+      e.data.reworkOf === stageKey,
   ).length
 }
 
@@ -70,16 +77,24 @@ export function applyReviewVerdict(input: {
   reviewerId: string
 }): ReviewApplyResult {
   const mission = getSwarmMission(input.missionId)
-  if (!mission) return { ok: false, error: `Mission not found: ${input.missionId}` }
-  const reviewAssignment = mission.assignments.find((a) => a.id === input.reviewAssignmentId)
-  if (!reviewAssignment) return { ok: false, error: `Assignment not found: ${input.reviewAssignmentId}` }
+  if (!mission)
+    return { ok: false, error: `Mission not found: ${input.missionId}` }
+  const reviewAssignment = mission.assignments.find(
+    (a) => a.id === input.reviewAssignmentId,
+  )
+  if (!reviewAssignment)
+    return {
+      ok: false,
+      error: `Assignment not found: ${input.reviewAssignmentId}`,
+    }
 
   const decision = parseReviewOutcome(input.rawCheckpoint)
   if (!decision) return { ok: false, error: 'No REVIEW_OUTCOME in checkpoint' }
 
   // The build assignment is the one the review stage depends on (reworkTarget).
   const buildAssignment = mission.assignments.find(
-    (a) => a.id !== reviewAssignment.id && reviewAssignment.dependsOn.includes(a.id),
+    (a) =>
+      a.id !== reviewAssignment.id && reviewAssignment.dependsOn.includes(a.id),
   )
 
   if (decision.outcome === 'approved') {
@@ -95,7 +110,11 @@ export function applyReviewVerdict(input: {
 
   // changes_requested
   const target = buildAssignment
-  if (!target) return { ok: false, error: 'No rework target (review stage has no upstream build dependency)' }
+  if (!target)
+    return {
+      ok: false,
+      error: 'No rework target (review stage has no upstream build dependency)',
+    }
 
   const attempts = reworkCount(mission, target.stageKey)
   if (attempts >= MAX_REWORK) {
@@ -104,7 +123,11 @@ export function applyReviewVerdict(input: {
       message: `Review rework limit (${MAX_REWORK}) reached for stage ${target.stageKey}; needs human`,
       data: { reworkOf: target.stageKey ?? target.id, needsHuman: true },
     })
-    return { ok: true, action: 'needs_human', reason: `rework limit ${MAX_REWORK} reached` }
+    return {
+      ok: true,
+      action: 'needs_human',
+      reason: `rework limit ${MAX_REWORK} reached`,
+    }
   }
 
   // Rework: requeue the build stage. Its downstream (review) becomes queued
@@ -119,5 +142,10 @@ export function applyReviewVerdict(input: {
     message: `Rework #${attempts + 1} for stage ${target.stageKey ?? target.id}`,
     data: { reworkOf: target.stageKey ?? target.id },
   })
-  return { ok: true, action: 'rework', targetAssignmentId: target.id, attempt: attempts + 1 }
+  return {
+    ok: true,
+    action: 'rework',
+    targetAssignmentId: target.id,
+    attempt: attempts + 1,
+  }
 }

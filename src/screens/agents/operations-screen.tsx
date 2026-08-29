@@ -17,7 +17,10 @@ import { OperationsNewAgentModal } from './components/operations-new-agent-modal
 import { OperationsSettingsModal } from './components/operations-settings-modal'
 import { FullOutputsView } from './components/full-outputs-view'
 import { AgentBusPanel, type AgentBusData } from './components/agent-bus-panel'
-import { TeamOverview, type TeamOverviewFilter } from './components/team-overview'
+import {
+  TeamOverview,
+  type TeamOverviewFilter,
+} from './components/team-overview'
 import { useOperations } from './hooks/use-operations'
 
 export const THEME_STYLE: CSSProperties = {
@@ -31,21 +34,32 @@ export const THEME_STYLE: CSSProperties = {
   ['--theme-muted-2' as string]: 'var(--color-primary-600)',
   ['--theme-accent' as string]: 'var(--color-accent-500)',
   ['--theme-accent-strong' as string]: 'var(--color-accent-600)',
-  ['--theme-accent-soft' as string]: 'color-mix(in srgb, var(--color-accent-500) 12%, transparent)',
-  ['--theme-accent-soft-strong' as string]: 'color-mix(in srgb, var(--color-accent-500) 18%, transparent)',
-  ['--theme-shadow' as string]: 'color-mix(in srgb, var(--color-primary-950) 14%, transparent)',
+  ['--theme-accent-soft' as string]:
+    'color-mix(in srgb, var(--color-accent-500) 12%, transparent)',
+  ['--theme-accent-soft-strong' as string]:
+    'color-mix(in srgb, var(--color-accent-500) 18%, transparent)',
+  ['--theme-shadow' as string]:
+    'color-mix(in srgb, var(--color-primary-950) 14%, transparent)',
   ['--theme-danger' as string]: 'var(--color-red-600, #dc2626)',
-  ['--theme-danger-soft' as string]: 'color-mix(in srgb, var(--theme-danger) 12%, transparent)',
-  ['--theme-danger-soft-strong' as string]: 'color-mix(in srgb, var(--theme-danger) 18%, transparent)',
-  ['--theme-danger-border' as string]: 'color-mix(in srgb, var(--theme-danger) 35%, white)',
+  ['--theme-danger-soft' as string]:
+    'color-mix(in srgb, var(--theme-danger) 12%, transparent)',
+  ['--theme-danger-soft-strong' as string]:
+    'color-mix(in srgb, var(--theme-danger) 18%, transparent)',
+  ['--theme-danger-border' as string]:
+    'color-mix(in srgb, var(--theme-danger) 35%, white)',
   ['--theme-warning' as string]: 'var(--color-amber-600, #d97706)',
-  ['--theme-warning-soft' as string]: 'color-mix(in srgb, var(--theme-warning) 12%, transparent)',
-  ['--theme-warning-soft-strong' as string]: 'color-mix(in srgb, var(--theme-warning) 18%, transparent)',
-  ['--theme-warning-border' as string]: 'color-mix(in srgb, var(--theme-warning) 35%, white)',
+  ['--theme-warning-soft' as string]:
+    'color-mix(in srgb, var(--theme-warning) 12%, transparent)',
+  ['--theme-warning-soft-strong' as string]:
+    'color-mix(in srgb, var(--theme-warning) 18%, transparent)',
+  ['--theme-warning-border' as string]:
+    'color-mix(in srgb, var(--theme-warning) 35%, white)',
 }
 
 export function OperationsScreen() {
-  useEffect(() => { seedAgentPresets() }, [])
+  useEffect(() => {
+    seedAgentPresets()
+  }, [])
   const [newAgentOpen, setNewAgentOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsAgentId, setSettingsAgentId] = useState<string | null>(null)
@@ -100,7 +114,8 @@ export function OperationsScreen() {
 
   const filteredAgents = useMemo(() => {
     if (filter === 'all') return agents
-    if (filter === 'needsSetup') return agents.filter((agent) => agent.needsSetup)
+    if (filter === 'needsSetup')
+      return agents.filter((agent) => agent.needsSetup)
     return agents.filter((agent) => agent.status === filter)
   }, [agents, filter])
 
@@ -111,7 +126,8 @@ export function OperationsScreen() {
     (sessionsQuery.error instanceof Error && sessionsQuery.error.message) ||
     (cronJobsQuery.error instanceof Error && cronJobsQuery.error.message) ||
     null
-  const settingsAgent = agents.find((agent) => agent.id === settingsAgentId) ?? null
+  const settingsAgent =
+    agents.find((agent) => agent.id === settingsAgentId) ?? null
 
   return (
     <main
@@ -125,7 +141,9 @@ export function OperationsScreen() {
               <HugeiconsIcon icon={AiBrain03Icon} size={22} strokeWidth={1.8} />
             </div>
             <div>
-              <h1 className="text-base font-semibold text-primary-900">Operations</h1>
+              <h1 className="text-base font-semibold text-primary-900">
+                Operations
+              </h1>
               <p className="mt-1 text-sm text-primary-600">
                 Your persistent agent team
               </p>
@@ -170,7 +188,11 @@ export function OperationsScreen() {
               className="border border-[var(--theme-border)] bg-[var(--theme-card)] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
               onClick={() => setSettingsOpen(true)}
             >
-              <HugeiconsIcon icon={Settings01Icon} size={16} strokeWidth={1.8} />
+              <HugeiconsIcon
+                icon={Settings01Icon}
+                size={16}
+                strokeWidth={1.8}
+              />
               Settings
             </Button>
           </div>
@@ -193,9 +215,7 @@ export function OperationsScreen() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.25 }}
             >
-              <OrchestratorCard
-                totalAgents={agents.length}
-              />
+              <OrchestratorCard totalAgents={agents.length} />
             </motion.div>
 
             <motion.div
@@ -203,7 +223,11 @@ export function OperationsScreen() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.05, duration: 0.25 }}
             >
-              <TeamOverview agents={agents} filter={filter} onFilterChange={setFilter} />
+              <TeamOverview
+                agents={agents}
+                filter={filter}
+                onFilterChange={setFilter}
+              />
             </motion.div>
 
             <motion.div
@@ -232,7 +256,10 @@ export function OperationsScreen() {
                 type="button"
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: filteredAgents.length * 0.04, duration: 0.22 }}
+                transition={{
+                  delay: filteredAgents.length * 0.04,
+                  duration: 0.22,
+                }}
                 onClick={() => setNewAgentOpen(true)}
                 className="flex min-h-[19rem] flex-col items-center justify-center rounded-[1.5rem] border border-dashed border-[var(--theme-border)] bg-[var(--theme-card)] p-4 text-center shadow-[0_20px_60px_color-mix(in_srgb,var(--theme-shadow)_10%,transparent)] transition-colors hover:border-[var(--theme-accent)] hover:bg-[var(--theme-accent-soft)]"
               >
@@ -242,7 +269,9 @@ export function OperationsScreen() {
                   strokeWidth={1.7}
                   className="text-[var(--theme-muted)]"
                 />
-                <span className="mt-3 text-sm text-[var(--theme-muted)]">Add Agent</span>
+                <span className="mt-3 text-sm text-[var(--theme-muted)]">
+                  Add Agent
+                </span>
               </motion.button>
             </section>
 
@@ -260,15 +289,21 @@ export function OperationsScreen() {
               <div className="mt-4 space-y-3">
                 {recentActivity.length > 0 ? (
                   recentActivity.map((activity) => {
-                    const agent = agents.find((entry) => entry.id === activity.agentId)
+                    const agent = agents.find(
+                      (entry) => entry.id === activity.agentId,
+                    )
                     return (
                       <div
                         key={activity.id}
                         className="flex flex-col gap-2 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 md:flex-row md:items-center md:justify-between"
                       >
                         <p className="text-sm text-[var(--theme-text)]">
-                          <span className="mr-2">{agent?.meta.emoji ?? '🤖'}</span>
-                          <span className="font-medium">{agent?.name ?? activity.agentId}:</span>{' '}
+                          <span className="mr-2">
+                            {agent?.meta.emoji ?? '🤖'}
+                          </span>
+                          <span className="font-medium">
+                            {agent?.name ?? activity.agentId}:
+                          </span>{' '}
                           {activity.summary}
                         </p>
                         <span className="shrink-0 text-sm text-[var(--theme-muted)]">
@@ -310,7 +345,9 @@ export function OperationsScreen() {
         onSave={saveAgent}
         onDelete={async (agentId) => {
           await deleteAgent(agentId)
-          setSettingsAgentId((current) => (current === agentId ? null : current))
+          setSettingsAgentId((current) =>
+            current === agentId ? null : current,
+          )
         }}
         isSaving={isSavingAgent}
         isDeleting={isDeletingAgent}

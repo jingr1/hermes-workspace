@@ -24,20 +24,36 @@ export const Route = createFileRoute('/api/swarm-langgraph/mission-event')({
         try {
           body = (await request.json()) as MissionEventBody
         } catch {
-          return json({ ok: false, error: 'Invalid JSON body' }, { status: 400 })
+          return json(
+            { ok: false, error: 'Invalid JSON body' },
+            { status: 400 },
+          )
         }
         const missionId = cleanString(body.missionId)
         const message = cleanString(body.message)
         if (!missionId || !message) {
-          return json({ ok: false, error: 'missionId and message required' }, { status: 400 })
+          return json(
+            { ok: false, error: 'missionId and message required' },
+            { status: 400 },
+          )
         }
-        const data = body.data && typeof body.data === 'object' && !Array.isArray(body.data)
-          ? body.data as Record<string, unknown>
-          : {}
+        const data =
+          body.data &&
+          typeof body.data === 'object' &&
+          !Array.isArray(body.data)
+            ? (body.data as Record<string, unknown>)
+            : {}
 
-        const mission = appendSwarmMissionOrchestratorEvent({ missionId, message, data })
+        const mission = appendSwarmMissionOrchestratorEvent({
+          missionId,
+          message,
+          data,
+        })
         if (!mission) {
-          return json({ ok: false, error: 'Mission not found' }, { status: 404 })
+          return json(
+            { ok: false, error: 'Mission not found' },
+            { status: 404 },
+          )
         }
         return json({ ok: true, missionId, mission })
       },

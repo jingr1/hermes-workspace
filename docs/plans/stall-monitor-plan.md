@@ -53,20 +53,20 @@ Hermes 子 Agent 系统采用更精细的 stall 检测：
 
 ```typescript
 type AgentProgressState =
-  | 'idle'           // 会话存在但无活动
-  | 'active'         // 持续产生 token 或 checkpoint 更新
-  | 'in_tool'        // 当前在工具调用内（如 terminal 执行长命令）
-  | 'stalled'        // 超过阈值无进展
-  | 'grace_period'   // 已请求中断，等待交付部分结果
-  | 'terminated'     // 已强制终结
+  | 'idle' // 会话存在但无活动
+  | 'active' // 持续产生 token 或 checkpoint 更新
+  | 'in_tool' // 当前在工具调用内（如 terminal 执行长命令）
+  | 'stalled' // 超过阈值无进展
+  | 'grace_period' // 已请求中断，等待交付部分结果
+  | 'terminated' // 已强制终结
 ```
 
 ### 3.2 阈值配置
 
 ```typescript
 interface StallThresholds {
-  idleMs: number        // 无任何 token/checkpoint 更新的最大空闲时间
-  inToolMs: number      // 在单个工具内执行的最大时间（慢命令给更高上限）
+  idleMs: number // 无任何 token/checkpoint 更新的最大空闲时间
+  inToolMs: number // 在单个工具内执行的最大时间（慢命令给更高上限）
   gracePeriodMs: number // 温和中断后等待部分结果的宽限时间
   slowToolMultiplier: number // 已知慢工具（terminal 长命令、git clone 等）的 inTool 倍率
 }
@@ -76,10 +76,10 @@ interface StallThresholds {
 
 ```typescript
 const DEFAULT_THRESHOLDS: StallThresholds = {
-  idleMs: 450_000,        // 7.5 分钟
-  inToolMs: 1_200_000,    // 20 分钟
+  idleMs: 450_000, // 7.5 分钟
+  inToolMs: 1_200_000, // 20 分钟
   gracePeriodMs: 120_000, // 2 分钟
-  slowToolMultiplier: 2,   // 慢命令上限 40 分钟
+  slowToolMultiplier: 2, // 慢命令上限 40 分钟
 }
 ```
 
@@ -91,17 +91,17 @@ interface AgentActivitySample {
   missionId: string
   sessionId?: string
   sampledAt: number
-  lastTokenAt: number | null      // 最后一个 token 流出的时间
-  lastToolCallAt: number | null   // 最后一个工具调用的开始时间
+  lastTokenAt: number | null // 最后一个 token 流出的时间
+  lastToolCallAt: number | null // 最后一个工具调用的开始时间
   lastCheckpointAt: number | null // 最后一个 checkpoint 更新时间
-  lastSummaryAt: number | null    // runtime 中 lastSummary 更新时间
-  apiCallCount: number            // 已观测到的 API/工具调用总数
-  currentTool: string | null      // 当前正在执行的工具名
+  lastSummaryAt: number | null // runtime 中 lastSummary 更新时间
+  apiCallCount: number // 已观测到的 API/工具调用总数
+  currentTool: string | null // 当前正在执行的工具名
   currentToolStartedAt: number | null
-  paneBytes: number               // tmux pane 当前累积字节数
-  paneBytesDelta: number          // 相比上次采样的字节变化
-  paneSnapshot: string            // 截屏内容摘要（前 N 字符）
-  runtimeState: string            // runtime.json 中的 state
+  paneBytes: number // tmux pane 当前累积字节数
+  paneBytesDelta: number // 相比上次采样的字节变化
+  paneSnapshot: string // 截屏内容摘要（前 N 字符）
+  runtimeState: string // runtime.json 中的 state
   needsHuman: boolean
   blockedReason: string | null
 }
@@ -147,24 +147,24 @@ interface AgentActivitySample {
 
 ### 5.1 新增文件
 
-| 文件 | 职责 |
-|---|---|
-| `src/server/swarm-stall-monitor.ts` | stall monitor 核心：采样、判断、中断、终结 |
-| `src/server/swarm-tmux-activity.ts` | 读取 tmux pane 内容、字节数、检测当前工具 |
+| 文件                                    | 职责                                          |
+| --------------------------------------- | --------------------------------------------- |
+| `src/server/swarm-stall-monitor.ts`     | stall monitor 核心：采样、判断、中断、终结    |
+| `src/server/swarm-tmux-activity.ts`     | 读取 tmux pane 内容、字节数、检测当前工具     |
 | `src/routes/api/swarm-stall-monitor.ts` | 暴露 HTTP API：sample / interrupt / terminate |
-| `src/routes/api/swarm-stall-status.ts` | 返回当前所有 worker 的 stall 状态汇总 |
-| `docs/plans/stall-monitor-plan.md` | 本计划文档 |
+| `src/routes/api/swarm-stall-status.ts`  | 返回当前所有 worker 的 stall 状态汇总         |
+| `docs/plans/stall-monitor-plan.md`      | 本计划文档                                    |
 
 ### 5.2 修改文件
 
-| 文件 | 修改内容 |
-|---|---|
-| `hermes_langgraph_orchestrator/nodes.py` | 新增 `wait_for_progress` 节点；修改 `route_workflow` 处理 stalled；移除固定 `max_polls` 超时 |
-| `hermes_langgraph_orchestrator/state.py` | 新增 `stall_state`, `grace_period_deadline`, `activity_samples` 等字段 |
-| `hermes_langgraph_orchestrator/workflows/rdi.yaml` | 移除 `timeout` 从 escalate；新增 `stall` blocker 类型及阈值配置 |
-| `src/routes/api/swarm-langgraph/resume.ts` | 支持 resume from stall（ approved / abort ） |
-| `src/server/swarm-missions.ts` | 支持 stalled 状态持久化 |
-| `src/server/swarm-runtime.ts` | 暴露更细粒度的活动信号（currentTool、lastTokenAt 等） |
+| 文件                                               | 修改内容                                                                                     |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `hermes_langgraph_orchestrator/nodes.py`           | 新增 `wait_for_progress` 节点；修改 `route_workflow` 处理 stalled；移除固定 `max_polls` 超时 |
+| `hermes_langgraph_orchestrator/state.py`           | 新增 `stall_state`, `grace_period_deadline`, `activity_samples` 等字段                       |
+| `hermes_langgraph_orchestrator/workflows/rdi.yaml` | 移除 `timeout` 从 escalate；新增 `stall` blocker 类型及阈值配置                              |
+| `src/routes/api/swarm-langgraph/resume.ts`         | 支持 resume from stall（ approved / abort ）                                                 |
+| `src/server/swarm-missions.ts`                     | 支持 stalled 状态持久化                                                                      |
+| `src/server/swarm-runtime.ts`                      | 暴露更细粒度的活动信号（currentTool、lastTokenAt 等）                                        |
 
 ---
 
@@ -173,11 +173,18 @@ interface AgentActivitySample {
 ### 6.1 `src/server/swarm-stall-monitor.ts`
 
 ```typescript
-import type { AgentActivitySample, StallThresholds, StallMonitor } from './swarm-stall-monitor-types'
+import type {
+  AgentActivitySample,
+  StallThresholds,
+  StallMonitor,
+} from './swarm-stall-monitor-types'
 
 export class SwarmStallMonitor implements StallMonitor {
   private samples = new Map<string, AgentActivitySample>()
-  private stallState = new Map<string, 'ok' | 'stalled' | 'grace_period' | 'terminated'>()
+  private stallState = new Map<
+    string,
+    'ok' | 'stalled' | 'grace_period' | 'terminated'
+  >()
   private gracePeriodEndsAt = new Map<string, number>()
 
   constructor(
@@ -187,7 +194,10 @@ export class SwarmStallMonitor implements StallMonitor {
     private checkpointReader: CheckpointActivityReader,
   ) {}
 
-  async sample(workerId: string, missionId: string): Promise<AgentActivitySample> {
+  async sample(
+    workerId: string,
+    missionId: string,
+  ): Promise<AgentActivitySample> {
     const [tmux, runtime, checkpoint] = await Promise.all([
       this.tmuxActivity.read(workerId),
       this.runtimeReader.read(workerId),
@@ -195,7 +205,11 @@ export class SwarmStallMonitor implements StallMonitor {
     ])
 
     const now = Date.now()
-    const lastTokenAt = maxNonNull(tmux.lastTokenAt, runtime.lastOutputAt, checkpoint.updatedAt)
+    const lastTokenAt = maxNonNull(
+      tmux.lastTokenAt,
+      runtime.lastOutputAt,
+      checkpoint.updatedAt,
+    )
     const lastToolCallAt = runtime.activeToolStartedAt ?? tmux.lastToolCallAt
     const currentTool = runtime.activeTool ?? tmux.inferredTool
 
@@ -212,7 +226,8 @@ export class SwarmStallMonitor implements StallMonitor {
       currentTool,
       currentToolStartedAt: runtime.activeToolStartedAt,
       paneBytes: tmux.paneBytes,
-      paneBytesDelta: tmux.paneBytes - (this.samples.get(workerId)?.paneBytes ?? 0),
+      paneBytesDelta:
+        tmux.paneBytes - (this.samples.get(workerId)?.paneBytes ?? 0),
       paneSnapshot: tmux.paneSnapshot.slice(-2000),
       runtimeState: runtime.state,
       needsHuman: runtime.needsHuman,
@@ -228,12 +243,20 @@ export class SwarmStallMonitor implements StallMonitor {
     const thresholds = this.thresholdsForTool(sample.currentTool)
 
     // 1.  pane 有字节变化或 checkpoint 在更新 -> 不 stall
-    if (sample.paneBytesDelta > 0 || (sample.lastCheckpointAt && now - sample.lastCheckpointAt < thresholds.idleMs)) {
+    if (
+      sample.paneBytesDelta > 0 ||
+      (sample.lastCheckpointAt &&
+        now - sample.lastCheckpointAt < thresholds.idleMs)
+    ) {
       return false
     }
 
     // 2. 在工具内，且时间未超过 inToolMs -> 不 stall
-    if (sample.currentTool && sample.currentToolStartedAt && now - sample.currentToolStartedAt < thresholds.inToolMs) {
+    if (
+      sample.currentTool &&
+      sample.currentToolStartedAt &&
+      now - sample.currentToolStartedAt < thresholds.inToolMs
+    ) {
       return false
     }
 
@@ -251,7 +274,10 @@ export class SwarmStallMonitor implements StallMonitor {
     const sessionName = `swarm-${workerId}`
     await tmuxSendKeys(sessionName, 'C-c')
     this.stallState.set(workerId, 'grace_period')
-    this.gracePeriodEndsAt.set(workerId, Date.now() + this.thresholds.gracePeriodMs)
+    this.gracePeriodEndsAt.set(
+      workerId,
+      Date.now() + this.thresholds.gracePeriodMs,
+    )
     return true
   }
 
@@ -262,8 +288,16 @@ export class SwarmStallMonitor implements StallMonitor {
   }
 
   private thresholdsForTool(tool: string | null): StallThresholds {
-    const slowTools = ['terminal', 'bash', 'execute_code', 'git', 'npm', 'pnpm', 'pytest']
-    if (tool && slowTools.some(t => tool.toLowerCase().includes(t))) {
+    const slowTools = [
+      'terminal',
+      'bash',
+      'execute_code',
+      'git',
+      'npm',
+      'pnpm',
+      'pytest',
+    ]
+    if (tool && slowTools.some((t) => tool.toLowerCase().includes(t))) {
       return {
         ...this.thresholds,
         inToolMs: this.thresholds.inToolMs * this.thresholds.slowToolMultiplier,
@@ -286,7 +320,9 @@ export interface TmuxActivity {
   apiCallCount: number
 }
 
-export async function readTmuxActivity(workerId: string): Promise<TmuxActivity> {
+export async function readTmuxActivity(
+  workerId: string,
+): Promise<TmuxActivity> {
   const sessionName = `swarm-${workerId}`
   const paneSnapshot = await tmuxCapturePane(sessionName)
   const bytes = Buffer.byteLength(paneSnapshot, 'utf8')
@@ -319,7 +355,7 @@ export async function readTmuxActivity(workerId: string): Promise<TmuxActivity> 
 async def wait_for_progress(state: OrchestratorState) -> dict:
     """
     Progress-based replacement for wait_for_checkpoints.
-    
+
     - Polls /api/swarm-stall-monitor/{worker_id} every 10s.
     - Returns immediately if any terminal checkpoint is ready.
     - If a worker is stalled:
@@ -331,10 +367,10 @@ async def wait_for_progress(state: OrchestratorState) -> dict:
     swarm_url = _swarm_api_url(state)
     assignments = state.get("langgraph_assignments", []) or []
     worker_ids = [a["worker_id"] for a in assignments]
-    
+
     if not worker_ids:
         return {"log_entries": ["[wait_for_progress] no workers to monitor"]}
-    
+
     # TODO: implement loop with stall-monitor API
     pass
 ```
@@ -344,12 +380,12 @@ async def wait_for_progress(state: OrchestratorState) -> dict:
 ```python
 def route_workflow(state: OrchestratorState) -> str:
     # ... existing logic ...
-    
+
     # Handle STALLED verdict: do not auto-retry, escalate to human
     for classification in state.get("classifications", []) or []:
         if classification.get("verdict") == "STALLED":
             return "human_approval"
-    
+
     # ... rest ...
 ```
 
@@ -365,7 +401,7 @@ blockers:
   escalate:
     - architecture_decision
     - missing_credential
-    - stall          # 新增：真正冻结才上升
+    - stall # 新增：真正冻结才上升
   retry:
     - missing_dependency
     - test_failure
@@ -390,18 +426,18 @@ settings:
 wait_for_progress(worker_ids):
     loop:
         sleep(10s)
-        
+
         for worker_id in worker_ids:
             sample = stall_monitor.sample(worker_id)
             checkpoint = harvest(worker_id)
-            
+
             if checkpoint is terminal:
                 return checkpoint
-            
+
             if stall_monitor.isStalled(sample):
                 log(f"{worker_id} stalled, requesting graceful interrupt")
                 stall_monitor.requestGracefulInterrupt(worker_id)
-                
+
                 # 进入 grace period，但继续采样
                 grace_deadline = now + grace_period_ms
                 while now < grace_deadline:
@@ -413,7 +449,7 @@ wait_for_progress(worker_ids):
                     if not stall_monitor.isStalled(sample):
                         # worker 恢复了，取消 grace period
                         break
-                
+
                 # grace period 结束仍无结果
                 log(f"{worker_id} still stalled after grace period, force terminate")
                 stall_monitor.forceTerminate(worker_id)
@@ -448,13 +484,13 @@ wait_for_progress(worker_ids):
 
 ## 9. 风险与缓解
 
-| 风险 | 缓解 |
-|---|---|
-| 慢命令（如模型下载）被误判为 stall | `slowToolMultiplier` + 工具白名单 |
-| tmux pane 采样开销 | 限制采样频率（10s），限制 snapshot 长度（2KB） |
-| SIGINT 被 worker 忽略 | grace period 后强制 kill session |
-| 进程重启后 stall 状态丢失 | 持久化到 mission state / runtime.json |
-| 误判导致任务被中断 | Human Gate 兜底，用户可重试 |
+| 风险                               | 缓解                                           |
+| ---------------------------------- | ---------------------------------------------- |
+| 慢命令（如模型下载）被误判为 stall | `slowToolMultiplier` + 工具白名单              |
+| tmux pane 采样开销                 | 限制采样频率（10s），限制 snapshot 长度（2KB） |
+| SIGINT 被 worker 忽略              | grace period 后强制 kill session               |
+| 进程重启后 stall 状态丢失          | 持久化到 mission state / runtime.json          |
+| 误判导致任务被中断                 | Human Gate 兜底，用户可重试                    |
 
 ---
 
@@ -524,6 +560,6 @@ wait_for_progress(worker_ids):
 
 ---
 
-*计划创建时间：2026-08-06*
-*作者：Hermes Agent*
-*状态：待实现*
+_计划创建时间：2026-08-06_
+_作者：Hermes Agent_
+_状态：待实现_

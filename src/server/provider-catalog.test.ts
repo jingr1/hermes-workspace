@@ -17,7 +17,9 @@ describe('provider catalog', () => {
   let tempHome: string
 
   beforeEach(() => {
-    tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-workspace-catalog-'))
+    tempHome = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'hermes-workspace-catalog-'),
+    )
     vi.spyOn(os, 'homedir').mockReturnValue(tempHome)
     process.env.HERMES_HOME = path.join(tempHome, '.hermes')
     process.env.HERMES_WORKSPACE_STATE_DIR = path.join(
@@ -129,20 +131,28 @@ describe('provider catalog', () => {
       'utf-8',
     )
     const catalog = getProviderCatalog()
-    expect(catalog.providers.map((entry) => entry.id).sort()).toEqual(['nvidia', 'tokenx'])
-    expect(catalog.providers.find((entry) => entry.id === 'tokenx')?.key_env).toBe(
-      'TOKENX_API_KEY_VPEL',
-    )
-    expect(catalog.providers.find((entry) => entry.id === 'nvidia')?.key_env).toBe(
-      'NVIDIA_API_KEY',
-    )
-    expect(catalog.providers.find((entry) => entry.id === 'tokenx')?.keyConfigured).toBe(true)
+    expect(catalog.providers.map((entry) => entry.id).sort()).toEqual([
+      'nvidia',
+      'tokenx',
+    ])
+    expect(
+      catalog.providers.find((entry) => entry.id === 'tokenx')?.key_env,
+    ).toBe('TOKENX_API_KEY_VPEL')
+    expect(
+      catalog.providers.find((entry) => entry.id === 'nvidia')?.key_env,
+    ).toBe('NVIDIA_API_KEY')
+    expect(
+      catalog.providers.find((entry) => entry.id === 'tokenx')?.keyConfigured,
+    ).toBe(true)
   })
 
   it('writes a catalog key to every unique .env without duplicating symlinks', () => {
     seedProfiles()
     upsertCatalogKey('TOKENX_API_KEY', 'shared-tokenx')
-    const rootEnv = fs.readFileSync(path.join(tempHome, '.hermes', '.env'), 'utf-8')
+    const rootEnv = fs.readFileSync(
+      path.join(tempHome, '.hermes', '.env'),
+      'utf-8',
+    )
     const developerEnv = fs.readFileSync(
       path.join(tempHome, '.hermes', 'profiles', 'developer', '.env'),
       'utf-8',
@@ -155,13 +165,22 @@ describe('provider catalog', () => {
   it('saves builtin API keys to env only and does not seed providers.<id>', () => {
     seedProfiles()
     upsertCatalogKey('DEEPSEEK_API_KEY', 'ds-secret', 'deepseek')
-    expect(readProfile('default').config.providers).not.toHaveProperty('deepseek')
-    expect(readProfile('developer').config.providers).not.toHaveProperty('deepseek')
+    expect(readProfile('default').config.providers).not.toHaveProperty(
+      'deepseek',
+    )
+    expect(readProfile('developer').config.providers).not.toHaveProperty(
+      'deepseek',
+    )
     const customProviders = readProfile('default').config.custom_providers
     expect(customProviders).toBeUndefined()
-    const rootEnv = fs.readFileSync(path.join(tempHome, '.hermes', '.env'), 'utf-8')
+    const rootEnv = fs.readFileSync(
+      path.join(tempHome, '.hermes', '.env'),
+      'utf-8',
+    )
     expect(rootEnv).toContain('DEEPSEEK_API_KEY=ds-secret')
-    expect(getProviderCatalog().providers.find((entry) => entry.id === 'deepseek')).toMatchObject({
+    expect(
+      getProviderCatalog().providers.find((entry) => entry.id === 'deepseek'),
+    ).toMatchObject({
       key_env: 'DEEPSEEK_API_KEY',
       keyConfigured: true,
     })
@@ -176,16 +195,23 @@ describe('provider catalog', () => {
       key_env: 'DEEPSEEK_API_KEY',
       key_value: 'ds-secret',
     })
-    expect(getProviderCatalog().providers.some((entry) => entry.id === 'nioint')).toBe(true)
+    expect(
+      getProviderCatalog().providers.some((entry) => entry.id === 'nioint'),
+    ).toBe(true)
 
     removeCatalogProvider('nioint')
 
-    expect(getProviderCatalog().providers.some((entry) => entry.id === 'nioint')).toBe(false)
+    expect(
+      getProviderCatalog().providers.some((entry) => entry.id === 'nioint'),
+    ).toBe(false)
     expect(readProfile('default').config.providers).not.toHaveProperty('nioint')
     expect(readProfile('developer').config.custom_providers || []).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ name: 'nioint' })]),
     )
-    const rootEnv = fs.readFileSync(path.join(tempHome, '.hermes', '.env'), 'utf-8')
+    const rootEnv = fs.readFileSync(
+      path.join(tempHome, '.hermes', '.env'),
+      'utf-8',
+    )
     expect(rootEnv).not.toContain('DEEPSEEK_API_KEY=')
   })
 
@@ -207,16 +233,25 @@ describe('provider catalog', () => {
       'utf-8',
     )
     getProviderCatalog()
-    expect(readProfile('default').config.providers).not.toHaveProperty('deepseek')
+    expect(readProfile('default').config.providers).not.toHaveProperty(
+      'deepseek',
+    )
   })
 
   it('clears builtin provider keys but leaves the card identity', () => {
     seedProfiles()
     upsertCatalogKey('DEEPSEEK_API_KEY', 'ds-secret', 'deepseek')
     removeCatalogProvider('deepseek')
-    expect(readProfile('default').config.providers).not.toHaveProperty('deepseek')
-    expect(readProfile('developer').config.providers).not.toHaveProperty('deepseek')
-    const rootEnv = fs.readFileSync(path.join(tempHome, '.hermes', '.env'), 'utf-8')
+    expect(readProfile('default').config.providers).not.toHaveProperty(
+      'deepseek',
+    )
+    expect(readProfile('developer').config.providers).not.toHaveProperty(
+      'deepseek',
+    )
+    const rootEnv = fs.readFileSync(
+      path.join(tempHome, '.hermes', '.env'),
+      'utf-8',
+    )
     expect(rootEnv).not.toContain('DEEPSEEK_API_KEY=')
     expect(isBuiltinCatalogProvider('deepseek')).toBe(true)
   })
@@ -237,7 +272,9 @@ describe('provider catalog', () => {
     expect(readProfile('developer').config).toMatchObject({
       providers: { tokenx: { base_url: 'https://model.example/v1' } },
     })
-    expect(readProfileProviderSelection('developer').fallbackModel).toBe('GLM-4.7')
+    expect(readProfileProviderSelection('developer').fallbackModel).toBe(
+      'GLM-4.7',
+    )
   })
 
   it('writes and updates provider models on every profile', () => {
@@ -277,6 +314,8 @@ describe('provider catalog', () => {
       fallbackProvider: 'tokenx',
       fallbackModel: 'GLM-5.2',
     })
-    expect(readProfileProviderSelection('default').fallbackModel).toBe('GLM-5.2')
+    expect(readProfileProviderSelection('default').fallbackModel).toBe(
+      'GLM-5.2',
+    )
   })
 })

@@ -7,9 +7,7 @@ import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import type { JobProfileOption } from '@/lib/jobs-api'
 import { JobModelFields } from './job-model-fields'
 import { JobDeliveryFields } from './job-delivery-fields'
-import {
-  type JobFormSubmitInput,
-} from './job-form-types'
+import { type JobFormSubmitInput } from './job-form-types'
 
 const SCHEDULE_PRESETS = [
   { label: 'Every 15m', value: 'every 15m' },

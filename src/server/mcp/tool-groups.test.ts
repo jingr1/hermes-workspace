@@ -25,9 +25,16 @@ async function loadModules() {
   }))
   const { issueRunToken } = await import('../../server/mcp/run-tokens')
   const { handleMcpRequest } = await import('../../server/mcp/mcp-handler')
-  const { createOrUpdateMission, recordMissionCheckpoint } = await import('../../server/swarm-missions')
+  const { createOrUpdateMission, recordMissionCheckpoint } =
+    await import('../../server/swarm-missions')
   const { runSqlite } = await import('../../server/sqlite-helper')
-  return { issueRunToken, handleMcpRequest, createOrUpdateMission, recordMissionCheckpoint, runSqlite }
+  return {
+    issueRunToken,
+    handleMcpRequest,
+    createOrUpdateMission,
+    recordMissionCheckpoint,
+    runSqlite,
+  }
 }
 
 afterEach(() => {
@@ -35,10 +42,17 @@ afterEach(() => {
   vi.doUnmock('../collab-db')
   vi.doUnmock('../../server/collab-db')
   vi.doUnmock('../../server/swarm-environment')
-  try { rmSync(tempRoot, { recursive: true, force: true }) } catch { /* ignore */ }
+  try {
+    rmSync(tempRoot, { recursive: true, force: true })
+  } catch {
+    /* ignore */
+  }
 })
 
-async function setup(mods: Awaited<ReturnType<typeof loadModules>>, suffix: string) {
+async function setup(
+  mods: Awaited<ReturnType<typeof loadModules>>,
+  suffix: string,
+) {
   const mission = mods.createOrUpdateMission({
     missionId: `mission-tools-${suffix}`,
     title: 'tools test',
@@ -53,9 +67,15 @@ async function setup(mods: Awaited<ReturnType<typeof loadModules>>, suffix: stri
     taskId: mission.id,
     roomId: 'room-1',
     toolAllowlist: [
-      'task_get', 'task_start', 'task_complete',
-      'kanban_get', 'review_approve', 'review_request_changes',
-      'message_send', 'member_work_sync_status', 'member_work_sync_report',
+      'task_get',
+      'task_start',
+      'task_complete',
+      'kanban_get',
+      'review_approve',
+      'review_request_changes',
+      'message_send',
+      'member_work_sync_status',
+      'member_work_sync_report',
     ],
     dbPath,
   })
@@ -67,7 +87,9 @@ describe('mcp tool groups (P1.4)', () => {
     const mods = await loadModules()
     const { token } = await setup(mods, 'k1')
     const res = await mods.handleMcpRequest(
-      { jsonrpc: '2.0', id: 1, method: 'kanban_get', params: { token } }, dbPath)
+      { jsonrpc: '2.0', id: 1, method: 'kanban_get', params: { token } },
+      dbPath,
+    )
     expect(res.error).toBeUndefined()
     expect((res.result as { cards: Array<unknown> }).cards).toBeDefined()
   })
@@ -76,10 +98,21 @@ describe('mcp tool groups (P1.4)', () => {
     const mods = await loadModules()
     const { token } = await setup(mods, 'm1')
     const res = await mods.handleMcpRequest(
-      { jsonrpc: '2.0', id: 2, method: 'message_send',
-        params: { token, content: 'hello room', mentions: [] } }, dbPath)
+      {
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'message_send',
+        params: { token, content: 'hello room', mentions: [] },
+      },
+      dbPath,
+    )
     expect(res.error).toBeUndefined()
-    const rows = JSON.parse(mods.runSqlite(dbPath, "SELECT * FROM room_messages WHERE room_id = 'room-1'")) as Array<Record<string, unknown>>
+    const rows = JSON.parse(
+      mods.runSqlite(
+        dbPath,
+        "SELECT * FROM room_messages WHERE room_id = 'room-1'",
+      ),
+    ) as Array<Record<string, unknown>>
     expect(rows).toHaveLength(1)
     expect(rows[0].content).toBe('hello room')
     expect(rows[0].sender_participant_id).toBe('dev-1')
@@ -89,8 +122,14 @@ describe('mcp tool groups (P1.4)', () => {
     const mods = await loadModules()
     const { token } = await setup(mods, 'm2')
     const res = await mods.handleMcpRequest(
-      { jsonrpc: '2.0', id: 3, method: 'message_send',
-        params: { token, roomId: 'room-OTHER', content: 'x' } }, dbPath)
+      {
+        jsonrpc: '2.0',
+        id: 3,
+        method: 'message_send',
+        params: { token, roomId: 'room-OTHER', content: 'x' },
+      },
+      dbPath,
+    )
     expect(res.error?.code).toBe(-32006)
   })
 
@@ -103,19 +142,38 @@ describe('mcp tool groups (P1.4)', () => {
       assignmentId,
       workerId: 'dev-1',
       checkpoint: {
-        stateLabel: 'DONE', checkpointStatus: 'done', runtimeState: 'idle',
-        filesChanged: null, commandsRun: null, result: 'done work',
-        blocker: null, nextAction: null, reviewOutcome: null, raw: 'done work',
+        stateLabel: 'DONE',
+        checkpointStatus: 'done',
+        runtimeState: 'idle',
+        filesChanged: null,
+        commandsRun: null,
+        result: 'done work',
+        blocker: null,
+        nextAction: null,
+        reviewOutcome: null,
+        raw: 'done work',
       },
       source: 'test',
     })
     const res = await mods.handleMcpRequest(
-      { jsonrpc: '2.0', id: 4, method: 'review_approve',
-        params: { token, assignmentId } }, dbPath)
+      {
+        jsonrpc: '2.0',
+        id: 4,
+        method: 'review_approve',
+        params: { token, assignmentId },
+      },
+      dbPath,
+    )
     expect(res.error).toBeUndefined()
     expect((res.result as { outcome: string }).outcome).toBe('approved')
-    const after = mods.createOrUpdateMission({ missionId: mission.id, title: mission.title, assignments: [] })
-    expect(after.assignments.find((a) => a.id === assignmentId)?.state).toBe('done')
+    const after = mods.createOrUpdateMission({
+      missionId: mission.id,
+      title: mission.title,
+      assignments: [],
+    })
+    expect(after.assignments.find((a) => a.id === assignmentId)?.state).toBe(
+      'done',
+    )
   })
 
   it('review_request_changes flips assignment to blocked with feedback', async () => {
@@ -126,18 +184,37 @@ describe('mcp tool groups (P1.4)', () => {
       assignmentId,
       workerId: 'dev-1',
       checkpoint: {
-        stateLabel: 'DONE', checkpointStatus: 'done', runtimeState: 'idle',
-        filesChanged: null, commandsRun: null, result: 'work',
-        blocker: null, nextAction: null, reviewOutcome: null, raw: 'work',
+        stateLabel: 'DONE',
+        checkpointStatus: 'done',
+        runtimeState: 'idle',
+        filesChanged: null,
+        commandsRun: null,
+        result: 'work',
+        blocker: null,
+        nextAction: null,
+        reviewOutcome: null,
+        raw: 'work',
       },
       source: 'test',
     })
     const res = await mods.handleMcpRequest(
-      { jsonrpc: '2.0', id: 5, method: 'review_request_changes',
-        params: { token, assignmentId, feedback: 'missing tests' } }, dbPath)
+      {
+        jsonrpc: '2.0',
+        id: 5,
+        method: 'review_request_changes',
+        params: { token, assignmentId, feedback: 'missing tests' },
+      },
+      dbPath,
+    )
     expect(res.error).toBeUndefined()
-    expect((res.result as { outcome: string }).outcome).toBe('changes_requested')
-    const after = mods.createOrUpdateMission({ missionId: mission.id, title: mission.title, assignments: [] })
+    expect((res.result as { outcome: string }).outcome).toBe(
+      'changes_requested',
+    )
+    const after = mods.createOrUpdateMission({
+      missionId: mission.id,
+      title: mission.title,
+      assignments: [],
+    })
     const a = after.assignments.find((x) => x.id === assignmentId)!
     expect(a.state).toBe('blocked')
     expect(a.checkpoint?.blocker).toContain('missing tests')
@@ -148,38 +225,82 @@ describe('mcp tool groups (P1.4)', () => {
     const { mission, assignmentId, token } = await setup(mods, 's1')
 
     const status = await mods.handleMcpRequest(
-      { jsonrpc: '2.0', id: 6, method: 'member_work_sync_status', params: { token } }, dbPath)
+      {
+        jsonrpc: '2.0',
+        id: 6,
+        method: 'member_work_sync_status',
+        params: { token },
+      },
+      dbPath,
+    )
     expect(status.error).toBeUndefined()
-    const { agendaFingerprint, reportToken } = status.result as { agendaFingerprint: string; reportToken: string }
+    const { agendaFingerprint, reportToken } = status.result as {
+      agendaFingerprint: string
+      reportToken: string
+    }
     expect(agendaFingerprint).toBeTruthy()
     expect(reportToken).toMatch(/^rpt_/)
 
     const report = await mods.handleMcpRequest(
-      { jsonrpc: '2.0', id: 7, method: 'member_work_sync_report',
-        params: { token, state: 'on_track', agendaFingerprint, reportToken } }, dbPath)
+      {
+        jsonrpc: '2.0',
+        id: 7,
+        method: 'member_work_sync_report',
+        params: { token, state: 'on_track', agendaFingerprint, reportToken },
+      },
+      dbPath,
+    )
     expect(report.error).toBeUndefined()
     expect((report.result as { acknowledged: boolean }).acknowledged).toBe(true)
 
     // 永不关单: assignment state untouched.
-    const after = mods.createOrUpdateMission({ missionId: mission.id, title: mission.title, assignments: [] })
-    expect(after.assignments.find((a) => a.id === assignmentId)?.state).toBe('queued')
+    const after = mods.createOrUpdateMission({
+      missionId: mission.id,
+      title: mission.title,
+      assignments: [],
+    })
+    expect(after.assignments.find((a) => a.id === assignmentId)?.state).toBe(
+      'queued',
+    )
   })
 
   it('sync report: same token + same payload replays first response (idempotent)', async () => {
     const mods = await loadModules()
     const { token } = await setup(mods, 's2')
     const status = await mods.handleMcpRequest(
-      { jsonrpc: '2.0', id: 8, method: 'member_work_sync_status', params: { token } }, dbPath)
-    const { agendaFingerprint, reportToken } = status.result as { agendaFingerprint: string; reportToken: string }
+      {
+        jsonrpc: '2.0',
+        id: 8,
+        method: 'member_work_sync_status',
+        params: { token },
+      },
+      dbPath,
+    )
+    const { agendaFingerprint, reportToken } = status.result as {
+      agendaFingerprint: string
+      reportToken: string
+    }
 
     const first = await mods.handleMcpRequest(
-      { jsonrpc: '2.0', id: 9, method: 'member_work_sync_report',
-        params: { token, state: 'on_track', agendaFingerprint, reportToken } }, dbPath)
+      {
+        jsonrpc: '2.0',
+        id: 9,
+        method: 'member_work_sync_report',
+        params: { token, state: 'on_track', agendaFingerprint, reportToken },
+      },
+      dbPath,
+    )
     expect(first.error).toBeUndefined()
 
     const retry = await mods.handleMcpRequest(
-      { jsonrpc: '2.0', id: 10, method: 'member_work_sync_report',
-        params: { token, state: 'on_track', agendaFingerprint, reportToken } }, dbPath)
+      {
+        jsonrpc: '2.0',
+        id: 10,
+        method: 'member_work_sync_report',
+        params: { token, state: 'on_track', agendaFingerprint, reportToken },
+      },
+      dbPath,
+    )
     expect(retry.error).toBeUndefined()
     expect((retry.result as { replayed?: boolean }).replayed).toBe(true)
   })
@@ -188,16 +309,38 @@ describe('mcp tool groups (P1.4)', () => {
     const mods = await loadModules()
     const { token } = await setup(mods, 's3')
     const status = await mods.handleMcpRequest(
-      { jsonrpc: '2.0', id: 11, method: 'member_work_sync_status', params: { token } }, dbPath)
-    const { agendaFingerprint, reportToken } = status.result as { agendaFingerprint: string; reportToken: string }
+      {
+        jsonrpc: '2.0',
+        id: 11,
+        method: 'member_work_sync_status',
+        params: { token },
+      },
+      dbPath,
+    )
+    const { agendaFingerprint, reportToken } = status.result as {
+      agendaFingerprint: string
+      reportToken: string
+    }
 
     await mods.handleMcpRequest(
-      { jsonrpc: '2.0', id: 12, method: 'member_work_sync_report',
-        params: { token, state: 'on_track', agendaFingerprint, reportToken } }, dbPath)
+      {
+        jsonrpc: '2.0',
+        id: 12,
+        method: 'member_work_sync_report',
+        params: { token, state: 'on_track', agendaFingerprint, reportToken },
+      },
+      dbPath,
+    )
 
     const evil = await mods.handleMcpRequest(
-      { jsonrpc: '2.0', id: 13, method: 'member_work_sync_report',
-        params: { token, state: 'idle', agendaFingerprint, reportToken } }, dbPath)
+      {
+        jsonrpc: '2.0',
+        id: 13,
+        method: 'member_work_sync_report',
+        params: { token, state: 'idle', agendaFingerprint, reportToken },
+      },
+      dbPath,
+    )
     expect(evil.error).toBeDefined()
     expect(evil.error?.code).toBe(-32003)
     expect(evil.error?.message).toMatch(/different payload/)
@@ -207,19 +350,39 @@ describe('mcp tool groups (P1.4)', () => {
     const mods = await loadModules()
     const { mission, token } = await setup(mods, 's4')
     const status = await mods.handleMcpRequest(
-      { jsonrpc: '2.0', id: 14, method: 'member_work_sync_status', params: { token } }, dbPath)
+      {
+        jsonrpc: '2.0',
+        id: 14,
+        method: 'member_work_sync_status',
+        params: { token },
+      },
+      dbPath,
+    )
     const { reportToken } = status.result as { reportToken: string }
 
     // Mutate the agenda (add an assignment) so the fingerprint goes stale.
     mods.createOrUpdateMission({
       missionId: mission.id,
       title: mission.title,
-      assignments: [{ workerId: 'dev-2', task: 'new stage', reviewRequired: false }],
+      assignments: [
+        { workerId: 'dev-2', task: 'new stage', reviewRequired: false },
+      ],
     })
 
     const res = await mods.handleMcpRequest(
-      { jsonrpc: '2.0', id: 15, method: 'member_work_sync_report',
-        params: { token, state: 'on_track', agendaFingerprint: 'stale-fp', reportToken } }, dbPath)
+      {
+        jsonrpc: '2.0',
+        id: 15,
+        method: 'member_work_sync_report',
+        params: {
+          token,
+          state: 'on_track',
+          agendaFingerprint: 'stale-fp',
+          reportToken,
+        },
+      },
+      dbPath,
+    )
     expect(res.error).toBeDefined()
     expect(res.error?.message).toMatch(/stale/)
     const data = res.error?.data as { nextRequiredToolCall?: { tool: string } }
@@ -244,16 +407,36 @@ describe('mcp tool groups (P1.4)', () => {
     })
 
     const kb = await mods.handleMcpRequest(
-      { jsonrpc: '2.0', id: 16, method: 'kanban_get', params: { token } }, dbPath)
+      { jsonrpc: '2.0', id: 16, method: 'kanban_get', params: { token } },
+      dbPath,
+    )
     expect(kb.error).toBeUndefined()
 
     const st = await mods.handleMcpRequest(
-      { jsonrpc: '2.0', id: 17, method: 'member_work_sync_status', params: { token } }, dbPath)
+      {
+        jsonrpc: '2.0',
+        id: 17,
+        method: 'member_work_sync_status',
+        params: { token },
+      },
+      dbPath,
+    )
     expect(st.error).toBeUndefined()
 
     const rp = await mods.handleMcpRequest(
-      { jsonrpc: '2.0', id: 18, method: 'member_work_sync_report',
-        params: { token, state: 'on_track', agendaFingerprint: 'x', reportToken: 'y' } }, dbPath)
+      {
+        jsonrpc: '2.0',
+        id: 18,
+        method: 'member_work_sync_report',
+        params: {
+          token,
+          state: 'on_track',
+          agendaFingerprint: 'x',
+          reportToken: 'y',
+        },
+      },
+      dbPath,
+    )
     expect(rp.error?.code).toBe(-32003)
     expect(rp.error?.message).toMatch(/run_write/)
   })

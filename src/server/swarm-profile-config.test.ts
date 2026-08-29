@@ -27,7 +27,11 @@ describe('ensureSwarmProfileConfig', () => {
   function setupHermesRoot(): string {
     const hermes = mkdtempSync(join(os.tmpdir(), 'swarm-hermes-'))
     tempDirs.push(hermes)
-    writeFileSync(join(hermes, 'config.yaml'), 'model: { provider: p, default: d }\n', 'utf8')
+    writeFileSync(
+      join(hermes, 'config.yaml'),
+      'model: { provider: p, default: d }\n',
+      'utf8',
+    )
     writeFileSync(
       join(hermes, '.env'),
       'API_SERVER_ENABLED=true\nAPI_SERVER_KEY=abcdefghijklmnopqrstuvwxyz12\nAPI_SERVER_PORT=8642\nTOKENX_API_KEY=secret\n',
@@ -63,21 +67,35 @@ describe('ensureSwarmProfileConfig', () => {
     expect(result.ok).toBe(true)
     expect(result.envCopied).toBe(true)
     expect(lstatSync(join(profile, '.env')).isSymbolicLink()).toBe(false)
-    expect(readFileSync(join(profile, '.env'), 'utf8')).not.toContain('API_SERVER_PORT=')
-    expect(readFileSync(join(hermes, '.env'), 'utf8')).toContain('API_SERVER_PORT=8642')
+    expect(readFileSync(join(profile, '.env'), 'utf8')).not.toContain(
+      'API_SERVER_PORT=',
+    )
+    expect(readFileSync(join(hermes, '.env'), 'utf8')).toContain(
+      'API_SERVER_PORT=8642',
+    )
   })
 
   it('does not overwrite an existing private .env', () => {
     const hermes = setupHermesRoot()
     const profile = join(hermes, 'profiles', 'architect')
     mkdirSync(profile, { recursive: true })
-    writeFileSync(join(profile, '.env'), 'API_SERVER_PORT=8643\nKEEP=1\n', 'utf8')
-    writeFileSync(join(profile, 'config.yaml'), 'model: { provider: p, default: d }\n', 'utf8')
+    writeFileSync(
+      join(profile, '.env'),
+      'API_SERVER_PORT=8643\nKEEP=1\n',
+      'utf8',
+    )
+    writeFileSync(
+      join(profile, 'config.yaml'),
+      'model: { provider: p, default: d }\n',
+      'utf8',
+    )
 
     const result = ensureSwarmProfileConfig(profile, { hermesRoot: hermes })
 
     expect(result.envCopied).toBe(false)
-    expect(readFileSync(join(profile, '.env'), 'utf8')).toBe('API_SERVER_PORT=8643\nKEEP=1\n')
+    expect(readFileSync(join(profile, '.env'), 'utf8')).toBe(
+      'API_SERVER_PORT=8643\nKEEP=1\n',
+    )
   })
 })
 
@@ -89,7 +107,8 @@ describe('syncSwarmProfileIdentity', () => {
         id: 'swarm5',
         name: 'Builder',
         role: 'Primary Builder',
-        specialty: 'full-stack implementation across Hermes Workspace and Swarm2',
+        specialty:
+          'full-stack implementation across Hermes Workspace and Swarm2',
         model: 'GPT-5.5',
         mission: 'Ship focused product slices with tests and clean diffs.',
         skills: ['swarm-ui-worker', 'swarm-worker-core'],
@@ -102,9 +121,15 @@ describe('syncSwarmProfileIdentity', () => {
       expect(identity).toContain('- Name: Builder')
       expect(identity).toContain('- Worker ID: swarm5')
       expect(identity).toContain('- Role: Primary Builder')
-      expect(identity).toContain('- Mission: Ship focused product slices with tests and clean diffs.')
-      expect(identity).toContain('- Capabilities: code-editing, ui-implementation')
-      expect(identity).toContain('The worker ID is a stable machine identifier only')
+      expect(identity).toContain(
+        '- Mission: Ship focused product slices with tests and clean diffs.',
+      )
+      expect(identity).toContain(
+        '- Capabilities: code-editing, ui-implementation',
+      )
+      expect(identity).toContain(
+        'The worker ID is a stable machine identifier only',
+      )
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

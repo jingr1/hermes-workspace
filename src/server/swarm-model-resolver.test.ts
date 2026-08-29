@@ -29,11 +29,17 @@ describe('parseSwarmModelLabel', () => {
   })
 
   it('parses custom: providers and upstream model ids with slashes', () => {
-    expect(parseSwarmModelLabel('custom:example-gateway/DeepSeek-V4-Pro-Seed')).toEqual({
+    expect(
+      parseSwarmModelLabel('custom:example-gateway/DeepSeek-V4-Pro-Seed'),
+    ).toEqual({
       provider: 'custom:example-gateway',
       default: 'DeepSeek-V4-Pro-Seed',
     })
-    expect(parseSwarmModelLabel('custom:example-gateway/deepseek-ai/deepseek-v4-pro')).toEqual({
+    expect(
+      parseSwarmModelLabel(
+        'custom:example-gateway/deepseek-ai/deepseek-v4-pro',
+      ),
+    ).toEqual({
       provider: 'custom:example-gateway',
       default: 'deepseek-ai/deepseek-v4-pro',
     })
@@ -57,9 +63,11 @@ describe('parseSwarmModelLabel', () => {
     expect(swarmModelKeyFromOption(option)).toBe(
       'custom:example-gateway/deepseek-ai/deepseek-v4-pro',
     )
-    expect(resolveSwarmModelKey('deepseek-ai/deepseek-v4-pro', 'deepseek-ai', [option])).toBe(
-      'custom:example-gateway/deepseek-ai/deepseek-v4-pro',
-    )
+    expect(
+      resolveSwarmModelKey('deepseek-ai/deepseek-v4-pro', 'deepseek-ai', [
+        option,
+      ]),
+    ).toBe('custom:example-gateway/deepseek-ai/deepseek-v4-pro')
   })
 
   it('returns null for unknown labels (no slash)', () => {

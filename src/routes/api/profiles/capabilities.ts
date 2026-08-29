@@ -15,11 +15,11 @@ import os from 'node:os'
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../server/auth-middleware'
+import { readProfile, getProfilesRoot } from '../../../server/profiles-browser'
 import {
-  readProfile,
-  getProfilesRoot,
-} from '../../../server/profiles-browser'
-import { normalizeMcpListFromConfig, maskSecretsInPlace } from '../../../server/mcp-normalize'
+  normalizeMcpListFromConfig,
+  maskSecretsInPlace,
+} from '../../../server/mcp-normalize'
 import {
   dashboardFetch,
   ensureGatewayEnhancedProbed,
@@ -54,12 +54,16 @@ function getSkillsDisabledSet(config: Record<string, unknown>): Set<string> {
   if (!Array.isArray(disabled)) return new Set()
   return new Set(
     disabled.filter(
-      (value): value is string => typeof value === 'string' && value.trim().length > 0,
+      (value): value is string =>
+        typeof value === 'string' && value.trim().length > 0,
     ),
   )
 }
 
-function listLocalSkills(profilePath: string, disabledSet: Set<string>): SkillItem[] {
+function listLocalSkills(
+  profilePath: string,
+  disabledSet: Set<string>,
+): SkillItem[] {
   const skillsDir = path.join(profilePath, 'skills')
   const results: SkillItem[] = []
   if (!fs.existsSync(skillsDir)) return results
@@ -151,7 +155,9 @@ function listLocalSkills(profilePath: string, disabledSet: Set<string>): SkillIt
   return results.sort((a, b) => a.name.localeCompare(b.name))
 }
 
-async function fetchDashboardSkills(profile: string): Promise<SkillItem[] | null> {
+async function fetchDashboardSkills(
+  profile: string,
+): Promise<SkillItem[] | null> {
   const capabilities = await ensureGatewayEnhancedProbed()
   if (!capabilities.skills || !capabilities.dashboard.available) {
     return null

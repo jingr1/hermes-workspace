@@ -10,7 +10,10 @@ import {
   getProfileGatewayUrl,
   resolveProfileGatewayPort,
 } from '../../../server/gateway-ports'
-import { setActiveProfile, resolveProfileHermesHome } from '../../../server/profiles-browser'
+import {
+  setActiveProfile,
+  resolveProfileHermesHome,
+} from '../../../server/profiles-browser'
 import { ensureSwarmProfileConfig } from '../../../server/swarm-profile-config'
 import { loadWorkspaceCatalog } from '../workspace'
 import { requireJsonContentType } from '../../../server/rate-limit'

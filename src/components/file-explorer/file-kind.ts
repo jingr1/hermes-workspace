@@ -72,10 +72,7 @@ export function classifyFilePreviewKind(pathValue: string): FilePreviewKind {
 
 export function isEditablePreviewKind(kind: FilePreviewKind): boolean {
   return (
-    kind === 'code' ||
-    kind === 'markdown' ||
-    kind === 'html' ||
-    kind === 'csv'
+    kind === 'code' || kind === 'markdown' || kind === 'html' || kind === 'csv'
   )
 }
 
@@ -147,13 +144,12 @@ export function buildCsvTablePreview(content: string): CsvTablePreview {
   const firstLine = lines[0] || ''
   const separators = [',', ';', '\t']
   const sep = separators.find((s) => firstLine.includes(s)) || ','
-  const clean = (cell: string) =>
-    cell.trim().replace(/^["']|["']$/g, '')
+  const clean = (cell: string) => cell.trim().replace(/^["']|["']$/g, '')
   const headers = firstLine.split(sep).map(clean)
   const maxRows = 500
-  const body = lines.slice(1, maxRows + 1).map((line) =>
-    line.split(sep).map(clean),
-  )
+  const body = lines
+    .slice(1, maxRows + 1)
+    .map((line) => line.split(sep).map(clean))
   return {
     ok: true,
     headers,

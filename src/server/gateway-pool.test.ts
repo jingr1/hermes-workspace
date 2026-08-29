@@ -103,7 +103,10 @@ describe('gateway-pool port assignment', () => {
 
   it('ignores API_SERVER_PORT from a .env symlink to the hermes root', async () => {
     const home = makeHome()
-    writeFileSync(path.join(home, '.env'), 'API_SERVER_PORT=8642\nAPI_SERVER_ENABLED=true\n')
+    writeFileSync(
+      path.join(home, '.env'),
+      'API_SERVER_PORT=8642\nAPI_SERVER_ENABLED=true\n',
+    )
     const writer = addProfile(home, 'writer')
     symlinkSync(path.join(home, '.env'), path.join(writer, '.env'))
 
@@ -197,9 +200,9 @@ describe('profileNameFromHermesHome', () => {
     addProfile(home, 'writer')
     const mod = await loadMod()
     expect(mod.profileNameFromHermesHome(home)).toBe('default')
-    expect(mod.profileNameFromHermesHome(path.join(home, 'profiles', 'writer'))).toBe(
-      'writer',
-    )
+    expect(
+      mod.profileNameFromHermesHome(path.join(home, 'profiles', 'writer')),
+    ).toBe('writer')
   })
 })
 

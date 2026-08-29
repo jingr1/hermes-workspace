@@ -59,16 +59,19 @@ export function deriveHumanGateOptions(gate: HumanGate): HumanGateOptions {
       primary: {
         id: 'primary',
         label: '派 developer 修复 P0',
-        description: '按 architect 审查意见修复 half_car / lqr 等阻塞项，完成后回报 checkpoint。',
+        description:
+          '按 architect 审查意见修复 half_car / lqr 等阻塞项，完成后回报 checkpoint。',
         targetWorkerId: 'developer',
       },
       secondary: {
         id: 'secondary',
         label: '让 architect 重新审查',
-        description: '在修复或补充说明后，由 architect 再次审查并更新 checkpoint。',
+        description:
+          '在修复或补充说明后，由 architect 再次审查并更新 checkpoint。',
         targetWorkerId: 'architect',
       },
-      customPlaceholder: '例如：先只修 half_car.py 字段顺序，修完再跑 extensions 测试…',
+      customPlaceholder:
+        '例如：先只修 half_car.py 字段顺序，修完再跑 extensions 测试…',
     }
   }
 
@@ -128,7 +131,8 @@ export function deriveHumanGateOptions(gate: HumanGate): HumanGateOptions {
       secondary: {
         id: 'secondary',
         label: '升级给 orchestrator 判断',
-        description: '将阻塞上下文交给 orchestrator worker 做路由/拆解（若 roster 已配置）。',
+        description:
+          '将阻塞上下文交给 orchestrator worker 做路由/拆解（若 roster 已配置）。',
         targetWorkerId: 'orchestrator',
       },
       customPlaceholder: '说明重试策略、环境修复步骤或希望转派的 worker…',
@@ -150,11 +154,12 @@ export function deriveHumanGateOptions(gate: HumanGate): HumanGateOptions {
     secondary: {
       id: 'secondary',
       label: '换 worker 处理',
-      description: workerId === 'researcher'
-        ? '交给 architect 进入设计阶段。'
-        : workerId === 'architect'
-          ? '交给 developer 进入实现阶段。'
-          : `重新指派 ${workerId} 处理当前阻塞。`,
+      description:
+        workerId === 'researcher'
+          ? '交给 architect 进入设计阶段。'
+          : workerId === 'architect'
+            ? '交给 developer 进入实现阶段。'
+            : `重新指派 ${workerId} 处理当前阻塞。`,
       targetWorkerId:
         workerId === 'researcher'
           ? 'architect'

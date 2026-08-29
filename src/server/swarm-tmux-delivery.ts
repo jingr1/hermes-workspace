@@ -35,7 +35,9 @@ export function buildHermesTmuxTuiCommand(input: {
     ...(input.runtimeModel
       ? buildSwarmModelEnvAssignments(input.runtimeModel)
       : []),
-  ].filter(Boolean).join(' ')
+  ]
+    .filter(Boolean)
+    .join(' ')
   const hermesBin = shellEscapeSingle(input.hermesBin)
   return `${launchPrefix} exec '${hermesBin}' chat --tui`
 }
@@ -55,7 +57,9 @@ export function buildHermesTmuxShellCommand(input: {
     ...(input.runtimeModel
       ? buildSwarmModelEnvAssignments(input.runtimeModel)
       : []),
-  ].filter(Boolean).join(' ')
+  ]
+    .filter(Boolean)
+    .join(' ')
   return `${launchPrefix} exec bash -l`
 }
 
@@ -115,7 +119,11 @@ export async function tmuxSessionHasPane(
   tmuxBin: string,
   sessionName: string,
 ): Promise<boolean> {
-  const listed = await execFileAsync(tmuxBin, ['list-panes', '-t', sessionName], 5_000)
+  const listed = await execFileAsync(
+    tmuxBin,
+    ['list-panes', '-t', sessionName],
+    5_000,
+  )
   return listed.ok
 }
 
@@ -135,14 +143,38 @@ export async function tmuxPasteWithBracketedPaste(
   }
   const wrapped = `${BRACKETED_PASTE_START}${content}${BRACKETED_PASTE_END}`
   const bufferName = `swarm-bp-${process.pid}-${Date.now().toString(36)}`
-  const loaded = await execFileAsync(tmuxBin, ['load-buffer', '-b', bufferName, '-'], 8_000, wrapped)
+  const loaded = await execFileAsync(
+    tmuxBin,
+    ['load-buffer', '-b', bufferName, '-'],
+    8_000,
+    wrapped,
+  )
   if (!loaded.ok) throw new Error(`load-buffer failed: ${loaded.error}`)
-  let pasted = await execFileAsync(tmuxBin, ['paste-buffer', '-d', '-b', bufferName, '-t', target])
+  let pasted = await execFileAsync(tmuxBin, [
+    'paste-buffer',
+    '-d',
+    '-b',
+    bufferName,
+    '-t',
+    target,
+  ])
   if (!pasted.ok && /no buffer/i.test(pasted.error)) {
     // Rare race or tmux-server mismatch — reload once and retry paste.
-    const reloaded = await execFileAsync(tmuxBin, ['load-buffer', '-b', bufferName, '-'], 8_000, wrapped)
+    const reloaded = await execFileAsync(
+      tmuxBin,
+      ['load-buffer', '-b', bufferName, '-'],
+      8_000,
+      wrapped,
+    )
     if (!reloaded.ok) throw new Error(`load-buffer failed: ${reloaded.error}`)
-    pasted = await execFileAsync(tmuxBin, ['paste-buffer', '-d', '-b', bufferName, '-t', target])
+    pasted = await execFileAsync(tmuxBin, [
+      'paste-buffer',
+      '-d',
+      '-b',
+      bufferName,
+      '-t',
+      target,
+    ])
   }
   if (!pasted.ok) throw new Error(`paste-buffer failed: ${pasted.error}`)
 }
@@ -154,10 +186,15 @@ export async function tmuxSendLiteralEscape(
   sequence: string,
 ): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    const child = execFile(tmuxBin, ['send-keys', '-t', sessionName, '-l', sequence], { env: tmuxExecEnv() }, (err) => {
-      if (err) reject(err)
-      else resolve()
-    })
+    const child = execFile(
+      tmuxBin,
+      ['send-keys', '-t', sessionName, '-l', sequence],
+      { env: tmuxExecEnv() },
+      (err) => {
+        if (err) reject(err)
+        else resolve()
+      },
+    )
     if (child.stdin) child.stdin.end()
   })
 }
@@ -170,13 +207,18 @@ function execFileAsync(
   input?: string,
 ): Promise<{ ok: true; stdout: string } | { ok: false; error: string }> {
   return new Promise((resolve) => {
-    const child = execFile(file, args, { timeout: timeoutMs, env: tmuxExecEnv() }, (err, stdout, stderr) => {
-      if (err) {
-        resolve({ ok: false, error: stderr || err.message })
-        return
-      }
-      resolve({ ok: true, stdout })
-    })
+    const child = execFile(
+      file,
+      args,
+      { timeout: timeoutMs, env: tmuxExecEnv() },
+      (err, stdout, stderr) => {
+        if (err) {
+          resolve({ ok: false, error: stderr || err.message })
+          return
+        }
+        resolve({ ok: true, stdout })
+      },
+    )
     if (input !== undefined && child.stdin) {
       child.stdin.write(input, 'utf8')
       child.stdin.end()

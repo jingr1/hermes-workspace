@@ -5,10 +5,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import YAML from 'yaml'
-import {
-  listProfiles,
-  resolveProfileHermesHome,
-} from './profiles-browser'
+import { listProfiles, resolveProfileHermesHome } from './profiles-browser'
 import { ensureSwarmProfileConfig } from './swarm-profile-config'
 import { getStateDir } from './workspace-state-dir'
 
@@ -164,7 +161,11 @@ export function readExplicitProfilePort(profileName: string): number | null {
       return null
     }
     const apiServer = (gateway as Record<string, unknown>).api_server
-    if (!apiServer || typeof apiServer !== 'object' || Array.isArray(apiServer)) {
+    if (
+      !apiServer ||
+      typeof apiServer !== 'object' ||
+      Array.isArray(apiServer)
+    ) {
       return null
     }
     return parsePort((apiServer as Record<string, unknown>).port)
@@ -179,7 +180,9 @@ function poolFilePath(): string {
 
 function loadPersistedPorts(): Record<string, number> {
   try {
-    const parsed = JSON.parse(fs.readFileSync(poolFilePath(), 'utf-8')) as PoolFile
+    const parsed = JSON.parse(
+      fs.readFileSync(poolFilePath(), 'utf-8'),
+    ) as PoolFile
     if (!parsed?.ports || typeof parsed.ports !== 'object') return {}
     const ports: Record<string, number> = {}
     for (const [name, value] of Object.entries(parsed.ports)) {
@@ -209,10 +212,7 @@ function persistPorts(ports: Record<string, number>): void {
   }
 }
 
-function upsertDotEnv(
-  envPath: string,
-  updates: Record<string, string>,
-): void {
+function upsertDotEnv(envPath: string, updates: Record<string, string>): void {
   let raw = ''
   try {
     raw = fs.readFileSync(envPath, 'utf-8')

@@ -26,7 +26,8 @@ export const APP_CSP_DIRECTIVES = [
   "base-uri 'self'",
   "object-src 'none'",
   "form-action 'self'",
-  "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+  // Shiki/oniguruma needs wasm-unsafe-eval; without it code blocks fall back to plain text.
+  "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data: https://fonts.gstatic.com",

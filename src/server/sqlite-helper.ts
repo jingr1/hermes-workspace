@@ -22,7 +22,10 @@ export type SqliteDriver = 'better-sqlite3' | 'node:sqlite'
 let sqliteDriverWarningShown = false
 let sqliteCliWarningShown = false
 
-function warnSqliteFallback(driver: SqliteDriver | 'sqlite3-cli', detail?: string): void {
+function warnSqliteFallback(
+  driver: SqliteDriver | 'sqlite3-cli',
+  detail?: string,
+): void {
   if (driver === 'node:sqlite') {
     if (sqliteDriverWarningShown) return
     sqliteDriverWarningShown = true
@@ -44,7 +47,10 @@ function warnSqliteFallback(driver: SqliteDriver | 'sqlite3-cli', detail?: strin
   }
 }
 
-export function openSqliteDatabase(dbPath: string, readOnly: boolean): SqliteDatabase {
+export function openSqliteDatabase(
+  dbPath: string,
+  readOnly: boolean,
+): SqliteDatabase {
   let Database: new (
     path: string,
     opts?: Record<string, unknown>,

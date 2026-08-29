@@ -67,10 +67,7 @@ export function useDeleteSession(): DeleteSessionResult {
     },
     onError: function onError(err, _payload, context) {
       if (context?.previousSessions) {
-        queryClient.setQueryData(
-          sessionsKey,
-          context.previousSessions,
-        )
+        queryClient.setQueryData(sessionsKey, context.previousSessions)
       }
       clearSessionDeleted(_payload.sessionKey || _payload.friendlyId)
       setError(err instanceof Error ? err.message : String(err))

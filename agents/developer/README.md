@@ -20,15 +20,19 @@ Write code — implement features from approved design specs, write tests, verif
 - `developer:autoresearch` — classic modify/verify/keep loop on code/test targets when `executor: developer` in contract (orchestrator dispatch only)
 
 ## Tools
+
 terminal, file, browser, web, session_search, skills, todo
 
 ## Skills
+
 gstack-for-hermes, llm-wiki, test-driven-development, systematic-debugging, codebase-inspection, github-pr-workflow, requesting-code-review, receiving-code-review, executing-plans, autoresearch, autoresearch-execute
 
 ## MCP servers
+
 none (brain-first via `llm-wiki` skill + `WIKI_PATH`)
 
 ## Plugins
+
 none
 
 ## Gates

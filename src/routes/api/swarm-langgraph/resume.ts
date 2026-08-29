@@ -5,7 +5,10 @@ import {
   langgraphEnvWithHumanGate,
   parseHumanGateResumeBody,
 } from '../../../server/langgraph-human-gate'
-import { runLanggraphSync, spawnLanggraphDetached } from '../../../server/langgraph-orchestrator'
+import {
+  runLanggraphSync,
+  spawnLanggraphDetached,
+} from '../../../server/langgraph-orchestrator'
 
 type ResumeBody = {
   missionId?: unknown
@@ -40,21 +43,34 @@ export const Route = createFileRoute('/api/swarm-langgraph/resume')({
         try {
           body = (await request.json()) as ResumeBody
         } catch {
-          return json({ ok: false, error: 'Invalid JSON body' }, { status: 400 })
+          return json(
+            { ok: false, error: 'Invalid JSON body' },
+            { status: 400 },
+          )
         }
         const missionId = cleanString(body.missionId)
         const action = cleanString(body.action)
         if (!missionId) {
-          return json({ ok: false, error: 'missionId required' }, { status: 400 })
+          return json(
+            { ok: false, error: 'missionId required' },
+            { status: 400 },
+          )
         }
         if (action !== 'approved' && action !== 'abort') {
-          return json({ ok: false, error: 'action must be approved or abort' }, { status: 400 })
+          return json(
+            { ok: false, error: 'action must be approved or abort' },
+            { status: 400 },
+          )
         }
 
         const useMock = new URL(request.url).searchParams.get('mock') === '1'
-        const humanGate = action === 'approved' ? parseHumanGateResumeBody(body) : null
+        const humanGate =
+          action === 'approved' ? parseHumanGateResumeBody(body) : null
         if (action === 'approved' && body.choice === 'custom' && !humanGate) {
-          return json({ ok: false, error: '自定义选项需要填写说明' }, { status: 400 })
+          return json(
+            { ok: false, error: '自定义选项需要填写说明' },
+            { status: 400 },
+          )
         }
         const env = langgraphEnvWithHumanGate(process.env, humanGate)
 

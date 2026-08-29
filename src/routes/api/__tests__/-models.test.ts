@@ -1,7 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import path from 'node:path'
 
-const { existsSync, readFileSync, writeFileSync, mkdirSync, statSync, readdirSync } = vi.hoisted(() => ({
+const {
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  statSync,
+  readdirSync,
+} = vi.hoisted(() => ({
   existsSync: vi.fn().mockReturnValue(false),
   readFileSync: vi.fn().mockReturnValue(''),
   writeFileSync: vi.fn().mockImplementation(() => {}),
@@ -11,7 +18,14 @@ const { existsSync, readFileSync, writeFileSync, mkdirSync, statSync, readdirSyn
 }))
 
 vi.mock('node:fs', () => ({
-  default: { existsSync, readFileSync, writeFileSync, mkdirSync, statSync, readdirSync },
+  default: {
+    existsSync,
+    readFileSync,
+    writeFileSync,
+    mkdirSync,
+    statSync,
+    readdirSync,
+  },
   existsSync,
   readFileSync,
   writeFileSync,
@@ -137,7 +151,9 @@ describe('models route', () => {
     expect(res.status).toBe(200)
     const json = await res.json()
     expect(json.ok).toBe(true)
-    const match = json.models.find((m: { id: string }) => m.id === 'minimaxai/minimax-m2.7')
+    const match = json.models.find(
+      (m: { id: string }) => m.id === 'minimaxai/minimax-m2.7',
+    )
     expect(match?.provider).toBe('nvidia')
   })
 

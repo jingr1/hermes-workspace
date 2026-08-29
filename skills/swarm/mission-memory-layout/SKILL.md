@@ -15,12 +15,12 @@ Shared swarm artifacts use a **three-layer** layout under the workspace `memory/
 
 ## Paths
 
-| Layer | Path | Owner |
-|-------|------|-------|
-| Handoff bus | `memory/handoffs/swarm/<worker>-latest.{md,json}` | Platform / orchestrator |
-| Mission archive | `memory/swarm/missions/<missionId>/<worker>/` | All workers (per assignment) |
-| Draft (no missionId yet) | `memory/swarm/<worker>/` | Individual worker |
-| Durable knowledge | `$WIKI_PATH` (`~/wiki`) | learning via `llm-wiki` |
+| Layer                    | Path                                              | Owner                        |
+| ------------------------ | ------------------------------------------------- | ---------------------------- |
+| Handoff bus              | `memory/handoffs/swarm/<worker>-latest.{md,json}` | Platform / orchestrator      |
+| Mission archive          | `memory/swarm/missions/<missionId>/<worker>/`     | All workers (per assignment) |
+| Draft (no missionId yet) | `memory/swarm/<worker>/`                          | Individual worker            |
+| Durable knowledge        | `$WIKI_PATH` (`~/wiki`)                           | learning via `llm-wiki`      |
 
 ## Write rules
 

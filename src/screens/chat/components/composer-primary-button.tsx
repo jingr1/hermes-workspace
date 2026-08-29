@@ -67,7 +67,8 @@ function ComposerPrimaryButtonComponent({
         isStop
           ? 'bg-red-500 shadow-[0_2px_10px_rgba(0,0,0,0.18)] hover:brightness-110 active:scale-95'
           : 'bg-accent-500 shadow-[0_2px_8px_rgba(0,0,0,0.12)] hover:scale-[1.04] hover:shadow-[0_4px_14px_rgba(0,0,0,0.16)] active:scale-95',
-        isDisabled && 'cursor-not-allowed opacity-35 shadow-none hover:scale-100',
+        isDisabled &&
+          'cursor-not-allowed opacity-35 shadow-none hover:scale-100',
       )}
     >
       {isStop ? (

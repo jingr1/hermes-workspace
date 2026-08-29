@@ -55,9 +55,11 @@ export function JobModelFields({
     }
 
     let cancelled = false
-    void fetchModelsForJobProvider(provider, catalogQuery.data).then((models) => {
-      if (!cancelled) setRemoteModels(models)
-    })
+    void fetchModelsForJobProvider(provider, catalogQuery.data).then(
+      (models) => {
+        if (!cancelled) setRemoteModels(models)
+      },
+    )
 
     return () => {
       cancelled = true
@@ -86,9 +88,13 @@ export function JobModelFields({
           className="rounded-full border px-3 py-1.5 text-xs font-medium transition-colors"
           style={{
             background:
-              modelPin === 'inherit' ? 'var(--theme-accent)' : 'var(--theme-card)',
+              modelPin === 'inherit'
+                ? 'var(--theme-accent)'
+                : 'var(--theme-card)',
             borderColor:
-              modelPin === 'inherit' ? 'var(--theme-accent)' : 'var(--theme-border)',
+              modelPin === 'inherit'
+                ? 'var(--theme-accent)'
+                : 'var(--theme-border)',
             color: modelPin === 'inherit' ? '#fff' : 'var(--theme-text)',
           }}
         >
@@ -100,9 +106,13 @@ export function JobModelFields({
           className="rounded-full border px-3 py-1.5 text-xs font-medium transition-colors"
           style={{
             background:
-              modelPin === 'pinned' ? 'var(--theme-accent)' : 'var(--theme-card)',
+              modelPin === 'pinned'
+                ? 'var(--theme-accent)'
+                : 'var(--theme-card)',
             borderColor:
-              modelPin === 'pinned' ? 'var(--theme-accent)' : 'var(--theme-border)',
+              modelPin === 'pinned'
+                ? 'var(--theme-accent)'
+                : 'var(--theme-border)',
             color: modelPin === 'pinned' ? '#fff' : 'var(--theme-text)',
           }}
         >
@@ -140,7 +150,8 @@ export function JobModelFields({
                   {option.name}
                 </option>
               ))}
-              {provider && !providerOptions.some((option) => option.id === provider) ? (
+              {provider &&
+              !providerOptions.some((option) => option.id === provider) ? (
                 <option value={provider}>{provider}</option>
               ) : null}
             </select>

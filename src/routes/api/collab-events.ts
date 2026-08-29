@@ -21,7 +21,8 @@ export const Route = createFileRoute('/api/collab-events')({
         }
 
         const url = new URL(request.url)
-        const sessionKey = url.searchParams.get('sessionKey')?.trim() || undefined
+        const sessionKey =
+          url.searchParams.get('sessionKey')?.trim() || undefined
         const roomId = url.searchParams.get('roomId')?.trim() || undefined
         const scope = url.searchParams.get('scope')?.trim() || undefined
 

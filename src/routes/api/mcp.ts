@@ -9,7 +9,10 @@ import {
   ensureGatewayEnhancedProbed,
   getCapabilities,
 } from '../../server/gateway-capabilities'
-import { requireJsonContentType, safeErrorMessage } from '../../server/rate-limit'
+import {
+  requireJsonContentType,
+  safeErrorMessage,
+} from '../../server/rate-limit'
 import {
   maskSecretsInPlace,
   normalizeMcpList,
@@ -26,7 +29,10 @@ import { getProbe } from '../../server/mcp-tools-cache'
 const KNOWN_CATEGORIES = ['All', 'Connected', 'Failed', 'Disabled'] as const
 const REQUEST_TIMEOUT_MS = 30_000
 
-async function mcpFetch(path: string, init: RequestInit = {}): Promise<Response> {
+async function mcpFetch(
+  path: string,
+  init: RequestInit = {},
+): Promise<Response> {
   // Control-plane refactor: always route to gateway, not dashboard
   const headers = new Headers(init.headers)
   if (BEARER_TOKEN && !headers.has('Authorization')) {
@@ -61,10 +67,13 @@ function toConfigEntry(input: McpServerInput): Record<string, unknown> {
   if (input.command) out.command = input.command
   if (input.args && input.args.length > 0) out.args = input.args
   if (input.env && Object.keys(input.env).length > 0) out.env = input.env
-  if (input.headers && Object.keys(input.headers).length > 0) out.headers = input.headers
+  if (input.headers && Object.keys(input.headers).length > 0)
+    out.headers = input.headers
   if (input.toolMode && input.toolMode !== 'all') out.tool_mode = input.toolMode
-  if (input.includeTools && input.includeTools.length > 0) out.include_tools = input.includeTools
-  if (input.excludeTools && input.excludeTools.length > 0) out.exclude_tools = input.excludeTools
+  if (input.includeTools && input.includeTools.length > 0)
+    out.include_tools = input.includeTools
+  if (input.excludeTools && input.excludeTools.length > 0)
+    out.exclude_tools = input.excludeTools
   if (input.authType && input.authType !== 'none') {
     const auth: Record<string, unknown> = { type: input.authType }
     if (input.bearerToken) auth.token = input.bearerToken
@@ -115,7 +124,9 @@ export const Route = createFileRoute('/api/mcp')({
         }
         try {
           const url = new URL(request.url)
-          const search = (url.searchParams.get('search') || '').trim().toLowerCase()
+          const search = (url.searchParams.get('search') || '')
+            .trim()
+            .toLowerCase()
           const category = (url.searchParams.get('category') || 'All').trim()
 
           let servers: ReturnType<typeof normalizeMcpList>
@@ -162,7 +173,8 @@ export const Route = createFileRoute('/api/mcp')({
                 .toLowerCase()
               if (!hay.includes(search)) return false
             }
-            if (category === 'Connected' && s.status !== 'connected') return false
+            if (category === 'Connected' && s.status !== 'connected')
+              return false
             if (category === 'Failed' && s.status !== 'failed') return false
             if (category === 'Disabled' && s.enabled) return false
             return true
@@ -175,7 +187,13 @@ export const Route = createFileRoute('/api/mcp')({
           })
         } catch (err) {
           return json(
-            { ok: false, error: safeErrorMessage(err), servers: [], total: 0, categories: [...KNOWN_CATEGORIES] },
+            {
+              ok: false,
+              error: safeErrorMessage(err),
+              servers: [],
+              total: 0,
+              categories: [...KNOWN_CATEGORIES],
+            },
             { status: 500 },
           )
         }
@@ -200,7 +218,11 @@ export const Route = createFileRoute('/api/mcp')({
           const parsed = parseMcpServerInput(raw)
           if (!parsed.ok) {
             return json(
-              { ok: false, error: 'Invalid MCP server payload', errors: parsed.errors },
+              {
+                ok: false,
+                error: 'Invalid MCP server payload',
+                errors: parsed.errors,
+              },
               { status: 400 },
             )
           }
@@ -218,9 +240,13 @@ export const Route = createFileRoute('/api/mcp')({
             )
             if (!response.ok || !server) {
               const errMsg =
-                ((body as Record<string, unknown>).error as string | undefined) ||
-                `MCP create failed (${response.status})`
-              return json({ ok: false, error: errMsg }, { status: response.status || 502 })
+                ((body as Record<string, unknown>).error as
+                  | string
+                  | undefined) || `MCP create failed (${response.status})`
+              return json(
+                { ok: false, error: errMsg },
+                { status: response.status || 502 },
+              )
             }
             return json({ ok: true, server: maskSecretsInPlace(server) })
           }
@@ -228,13 +254,22 @@ export const Route = createFileRoute('/api/mcp')({
           const { servers } = await readConfigServersMap()
           servers[input.name] = toConfigEntry(input)
           await saveConfig({ mcp_servers: servers })
-          const written = normalizeMcpServerFromConfig(input.name, servers[input.name])
+          const written = normalizeMcpServerFromConfig(
+            input.name,
+            servers[input.name],
+          )
           if (!written) {
-            return json({ ok: false, error: 'MCP create failed (config write)' }, { status: 500 })
+            return json(
+              { ok: false, error: 'MCP create failed (config write)' },
+              { status: 500 },
+            )
           }
           return json({ ok: true, server: maskSecretsInPlace(written) })
         } catch (err) {
-          return json({ ok: false, error: safeErrorMessage(err) }, { status: 500 })
+          return json(
+            { ok: false, error: safeErrorMessage(err) },
+            { status: 500 },
+          )
         }
       },
     },

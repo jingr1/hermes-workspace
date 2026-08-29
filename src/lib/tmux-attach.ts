@@ -3,7 +3,17 @@ export function buildTmuxAttachCommand(sessionName: string): Array<string> {
   // When pnpm dev runs inside tmux, inherited TMUX blocks nested attach and the
   // subprocess exits immediately — Runtime shows "session closed" while `tmux ls`
   // still lists the worker session.
-  return ['env', '-u', 'TMUX', '-u', 'TMUX_PANE', 'tmux', 'attach', '-t', sessionName]
+  return [
+    'env',
+    '-u',
+    'TMUX',
+    '-u',
+    'TMUX_PANE',
+    'tmux',
+    'attach',
+    '-t',
+    sessionName,
+  ]
 }
 
 export function isTmuxAttachCommand(command: Array<string>): boolean {

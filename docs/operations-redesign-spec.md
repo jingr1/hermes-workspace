@@ -29,13 +29,13 @@ Operations 重新定位为：
 
 ### 2.1 与周边页面的边界
 
-| 页面 | 不再做 | 交给 Operations | 交给 Swarm |
-|---|---|---|---|
-| Profiles | profile 列表、创建、激活 | profile 的完整编辑（具身在 Operations 中） | - |
-| Skills | 统一按 profile 管理 skills | 按 agent 管理 skills/MCP | - |
-| MCP | 统一按 profile 管理 MCP | 按 agent 管理 MCP | - |
-| Settings/Providers | 按 agent 管理 provider/model | provider/model 选择、.env 检测 | - |
-| Swarm | - | - | worker 运行时、dispatch、mission、tmux、checkpoint |
+| 页面               | 不再做                       | 交给 Operations                            | 交给 Swarm                                         |
+| ------------------ | ---------------------------- | ------------------------------------------ | -------------------------------------------------- |
+| Profiles           | profile 列表、创建、激活     | profile 的完整编辑（具身在 Operations 中） | -                                                  |
+| Skills             | 统一按 profile 管理 skills   | 按 agent 管理 skills/MCP                   | -                                                  |
+| MCP                | 统一按 profile 管理 MCP      | 按 agent 管理 MCP                          | -                                                  |
+| Settings/Providers | 按 agent 管理 provider/model | provider/model 选择、.env 检测             | -                                                  |
+| Swarm              | -                            | -                                          | worker 运行时、dispatch、mission、tmux、checkpoint |
 
 ## 3. 页面结构
 
@@ -77,17 +77,20 @@ Operations 重新定位为：
 点击卡片进入详情，分为以下 tab：
 
 #### Tab 1: Identity
+
 - Name / Emoji / Description
 - System Prompt
 - Role template（可与 skills/tools/MCP 联动）
 
 #### Tab 2: Model & Provider
+
 - Provider 选择
 - Model 选择
 - Fallback model（可选）
 - Temperature / max_tokens 等高级参数（如果 config 支持）
 
 #### Tab 3: Capabilities（核心扩展）
+
 - **Skills**：已安装 skills 列表，按 agent 开关 / 排序 / 搜索；提供 "Add skill" 跳转
 - **MCP Servers**：已配置 MCP servers，按 agent 开关 / 编辑
 - **Tools**：基于 Hermes config 的 enabled_toolsets / toolsets 显示（如果有），简单展示哪些 toolset 可用
@@ -95,11 +98,13 @@ Operations 重新定位为：
 - **Memory**：绑定 wiki / memory 路径（如果支持）
 
 #### Tab 4: Schedule
+
 - 属于该 agent 的 cron jobs 列表（现有）
 - 新增 / 编辑 / 删除 cron job
 - 模板："Daily standup report"、"Weekly competitor scan"等
 
 #### Tab 5: Activity
+
 - 该 agent 的近期 outputs 列表
 - 点击跳转到对应 session
 - 按日期、source（session/cron）筛选
@@ -147,15 +152,15 @@ export type OperationsAgent = GatewayConfigAgent & {
 
 ### 4.2 新增 API
 
-| API | 方法 | 功能 |
-|---|---|---|
-| `/api/profiles/read` | GET | 读取单个 profile 的完整 config（已有） |
-| `/api/profiles/skills?name=<profile>` | GET | 读取某 profile 的 skills（已有） |
-| `/api/profiles/update` | POST | 更新 profile config（已有） |
-| `/api/profiles/toggle-skill` | POST | 切换某 profile 的 skill 开关（已有） |
-| `/api/profiles/mcp` | GET/POST | 读取/更新某 profile 的 MCP server 配置（需新增） |
-| `/api/profiles/env` | GET | 检测某 profile 是否有 .env（已有能力，封装 API） |
-| `/api/profiles/capabilities` | GET | 聚合返回 skills + MCP + toolsets（可选，减少前端请求数） |
+| API                                   | 方法     | 功能                                                     |
+| ------------------------------------- | -------- | -------------------------------------------------------- |
+| `/api/profiles/read`                  | GET      | 读取单个 profile 的完整 config（已有）                   |
+| `/api/profiles/skills?name=<profile>` | GET      | 读取某 profile 的 skills（已有）                         |
+| `/api/profiles/update`                | POST     | 更新 profile config（已有）                              |
+| `/api/profiles/toggle-skill`          | POST     | 切换某 profile 的 skill 开关（已有）                     |
+| `/api/profiles/mcp`                   | GET/POST | 读取/更新某 profile 的 MCP server 配置（需新增）         |
+| `/api/profiles/env`                   | GET      | 检测某 profile 是否有 .env（已有能力，封装 API）         |
+| `/api/profiles/capabilities`          | GET      | 聚合返回 skills + MCP + toolsets（可选，减少前端请求数） |
 
 ### 4.3 后端实现复用
 
@@ -187,6 +192,7 @@ export type OperationsAgent = GatewayConfigAgent & {
 4. 新增 Schedule tab（展示 cron jobs）和 Activity tab（展示 outputs + sessions）。
 
 **新增 API：**
+
 - `GET /api/profiles/capabilities?name=<profile>` — 聚合返回 skills + MCP + toolsets + workspace + envExists
 - `GET /api/profiles/mcp?name=<profile>` — 读取 profile 的 MCP servers 列表
 - `POST /api/profiles/mcp` — toggle/remove MCP server（body: `{name, action, server, enabled?}`）
@@ -202,6 +208,7 @@ export type OperationsAgent = GatewayConfigAgent & {
 **根因**：`saveAgentMutation`（`use-operations.ts` 第 876 行）只把 `model` 和 `systemPrompt` 写入 config.yaml，`name` 和 `description` 字段从未持久化到任何地方。`persistAgentMeta` 只写 emoji + systemPrompt，`updateClaudeProfile` 的 patch 对象里也没有这两个字段。用户在输入框里修改后点 Save，实际上什么都没写。
 
 **修复**：
+
 1. `saveAgentMutation` 的 `patch` 对象里加入 `name`（对应 config.yaml 的 `display_name` 字段）。
 2. `persistAgentMeta` 调用时传入 `description`，写入 localStorage meta。
 3. `saveAgentMeta` helper 类型 `OperationsAgentMeta` 补充 `name?: string` 字段。
@@ -213,6 +220,7 @@ export type OperationsAgent = GatewayConfigAgent & {
 **根因**：`operations-agent-detail.tsx` 直接调用 `import { fetchModels } from '@/lib/gateway-api'`，该函数内部使用 `makeEndpoint('/api/models')` 构造 URL，`makeEndpoint` 把路径拼在 `BASE_URL`（即 `CLAUDE_API_URL`，gateway 地址 `:8642`）上，而不是 workspace 服务器 `:3000`。Operations 所有其他 API（`/api/profiles/*`、`/api/swarm-runtime` 等）都用相对路径走 `:3000`，这里是例外。若 gateway 未响应或未配置，`models` 为空数组，下拉没有任何选项，但组件不报错，表现为"空白下拉"。
 
 **修复**：
+
 1. 在 detail 组件里把 `queryFn: fetchModels` 替换为直接 `fetch('/api/models')` 相对路径调用，走 workspace 服务器。
 2. 或者在 `use-operations.ts` 里统一管理 models query（`queryKey: ['operations', 'models']`），避免 detail 组件直接引入 gateway-api。
 3. 下拉为空时显示 placeholder 提示"Gateway 未连接，无法加载模型列表"，而不是沉默空白。
@@ -228,6 +236,7 @@ A. **视觉层**：toggle 开关用的是 Tailwind `peer` 机制（`peer-checked
 B. **网络层**：`toggle-skill` API 通过 `dashboardFetch` 代理到 Hermes Dashboard（`:9119`），先检查 `capabilities.dashboard.available`。Dashboard 未连接时直接返回 503，`onError` 里调用 `toast()` 弹出通知，但 toast 可能渲染在模态框 z-index 层级之下或边缘不可见区域，用户看不到报错。
 
 **修复**：
+
 1. **乐观更新**：`toggleSkillMutation` 的 `onMutate` 里对 `['operations', 'capabilities']` 做 `queryClient.setQueryData` 乐观翻转，`onError` 时 rollback。
 2. **内联错误**：Capabilities tab 顶部加 inline error banner，dashboard 不可用时显示"Dashboard 未连接，技能开关不可用"，不依赖 toast。
 3. **备选方案（长期）**：绕开 dashboard 代理，改为直接读写 profile config.yaml 文件系统（`skills.disabled` 数组），与 `/api/profiles/capabilities` 读取路径一致，完全不依赖 dashboard 连接。
@@ -239,6 +248,7 @@ B. **网络层**：`toggle-skill` API 通过 `dashboardFetch` 代理到 Hermes D
 **根因**：`ScheduleTab` 里用了原生 `<a href="/jobs">` 触发硬导航，整个应用跳转到 `/jobs` 路由，模态框关闭、页面刷新。
 
 **修复**：
+
 1. 把 `<a href="/jobs">` 改为 TanStack Router 的 `<Link to="/jobs">` 软导航（不刷新页面）。
 2. 同时在 `onClose` 前把 detail modal 关掉，避免 navigation + modal 同时存在的状态。
 3. 更好的 UX："+ Add Job" 改为在 Schedule tab 内展开一个 inline 表单，填写 name + schedule + prompt，调用 `/api/jobs` 创建，创建后 invalidate cronJobsQuery，无需跳出页面。
@@ -247,12 +257,12 @@ B. **网络层**：`toggle-skill` API 通过 `dashboardFetch` 代理到 Hermes D
 
 #### 修复优先级
 
-| Bug | 严重性 | 修复难度 | 优先级 |
-|---|---|---|---|
-| Bug 2：Model 下拉为空 | 高（功能不可用） | 低（改一行 fetch URL） | P0 |
-| Bug 1：name/description 不保存 | 高（数据丢失） | 低（扩展 patch 对象） | P0 |
-| Bug 3：Skill toggle 无反应 | 高（功能不可用） | 中（乐观更新 + 内联错误） | P1 |
-| Bug 4：Add Job 跳出 | 中（UX 问题） | 低（改为 Link 组件） | P1 |
+| Bug                            | 严重性           | 修复难度                  | 优先级 |
+| ------------------------------ | ---------------- | ------------------------- | ------ |
+| Bug 2：Model 下拉为空          | 高（功能不可用） | 低（改一行 fetch URL）    | P0     |
+| Bug 1：name/description 不保存 | 高（数据丢失）   | 低（扩展 patch 对象）     | P0     |
+| Bug 3：Skill toggle 无反应     | 高（功能不可用） | 中（乐观更新 + 内联错误） | P1     |
+| Bug 4：Add Job 跳出            | 中（UX 问题）    | 低（改为 Link 组件）      | P1     |
 
 ### 5.3 阶段三：角色模板与一键配置 ✅ 已完成
 

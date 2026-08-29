@@ -1,4 +1,7 @@
-import { parseSwarmModelLabel, type ResolvedSwarmModel } from './swarm-model-resolver'
+import {
+  parseSwarmModelLabel,
+  type ResolvedSwarmModel,
+} from './swarm-model-resolver'
 import { rosterByWorkerId } from './swarm-roster'
 
 function shellEscapeSingle(value: string): string {

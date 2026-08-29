@@ -55,20 +55,30 @@ export function ProfileModelSelector({
     [catalogProviders],
   )
 
-  const [draftDefaultProvider, setDraftDefaultProvider] = useState(defaultProvider)
+  const [draftDefaultProvider, setDraftDefaultProvider] =
+    useState(defaultProvider)
   const [draftDefaultModel, setDraftDefaultModel] = useState(defaultModel)
-  const [draftFallbackProvider, setDraftFallbackProvider] = useState(fallbackProvider)
+  const [draftFallbackProvider, setDraftFallbackProvider] =
+    useState(fallbackProvider)
   const [draftFallbackModel, setDraftFallbackModel] = useState(fallbackModel)
   const [defaultModels, setDefaultModels] = useState<Array<string>>([])
   const [fallbackModels, setFallbackModels] = useState<Array<string>>([])
-  const [saving, setSaving] = useState<'default' | 'fallback' | 'clear' | null>(null)
+  const [saving, setSaving] = useState<'default' | 'fallback' | 'clear' | null>(
+    null,
+  )
 
   useEffect(() => {
     setDraftDefaultProvider(defaultProvider)
     setDraftDefaultModel(defaultModel)
     setDraftFallbackProvider(fallbackProvider)
     setDraftFallbackModel(fallbackModel)
-  }, [defaultModel, defaultProvider, fallbackModel, fallbackProvider, profileName])
+  }, [
+    defaultModel,
+    defaultProvider,
+    fallbackModel,
+    fallbackProvider,
+    profileName,
+  ])
 
   const fetchModels = useCallback(
     async (providerId: string, catalog: Array<ExtraCatalogProvider>) => {
@@ -92,7 +102,9 @@ export function ProfileModelSelector({
       try {
         const res = await fetch('/api/models')
         if (res.ok) {
-          const data = (await res.json()) as { models?: Array<{ id: string; provider?: string }> }
+          const data = (await res.json()) as {
+            models?: Array<{ id: string; provider?: string }>
+          }
           const filtered = (data.models || [])
             .filter((m) => m.provider === providerId)
             .map((m) => m.id)
@@ -103,8 +115,12 @@ export function ProfileModelSelector({
       } catch {
         // fall through to catalog / card defaults
       }
-      const card = mergeProviderCards(catalog).find((entry) => entry.id === providerId)
-      return [...new Set([...(catalogEntry?.models || []), ...(card?.models || [])])]
+      const card = mergeProviderCards(catalog).find(
+        (entry) => entry.id === providerId,
+      )
+      return [
+        ...new Set([...(catalogEntry?.models || []), ...(card?.models || [])]),
+      ]
     },
     [],
   )
@@ -140,7 +156,11 @@ export function ProfileModelSelector({
     value: string,
     onChange: (next: string) => void,
   ) => (
-    <select value={value} onChange={(event) => onChange(event.target.value)} className={selectClassName}>
+    <select
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className={selectClassName}
+    >
       <option value="">Select provider</option>
       {providerOptions.map((provider) => (
         <option key={provider.id} value={provider.id}>
@@ -163,7 +183,9 @@ export function ProfileModelSelector({
       className={selectClassName + ' font-mono'}
       disabled={!providerId}
     >
-      <option value="">{providerId ? 'Select model' : 'Pick a provider first'}</option>
+      <option value="">
+        {providerId ? 'Select model' : 'Pick a provider first'}
+      </option>
       {models.map((model) => (
         <option key={model} value={model}>
           {model}
@@ -179,12 +201,15 @@ export function ProfileModelSelector({
     <div className="space-y-4 rounded-xl p-4" style={panelStyle}>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <p className="text-sm font-semibold" style={{ color: 'var(--theme-text)' }}>
+          <p
+            className="text-sm font-semibold"
+            style={{ color: 'var(--theme-text)' }}
+          >
             Profile selection
           </p>
           <p className="text-xs leading-relaxed" style={mutedStyle}>
-            Choose which provider and model this profile uses. Provider URLs and keys are
-            configured in the card grid above.
+            Choose which provider and model this profile uses. Provider URLs and
+            keys are configured in the card grid above.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -245,8 +270,14 @@ export function ProfileModelSelector({
         />
       ) : (
         <div className="space-y-4">
-          <div className="space-y-2 rounded-lg p-3" style={{ backgroundColor: 'var(--theme-panel)' }}>
-            <p className="text-xs font-semibold uppercase tracking-wider" style={mutedStyle}>
+          <div
+            className="space-y-2 rounded-lg p-3"
+            style={{ backgroundColor: 'var(--theme-panel)' }}
+          >
+            <p
+              className="text-xs font-semibold uppercase tracking-wider"
+              style={mutedStyle}
+            >
               Default model
             </p>
             <div className="grid gap-2 md:grid-cols-2">
@@ -275,13 +306,18 @@ export function ProfileModelSelector({
               <Button
                 size="sm"
                 disabled={
-                  saving !== null || !draftDefaultProvider.trim() || !draftDefaultModel.trim()
+                  saving !== null ||
+                  !draftDefaultProvider.trim() ||
+                  !draftDefaultModel.trim()
                 }
                 onClick={() => {
                   void (async () => {
                     setSaving('default')
                     try {
-                      await onSaveDefault(draftDefaultProvider.trim(), draftDefaultModel.trim())
+                      await onSaveDefault(
+                        draftDefaultProvider.trim(),
+                        draftDefaultModel.trim(),
+                      )
                     } finally {
                       setSaving(null)
                     }
@@ -293,8 +329,14 @@ export function ProfileModelSelector({
             </div>
           </div>
 
-          <div className="space-y-2 rounded-lg p-3" style={{ backgroundColor: 'var(--theme-panel)' }}>
-            <p className="text-xs font-semibold uppercase tracking-wider" style={mutedStyle}>
+          <div
+            className="space-y-2 rounded-lg p-3"
+            style={{ backgroundColor: 'var(--theme-panel)' }}
+          >
+            <p
+              className="text-xs font-semibold uppercase tracking-wider"
+              style={mutedStyle}
+            >
               Fallback model (optional)
             </p>
             <div className="grid gap-2 md:grid-cols-2">
@@ -323,7 +365,10 @@ export function ProfileModelSelector({
               <Button
                 size="sm"
                 variant="ghost"
-                disabled={saving !== null || (!fallbackProvider && !draftFallbackProvider)}
+                disabled={
+                  saving !== null ||
+                  (!fallbackProvider && !draftFallbackProvider)
+                }
                 onClick={() => {
                   void (async () => {
                     setSaving('clear')
@@ -342,7 +387,9 @@ export function ProfileModelSelector({
               <Button
                 size="sm"
                 disabled={
-                  saving !== null || !draftFallbackProvider.trim() || !draftFallbackModel.trim()
+                  saving !== null ||
+                  !draftFallbackProvider.trim() ||
+                  !draftFallbackModel.trim()
                 }
                 onClick={() => {
                   void (async () => {

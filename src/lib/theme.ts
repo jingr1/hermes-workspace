@@ -23,7 +23,8 @@ export const THEMES: Array<{
   {
     id: 'claude-nous',
     label: 'Nous',
-    description: 'Deep teal background, cream accent — matches Nous Research chrome',
+    description:
+      'Deep teal background, cream accent — matches Nous Research chrome',
     icon: '◱',
   },
   {
@@ -118,7 +119,7 @@ const LIGHT_THEME_MAP: Record<
   'claude-official': 'claude-official-light',
   'claude-classic': 'claude-classic-light',
   'claude-slate': 'claude-slate-light',
-  'scifi': 'scifi-light',
+  scifi: 'scifi-light',
   webui: 'webui-light',
 }
 const DARK_THEME_MAP: Record<
