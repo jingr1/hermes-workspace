@@ -223,17 +223,19 @@ describe('provider catalog', () => {
 
   it('copies a provider URL into every profile without changing live fallbacks', () => {
     seedProfiles()
+    // Use a NON-builtin id: builtins are (by design) pruned from profiles
+    // instead of being redundantly written (syncProviderToAllProfiles).
     upsertCatalogProvider({
-      id: 'nvidia',
-      name: 'NVIDIA',
-      base_url: 'https://integrate.api.nvidia.com/v1',
-      key_env: 'NVIDIA_API_KEY',
+      id: 'tokenx',
+      name: 'TokenX',
+      base_url: 'https://model.example/v1',
+      key_env: 'TOKENX_API_KEY',
     })
     expect(readProfile('default').config).toMatchObject({
-      providers: { nvidia: { base_url: 'https://integrate.api.nvidia.com/v1' } },
+      providers: { tokenx: { base_url: 'https://model.example/v1' } },
     })
     expect(readProfile('developer').config).toMatchObject({
-      providers: { nvidia: { base_url: 'https://integrate.api.nvidia.com/v1' } },
+      providers: { tokenx: { base_url: 'https://model.example/v1' } },
     })
     expect(readProfileProviderSelection('developer').fallbackModel).toBe('GLM-4.7')
   })

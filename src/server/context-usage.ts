@@ -6,12 +6,19 @@ import {
   getCapabilities,
 } from '@/server/gateway-capabilities'
 import { listSessions } from '@/server/claude-api'
+import {
+  readHermesConfigFiles,
+  resolveHermesConfigPaths,
+} from '@/server/hermes-config-store'
 import { getLocalMessages, getLocalSession } from './local-session-store'
 import { getActiveRunForSession } from './run-store'
 import {
   resolveMainChatSessionId,
   shouldBindMainToPortableSession,
 } from '@/server/session-utils'
+
+/** Hermes default when compression.threshold is unset (see hermes-agent config docs). */
+export const DEFAULT_COMPRESSION_THRESHOLD = 0.5
 
 export type ContextUsageSnapshot = {
   ok: true
@@ -25,6 +32,11 @@ export type ContextUsageSnapshot = {
   cacheReadTokens: number
   cacheWriteTokens: number
   cacheHitPercent: number | null
+}
+
+export type CompressionSettings = {
+  thresholdRatio: number
+  thresholdTokensCap: number
 }
 
 type ResolvedModelContext = {
@@ -154,32 +166,77 @@ function lookupModelContextWindow(model: string): number {
   return 0
 }
 
-function getContextWindow(model: string): number {
+function lookupStaticContextWindow(model: string): number {
+  if (!model) return 0
   if (MODEL_CONTEXT_WINDOWS[model]) return MODEL_CONTEXT_WINDOWS[model]
-  const fuzzy = lookupModelContextWindow(model)
-  return fuzzy > 0 ? fuzzy : 200_000
+  return lookupModelContextWindow(model)
 }
 
-function resolvePreferredContextWindow(
+/**
+ * Prefer live session length, then gateway effective_context_length, then the
+ * static table. Never invent a 200k default ahead of the gateway value — that
+ * shadows real windows (e.g. Kimi-K3 ≈ 1M) and desyncs the meter from compression.
+ */
+export function resolvePreferredContextWindow(
   model: string,
   configuredMaxTokens?: number,
   sessionContextLength?: number,
 ): number {
-  const knownWindow = model ? getContextWindow(model) : 0
-  return sessionContextLength || knownWindow || configuredMaxTokens || 0
+  if (sessionContextLength && sessionContextLength > 0) return sessionContextLength
+  if (configuredMaxTokens && configuredMaxTokens > 0) return configuredMaxTokens
+  return lookupStaticContextWindow(model)
 }
 
 function authHeaders(): Record<string, string> {
   return BEARER_TOKEN ? { Authorization: `Bearer ${BEARER_TOKEN}` } : {}
 }
 
-function computeThresholdTokens(
+export function parseCompressionSettings(
+  config: Record<string, unknown> | null | undefined,
+): CompressionSettings {
+  const compression = config?.compression
+  if (!compression || typeof compression !== 'object' || Array.isArray(compression)) {
+    return {
+      thresholdRatio: DEFAULT_COMPRESSION_THRESHOLD,
+      thresholdTokensCap: 0,
+    }
+  }
+  const record = compression as Record<string, unknown>
+  const rawRatio = Number(record.threshold)
+  const thresholdRatio =
+    Number.isFinite(rawRatio) && rawRatio > 0 && rawRatio <= 1
+      ? rawRatio
+      : DEFAULT_COMPRESSION_THRESHOLD
+  const rawCap = Number(record.threshold_tokens)
+  const thresholdTokensCap =
+    Number.isFinite(rawCap) && rawCap > 0 ? Math.floor(rawCap) : 0
+  return { thresholdRatio, thresholdTokensCap }
+}
+
+/**
+ * Match Hermes agent: ratio of context window, optionally capped by
+ * compression.threshold_tokens (lower of ratio vs absolute).
+ */
+export function computeThresholdTokens(
   maxTokens: number,
   explicitThreshold?: unknown,
+  thresholdRatio: number = DEFAULT_COMPRESSION_THRESHOLD,
+  thresholdTokensCap: number = 0,
 ): number {
-  const threshold = Number(explicitThreshold) || 0
-  if (threshold > 0) return threshold
-  return maxTokens > 0 ? Math.floor(maxTokens * 0.75) : 0
+  const explicit = Number(explicitThreshold) || 0
+  if (explicit > 0) return explicit
+  if (maxTokens <= 0) return 0
+  const safeRatio =
+    Number.isFinite(thresholdRatio) &&
+    thresholdRatio > 0 &&
+    thresholdRatio <= 1
+      ? thresholdRatio
+      : DEFAULT_COMPRESSION_THRESHOLD
+  let threshold = Math.floor(maxTokens * safeRatio)
+  if (thresholdTokensCap > 0) {
+    threshold = Math.min(threshold, thresholdTokensCap, maxTokens)
+  }
+  return threshold
 }
 
 function computeCacheHitPercent(
@@ -190,8 +247,9 @@ function computeCacheHitPercent(
   if (typeof explicit === 'number' && Number.isFinite(explicit)) {
     return Math.min(100, Math.max(0, Math.round(explicit)))
   }
+  // Need both sides — read-only cumulative totals otherwise always look like 100%.
+  if (cacheReadTokens <= 0 || cacheWriteTokens <= 0) return null
   const promptTotal = cacheReadTokens + cacheWriteTokens
-  if (promptTotal <= 0) return null
   return Math.min(100, Math.round((cacheReadTokens / promptTotal) * 100))
 }
 
@@ -203,6 +261,8 @@ function buildSnapshot(partial: {
   staticTokens?: number
   conversationTokens?: number
   thresholdTokens?: number
+  thresholdRatio?: number
+  thresholdTokensCap?: number
   cacheReadTokens?: number
   cacheWriteTokens?: number
   cacheHitPercent?: number | null
@@ -221,6 +281,8 @@ function buildSnapshot(partial: {
     thresholdTokens: computeThresholdTokens(
       maxTokens,
       partial.thresholdTokens,
+      partial.thresholdRatio,
+      partial.thresholdTokensCap,
     ),
     cacheReadTokens,
     cacheWriteTokens,
@@ -230,23 +292,17 @@ function buildSnapshot(partial: {
   }
 }
 
-function emptySnapshot(): ContextUsageSnapshot {
-  return buildSnapshot({
-    contextPercent: 0,
-    maxTokens: 0,
-    usedTokens: 0,
-    model: '',
-  })
-}
-
 function configuredEmptySnapshot(
   configuredModelContext: ResolvedModelContext | null,
+  compression: CompressionSettings,
 ): ContextUsageSnapshot {
   return buildSnapshot({
     contextPercent: 0,
     maxTokens: configuredModelContext?.maxTokens || 0,
     usedTokens: 0,
     model: configuredModelContext?.model || '',
+    thresholdRatio: compression.thresholdRatio,
+    thresholdTokensCap: compression.thresholdTokensCap,
   })
 }
 
@@ -272,25 +328,80 @@ function readConfiguredContextLength(payload: Record<string, unknown>): number {
   return 0
 }
 
+async function parseJsonObject(
+  response: Response | null | undefined,
+): Promise<Record<string, unknown> | null> {
+  if (!response?.ok) return null
+  const payload = (await response.json()) as unknown
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return null
+  }
+  return payload as Record<string, unknown>
+}
+
+/**
+ * `/api/model/info` and `/api/config` live on the dashboard (:9119), not the
+ * gateway runtime. In zero-fork mode `dashboard.available` is often false
+ * (local control plane skips probing) even while the dashboard is up — so
+ * always try dashboardFetch first, then fall back to CLAUDE_API.
+ */
+async function fetchGatewayJson(
+  path: string,
+): Promise<Record<string, unknown> | null> {
+  try {
+    try {
+      const dashboardPayload = await parseJsonObject(
+        await dashboardFetch(path, {
+          signal: AbortSignal.timeout(2500),
+        }),
+      )
+      if (dashboardPayload) return dashboardPayload
+    } catch {
+      /* fall through to gateway */
+    }
+
+    return await parseJsonObject(
+      await fetch(`${CLAUDE_API}${path}`, {
+        headers: authHeaders(),
+        signal: AbortSignal.timeout(2500),
+      }),
+    )
+  } catch {
+    return null
+  }
+}
+
+function readLocalCompressionSettings(): CompressionSettings {
+  try {
+    const files = readHermesConfigFiles(resolveHermesConfigPaths())
+    return parseCompressionSettings(files.config)
+  } catch {
+    return {
+      thresholdRatio: DEFAULT_COMPRESSION_THRESHOLD,
+      thresholdTokensCap: 0,
+    }
+  }
+}
+
+async function readCompressionSettings(): Promise<CompressionSettings> {
+  const payload = await fetchGatewayJson('/api/config')
+  if (payload) return parseCompressionSettings(payload)
+  return readLocalCompressionSettings()
+}
+
 async function readConfiguredModelContext(): Promise<ResolvedModelContext | null> {
   try {
-    const { CLAUDE_API, getGatewayBearerToken } = await import('./gateway-capabilities')
-    const token = getGatewayBearerToken()
-    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
-    const response = await fetch(`${CLAUDE_API}/api/model/info`, {
-      headers,
-      signal: AbortSignal.timeout(2500),
-    })
-    if (!response.ok) return null
+    const payload = await fetchGatewayJson('/api/model/info')
+    if (!payload) return null
 
-    const payload = (await response.json()) as Record<string, unknown>
     const model = typeof payload.model === 'string' ? payload.model.trim() : ''
     const configuredLength = readConfiguredContextLength(payload)
-    // Prefer the explicit entry from MODEL_CONTEXT_WINDOWS when it exists,
-    // because the configured length from the gateway can be a generic default
-    // (e.g. provider-level 1M) that doesn't match the model's real limit.
-    const exactEntry = model ? MODEL_CONTEXT_WINDOWS[model] ?? lookupModelContextWindow(model) : 0
-    const maxTokens = exactEntry > 0 ? exactEntry : (configuredLength || 0)
+    // Prefer gateway effective_context_length (same resolution chain as the
+    // agent). Static table is last-resort only when the gateway has no length.
+    const maxTokens =
+      configuredLength > 0
+        ? configuredLength
+        : lookupStaticContextWindow(model)
 
     if (!model && maxTokens <= 0) return null
 
@@ -305,6 +416,8 @@ async function readConfiguredModelContext(): Promise<ResolvedModelContext | null
 
 async function readGatewayRuntimeSnapshot(
   sessionId: string,
+  compression: CompressionSettings,
+  configuredModelContext: ResolvedModelContext | null,
 ): Promise<ContextUsageSnapshot | null> {
   const sid = sessionId.trim()
   if (!sid) return null
@@ -320,39 +433,56 @@ async function readGatewayRuntimeSnapshot(
     const data = (await res.json()) as {
       model?: unknown
       context_tokens?: unknown
+      last_prompt_tokens?: unknown
       context_length?: unknown
+      effective_context_length?: unknown
       context_percent?: unknown
-      total_tokens?: unknown
       prompt_tokens?: unknown
-      input_tokens?: unknown
       threshold_tokens?: unknown
       cache_read_tokens?: unknown
       cache_write_tokens?: unknown
       cache_hit_percent?: unknown
     }
-    const model = typeof data.model === 'string' ? data.model : ''
-    const maxTokens = Number(data.context_length) || 0
+    const model =
+      (typeof data.model === 'string' && data.model.trim()) ||
+      configuredModelContext?.model ||
+      ''
+    const sessionContextLength =
+      Number(data.context_length) ||
+      Number(data.effective_context_length) ||
+      0
+    const maxTokens = resolvePreferredContextWindow(
+      model,
+      configuredModelContext?.maxTokens,
+      sessionContextLength,
+    )
+    // Prefer true prompt-context fields. Never use cumulative total/input
+    // billing tokens — those produce 0/0 or nonsense meters when context_*
+    // is missing from /runtime.
     const usedTokens =
       Number(data.context_tokens) ||
+      Number(data.last_prompt_tokens) ||
       Number(data.prompt_tokens) ||
-      Number(data.input_tokens) ||
-      Number(data.total_tokens) ||
       0
+    const reportedPercent = Number(data.context_percent)
     const contextPercent =
-      Number.isFinite(Number(data.context_percent)) && Number(data.context_percent) > 0
-        ? Number(data.context_percent)
+      Number.isFinite(reportedPercent) && reportedPercent > 0
+        ? reportedPercent
         : maxTokens > 0 && usedTokens > 0
           ? Math.round((usedTokens / maxTokens) * 1000) / 10
           : 0
-    if (!model && maxTokens <= 0 && usedTokens <= 0 && contextPercent <= 0) {
-      return null
-    }
+    // Incomplete cache/model-only payloads must not short-circuit the meter.
+    if (maxTokens <= 0) return null
+    if (usedTokens <= 0 && contextPercent <= 0) return null
+
     return buildSnapshot({
       contextPercent,
       maxTokens,
       usedTokens,
       model,
       thresholdTokens: Number(data.threshold_tokens) || undefined,
+      thresholdRatio: compression.thresholdRatio,
+      thresholdTokensCap: compression.thresholdTokensCap,
       cacheReadTokens: Number(data.cache_read_tokens) || 0,
       cacheWriteTokens: Number(data.cache_write_tokens) || 0,
       cacheHitPercent:
@@ -463,13 +593,20 @@ export async function readContextUsage(
     let fallbackSnapshot: ContextUsageSnapshot | null = null
     const explicitSessionId = sessionId.trim()
     const capabilities = await ensureGatewayProbed()
-    const configuredModelContext = await readConfiguredModelContext()
+    const [configuredModelContext, compression] = await Promise.all([
+      readConfiguredModelContext(),
+      readCompressionSettings(),
+    ])
     const resolvedSessionId = explicitSessionId
       ? await resolveRuntimeSessionId(explicitSessionId)
       : ''
 
     if (explicitSessionId) {
-      const liveRuntime = await readGatewayRuntimeSnapshot(resolvedSessionId)
+      const liveRuntime = await readGatewayRuntimeSnapshot(
+        resolvedSessionId,
+        compression,
+        configuredModelContext,
+      )
       if (liveRuntime) return liveRuntime
 
       const localSession = getLocalSession(explicitSessionId)
@@ -482,6 +619,8 @@ export async function readContextUsage(
         if (mirroredRuntimeSessionId) {
           const mirroredRuntime = await readGatewayRuntimeSnapshot(
             mirroredRuntimeSessionId,
+            compression,
+            configuredModelContext,
           )
           if (mirroredRuntime) return mirroredRuntime
         }
@@ -510,6 +649,8 @@ export async function readContextUsage(
           maxTokens,
           usedTokens,
           model,
+          thresholdRatio: compression.thresholdRatio,
+          thresholdTokensCap: compression.thresholdTokensCap,
         })
       } else if (localMessages.length > 0 || activeRun?.assistantText) {
         const pendingMessages = activeRun?.assistantText
@@ -535,6 +676,8 @@ export async function readContextUsage(
           maxTokens,
           usedTokens,
           model,
+          thresholdRatio: compression.thresholdRatio,
+          thresholdTokensCap: compression.thresholdTokensCap,
         })
       }
     }
@@ -567,12 +710,22 @@ export async function readContextUsage(
     // the gateway has it, return the configured context window without inheriting
     // unrelated conversation usage from another session.
     if (explicitSessionId && !sessionData) {
-      return fallbackSnapshot ?? configuredEmptySnapshot(configuredModelContext)
+      return (
+        fallbackSnapshot ??
+        configuredEmptySnapshot(configuredModelContext, compression)
+      )
     }
 
-    if (!explicitSessionId) return configuredEmptySnapshot(configuredModelContext)
+    if (!explicitSessionId) {
+      return configuredEmptySnapshot(configuredModelContext, compression)
+    }
 
-    if (!sessionData) return fallbackSnapshot ?? configuredEmptySnapshot(configuredModelContext)
+    if (!sessionData) {
+      return (
+        fallbackSnapshot ??
+        configuredEmptySnapshot(configuredModelContext, compression)
+      )
+    }
 
     const model = String(sessionData.model || '')
     const sessionContextLength = Number(sessionData.context_length) || 0
@@ -588,16 +741,20 @@ export async function readContextUsage(
     const apiCallCount = Number(sessionData.api_call_count) || 0
 
     let usedTokens = 0
-    const assistantTurns = Math.max(1, Math.ceil(messageCount / 2))
-
-    if (apiCallCount > 0) {
+    const lastPromptTokens =
+      Number(sessionData.last_prompt_tokens) ||
+      Number(sessionData.context_tokens) ||
+      0
+    if (lastPromptTokens > 0) {
+      usedTokens = lastPromptTokens
+    } else if (apiCallCount > 0) {
       usedTokens = estimateContextTokensFromSessionUsage(
         inputTokens,
         cacheReadTokens,
         cacheWriteTokens,
         apiCallCount,
       )
-    } else if (cacheReadTokens > 0 && assistantTurns > 0) {
+    } else if (cacheReadTokens > 0 && messageCount > 0) {
       usedTokens = estimateContextTokensFromCacheRead(cacheReadTokens, messageCount)
     } else if (messageCount > 0) {
       try {
@@ -652,6 +809,8 @@ export async function readContextUsage(
       usedTokens,
       model,
       thresholdTokens: Number(sessionData.threshold_tokens) || undefined,
+      thresholdRatio: compression.thresholdRatio,
+      thresholdTokensCap: compression.thresholdTokensCap,
       cacheReadTokens,
       cacheWriteTokens,
       cacheHitPercent: computeCacheHitPercent(
@@ -666,6 +825,7 @@ export async function readContextUsage(
       maxTokens: 128_000,
       usedTokens: 0,
       model: '',
+      thresholdRatio: DEFAULT_COMPRESSION_THRESHOLD,
     })
   }
 }

@@ -2079,7 +2079,7 @@ function ChatMessageListComponent({
             )}
             {/* Bottom shimmer + branch TUI card. Hide as soon as the
                 streaming text starts arriving — the per-message TUI card
-                above the assistant bubble takes over from there to avoid
+                below the assistant bubble takes over from there to avoid
                 a duplicated activity surface. */}
             {(showTypingIndicator ||
               showResearchCard ||

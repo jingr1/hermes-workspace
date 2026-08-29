@@ -2965,9 +2965,6 @@ export function ChatScreen({
                   params: { sessionKey: key },
                 })
               }
-              showFileExplorerButton={!isMobile && !isFocusMode}
-              fileExplorerCollapsed={fileExplorerCollapsed}
-              onToggleFileExplorer={handleToggleFileExplorer}
               dataUpdatedAt={historyQuery.dataUpdatedAt}
               onRefresh={handleRefreshHistory}
               agentModel={currentModel}

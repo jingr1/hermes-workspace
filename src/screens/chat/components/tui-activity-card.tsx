@@ -4,8 +4,10 @@ import { cn } from '@/lib/utils'
 /**
  * TUI-style activity card.
  *
- * Renders thinking + all tool calls as a single card above the assistant
- * message bubble. Rows mimic Claude Code / Codex CLI tool output:
+ * Renders thinking + all tool calls as a single card. While streaming with
+ * assistant text, MessageItem places this below the bubble so narration stays
+ * chronological; before text arrives, chat-message-list owns the branched card.
+ * Rows mimic Claude Code / Codex CLI tool output:
  *
  *   💭 Thinking 4s
  *     ⎿ Looking at chat component…

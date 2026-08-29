@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { SWARM_CANONICAL_REPO } from './swarm-environment'
-import type { ParsedSwarmCheckpoint } from './swarm-checkpoints'
 import { applyArtifactPathPolicy } from './swarm-mission-artifacts'
+import type { ParsedSwarmCheckpoint } from './swarm-checkpoints'
 
 export type SwarmMissionAssignmentState = 'queued' | 'dispatched' | 'checkpointed' | 'blocked' | 'needs_input' | 'reviewing' | 'done' | 'cancelled'
 export type SwarmMissionState = 'planning' | 'dispatching' | 'executing' | 'reviewing' | 'blocked' | 'complete' | 'cancelled'
@@ -20,6 +20,26 @@ export type SwarmMissionAssignment = {
   reviewedAt: number | null
   reviewedBy: string | null
   checkpoint: ParsedSwarmCheckpoint | null
+  /** Pipeline stage key this assignment was created from (P2a task module). */
+  stageKey?: string | null
+  /** specVersion the instruction text was generated against (stale check). */
+  briefSpecVersion?: number | null
+}
+
+export type SwarmMission = {
+  id: string
+  title: string
+  state: SwarmMissionState
+  createdAt: number
+  updatedAt: number
+  assignments: Array<SwarmMissionAssignment>
+  events: Array<SwarmMissionEvent>
+  /** Bumped on every spec edit; stale brief detection compares against this. */
+  specVersion?: number
+  /** Pipeline template this mission was instantiated from (P2a). */
+  pipelineId?: string | null
+  /** Kanban card id this mission is bound to (P2a). */
+  taskId?: string | null
 }
 
 export type SwarmMissionEvent = {
@@ -46,16 +66,6 @@ export type SwarmCheckpointReport = {
   blocker: string | null
   nextAction: string | null
   source: string
-}
-
-export type SwarmMission = {
-  id: string
-  title: string
-  state: SwarmMissionState
-  createdAt: number
-  updatedAt: number
-  assignments: Array<SwarmMissionAssignment>
-  events: Array<SwarmMissionEvent>
 }
 
 type SwarmMissionStore = {
@@ -178,6 +188,45 @@ export function archiveStaleMissions(staleMs: number = 6 * 60 * 60 * 1000): { ar
 
 export type CreateOrUpdateMissionResult = SwarmMission & { _created?: boolean }
 
+/**
+ * Kahn topological check on the assignment dependsOn graph. Throws with the
+ * offending cycle members when a cycle exists. Edges pointing at unknown
+ * ids are ignored here (they simply never satisfy) — only true cycles
+ * deadlock the pipeline.
+ */
+export function assertAcyclicDependencies(assignments: Array<SwarmMissionAssignment>): void {
+  const ids = new Set(assignments.map((a) => a.id))
+  const indegree = new Map<string, number>()
+  const edges = new Map<string, Array<string>>() // dep → dependents
+  for (const a of assignments) {
+    indegree.set(a.id, 0)
+  }
+  for (const a of assignments) {
+    for (const dep of a.dependsOn) {
+      if (!ids.has(dep)) continue
+      indegree.set(a.id, (indegree.get(a.id) ?? 0) + 1)
+      const list = edges.get(dep) ?? []
+      list.push(a.id)
+      edges.set(dep, list)
+    }
+  }
+  const queue = assignments.filter((a) => (indegree.get(a.id) ?? 0) === 0).map((a) => a.id)
+  let visited = 0
+  while (queue.length > 0) {
+    const current = queue.pop()!
+    visited++
+    for (const next of edges.get(current) ?? []) {
+      const remaining = (indegree.get(next) ?? 0) - 1
+      indegree.set(next, remaining)
+      if (remaining === 0) queue.push(next)
+    }
+  }
+  if (visited < ids.size) {
+    const cyclic = assignments.filter((a) => (indegree.get(a.id) ?? 0) > 0).map((a) => a.id)
+    throw new Error(`dependsOn cycle detected among assignments: ${cyclic.join(', ')}`)
+  }
+}
+
 export function createOrUpdateMission(input: {
   missionId?: string | null
   title: string
@@ -226,6 +275,10 @@ export function createOrUpdateMission(input: {
       checkpoint: null,
     })
   }
+  // Cycle guard (plan risk table): a cyclic dependsOn graph makes
+  // readyQueuedAssignments return [] forever — the pipeline silently dies.
+  // Reject at registration time, where the error is loud and attributable.
+  assertAcyclicDependencies(mission.assignments)
   mission.updatedAt = now()
   mission.state = deriveMissionState(mission.assignments)
   writeStore(store)
@@ -385,6 +438,7 @@ export function appendMissionContinuation(input: {
   workerId: string
   task: string
   rationale: string
+  dependsOn?: Array<string>
 }): SwarmMission | null {
   if (!input.missionId) return null
   const store = readStore()
@@ -397,7 +451,7 @@ export function appendMissionContinuation(input: {
     workerId: input.workerId,
     task: input.task,
     rationale: input.rationale,
-    dependsOn: [],
+    dependsOn: input.dependsOn ?? [],
     reviewRequired: false,
     state: 'queued',
     dispatchedAt: null,
@@ -406,6 +460,7 @@ export function appendMissionContinuation(input: {
     reviewedBy: null,
     checkpoint: null,
   })
+  assertAcyclicDependencies(mission.assignments)
   mission.events.push(event('continuation', `Queued continuation ${id} for ${input.workerId}`, { workerId: input.workerId, assignmentId: id }))
   mission.updatedAt = now()
   mission.state = deriveMissionState(mission.assignments)
@@ -418,6 +473,67 @@ export function readyQueuedAssignments(missionId: string): Array<SwarmMissionAss
   if (!mission) return []
   const doneIds = new Set(mission.assignments.filter((item) => ['checkpointed', 'done'].includes(item.state)).map((item) => item.id))
   return mission.assignments.filter((item) => item.state === 'queued' && item.dependsOn.every((id) => doneIds.has(id)))
+}
+
+export function requeueMissionAssignment(input: {
+  missionId: string
+  assignmentId: string
+  reason: string
+}): SwarmMission | null {
+  const store = readStore()
+  const mission = store.missions.find((item) => item.id === input.missionId)
+  if (!mission) return null
+  const assignment = mission.assignments.find((item) => item.id === input.assignmentId)
+  if (!assignment) return null
+  if (assignment.state !== 'dispatched') return mission
+  assignment.state = 'queued'
+  assignment.dispatchedAt = null
+  mission.events.push(event('continuation', `Requeued ${assignment.id}: ${input.reason}`, {
+    assignmentId: assignment.id,
+    data: { reason: input.reason },
+  }))
+  mission.updatedAt = now()
+  mission.state = deriveMissionState(mission.assignments)
+  writeStore(store)
+  return mission
+}
+
+/**
+ * P2a two-pass instantiation helper: after all stage assignments exist,
+ * rewrite their dependsOn from stage keys to assignment ids, stamp
+ * stageKey / briefSpecVersion, and bind the mission to its pipeline + card.
+ * Re-runs the cycle guard after rewiring. Single write, one place for the
+ * invariant.
+ */
+export function rewriteAssignmentDependencies(input: {
+  missionId: string
+  dependsOnByAssignmentId: Record<string, Array<string>>
+  stageKeyByAssignmentId?: Record<string, string>
+  briefSpecVersion?: number
+  pipelineId?: string
+  taskId?: string
+  specVersion?: number
+}): SwarmMission | null {
+  const store = readStore()
+  const mission = store.missions.find((item) => item.id === input.missionId)
+  if (!mission) return null
+  for (const assignment of mission.assignments) {
+    const deps = input.dependsOnByAssignmentId[assignment.id]
+    // dependsOnByAssignmentId is a full map over every stage assignment built
+    // by the caller (instantiatePipeline); a missing key means caller bug.
+    assignment.dependsOn = deps
+    const stageKey = input.stageKeyByAssignmentId?.[assignment.id]
+    if (stageKey !== undefined) assignment.stageKey = stageKey
+    if (input.briefSpecVersion !== undefined) assignment.briefSpecVersion = input.briefSpecVersion
+  }
+  if (input.pipelineId !== undefined) mission.pipelineId = input.pipelineId
+  if (input.taskId !== undefined) mission.taskId = input.taskId
+  if (input.specVersion !== undefined) mission.specVersion = input.specVersion
+  assertAcyclicDependencies(mission.assignments)
+  mission.updatedAt = now()
+  mission.state = deriveMissionState(mission.assignments)
+  writeStore(store)
+  return mission
 }
 
 export function cancelSwarmAssignment(input: {

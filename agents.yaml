@@ -1,0 +1,43 @@
+version: 1
+# Runtime declarations for managed agents (plan «运行时声明：agents.yaml»).
+# swarm.yaml stays the pipeline source of truth; this file only says HOW a
+# runtime is launched. capabilities are inherited from swarm.yaml when omitted.
+agents:
+  - id: orchestrator
+    runtime: hermes
+    profile: orchestrator
+  - id: researcher
+    runtime: hermes
+    profile: researcher
+  - id: architect
+    runtime: hermes
+    profile: architect
+  - id: developer
+    runtime: hermes
+    profile: developer
+  - id: writer
+    runtime: hermes
+    profile: writer
+  - id: learning
+    runtime: hermes
+    profile: learning
+  - id: gpuserver
+    runtime: hermes
+    profile: gpuserver
+    execution: ssh
+    capabilities: [gpu, cuda, benchmark, training]
+    mentionName: gpu
+  - id: cc-impl
+    runtime: claude-code
+    displayName: Claude Code
+    command: claude
+    args: ["-p"]
+    mentionName: claude
+  - id: codex-impl
+    runtime: codex
+    command: codex
+    mentionName: codex
+  - id: ds-harness
+    runtime: deepseek-harness
+    command: deepseek-harness
+    mentionName: deepseek

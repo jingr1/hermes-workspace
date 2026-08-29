@@ -17,6 +17,10 @@ vi.mock('../../server/local-session-store', () => ({
   getLocalSession: vi.fn(() => null),
 }))
 
+vi.mock('../../server/run-store', () => ({
+  getActiveRunForSession: vi.fn(async () => null),
+}))
+
 import {
   dashboardFetch,
   ensureGatewayProbed,
@@ -25,22 +29,42 @@ import {
 import { listSessions } from '../../server/claude-api'
 import { getLocalMessages, getLocalSession } from '../../server/local-session-store'
 import {
+  computeThresholdTokens,
   estimateContextTokensFromCacheRead,
   estimateContextTokensFromMessages,
   estimateContextTokensFromSessionUsage,
+  parseCompressionSettings,
   readContextUsage,
+  resolvePreferredContextWindow,
 } from '../../server/context-usage'
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
 
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.clearAllMocks()
+  // clearAllMocks does not drop mockImplementation — reset so a prior test's
+  // dashboardFetch stub cannot leak into fetch-based cases.
+  vi.mocked(dashboardFetch).mockReset()
+  vi.mocked(ensureGatewayProbed).mockResolvedValue({
+    dashboard: { available: false },
+  } as any)
+  vi.mocked(getCapabilities).mockReturnValue({
+    dashboard: { available: false },
+  } as any)
 })
 
 describe('context usage estimation', () => {
   it('prefers live gateway runtime snapshots when the vanilla runtime endpoint is available', async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(
-        JSON.stringify({
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/sessions/session-123/runtime')) {
+        return jsonResponse({
           model: 'anthropic/claude-sonnet-4-20250514',
           context_tokens: 4321,
           context_length: 200000,
@@ -48,10 +72,19 @@ describe('context usage estimation', () => {
           prompt_tokens: 111,
           completion_tokens: 22,
           total_tokens: 133,
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
-    )
+        })
+      }
+      if (url.includes('/api/model/info')) {
+        return jsonResponse({
+          model: 'anthropic/claude-sonnet-4-20250514',
+          effective_context_length: 200000,
+        })
+      }
+      if (url.includes('/api/config')) {
+        return jsonResponse({ compression: { threshold: 0.5 } })
+      }
+      return new Response('not found', { status: 404 })
+    })
     vi.stubGlobal('fetch', fetchMock)
 
     const snapshot = await readContextUsage('session-123')
@@ -67,7 +100,116 @@ describe('context usage estimation', () => {
       maxTokens: 200000,
       contextPercent: 2,
       conversationTokens: 4321,
+      thresholdTokens: 100000,
     })
+  })
+
+  it('ignores incomplete /runtime payloads that only have cache totals (no 0/0 meter)', async () => {
+    vi.mocked(getLocalSession).mockReturnValue(null as any)
+    vi.mocked(getLocalMessages).mockReturnValue([] as any)
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/sessions/session-empty/runtime')) {
+        return jsonResponse({
+          model: 'Kimi-K3',
+          cache_read_tokens: 92_100_000,
+          cache_write_tokens: 0,
+          // missing context_tokens / context_length — previously painted 0/0
+        })
+      }
+      if (url.includes('/api/sessions/session-empty') && !url.includes('/runtime')) {
+        return jsonResponse({
+          session: {
+            id: 'session-empty',
+            model: 'Kimi-K3',
+            message_count: 0,
+            cache_read_tokens: 92_100_000,
+            cache_write_tokens: 0,
+          },
+        })
+      }
+      if (url.includes('/api/model/info')) {
+        return jsonResponse({
+          model: 'Kimi-K3',
+          effective_context_length: 1_048_576,
+        })
+      }
+      if (url.includes('/api/config')) {
+        return jsonResponse({ compression: { threshold: 0.5 } })
+      }
+      return new Response('not found', { status: 404 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const snapshot = await readContextUsage('session-empty')
+
+    expect(snapshot).toMatchObject({
+      ok: true,
+      model: 'Kimi-K3',
+      maxTokens: 1_048_576,
+      usedTokens: 0,
+      contextPercent: 0,
+      thresholdTokens: 524_288,
+      cacheReadTokens: 92_100_000,
+    })
+    expect(snapshot.cacheHitPercent).toBeNull()
+  })
+
+  it('reads /api/model/info via dashboardFetch even when dashboard.available is false (zero-fork)', async () => {
+    // Local control plane marks dashboard.available=false while :9119 still
+    // serves model/info. Previously we only hit CLAUDE_API and got maxTokens=0,
+    // which hid the context indicator entirely.
+    vi.mocked(getLocalSession).mockReturnValue(null as any)
+    vi.mocked(getLocalMessages).mockReturnValue([] as any)
+    vi.mocked(getCapabilities).mockReturnValue({
+      dashboard: { available: false },
+    } as any)
+    vi.mocked(ensureGatewayProbed).mockResolvedValue({
+      dashboard: { available: false },
+    } as any)
+
+    vi.mocked(dashboardFetch).mockImplementation(async (path: string) => {
+      if (path.includes('/api/model/info')) {
+        return jsonResponse({
+          model: 'Kimi-K2.7-Code',
+          effective_context_length: 262_144,
+          auto_context_length: 262_144,
+        }) as any
+      }
+      if (path.includes('/api/config')) {
+        return jsonResponse({ compression: { threshold: 0.5 } }) as any
+      }
+      return new Response('not found', { status: 404 }) as any
+    })
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      // Gateway has no /api/model/info — this used to be the only attempt.
+      if (url.includes('/api/model/info')) {
+        return new Response('not found', { status: 404 })
+      }
+      if (url.includes('/runtime')) {
+        return new Response('not found', { status: 404 })
+      }
+      return new Response('not found', { status: 404 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const snapshot = await readContextUsage('new')
+
+    expect(snapshot).toMatchObject({
+      ok: true,
+      model: 'Kimi-K2.7-Code',
+      maxTokens: 262_144,
+      usedTokens: 0,
+      contextPercent: 0,
+      thresholdTokens: 131_072,
+    })
+    expect(dashboardFetch).toHaveBeenCalledWith(
+      '/api/model/info',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
   })
 
   it('resolves main to the canonical Hermes session id before reading runtime usage', async () => {
@@ -82,15 +224,21 @@ describe('context usage estimation', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url.includes('/api/sessions/session-abc/runtime')) {
-        return new Response(
-          JSON.stringify({
-            model: 'gpt-5.4',
-            context_tokens: 86397,
-            context_length: 512000,
-            context_percent: 17,
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        )
+        return jsonResponse({
+          model: 'gpt-5.4',
+          context_tokens: 86397,
+          context_length: 512000,
+          context_percent: 17,
+        })
+      }
+      if (url.includes('/api/model/info')) {
+        return jsonResponse({
+          model: 'gpt-5.4',
+          effective_context_length: 512000,
+        })
+      }
+      if (url.includes('/api/config')) {
+        return jsonResponse({ compression: { threshold: 0.5 } })
       }
       return new Response('not found', { status: 404 })
     })
@@ -109,6 +257,7 @@ describe('context usage estimation', () => {
       usedTokens: 86397,
       maxTokens: 512000,
       contextPercent: 17,
+      thresholdTokens: 256000,
     })
   })
 
@@ -132,16 +281,19 @@ describe('context usage estimation', () => {
       return new Response('unexpected', { status: 500 })
     })
     vi.stubGlobal('fetch', fetchMock)
-    vi.mocked(dashboardFetch).mockResolvedValue(
-      new Response(
-        JSON.stringify({
+    vi.mocked(dashboardFetch).mockImplementation(async (path: string) => {
+      if (path.includes('/api/config')) {
+        return jsonResponse({ compression: { threshold: 0.5 } }) as any
+      }
+      if (path.includes('/api/model/info')) {
+        return jsonResponse({
           model: 'gpt-5.4',
           effective_context_length: 512000,
           config_context_length: 512000,
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ) as any,
-    )
+        }) as any
+      }
+      return new Response('not found', { status: 404 }) as any
+    })
 
     const snapshot = await readContextUsage('local-1')
 
@@ -151,11 +303,81 @@ describe('context usage estimation', () => {
       maxTokens: 512000,
       usedTokens: 200,
       contextPercent: 0,
+      thresholdTokens: 256000,
     })
     expect(dashboardFetch).toHaveBeenCalledWith(
       '/api/model/info',
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
+  })
+
+  it('uses gateway effective_context_length for Kimi-K3 instead of the 200k hardcoded fallback', async () => {
+    vi.mocked(getLocalSession).mockReturnValue({
+      id: 'local-kimi',
+      model: 'Kimi-K3',
+    } as any)
+    vi.mocked(getLocalMessages).mockReturnValue([
+      { content: 'x'.repeat(700) },
+    ] as any)
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/runtime')) {
+        return new Response('not found', { status: 404 })
+      }
+      if (url.includes('/api/model/info')) {
+        return jsonResponse({
+          model: 'Kimi-K3',
+          effective_context_length: 1_048_576,
+          auto_context_length: 1_048_576,
+        })
+      }
+      if (url.includes('/api/config')) {
+        return jsonResponse({ compression: { threshold: 0.5 } })
+      }
+      return new Response('not found', { status: 404 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const snapshot = await readContextUsage('local-kimi')
+
+    expect(snapshot).toMatchObject({
+      ok: true,
+      model: 'Kimi-K3',
+      maxTokens: 1_048_576,
+      thresholdTokens: 524_288,
+    })
+    expect(snapshot.contextPercent).toBeLessThan(1)
+  })
+
+  it('derives Auto-compress threshold from compression.threshold in config.yaml', async () => {
+    vi.mocked(getLocalSession).mockReturnValue(null as any)
+    vi.mocked(getLocalMessages).mockReturnValue([] as any)
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/model/info')) {
+        return jsonResponse({
+          model: 'Kimi-K3',
+          effective_context_length: 200000,
+        })
+      }
+      if (url.includes('/api/config')) {
+        return jsonResponse({ compression: { threshold: 0.5 } })
+      }
+      return new Response('not found', { status: 404 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const snapshot = await readContextUsage('new')
+
+    expect(snapshot).toMatchObject({
+      ok: true,
+      model: 'Kimi-K3',
+      maxTokens: 200000,
+      // 50% of 200k — matches yaml, not the old hardcoded 75%
+      thresholdTokens: 100000,
+    })
   })
 
   it('maps a mirrored local chat to the nearest real Hermes runtime session even when the runtime session has zero stored messages', async () => {
@@ -191,26 +413,29 @@ describe('context usage estimation', () => {
         return new Response('not found', { status: 404 })
       }
       if (url.includes('/api/sessions/runtime-nearest/runtime')) {
-        return new Response(
-          JSON.stringify({
-            model: 'gpt-5.4',
-            context_tokens: 85028,
-            context_length: 512000,
-            context_percent: 17,
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        )
+        return jsonResponse({
+          model: 'gpt-5.4',
+          context_tokens: 85028,
+          context_length: 512000,
+          context_percent: 17,
+        })
       }
       if (url.includes('/api/sessions/runtime-older/runtime')) {
-        return new Response(
-          JSON.stringify({
-            model: 'gpt-5.4',
-            context_tokens: 19266,
-            context_length: 512000,
-            context_percent: 4,
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        )
+        return jsonResponse({
+          model: 'gpt-5.4',
+          context_tokens: 19266,
+          context_length: 512000,
+          context_percent: 4,
+        })
+      }
+      if (url.includes('/api/model/info')) {
+        return jsonResponse({
+          model: 'gpt-5.4',
+          effective_context_length: 512000,
+        })
+      }
+      if (url.includes('/api/config')) {
+        return jsonResponse({ compression: { threshold: 0.5 } })
       }
       return new Response('not found', { status: 404 })
     })
@@ -239,16 +464,19 @@ describe('context usage estimation', () => {
 
     const fetchMock = vi.fn(async () => new Response('not found', { status: 404 }))
     vi.stubGlobal('fetch', fetchMock)
-    vi.mocked(dashboardFetch).mockResolvedValue(
-      new Response(
-        JSON.stringify({
+    vi.mocked(dashboardFetch).mockImplementation(async (path: string) => {
+      if (path.includes('/api/config')) {
+        return jsonResponse({ compression: { threshold: 0.5 } }) as any
+      }
+      if (path.includes('/api/model/info')) {
+        return jsonResponse({
           model: 'gpt-5.4',
           effective_context_length: 512000,
           config_context_length: 512000,
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ) as any,
-    )
+        }) as any
+      }
+      return new Response('not found', { status: 404 }) as any
+    })
 
     const snapshot = await readContextUsage('new')
 
@@ -258,6 +486,7 @@ describe('context usage estimation', () => {
       maxTokens: 512000,
       usedTokens: 0,
       contextPercent: 0,
+      thresholdTokens: 256000,
     })
   })
 
@@ -295,16 +524,19 @@ describe('context usage estimation', () => {
 
     const fetchMock = vi.fn(async () => new Response('not found', { status: 404 }))
     vi.stubGlobal('fetch', fetchMock)
-    vi.mocked(dashboardFetch).mockResolvedValue(
-      new Response(
-        JSON.stringify({
+    vi.mocked(dashboardFetch).mockImplementation(async (path: string) => {
+      if (path.includes('/api/config')) {
+        return jsonResponse({ compression: { threshold: 0.5 } }) as any
+      }
+      if (path.includes('/api/model/info')) {
+        return jsonResponse({
           model: 'gpt-5.4',
           effective_context_length: 512000,
           config_context_length: 512000,
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ) as any,
-    )
+        }) as any
+      }
+      return new Response('not found', { status: 404 }) as any
+    })
 
     const snapshot = await readContextUsage('local-structured')
 
@@ -395,5 +627,24 @@ describe('context usage estimation', () => {
 
     expect(usageEstimate).toBeLessThan(cacheEstimate)
     expect(usageEstimate).toBe(69233)
+  })
+})
+
+describe('context window + compression threshold helpers', () => {
+  it('prefers gateway effective length over the static model table', () => {
+    expect(resolvePreferredContextWindow('gpt-5.4', 512000)).toBe(512000)
+    expect(resolvePreferredContextWindow('Kimi-K3', 1_048_576)).toBe(1_048_576)
+    expect(resolvePreferredContextWindow('gpt-5.4', undefined, 272000)).toBe(272000)
+  })
+
+  it('parses compression.threshold from Hermes config and matches agent math', () => {
+    expect(parseCompressionSettings({ compression: { threshold: 0.5 } })).toEqual({
+      thresholdRatio: 0.5,
+      thresholdTokensCap: 0,
+    })
+    expect(computeThresholdTokens(200000, undefined, 0.5)).toBe(100000)
+    expect(computeThresholdTokens(1_048_576, undefined, 0.5)).toBe(524288)
+    expect(computeThresholdTokens(200000, undefined, 0.5, 80_000)).toBe(80_000)
+    expect(computeThresholdTokens(200000, 150000, 0.5)).toBe(150000)
   })
 })

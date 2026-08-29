@@ -167,6 +167,7 @@ describe('Phase 1.5 fallback — capability gating shape', () => {
     }
     vi.doMock('../../server/gateway-capabilities', () => ({
       ensureGatewayProbed: () => Promise.resolve(fakeCaps),
+      ensureGatewayEnhancedProbed: () => Promise.resolve(fakeCaps),
       getCapabilities: () => fakeCaps,
       BEARER_TOKEN: '',
       CLAUDE_API: 'http://127.0.0.1:8642',

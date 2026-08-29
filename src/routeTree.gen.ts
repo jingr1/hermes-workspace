@@ -90,6 +90,7 @@ import { Route as ApiModelsLocalRouteImport } from './routes/api/models-local'
 import { Route as ApiModelsRouteImport } from './routes/api/models'
 import { Route as ApiMemoryRouteImport } from './routes/api/memory'
 import { Route as ApiMediaRouteImport } from './routes/api/media'
+import { Route as ApiMcpRpcRouteImport } from './routes/api/mcp-rpc'
 import { Route as ApiMcpRouteImport } from './routes/api/mcp'
 import { Route as ApiLocalProvidersRouteImport } from './routes/api/local-providers'
 import { Route as ApiJobDeliveryTargetsRouteImport } from './routes/api/job-delivery-targets'
@@ -110,6 +111,7 @@ import { Route as ApiConfigPatchRouteImport } from './routes/api/config-patch'
 import { Route as ApiConductorStopRouteImport } from './routes/api/conductor-stop'
 import { Route as ApiConductorSpawnRouteImport } from './routes/api/conductor-spawn'
 import { Route as ApiCommandsRouteImport } from './routes/api/commands'
+import { Route as ApiCollabEventsRouteImport } from './routes/api/collab-events'
 import { Route as ApiClaudeUpdateRouteImport } from './routes/api/claude-update'
 import { Route as ApiClaudeTasksAssigneesRouteImport } from './routes/api/claude-tasks-assignees'
 import { Route as ApiClaudeTasksRouteImport } from './routes/api/claude-tasks'
@@ -120,10 +122,12 @@ import { Route as ApiAuthCheckRouteImport } from './routes/api/auth-check'
 import { Route as ApiAuthRouteImport } from './routes/api/auth'
 import { Route as ApiArtifactsRouteImport } from './routes/api/artifacts'
 import { Route as ApiAgentBusRouteImport } from './routes/api/agent-bus'
+import { Route as ApiTasksIndexRouteImport } from './routes/api/tasks/index'
 import { Route as ApiWorkspaceFoldersRouteImport } from './routes/api/workspace.folders'
 import { Route as ApiUpdateWorkspaceRouteImport } from './routes/api/update/workspace'
 import { Route as ApiUpdateStatusRouteImport } from './routes/api/update/status'
 import { Route as ApiUpdateAgentRouteImport } from './routes/api/update/agent'
+import { Route as ApiTasksTaskIdRouteImport } from './routes/api/tasks/$taskId'
 import { Route as ApiSwarmRuntimeResetRouteImport } from './routes/api/swarm-runtime.reset'
 import { Route as ApiSwarmMemorySearchRouteImport } from './routes/api/swarm-memory/search'
 import { Route as ApiSwarmLanggraphStatusRouteImport } from './routes/api/swarm-langgraph/status'
@@ -184,6 +188,7 @@ import { Route as ApiClaudeJobsJobIdRouteImport } from './routes/api/claude-jobs
 import { Route as ApiAuthCodexRouteImport } from './routes/api/auth.codex'
 import { Route as ApiAuthAnthropicRouteImport } from './routes/api/auth.anthropic'
 import { Route as ApiArtifactsArtifactIdRouteImport } from './routes/api/artifacts.$artifactId'
+import { Route as ApiAgentsStatusRouteImport } from './routes/api/agents/status'
 import { Route as ApiSessionsSessionKeyStatusRouteImport } from './routes/api/sessions/$sessionKey.status'
 import { Route as ApiSessionsSessionKeyActiveRunRouteImport } from './routes/api/sessions/$sessionKey.active-run'
 import { Route as ApiMcpHubSourcesIdRouteImport } from './routes/api/mcp/hub-sources.$id'
@@ -599,6 +604,11 @@ const ApiMediaRoute = ApiMediaRouteImport.update({
   path: '/api/media',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiMcpRpcRoute = ApiMcpRpcRouteImport.update({
+  id: '/api/mcp-rpc',
+  path: '/api/mcp-rpc',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiMcpRoute = ApiMcpRouteImport.update({
   id: '/api/mcp',
   path: '/api/mcp',
@@ -699,6 +709,11 @@ const ApiCommandsRoute = ApiCommandsRouteImport.update({
   path: '/api/commands',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCollabEventsRoute = ApiCollabEventsRouteImport.update({
+  id: '/api/collab-events',
+  path: '/api/collab-events',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiClaudeUpdateRoute = ApiClaudeUpdateRouteImport.update({
   id: '/api/claude-update',
   path: '/api/claude-update',
@@ -749,6 +764,11 @@ const ApiAgentBusRoute = ApiAgentBusRouteImport.update({
   path: '/api/agent-bus',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiTasksIndexRoute = ApiTasksIndexRouteImport.update({
+  id: '/api/tasks/',
+  path: '/api/tasks/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiWorkspaceFoldersRoute = ApiWorkspaceFoldersRouteImport.update({
   id: '/folders',
   path: '/folders',
@@ -767,6 +787,11 @@ const ApiUpdateStatusRoute = ApiUpdateStatusRouteImport.update({
 const ApiUpdateAgentRoute = ApiUpdateAgentRouteImport.update({
   id: '/api/update/agent',
   path: '/api/update/agent',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiTasksTaskIdRoute = ApiTasksTaskIdRouteImport.update({
+  id: '/api/tasks/$taskId',
+  path: '/api/tasks/$taskId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiSwarmRuntimeResetRoute = ApiSwarmRuntimeResetRouteImport.update({
@@ -1075,6 +1100,11 @@ const ApiArtifactsArtifactIdRoute = ApiArtifactsArtifactIdRouteImport.update({
   path: '/$artifactId',
   getParentRoute: () => ApiArtifactsRoute,
 } as any)
+const ApiAgentsStatusRoute = ApiAgentsStatusRouteImport.update({
+  id: '/api/agents/status',
+  path: '/api/agents/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSessionsSessionKeyStatusRoute =
   ApiSessionsSessionKeyStatusRouteImport.update({
     id: '/$sessionKey/status',
@@ -1145,6 +1175,7 @@ export interface FileRoutesByFullPath {
   '/api/claude-tasks': typeof ApiClaudeTasksRouteWithChildren
   '/api/claude-tasks-assignees': typeof ApiClaudeTasksAssigneesRoute
   '/api/claude-update': typeof ApiClaudeUpdateRoute
+  '/api/collab-events': typeof ApiCollabEventsRoute
   '/api/commands': typeof ApiCommandsRoute
   '/api/conductor-spawn': typeof ApiConductorSpawnRoute
   '/api/conductor-stop': typeof ApiConductorStopRoute
@@ -1165,6 +1196,7 @@ export interface FileRoutesByFullPath {
   '/api/job-delivery-targets': typeof ApiJobDeliveryTargetsRoute
   '/api/local-providers': typeof ApiLocalProvidersRoute
   '/api/mcp': typeof ApiMcpRouteWithChildren
+  '/api/mcp-rpc': typeof ApiMcpRpcRoute
   '/api/media': typeof ApiMediaRoute
   '/api/memory': typeof ApiMemoryRouteWithChildren
   '/api/models': typeof ApiModelsRoute
@@ -1222,6 +1254,7 @@ export interface FileRoutesByFullPath {
   '/settings/providers': typeof SettingsProvidersRoute
   '/chat/': typeof ChatIndexRoute
   '/settings/': typeof SettingsIndexRoute
+  '/api/agents/status': typeof ApiAgentsStatusRoute
   '/api/artifacts/$artifactId': typeof ApiArtifactsArtifactIdRoute
   '/api/auth/anthropic': typeof ApiAuthAnthropicRoute
   '/api/auth/codex': typeof ApiAuthCodexRoute
@@ -1282,10 +1315,12 @@ export interface FileRoutesByFullPath {
   '/api/swarm-langgraph/status': typeof ApiSwarmLanggraphStatusRoute
   '/api/swarm-memory/search': typeof ApiSwarmMemorySearchRoute
   '/api/swarm-runtime/reset': typeof ApiSwarmRuntimeResetRoute
+  '/api/tasks/$taskId': typeof ApiTasksTaskIdRoute
   '/api/update/agent': typeof ApiUpdateAgentRoute
   '/api/update/status': typeof ApiUpdateStatusRoute
   '/api/update/workspace': typeof ApiUpdateWorkspaceRoute
   '/api/workspace/folders': typeof ApiWorkspaceFoldersRoute
+  '/api/tasks/': typeof ApiTasksIndexRoute
   '/api/hermesworld/reservations/confirm': typeof ApiHermesworldReservationsConfirmRoute
   '/api/mcp/$name/logs': typeof ApiMcpNameLogsRoute
   '/api/mcp/hub-sources/$id': typeof ApiMcpHubSourcesIdRoute
@@ -1327,6 +1362,7 @@ export interface FileRoutesByTo {
   '/api/claude-tasks': typeof ApiClaudeTasksRouteWithChildren
   '/api/claude-tasks-assignees': typeof ApiClaudeTasksAssigneesRoute
   '/api/claude-update': typeof ApiClaudeUpdateRoute
+  '/api/collab-events': typeof ApiCollabEventsRoute
   '/api/commands': typeof ApiCommandsRoute
   '/api/conductor-spawn': typeof ApiConductorSpawnRoute
   '/api/conductor-stop': typeof ApiConductorStopRoute
@@ -1347,6 +1383,7 @@ export interface FileRoutesByTo {
   '/api/job-delivery-targets': typeof ApiJobDeliveryTargetsRoute
   '/api/local-providers': typeof ApiLocalProvidersRoute
   '/api/mcp': typeof ApiMcpRouteWithChildren
+  '/api/mcp-rpc': typeof ApiMcpRpcRoute
   '/api/media': typeof ApiMediaRoute
   '/api/memory': typeof ApiMemoryRouteWithChildren
   '/api/models': typeof ApiModelsRoute
@@ -1404,6 +1441,7 @@ export interface FileRoutesByTo {
   '/settings/providers': typeof SettingsProvidersRoute
   '/chat': typeof ChatIndexRoute
   '/settings': typeof SettingsIndexRoute
+  '/api/agents/status': typeof ApiAgentsStatusRoute
   '/api/artifacts/$artifactId': typeof ApiArtifactsArtifactIdRoute
   '/api/auth/anthropic': typeof ApiAuthAnthropicRoute
   '/api/auth/codex': typeof ApiAuthCodexRoute
@@ -1464,10 +1502,12 @@ export interface FileRoutesByTo {
   '/api/swarm-langgraph/status': typeof ApiSwarmLanggraphStatusRoute
   '/api/swarm-memory/search': typeof ApiSwarmMemorySearchRoute
   '/api/swarm-runtime/reset': typeof ApiSwarmRuntimeResetRoute
+  '/api/tasks/$taskId': typeof ApiTasksTaskIdRoute
   '/api/update/agent': typeof ApiUpdateAgentRoute
   '/api/update/status': typeof ApiUpdateStatusRoute
   '/api/update/workspace': typeof ApiUpdateWorkspaceRoute
   '/api/workspace/folders': typeof ApiWorkspaceFoldersRoute
+  '/api/tasks': typeof ApiTasksIndexRoute
   '/api/hermesworld/reservations/confirm': typeof ApiHermesworldReservationsConfirmRoute
   '/api/mcp/$name/logs': typeof ApiMcpNameLogsRoute
   '/api/mcp/hub-sources/$id': typeof ApiMcpHubSourcesIdRoute
@@ -1511,6 +1551,7 @@ export interface FileRoutesById {
   '/api/claude-tasks': typeof ApiClaudeTasksRouteWithChildren
   '/api/claude-tasks-assignees': typeof ApiClaudeTasksAssigneesRoute
   '/api/claude-update': typeof ApiClaudeUpdateRoute
+  '/api/collab-events': typeof ApiCollabEventsRoute
   '/api/commands': typeof ApiCommandsRoute
   '/api/conductor-spawn': typeof ApiConductorSpawnRoute
   '/api/conductor-stop': typeof ApiConductorStopRoute
@@ -1531,6 +1572,7 @@ export interface FileRoutesById {
   '/api/job-delivery-targets': typeof ApiJobDeliveryTargetsRoute
   '/api/local-providers': typeof ApiLocalProvidersRoute
   '/api/mcp': typeof ApiMcpRouteWithChildren
+  '/api/mcp-rpc': typeof ApiMcpRpcRoute
   '/api/media': typeof ApiMediaRoute
   '/api/memory': typeof ApiMemoryRouteWithChildren
   '/api/models': typeof ApiModelsRoute
@@ -1588,6 +1630,7 @@ export interface FileRoutesById {
   '/settings/providers': typeof SettingsProvidersRoute
   '/chat/': typeof ChatIndexRoute
   '/settings/': typeof SettingsIndexRoute
+  '/api/agents/status': typeof ApiAgentsStatusRoute
   '/api/artifacts/$artifactId': typeof ApiArtifactsArtifactIdRoute
   '/api/auth/anthropic': typeof ApiAuthAnthropicRoute
   '/api/auth/codex': typeof ApiAuthCodexRoute
@@ -1648,10 +1691,12 @@ export interface FileRoutesById {
   '/api/swarm-langgraph/status': typeof ApiSwarmLanggraphStatusRoute
   '/api/swarm-memory/search': typeof ApiSwarmMemorySearchRoute
   '/api/swarm-runtime/reset': typeof ApiSwarmRuntimeResetRoute
+  '/api/tasks/$taskId': typeof ApiTasksTaskIdRoute
   '/api/update/agent': typeof ApiUpdateAgentRoute
   '/api/update/status': typeof ApiUpdateStatusRoute
   '/api/update/workspace': typeof ApiUpdateWorkspaceRoute
   '/api/workspace/folders': typeof ApiWorkspaceFoldersRoute
+  '/api/tasks/': typeof ApiTasksIndexRoute
   '/api/hermesworld/reservations/confirm': typeof ApiHermesworldReservationsConfirmRoute
   '/api/mcp/$name/logs': typeof ApiMcpNameLogsRoute
   '/api/mcp/hub-sources/$id': typeof ApiMcpHubSourcesIdRoute
@@ -1696,6 +1741,7 @@ export interface FileRouteTypes {
     | '/api/claude-tasks'
     | '/api/claude-tasks-assignees'
     | '/api/claude-update'
+    | '/api/collab-events'
     | '/api/commands'
     | '/api/conductor-spawn'
     | '/api/conductor-stop'
@@ -1716,6 +1762,7 @@ export interface FileRouteTypes {
     | '/api/job-delivery-targets'
     | '/api/local-providers'
     | '/api/mcp'
+    | '/api/mcp-rpc'
     | '/api/media'
     | '/api/memory'
     | '/api/models'
@@ -1773,6 +1820,7 @@ export interface FileRouteTypes {
     | '/settings/providers'
     | '/chat/'
     | '/settings/'
+    | '/api/agents/status'
     | '/api/artifacts/$artifactId'
     | '/api/auth/anthropic'
     | '/api/auth/codex'
@@ -1833,10 +1881,12 @@ export interface FileRouteTypes {
     | '/api/swarm-langgraph/status'
     | '/api/swarm-memory/search'
     | '/api/swarm-runtime/reset'
+    | '/api/tasks/$taskId'
     | '/api/update/agent'
     | '/api/update/status'
     | '/api/update/workspace'
     | '/api/workspace/folders'
+    | '/api/tasks/'
     | '/api/hermesworld/reservations/confirm'
     | '/api/mcp/$name/logs'
     | '/api/mcp/hub-sources/$id'
@@ -1878,6 +1928,7 @@ export interface FileRouteTypes {
     | '/api/claude-tasks'
     | '/api/claude-tasks-assignees'
     | '/api/claude-update'
+    | '/api/collab-events'
     | '/api/commands'
     | '/api/conductor-spawn'
     | '/api/conductor-stop'
@@ -1898,6 +1949,7 @@ export interface FileRouteTypes {
     | '/api/job-delivery-targets'
     | '/api/local-providers'
     | '/api/mcp'
+    | '/api/mcp-rpc'
     | '/api/media'
     | '/api/memory'
     | '/api/models'
@@ -1955,6 +2007,7 @@ export interface FileRouteTypes {
     | '/settings/providers'
     | '/chat'
     | '/settings'
+    | '/api/agents/status'
     | '/api/artifacts/$artifactId'
     | '/api/auth/anthropic'
     | '/api/auth/codex'
@@ -2015,10 +2068,12 @@ export interface FileRouteTypes {
     | '/api/swarm-langgraph/status'
     | '/api/swarm-memory/search'
     | '/api/swarm-runtime/reset'
+    | '/api/tasks/$taskId'
     | '/api/update/agent'
     | '/api/update/status'
     | '/api/update/workspace'
     | '/api/workspace/folders'
+    | '/api/tasks'
     | '/api/hermesworld/reservations/confirm'
     | '/api/mcp/$name/logs'
     | '/api/mcp/hub-sources/$id'
@@ -2061,6 +2116,7 @@ export interface FileRouteTypes {
     | '/api/claude-tasks'
     | '/api/claude-tasks-assignees'
     | '/api/claude-update'
+    | '/api/collab-events'
     | '/api/commands'
     | '/api/conductor-spawn'
     | '/api/conductor-stop'
@@ -2081,6 +2137,7 @@ export interface FileRouteTypes {
     | '/api/job-delivery-targets'
     | '/api/local-providers'
     | '/api/mcp'
+    | '/api/mcp-rpc'
     | '/api/media'
     | '/api/memory'
     | '/api/models'
@@ -2138,6 +2195,7 @@ export interface FileRouteTypes {
     | '/settings/providers'
     | '/chat/'
     | '/settings/'
+    | '/api/agents/status'
     | '/api/artifacts/$artifactId'
     | '/api/auth/anthropic'
     | '/api/auth/codex'
@@ -2198,10 +2256,12 @@ export interface FileRouteTypes {
     | '/api/swarm-langgraph/status'
     | '/api/swarm-memory/search'
     | '/api/swarm-runtime/reset'
+    | '/api/tasks/$taskId'
     | '/api/update/agent'
     | '/api/update/status'
     | '/api/update/workspace'
     | '/api/workspace/folders'
+    | '/api/tasks/'
     | '/api/hermesworld/reservations/confirm'
     | '/api/mcp/$name/logs'
     | '/api/mcp/hub-sources/$id'
@@ -2245,6 +2305,7 @@ export interface RootRouteChildren {
   ApiClaudeTasksRoute: typeof ApiClaudeTasksRouteWithChildren
   ApiClaudeTasksAssigneesRoute: typeof ApiClaudeTasksAssigneesRoute
   ApiClaudeUpdateRoute: typeof ApiClaudeUpdateRoute
+  ApiCollabEventsRoute: typeof ApiCollabEventsRoute
   ApiCommandsRoute: typeof ApiCommandsRoute
   ApiConductorSpawnRoute: typeof ApiConductorSpawnRoute
   ApiConductorStopRoute: typeof ApiConductorStopRoute
@@ -2265,6 +2326,7 @@ export interface RootRouteChildren {
   ApiJobDeliveryTargetsRoute: typeof ApiJobDeliveryTargetsRoute
   ApiLocalProvidersRoute: typeof ApiLocalProvidersRoute
   ApiMcpRoute: typeof ApiMcpRouteWithChildren
+  ApiMcpRpcRoute: typeof ApiMcpRpcRoute
   ApiMediaRoute: typeof ApiMediaRoute
   ApiMemoryRoute: typeof ApiMemoryRouteWithChildren
   ApiModelsRoute: typeof ApiModelsRoute
@@ -2319,6 +2381,7 @@ export interface RootRouteChildren {
   ApiWorkspaceRoute: typeof ApiWorkspaceRouteWithChildren
   ChatSessionKeyRoute: typeof ChatSessionKeyRoute
   ChatIndexRoute: typeof ChatIndexRoute
+  ApiAgentsStatusRoute: typeof ApiAgentsStatusRoute
   ApiClaudeProxySplatRoute: typeof ApiClaudeProxySplatRoute
   ApiDashboardOverviewRoute: typeof ApiDashboardOverviewRoute
   ApiExternalMemoryCandidatesRoute: typeof ApiExternalMemoryCandidatesRoute
@@ -2354,9 +2417,11 @@ export interface RootRouteChildren {
   ApiSwarmLanggraphResumeRoute: typeof ApiSwarmLanggraphResumeRoute
   ApiSwarmLanggraphRunRoute: typeof ApiSwarmLanggraphRunRoute
   ApiSwarmLanggraphStatusRoute: typeof ApiSwarmLanggraphStatusRoute
+  ApiTasksTaskIdRoute: typeof ApiTasksTaskIdRoute
   ApiUpdateAgentRoute: typeof ApiUpdateAgentRoute
   ApiUpdateStatusRoute: typeof ApiUpdateStatusRoute
   ApiUpdateWorkspaceRoute: typeof ApiUpdateWorkspaceRoute
+  ApiTasksIndexRoute: typeof ApiTasksIndexRoute
   ApiRunsSessionKeyRunIdAbandonRoute: typeof ApiRunsSessionKeyRunIdAbandonRoute
 }
 
@@ -2929,6 +2994,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMediaRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/mcp-rpc': {
+      id: '/api/mcp-rpc'
+      path: '/api/mcp-rpc'
+      fullPath: '/api/mcp-rpc'
+      preLoaderRoute: typeof ApiMcpRpcRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/mcp': {
       id: '/api/mcp'
       path: '/api/mcp'
@@ -3069,6 +3141,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCommandsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/collab-events': {
+      id: '/api/collab-events'
+      path: '/api/collab-events'
+      fullPath: '/api/collab-events'
+      preLoaderRoute: typeof ApiCollabEventsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/claude-update': {
       id: '/api/claude-update'
       path: '/api/claude-update'
@@ -3139,6 +3218,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentBusRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/tasks/': {
+      id: '/api/tasks/'
+      path: '/api/tasks'
+      fullPath: '/api/tasks/'
+      preLoaderRoute: typeof ApiTasksIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/workspace/folders': {
       id: '/api/workspace/folders'
       path: '/folders'
@@ -3165,6 +3251,13 @@ declare module '@tanstack/react-router' {
       path: '/api/update/agent'
       fullPath: '/api/update/agent'
       preLoaderRoute: typeof ApiUpdateAgentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/tasks/$taskId': {
+      id: '/api/tasks/$taskId'
+      path: '/api/tasks/$taskId'
+      fullPath: '/api/tasks/$taskId'
+      preLoaderRoute: typeof ApiTasksTaskIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/swarm-runtime/reset': {
@@ -3587,6 +3680,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiArtifactsArtifactIdRouteImport
       parentRoute: typeof ApiArtifactsRoute
     }
+    '/api/agents/status': {
+      id: '/api/agents/status'
+      path: '/api/agents/status'
+      fullPath: '/api/agents/status'
+      preLoaderRoute: typeof ApiAgentsStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/sessions/$sessionKey/status': {
       id: '/api/sessions/$sessionKey/status'
       path: '/$sessionKey/status'
@@ -3904,6 +4004,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiClaudeTasksRoute: ApiClaudeTasksRouteWithChildren,
   ApiClaudeTasksAssigneesRoute: ApiClaudeTasksAssigneesRoute,
   ApiClaudeUpdateRoute: ApiClaudeUpdateRoute,
+  ApiCollabEventsRoute: ApiCollabEventsRoute,
   ApiCommandsRoute: ApiCommandsRoute,
   ApiConductorSpawnRoute: ApiConductorSpawnRoute,
   ApiConductorStopRoute: ApiConductorStopRoute,
@@ -3924,6 +4025,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiJobDeliveryTargetsRoute: ApiJobDeliveryTargetsRoute,
   ApiLocalProvidersRoute: ApiLocalProvidersRoute,
   ApiMcpRoute: ApiMcpRouteWithChildren,
+  ApiMcpRpcRoute: ApiMcpRpcRoute,
   ApiMediaRoute: ApiMediaRoute,
   ApiMemoryRoute: ApiMemoryRouteWithChildren,
   ApiModelsRoute: ApiModelsRoute,
@@ -3978,6 +4080,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiWorkspaceRoute: ApiWorkspaceRouteWithChildren,
   ChatSessionKeyRoute: ChatSessionKeyRoute,
   ChatIndexRoute: ChatIndexRoute,
+  ApiAgentsStatusRoute: ApiAgentsStatusRoute,
   ApiClaudeProxySplatRoute: ApiClaudeProxySplatRoute,
   ApiDashboardOverviewRoute: ApiDashboardOverviewRoute,
   ApiExternalMemoryCandidatesRoute: ApiExternalMemoryCandidatesRoute,
@@ -4014,9 +4117,11 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSwarmLanggraphResumeRoute: ApiSwarmLanggraphResumeRoute,
   ApiSwarmLanggraphRunRoute: ApiSwarmLanggraphRunRoute,
   ApiSwarmLanggraphStatusRoute: ApiSwarmLanggraphStatusRoute,
+  ApiTasksTaskIdRoute: ApiTasksTaskIdRoute,
   ApiUpdateAgentRoute: ApiUpdateAgentRoute,
   ApiUpdateStatusRoute: ApiUpdateStatusRoute,
   ApiUpdateWorkspaceRoute: ApiUpdateWorkspaceRoute,
+  ApiTasksIndexRoute: ApiTasksIndexRoute,
   ApiRunsSessionKeyRunIdAbandonRoute: ApiRunsSessionKeyRunIdAbandonRoute,
 }
 export const routeTree = rootRouteImport

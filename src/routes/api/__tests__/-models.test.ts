@@ -43,6 +43,7 @@ vi.mock('../../../server/gateway-capabilities', () => ({
 
 vi.mock('../../../server/claude-api', () => ({
   ensureGatewayProbed: vi.fn(),
+  ensureGatewayCoreProbed: vi.fn().mockResolvedValue({}),
   getGatewayCapabilities: () => ({ models: false }),
 }))
 

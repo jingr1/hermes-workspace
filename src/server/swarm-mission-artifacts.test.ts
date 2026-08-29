@@ -7,6 +7,7 @@ import {
   rewriteLegacyOutputPathsInText,
   swarmMissionWorkerDir,
 } from './swarm-mission-artifacts'
+import { SWARM_LEGACY_OUTPUT_ROOT } from './swarm-environment'
 import type { ParsedSwarmCheckpoint } from './swarm-checkpoints'
 
 describe('swarm-mission-artifacts', () => {
@@ -37,21 +38,25 @@ describe('swarm-mission-artifacts', () => {
   })
 
   it('flags legacy paths in checkpoint filesChanged', () => {
+    // Relative legacy path (machine-agnostic).
+    expect(checkpointUsesLegacyOutputPaths('output/researcher/a.md')).toBe(true)
+    // Absolute path under the current canonical repo's legacy root.
     expect(
-      checkpointUsesLegacyOutputPaths('/Users/ramon/hermes-workspace/output/researcher/a.md'),
+      checkpointUsesLegacyOutputPaths(`${SWARM_LEGACY_OUTPUT_ROOT}/researcher/a.md`),
     ).toBe(true)
   })
 
   it('downgrades DONE checkpoints that reference legacy output paths', () => {
     const checkpoint: ParsedSwarmCheckpoint = {
       stateLabel: 'DONE',
-      runtimeState: 'done',
+      runtimeState: 'idle',
       checkpointStatus: 'done',
       filesChanged: 'output/researcher/report.md',
       commandsRun: 'none',
       result: 'done',
       blocker: 'none',
       nextAction: 'none',
+      reviewOutcome: null,
       raw: 'STATE: DONE',
     }
     const adjusted = applyArtifactPathPolicy(checkpoint, 'lg-test', 'researcher')

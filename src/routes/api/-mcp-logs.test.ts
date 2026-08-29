@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { isAuthenticated } from '../../server/auth-middleware'
-import { ensureGatewayProbed } from '../../server/gateway-capabilities'
+import { ensureGatewayEnhancedProbed, ensureGatewayProbed } from '../../server/gateway-capabilities'
 import { Route } from './mcp/$name.logs'
 
 // Vitest module-level mocks for the SSE logs route. These let us synthesize
@@ -14,6 +14,7 @@ vi.mock('../../server/gateway-capabilities', () => ({
   CLAUDE_UPGRADE_INSTRUCTIONS: 'Upgrade your Claude agent.',
   dashboardFetch: vi.fn(),
   ensureGatewayProbed: vi.fn(),
+  ensureGatewayEnhancedProbed: vi.fn(),
 }))
 
 type RouteWithHandlers = typeof Route & {
@@ -61,9 +62,9 @@ describe('GET /api/mcp/$name/logs', () => {
 
   it('returns 503 with capability_unavailable payload when gateway lacks mcp', async () => {
     vi.mocked(isAuthenticated).mockReturnValue(true)
-    vi.mocked(ensureGatewayProbed).mockResolvedValue({
+    vi.mocked(ensureGatewayEnhancedProbed).mockResolvedValue({
       mcp: false,
-    } as Awaited<ReturnType<typeof ensureGatewayProbed>>)
+    } as Awaited<ReturnType<typeof ensureGatewayEnhancedProbed>>)
     const req = new Request('http://localhost/api/mcp/github/logs')
     const res = await handler({ request: req, params: { name: 'github' } })
     expect(res.status).toBe(503)

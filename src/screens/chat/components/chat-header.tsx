@@ -1,6 +1,4 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
-import { HugeiconsIcon } from '@hugeicons/react'
-import { Folder01Icon } from '@hugeicons/core-free-icons'
 import { Button } from '@/components/ui/button'
 import {
   TooltipContent,
@@ -81,9 +79,6 @@ type ChatHeaderProps = {
   }>
   activeFriendlyId?: string
   onSelectSession?: (key: string) => void
-  showFileExplorerButton?: boolean
-  fileExplorerCollapsed?: boolean
-  onToggleFileExplorer?: () => void
   /** Timestamp (ms) of last successful history fetch */
   dataUpdatedAt?: number
   /** Callback to manually refresh history */
@@ -115,9 +110,6 @@ function ChatHeaderComponent({
   sessions = [],
   activeFriendlyId = '',
   onSelectSession,
-  showFileExplorerButton = false,
-  fileExplorerCollapsed = true,
-  onToggleFileExplorer,
   dataUpdatedAt = 0,
   onRefresh,
   agentModel: _agentModel = '',
@@ -308,34 +300,6 @@ function ChatHeaderComponent({
   return (
     <div ref={wrapperRef} className="shrink-0 bg-surface">
       <div className="px-4 h-12 flex items-center">
-        {showFileExplorerButton ? (
-          <TooltipProvider>
-            <TooltipRoot>
-              <TooltipTrigger
-                onClick={onToggleFileExplorer}
-                render={
-                  <Button
-                    size="icon-sm"
-                    variant="ghost"
-                    className="mr-2 text-primary-800 hover:bg-primary-100 dark:hover:bg-primary-800"
-                    aria-label={
-                      fileExplorerCollapsed ? 'Show files' : 'Hide files'
-                    }
-                  >
-                    <HugeiconsIcon
-                      icon={Folder01Icon}
-                      size={20}
-                      strokeWidth={1.5}
-                    />
-                  </Button>
-                }
-              />
-              <TooltipContent side="bottom">
-                {fileExplorerCollapsed ? 'Show files' : 'Hide files'}
-              </TooltipContent>
-            </TooltipRoot>
-          </TooltipProvider>
-        ) : null}
         <div className="group min-w-0 flex-1">
           {isEditingTitle ? (
             <input

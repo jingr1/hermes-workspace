@@ -53,28 +53,40 @@ export async function ensureBusStarted(): Promise<void> {
   bus.started = true
 }
 
+export type ChatEventFilter = {
+  sessionKey?: string
+  roomId?: string
+  scope?: string
+}
+
 export function subscribeToChatEvents(
   subscriber: ChatSSESubscriber,
-  sessionKeyFilter?: string,
+  filter?: ChatEventFilter | string,
 ): () => void {
   const bus = getBus()
 
-  // Wrap subscriber with session key filter if provided
-  const wrappedSubscriber: ChatSSESubscriber = sessionKeyFilter
-    ? (event) => {
-        const eventSessionKey = event.data.sessionKey as string | undefined
-        if (eventSessionKey && eventSessionKey !== sessionKeyFilter) return
-        const runId =
-          typeof event.data.runId === 'string' ? event.data.runId : undefined
-        if (hasActiveSendRun(runId)) return
-        subscriber(event)
-      }
-    : (event) => {
-        const runId =
-          typeof event.data.runId === 'string' ? event.data.runId : undefined
-        if (hasActiveSendRun(runId)) return
-        subscriber(event)
-      }
+  // Backwards compatible: a bare string is treated as sessionKeyFilter.
+  const normalized: ChatEventFilter =
+    typeof filter === 'string' ? { sessionKey: filter } : (filter ?? {})
+
+  const wrappedSubscriber: ChatSSESubscriber = (event) => {
+    if (normalized.sessionKey) {
+      const eventSessionKey = event.data.sessionKey as string | undefined
+      if (eventSessionKey && eventSessionKey !== normalized.sessionKey) return
+    }
+    if (normalized.roomId) {
+      const eventRoomId = event.data.roomId as string | undefined
+      if (eventRoomId !== normalized.roomId) return
+    }
+    if (normalized.scope) {
+      const eventScope = event.data.scope as string | undefined
+      if (eventScope !== normalized.scope) return
+    }
+    const runId =
+      typeof event.data.runId === 'string' ? event.data.runId : undefined
+    if (hasActiveSendRun(runId)) return
+    subscriber(event)
+  }
 
   bus.subscribers.add(wrappedSubscriber)
   return () => {

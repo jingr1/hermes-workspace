@@ -633,3 +633,114 @@ export async function deleteSshPath(input: {
     throw new Error(`Cannot delete remote path: ${result.stderr.trim() || result.code}`)
   }
 }
+
+export async function remotePathIsDirectory(input: {
+  config: Record<string, unknown>
+  workspaceRoot: string
+  targetPath: string
+}): Promise<boolean> {
+  const ssh = readSshTerminalConfig(input.config)
+  if (!ssh) {
+    throw new Error('SSH terminal is not configured on this profile')
+  }
+  const target = ensureRemoteWorkspacePath(input.targetPath, input.workspaceRoot)
+  rejectUnsafeRemotePath(target)
+  const result = await runSsh(ssh, ['/bin/test', '-d', target])
+  return result.code === 0
+}
+
+const ZIP_SSH_SCRIPT = `
+import os, sys, zipfile, io
+root = sys.argv[1]
+max_files = int(sys.argv[2])
+max_bytes = int(sys.argv[3])
+ignored = {${[...IGNORED_DIRS].map((d) => JSON.stringify(d)).join(', ')}}
+buf = io.BytesIO()
+count = 0
+total = 0
+with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in ignored and not d.startswith('.')]
+        for name in filenames:
+            if name.startswith('.'):
+                continue
+            abs_path = os.path.join(dirpath, name)
+            if not os.path.isfile(abs_path):
+                continue
+            try:
+                size = os.path.getsize(abs_path)
+            except OSError:
+                continue
+            count += 1
+            total += size
+            if count > max_files:
+                print('MAX_FILES', max_files, file=sys.stderr)
+                sys.exit(41)
+            if total > max_bytes:
+                print('MAX_BYTES', max_bytes, file=sys.stderr)
+                sys.exit(42)
+            arc = os.path.relpath(abs_path, root).replace(os.sep, '/')
+            try:
+                zf.write(abs_path, arcname=arc or os.path.basename(abs_path))
+            except OSError:
+                continue
+sys.stdout.buffer.write(buf.getvalue())
+`.trim()
+
+export async function zipSshFolder(input: {
+  config: Record<string, unknown>
+  workspaceRoot: string
+  folderPath: string
+  maxFiles?: number
+  maxBytes?: number
+}): Promise<Buffer> {
+  const ssh = readSshTerminalConfig(input.config)
+  if (!ssh) {
+    throw new Error('SSH terminal is not configured on this profile')
+  }
+  const target = ensureRemoteWorkspacePath(input.folderPath, input.workspaceRoot)
+  rejectUnsafeRemotePath(target)
+  const maxFiles = input.maxFiles ?? 5_000
+  const maxBytes = input.maxBytes ?? 512 * 1024 * 1024
+
+  const isDir = await runSsh(ssh, ['/bin/test', '-d', target])
+  if (isDir.code !== 0) {
+    throw new Error('path must be a directory')
+  }
+
+  const du = await runSsh(ssh, ['du', '-sb', '--', target], {
+    timeoutMs: 60_000,
+  })
+  if (du.code === 0) {
+    const bytes = Number.parseInt(du.stdout.toString('utf8').trim().split(/\s+/)[0] || '', 10)
+    if (Number.isFinite(bytes) && bytes > maxBytes) {
+      throw Object.assign(new Error('folder too large'), {
+        code: 'MAX_BYTES',
+        limit: maxBytes,
+      })
+    }
+  }
+
+  const result = await runSsh(
+    ssh,
+    ['python3', '-', target, String(maxFiles), String(maxBytes)],
+    { stdin: ZIP_SSH_SCRIPT, timeoutMs: 180_000 },
+  )
+  if (result.code === 41) {
+    throw Object.assign(new Error('too many files'), {
+      code: 'MAX_FILES',
+      limit: maxFiles,
+    })
+  }
+  if (result.code === 42) {
+    throw Object.assign(new Error('folder too large'), {
+      code: 'MAX_BYTES',
+      limit: maxBytes,
+    })
+  }
+  if (result.code !== 0) {
+    const detail = result.stderr.trim() || `ssh exited ${result.code}`
+    throw new Error(`Cannot zip remote folder: ${detail}`)
+  }
+  return result.stdout
+}

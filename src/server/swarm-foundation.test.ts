@@ -14,7 +14,9 @@ import * as path from 'node:path'
 
 describe('normalizeSwarmRuntime', () => {
   it('resolves semantic wrapper aliases from the roster', () => {
-    expect(getSwarmWrapperPath('builder')).toMatch(/\/builder:task$/)
+    // Roster maps worker id → its wrapper (e.g. developer → developer:implement).
+    expect(getSwarmWrapperPath('developer')).toMatch(/\/developer:implement$/)
+    // Unknown worker ids fall back to the id itself as the wrapper name.
     expect(getSwarmWrapperPath('swarm5')).toMatch(/\/swarm5$/)
   })
 
