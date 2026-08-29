@@ -50,6 +50,27 @@ type WorkspaceState = {
   last?: string
 }
 
+const WORKSPACE_CATALOG_TTL_MS = 3_000
+const workspaceCatalogCache = new Map<
+  string,
+  { at: number; value: WorkspaceDetectionResponse }
+>()
+
+function workspaceCatalogCacheKey(profileName?: string | null): string {
+  return String(profileName ?? '').trim() || '__active__'
+}
+
+export function invalidateWorkspaceCatalogCache(
+  profileName?: string | null,
+): void {
+  if (profileName === undefined || profileName === null) {
+    workspaceCatalogCache.clear()
+    return
+  }
+  workspaceCatalogCache.delete(workspaceCatalogCacheKey(profileName))
+  workspaceCatalogCache.delete('__active__')
+}
+
 function remoteWorkspaceContext(scope: WorkspaceProfileScope): {
   remoteCwd: string
   config: Record<string, unknown>
@@ -224,10 +245,76 @@ async function cleanExistingWorkspaces(
 export async function loadWorkspaceCatalog(
   profileName?: string | null,
 ): Promise<WorkspaceDetectionResponse> {
+  const cacheKey = workspaceCatalogCacheKey(profileName)
+  const cached = workspaceCatalogCache.get(cacheKey)
+  if (cached && Date.now() - cached.at < WORKSPACE_CATALOG_TTL_MS) {
+    return cached.value
+  }
+
+  const value = await loadWorkspaceCatalogUncached(profileName)
+  workspaceCatalogCache.set(cacheKey, { at: Date.now(), value })
+  return value
+}
+
+async function loadWorkspaceCatalogUncached(
+  profileName?: string | null,
+): Promise<WorkspaceDetectionResponse> {
   const scope = workspaceProfileScope(profileName)
   const remote = remoteWorkspaceContext(scope)
   const remoteCwd = remote?.remoteCwd
   const state = await readWorkspaceState(scope)
+
+  const savedLast = readString(state.last)
+  const lastFromFile = await (async () => {
+    try {
+      return (await fs.readFile(lastWorkspaceFile(scope), 'utf-8')).trim()
+    } catch {
+      return ''
+    }
+  })()
+
+  // Fast path (local): if we already have a valid last workspace, skip the
+  // expensive firstValidDirectory candidate walk used by configuredDefaultWorkspace.
+  if (!remoteCwd) {
+    for (const raw of [savedLast, lastFromFile]) {
+      if (!raw) continue
+      const normalized = normalizeCandidate(raw)
+      if (isHermesStatePath(normalized) || isBlockedSystemPath(normalized)) {
+        continue
+      }
+      if (!(await isValidDirectory(normalized))) continue
+
+      let workspaces = await cleanExistingWorkspaces(
+        state.workspaces ?? [],
+        remoteCwd,
+      )
+      if (!workspaces.some((workspace) => workspace.path === normalized)) {
+        workspaces = [
+          {
+            name: extractFolderName(normalized),
+            path: normalized,
+          },
+          ...workspaces,
+        ]
+      }
+      if (workspaces.length === 0) {
+        workspaces = [{ name: 'Home', path: normalized }]
+      }
+
+      return {
+        path: normalized,
+        folderName:
+          workspaces.find((workspace) => workspace.path === normalized)
+            ?.name || extractFolderName(normalized),
+        source: 'workspace-state',
+        isValid: true,
+        workspaces,
+        last: normalized,
+        profile: scope.profileName,
+      }
+    }
+  }
+
   const configured = await configuredDefaultWorkspace(scope)
   const fallback = configured ?? { path: '', source: 'none' }
   let workspaces = await cleanExistingWorkspaces(state.workspaces ?? [], remoteCwd)
@@ -256,15 +343,6 @@ export async function loadWorkspaceCatalog(
       }
     }
   }
-
-  const savedLast = readString(state.last)
-  const lastFromFile = await (async () => {
-    try {
-      return (await fs.readFile(lastWorkspaceFile(scope), 'utf-8')).trim()
-    } catch {
-      return ''
-    }
-  })()
 
   const resolveLastCandidate = (raw: string): string => {
     if (!raw) return ''
@@ -300,6 +378,63 @@ export async function loadWorkspaceCatalog(
     last: activePath,
     profile: scope.profileName,
   }
+}
+
+export async function resolveActiveWorkspacePath(
+  profileName?: string | null,
+): Promise<string> {
+  const cacheKey = `root:${workspaceCatalogCacheKey(profileName)}`
+  const cached = workspaceCatalogCache.get(cacheKey)
+  if (cached && Date.now() - cached.at < WORKSPACE_CATALOG_TTL_MS) {
+    return cached.value.path
+  }
+
+  const scope = workspaceProfileScope(profileName)
+  const remote = remoteWorkspaceContext(scope)
+  if (remote) {
+    const catalog = await loadWorkspaceCatalog(profileName)
+    if (!catalog.isValid || !catalog.path) {
+      throw new Error('No valid workspace selected')
+    }
+    return catalog.path
+  }
+
+  const state = await readWorkspaceState(scope)
+  const savedLast = readString(state.last)
+  let lastFromFile = ''
+  try {
+    lastFromFile = (await fs.readFile(lastWorkspaceFile(scope), 'utf-8')).trim()
+  } catch {
+    // no last file yet
+  }
+
+  for (const raw of [savedLast, lastFromFile]) {
+    if (!raw) continue
+    const normalized = normalizeCandidate(raw)
+    if (isHermesStatePath(normalized) || isBlockedSystemPath(normalized)) {
+      continue
+    }
+    if (!(await isValidDirectory(normalized))) continue
+    workspaceCatalogCache.set(cacheKey, {
+      at: Date.now(),
+      value: {
+        path: normalized,
+        folderName: extractFolderName(normalized),
+        source: 'workspace-state',
+        isValid: true,
+        workspaces: [{ name: 'Home', path: normalized }],
+        last: normalized,
+        profile: scope.profileName,
+      },
+    })
+    return normalized
+  }
+
+  const catalog = await loadWorkspaceCatalog(profileName)
+  if (!catalog.isValid || !catalog.path) {
+    throw new Error('No valid workspace selected')
+  }
+  return catalog.path
 }
 
 export async function saveWorkspaceSelection(input: {
@@ -340,6 +475,7 @@ export async function saveWorkspaceSelection(input: {
     },
   ])
   await writeWorkspaceState(scope, { workspaces: next, last: target })
+  invalidateWorkspaceCatalogCache(scope.profileName)
   return loadWorkspaceCatalog(scope.profileName)
 }
 

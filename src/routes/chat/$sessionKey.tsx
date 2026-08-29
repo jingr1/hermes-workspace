@@ -11,6 +11,7 @@ import { writeLastSession } from '../../screens/chat/last-session'
 import { ChatRouteLoading } from '../../screens/chat/chat-route-loading'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { useProfiles } from '../../screens/chat/hooks/use-profiles'
+import { prefetchProfileWorkspace } from '@/lib/workspace-client'
 
 const loadChatScreen = () =>
   import('../../screens/chat/chat-screen').then((module) => ({
@@ -20,6 +21,9 @@ const loadChatScreen = () =>
 // Warm the chat chunk as soon as this module evaluates (route match), not
 // only after Suspense mounts — cuts the spinner→shell gap on cold navigations.
 void loadChatScreen()
+// File explorer is nested-lazy inside ChatScreen; warm it here so the files
+// tree request is not gated on that second chunk download.
+void import('../../components/file-explorer')
 
 const ChatScreen = lazy(loadChatScreen)
 
@@ -104,6 +108,13 @@ function ChatRoute() {
       staleTime: 10_000,
     })
   }, [activeFriendlyId, activeProfileName, isNewChat, queryClient])
+
+  // Prefetch workspace + shallow files tree at route level — explorer mounts
+  // later via nested lazy(), so warm the cache (path-keyed, depth 0) early.
+  useEffect(() => {
+    if (!activeProfileName) return
+    void prefetchProfileWorkspace(queryClient, activeProfileName)
+  }, [activeProfileName, queryClient])
 
   const handleSessionResolved = useCallback(
     function handleSessionResolved(payload: {

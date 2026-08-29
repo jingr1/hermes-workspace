@@ -1114,6 +1114,9 @@ function ChatComposerComponent({
           queryKey: ['workspace'],
         }),
         queryClient.invalidateQueries({
+          queryKey: ['files'],
+        }),
+        queryClient.invalidateQueries({
           queryKey: ['search', 'files'],
         }),
       ])
