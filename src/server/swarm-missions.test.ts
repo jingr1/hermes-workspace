@@ -549,4 +549,32 @@ describe('swarm-missions', () => {
       mod.assertAcyclicDependencies([{ id: 'a', dependsOn: ['a'] }] as never),
     ).toThrow(/cycle detected/)
   })
+
+  it('marks a mission complete and records an event', async () => {
+    const mod = await loadModule()
+    const mission = mod.createOrUpdateMission({
+      missionId: 'mission-mark-complete',
+      title: 'Complete me',
+      assignments: [
+        {
+          workerId: 'swarm2',
+          task: 'Done',
+          reviewRequired: false,
+        },
+      ],
+    })
+
+    const updated = mod.markMissionComplete(mission.id, {
+      reason: 'Merged into main',
+      data: { mergedHead: 'deadbeef' },
+    })
+    expect(updated?.state).toBe('complete')
+    const event = updated?.events.find((e) => e.type === 'mission_complete')
+    expect(event?.message).toContain('Merged into main')
+    expect(event?.data?.mergedHead).toBe('deadbeef')
+
+    // Idempotent: second call returns the same complete mission.
+    const again = mod.markMissionComplete(mission.id)
+    expect(again?.state).toBe('complete')
+  })
 })

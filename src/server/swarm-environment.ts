@@ -33,10 +33,41 @@ export type SwarmEnvironment = {
   notes: string[]
 }
 
-export function getSwarmEnvironment(): SwarmEnvironment {
+export function getSwarmEnvironment(input?: {
+  missionId?: string
+  workspaceMode?: 'canonical' | 'worktree'
+  worktreeCwd?: string | null
+}): SwarmEnvironment {
   const hermesRoot = getHermesRoot()
   const profilesRoot = getProfilesDir()
   const localBinDir = getLocalBinDir()
+
+  const workspaceMode = input?.workspaceMode ?? 'canonical'
+  const worktreeCwd = input?.worktreeCwd ?? null
+
+  // P2b: in worktree mode, the agent's working directory is the mission worktree,
+  // not the control-plane repo. Notes must reflect this or agents will be directed
+  // to modify the server's own source tree.
+  const workDir = worktreeCwd ?? SWARM_CANONICAL_REPO
+
+  const canonicalNotes = [
+    'Swarm code, git, build, and tests run only in the canonical repo.',
+    'Do not use the legacy hermes-workspace alias for Swarm work.',
+    'Worker profiles live under ~/.hermes/profiles/<workerId> and wrappers under ~/.local/bin/swarmN.',
+    'Prefer live tmux-backed Hermes sessions over one-shot subprocesses.',
+    'Use the swarm APIs as the machine-readable source of worker/runtime truth.',
+    'Swarm deliverables belong under memory/swarm/missions/<missionId>/<worker>/; do not write new files under output/.',
+  ]
+
+  const worktreeNotes = [
+    `Mission worktree mode: code, git, build, and tests run in the per-mission worktree at ${workDir}.`,
+    'Do not write files in the control-plane hermes-workspace repo.',
+    'Swarm deliverables belong under memory/swarm/missions/<missionId>/<worker>/; do not write new files under output/.',
+    `Run git operations inside ${workDir}.`,
+    ...(input?.missionId
+      ? [`Current mission: ${input.missionId}. Current worktree: ${workDir}.`]
+      : []),
+  ]
 
   return {
     canonicalRepo: SWARM_CANONICAL_REPO,
@@ -50,9 +81,9 @@ export function getSwarmEnvironment(): SwarmEnvironment {
     localBinDir,
     wrapperPattern: join(localBinDir, 'swarmN'),
     tmuxSessionPattern: 'swarm-<workerId>',
-    defaultBuildCommand: `cd ${SWARM_CANONICAL_REPO} && npm run build`,
-    defaultTestCommand: `cd ${SWARM_CANONICAL_REPO} && npm test -- src/screens/swarm2`,
-    defaultDevCommand: `cd ${SWARM_CANONICAL_REPO} && PORT=3002 npm run dev`,
+    defaultBuildCommand: `cd ${workDir} && npm run build`,
+    defaultTestCommand: `cd ${workDir} && npm test -- src/screens/swarm2`,
+    defaultDevCommand: `cd ${workDir} && PORT=3002 npm run dev`,
     runtimeApis: [
       '/api/swarm-environment',
       '/api/swarm-runtime',
@@ -66,7 +97,10 @@ export function getSwarmEnvironment(): SwarmEnvironment {
       '/api/swarm-tmux-stop',
       '/api/swarm-tmux-scroll',
     ],
-    writableRoots: [SWARM_CANONICAL_REPO, SWARM_MEMORY_HANDOFFS],
+    writableRoots:
+      workspaceMode === 'worktree' && worktreeCwd
+        ? [worktreeCwd, SWARM_MEMORY_HANDOFFS]
+        : [SWARM_CANONICAL_REPO, SWARM_MEMORY_HANDOFFS],
     readOnlyRoots: [
       SWARM_MEMORY_ROOT,
       profilesRoot,
@@ -74,14 +108,7 @@ export function getSwarmEnvironment(): SwarmEnvironment {
       join(homedir(), '.ssh'),
     ],
     forbiddenRoots: SWARM_FORBIDDEN_PATHS,
-    notes: [
-      'Swarm code, git, build, and tests run only in the canonical repo.',
-      'Do not use the legacy hermes-workspace alias for Swarm work.',
-      'Worker profiles live under ~/.hermes/profiles/<workerId> and wrappers under ~/.local/bin/swarmN.',
-      'Prefer live tmux-backed Hermes sessions over one-shot subprocesses.',
-      'Use the swarm APIs as the machine-readable source of worker/runtime truth.',
-      'Swarm deliverables belong under memory/swarm/missions/<missionId>/<worker>/; do not write new files under output/.',
-    ],
+    notes: workspaceMode === 'worktree' ? worktreeNotes : canonicalNotes,
   }
 }
 

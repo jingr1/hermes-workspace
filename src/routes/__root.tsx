@@ -18,6 +18,7 @@ import { GlobalShortcutListener } from '@/components/global-shortcut-listener'
 import { WorkspaceShell } from '@/components/workspace-shell'
 import { MobilePromptTrigger } from '@/components/mobile-prompt/MobilePromptTrigger'
 import { Toaster } from '@/components/ui/toast'
+import { AttentionToaster } from '@/components/attention-toaster'
 import { OnboardingTour } from '@/components/onboarding/onboarding-tour'
 import { KeyboardShortcutsModal } from '@/components/keyboard-shortcuts-modal'
 import { UpdateCenterNotifier } from '@/components/update-center-notifier'
@@ -380,6 +381,7 @@ function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <Toaster />
+      <AttentionToaster />
       {mounted && rootSurfaceState.showLogin ? <LoginScreen /> : null}
       {mounted && rootSurfaceState.showOnboarding ? <ClaudeOnboarding /> : null}
       {rootSurfaceState.showWorkspaceShell ? (

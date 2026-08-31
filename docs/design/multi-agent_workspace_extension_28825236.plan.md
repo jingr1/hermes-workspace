@@ -25,16 +25,16 @@ todos:
     status: in_progress
   - id: p3-views
     content: Phase 3 三视图：/mission-control 的 Overview 全局态势、Board 看板、Pipeline 单任务流水线
-    status: pending
+    status: completed
   - id: p4-rooms
-    content: Phase 4 群聊：room_participants 人与 Agent 同表、human/agent/all 三类 mention、滚动摘要、context-projection、checkpoint 自动 @ 下一棒
-    status: pending
+    content: Phase 4 群聊：room_participants 人与 Agent 同表、human/agent/all 三类 mention、context-projection + 基础滚动摘要（规则实现）、checkpoint 自动 @ 下一棒
+    status: completed
   - id: p5-attention
-    content: Phase 5 人工干预：pending_turns 一等状态 + 四类触发源收敛 + bottom-right toast + 选项 chip + 超时与深链
-    status: pending
+    content: Phase 5 人工干预：pending_turns 一等状态 + 四类触发源收敛 + bottom-right toast + 选项 chip + 人工回答续跑
+    status: completed
   - id: p6-health-cost
-    content: Phase 6 健康与成本：限流 nudge 服务（三类触发）、token_usage 计量、预算 80% 告警与 100% 硬停、Overview 成本卡片
-    status: pending
+    content: Phase 6 健康与成本：限流 nudge 服务（三类触发）、token_usage 表与预算 80%/100% 门控、Overview 成本卡片
+    status: completed
   - id: p7-codex-deepseek
     content: Phase 7 补齐 codex / deepseek-harness adapter（各自 MCP 配置注入）
     status: pending
@@ -45,9 +45,8 @@ isProject: false
 
 > **开发边界标注** (2026-08-27)
 >
-> - 已完成：P0 地基、P1.1–P1.4 MCP + AgentRuntime 通电与工具组、P2a canonical 流水线任务模块。
-> - 正在开发：P2b 工作区/产物/git 模型（从本文档「产物与代码同步」开始的内容）。
-> - 尚未开始：P3 三视图、P4 群聊、P5 人工干预、P6 健康与成本、P7 补齐 CLI adapter。
+> - 已完成：P0 地基、P1.1–P1.4 MCP + AgentRuntime 通电与工具组、P2a canonical 流水线任务模块、P2b 工作区与产物模型（git-ops/worktree/合并）、P3 三视图、P4 群聊、P5 人工干预、P6 健康与成本。
+> - 正在开发：P7 补齐 codex / deepseek-harness adapter。
 > - 已实际落库主要文件：`src/server/sqlite-helper.ts`、`src/server/collab-db.ts`、`src/server/chat-event-bus.ts`、`src/routes/api/collab-events.ts`、`src/routes/api/mcp-rpc.ts`、`src/server/mcp/*`、`src/server/agent-runtime/*`、`src/server/task-pipeline/*`、`src/routes/api/tasks/*`、`src/routes/api/agents/status.ts`、`agents.yaml`、`pipelines.yaml`。
 > - P2a 目标测试：`npx vitest run src/server/agent-runtime src/server/mcp src/server/task-pipeline src/server/collab-db.test.ts src/server/chat-event-bus.test.ts` 通过 21 文件 / 305 例。
 

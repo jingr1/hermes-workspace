@@ -152,6 +152,47 @@ CREATE INDEX IF NOT EXISTS idx_run_tokens_expiry
   ON run_tokens(expires_at);
 `,
   },
+  {
+    version: 2,
+    sql: `
+CREATE TABLE IF NOT EXISTS token_usage (
+  id TEXT PRIMARY KEY,
+  run_id TEXT,
+  task_id TEXT,
+  agent_id TEXT,
+  project_id TEXT,
+  runtime TEXT,
+  model TEXT,
+  input INTEGER,
+  output INTEGER,
+  cache_read INTEGER,
+  cache_write INTEGER,
+  reasoning INTEGER,
+  cost_estimate REAL,
+  at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_token_usage_task
+  ON token_usage(task_id, at);
+CREATE INDEX IF NOT EXISTS idx_token_usage_project
+  ON token_usage(project_id, at);
+CREATE INDEX IF NOT EXISTS idx_token_usage_run
+  ON token_usage(run_id, at);
+
+CREATE TABLE IF NOT EXISTS budgets (
+  id TEXT PRIMARY KEY,
+  scope TEXT,              -- run | task | project | global
+  scope_id TEXT,           -- global 时为 NULL
+  period TEXT,             -- month | total
+  limit_tokens INTEGER,
+  limit_cost REAL,
+  warn_ratio REAL DEFAULT 0.8,
+  created_at INTEGER,
+  updated_at INTEGER
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_budgets_scope
+  ON budgets(scope, scope_id, period);
+`,
+  },
 ]
 
 export function ensureCollabDb(dbPath: string = getCollabDbPath()): void {

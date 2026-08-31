@@ -5,10 +5,15 @@ version: 1
 # requires an explicit `selfHosted: true` flag.
 projects:
   - id: hermes-workspace
-    repo: /home/ramon.jing/hermes-workspace
+    repo: /Users/ramon/hermes-workspace
     defaultBranch: main
-    worktreeRoot: /home/ramon.jing/worktrees/hermes-workspace
+    worktreeRoot: /Users/ramon/worktrees/hermes-workspace
     setup: ['pnpm install --frozen-lockfile']
     maxConcurrentWorktrees: 2
     gitRemote: ''
     selfHosted: true
+    remotes:
+      dev-wsl:
+        repo: /home/ramonjing/repos/hermes-workspace
+        worktreeRoot: /home/ramonjing/worktrees/hermes-workspace
+        setup: ['pnpm install --frozen-lockfile']

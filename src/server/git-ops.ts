@@ -462,6 +462,67 @@ export async function releaseRemoteMissionWorktree(
   }
 }
 
+/**
+ * Merge the mission integration branch into the project's default branch.
+ * Per the plan, this is always a manual action triggered after the last
+ * review stage is approved. On conflict the merge is aborted and the list
+ * of conflicted files is returned.
+ */
+export async function mergeMissionBranch(
+  project: ProjectDeclaration,
+  missionId: string,
+): Promise<{ ok: true; mergedHead: string } | { ok: false; conflicts: Array<string> }> {
+  const ctx: GitContext = { locality: 'local', cwd: project.repo }
+  const branch = `swarm/mission-${missionId}`
+
+  await gitExec(ctx, ['checkout', project.defaultBranch])
+  try {
+    await gitExec(ctx, [
+      'merge',
+      '--no-ff',
+      '-m',
+      `Merge mission ${missionId}`,
+      branch,
+    ])
+  } catch {
+    let conflicts: Array<string> = []
+    try {
+      const { stdout } = await gitExec(ctx, [
+        'diff',
+        '--name-only',
+        '--diff-filter=U',
+      ])
+      conflicts = stdout.split('\n').filter(Boolean)
+    } catch {
+      // ignore
+    }
+    if (conflicts.length === 0) {
+      try {
+        const { stdout } = await gitExec(ctx, ['ls-files', '-u'])
+        conflicts = Array.from(
+          new Set(
+            stdout
+              .split('\n')
+              .filter(Boolean)
+              .map((line) => line.split(/\s+/)[3]),
+          ),
+        )
+      } catch {
+        // ignore
+      }
+    }
+    try {
+      await gitExec(ctx, ['merge', '--abort'])
+    } catch {
+      // ignore abort errors
+    }
+    return { ok: false, conflicts }
+  }
+
+  const mergedHead = await resolveHead(ctx)
+  return { ok: true, mergedHead }
+}
+
 /** Verify ssh host is reachable without interactive auth. */
 export async function probeSshHost(
   host: string,

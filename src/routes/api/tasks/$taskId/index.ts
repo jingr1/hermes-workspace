@@ -1,16 +1,16 @@
 import { existsSync } from 'node:fs'
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
-import { isAuthenticated } from '../../../server/auth-middleware'
-import { listKanbanCards } from '../../../server/kanban-backend'
-import { getSwarmMission } from '../../../server/swarm-missions'
-import { getCollabDbPath } from '../../../server/collab-db'
-import { openSqliteDatabase } from '../../../server/sqlite-helper'
+import { isAuthenticated } from '../../../../server/auth-middleware'
+import { listKanbanCards } from '../../../../server/kanban-backend'
+import { getSwarmMission } from '../../../../server/swarm-missions'
+import { getCollabDbPath } from '../../../../server/collab-db'
+import { openSqliteDatabase } from '../../../../server/sqlite-helper'
 
 /**
  * GET /api/tasks/:taskId → card + pipeline stages (from mission) + runs + events
  */
-export const Route = createFileRoute('/api/tasks/$taskId')({
+export const Route = createFileRoute('/api/tasks/$taskId/')({
   server: {
     handlers: {
       GET: async ({ request, params }) => {

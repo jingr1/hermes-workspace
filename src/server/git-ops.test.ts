@@ -10,6 +10,7 @@ import {
   filesChangedBetween,
   gitExec,
   localGitContext,
+  mergeMissionBranch,
   mergeSiblings,
   releaseMissionWorktree,
   resolveHead,
@@ -122,5 +123,44 @@ describe('git-ops (P2b)', () => {
     await ensureMissionWorktree(project, '5')
     await releaseMissionWorktree(project, '5')
     expect(fs.existsSync(path.join(project.worktreeRoot, '5'))).toBe(false)
+  })
+
+  it('merges mission branch into default branch', async () => {
+    const { ctx, baseRef } = await ensureMissionWorktree(project, 'merge-ok')
+    fs.writeFileSync(path.join(ctx.cwd, 'feature.md'), '# feature')
+    await commitStage(ctx, 'add feature')
+
+    const result = await mergeMissionBranch(project, 'merge-ok')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.mergedHead).not.toBe(baseRef)
+
+    // default branch in the main repo should now contain the feature file.
+    const mainFile = path.join(project.repo, 'feature.md')
+    expect(fs.existsSync(mainFile)).toBe(true)
+  })
+
+  it('reports conflicts when merging divergent mission branch', async () => {
+    const { ctx, baseRef } = await ensureMissionWorktree(project, 'merge-conflict')
+    fs.writeFileSync(path.join(ctx.cwd, 'shared.md'), 'mission line')
+    await commitStage(ctx, 'mission change')
+
+    // Make default branch advance with a conflicting change.
+    const mainCtx: import('./git-ops').GitContext = {
+      locality: 'local',
+      cwd: project.repo,
+    }
+    fs.writeFileSync(path.join(project.repo, 'shared.md'), 'main line')
+    await gitExec(mainCtx, ['add', '-A'])
+    await gitExec(mainCtx, ['commit', '-m', 'main change'])
+
+    const result = await mergeMissionBranch(project, 'merge-conflict')
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.conflicts).toContain('shared.md')
+
+    // default branch should be back to a clean state.
+    const status = await gitExec(mainCtx, ['status', '--porcelain'])
+    expect(status.stdout).toBe('')
   })
 })

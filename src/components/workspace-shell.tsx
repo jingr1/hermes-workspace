@@ -102,6 +102,8 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
     if (path.startsWith('/jobs')) return 4
     if (path === '/swarm' || path.startsWith('/swarm2')) return 5
     if (path.startsWith('/echo-studio')) return 5
+    if (path.startsWith('/mission-control')) return 5
+    if (path.startsWith('/rooms')) return 5
     if (path.startsWith('/memory')) return 6
     if (path.startsWith('/skills')) return 7
     if (path.startsWith('/mcp')) return 8
@@ -189,6 +191,8 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
     if (pathname.startsWith('/operations')) return 'Operations'
     if (pathname.startsWith('/swarm2') || pathname === '/swarm') return 'Swarm'
     if (pathname.startsWith('/echo-studio')) return 'Echo Studio'
+    if (pathname.startsWith('/mission-control')) return 'Mission Control'
+    if (pathname.startsWith('/rooms')) return 'Rooms'
     if (pathname.startsWith('/memory')) return 'Memory'
     if (pathname.startsWith('/skills')) return 'Skills'
     if (pathname.startsWith('/mcp')) return 'MCP'

@@ -4,6 +4,8 @@ import {
   ensureBusStarted,
   subscribeToChatEvents,
 } from '../../server/chat-event-bus'
+import { startAgentStatusWatcher } from '../../server/agent-status-watcher'
+import { startRoomRunner } from '../../server/group-chat/room-runner'
 
 /**
  * SSE endpoint for collaboration events (rooms, agent status, human attention).
@@ -62,6 +64,8 @@ export const Route = createFileRoute('/api/collab-events')({
             }
 
             await ensureBusStarted()
+            startAgentStatusWatcher()
+            startRoomRunner()
             unsubscribe = subscribeToChatEvents(
               (evt) => sendEvent(evt.event, evt.data),
               { sessionKey, roomId, scope },

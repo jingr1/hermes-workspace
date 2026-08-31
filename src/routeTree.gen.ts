@@ -17,10 +17,12 @@ import { Route as Swarm2RouteImport } from './routes/swarm2'
 import { Route as SwarmRouteImport } from './routes/swarm'
 import { Route as SkillsRouteImport } from './routes/skills'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as RoomsRouteImport } from './routes/rooms'
 import { Route as ReserveRouteImport } from './routes/reserve'
 import { Route as ProfilesRouteImport } from './routes/profiles'
 import { Route as PlaygroundRouteImport } from './routes/playground'
 import { Route as OperationsRouteImport } from './routes/operations'
+import { Route as MissionControlRouteImport } from './routes/mission-control'
 import { Route as MemoryRouteImport } from './routes/memory'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as JobsRouteImport } from './routes/jobs'
@@ -76,12 +78,14 @@ import { Route as ApiSessionSendRouteImport } from './routes/api/session-send'
 import { Route as ApiSessionHistoryRouteImport } from './routes/api/session-history'
 import { Route as ApiSendStreamRouteImport } from './routes/api/send-stream'
 import { Route as ApiSendRouteImport } from './routes/api/send'
+import { Route as ApiRoomsRouteImport } from './routes/api/rooms'
 import { Route as ApiProviderUsageRouteImport } from './routes/api/provider-usage'
 import { Route as ApiPreviewFileRouteImport } from './routes/api/preview-file'
 import { Route as ApiPluginsRouteImport } from './routes/api/plugins'
 import { Route as ApiPlaygroundNpcRouteImport } from './routes/api/playground-npc'
 import { Route as ApiPlaygroundAdminRouteImport } from './routes/api/playground-admin'
 import { Route as ApiPingRouteImport } from './routes/api/ping'
+import { Route as ApiPendingTurnsRouteImport } from './routes/api/pending-turns'
 import { Route as ApiPathsRouteImport } from './routes/api/paths'
 import { Route as ApiOrchestratorStateRouteImport } from './routes/api/orchestrator-state'
 import { Route as ApiOrchestratorResumeRouteImport } from './routes/api/orchestrator-resume'
@@ -104,6 +108,7 @@ import { Route as ApiGatewayPoolRouteImport } from './routes/api/gateway-pool'
 import { Route as ApiFilesRouteImport } from './routes/api/files'
 import { Route as ApiEventsRouteImport } from './routes/api/events'
 import { Route as ApiCrewStatusRouteImport } from './routes/api/crew-status'
+import { Route as ApiCostRouteImport } from './routes/api/cost'
 import { Route as ApiContextUsageRouteImport } from './routes/api/context-usage'
 import { Route as ApiConnectionStatusRouteImport } from './routes/api/connection-status'
 import { Route as ApiConnectionSettingsRouteImport } from './routes/api/connection-settings'
@@ -127,7 +132,6 @@ import { Route as ApiWorkspaceFoldersRouteImport } from './routes/api/workspace.
 import { Route as ApiUpdateWorkspaceRouteImport } from './routes/api/update/workspace'
 import { Route as ApiUpdateStatusRouteImport } from './routes/api/update/status'
 import { Route as ApiUpdateAgentRouteImport } from './routes/api/update/agent'
-import { Route as ApiTasksTaskIdRouteImport } from './routes/api/tasks/$taskId'
 import { Route as ApiSwarmRuntimeResetRouteImport } from './routes/api/swarm-runtime.reset'
 import { Route as ApiSwarmMemorySearchRouteImport } from './routes/api/swarm-memory/search'
 import { Route as ApiSwarmLanggraphStatusRouteImport } from './routes/api/swarm-langgraph/status'
@@ -143,6 +147,7 @@ import { Route as ApiSessionsSendRouteImport } from './routes/api/sessions/send'
 import { Route as ApiSessionsSearchRouteImport } from './routes/api/sessions/search'
 import { Route as ApiRunsDetachRouteImport } from './routes/api/runs/detach'
 import { Route as ApiRunsActiveRouteImport } from './routes/api/runs/active'
+import { Route as ApiRoomsRoomIdRouteImport } from './routes/api/rooms/$roomId'
 import { Route as ApiProfilesUpdateAllModelProviderRouteImport } from './routes/api/profiles/update-all-model-provider'
 import { Route as ApiProfilesUpdateRouteImport } from './routes/api/profiles/update'
 import { Route as ApiProfilesToggleSkillRouteImport } from './routes/api/profiles/toggle-skill'
@@ -190,8 +195,15 @@ import { Route as ApiAuthCodexRouteImport } from './routes/api/auth.codex'
 import { Route as ApiAuthAnthropicRouteImport } from './routes/api/auth.anthropic'
 import { Route as ApiArtifactsArtifactIdRouteImport } from './routes/api/artifacts.$artifactId'
 import { Route as ApiAgentsStatusRouteImport } from './routes/api/agents/status'
+import { Route as ApiTasksTaskIdIndexRouteImport } from './routes/api/tasks/$taskId/index'
+import { Route as ApiTasksTaskIdMergeRouteImport } from './routes/api/tasks/$taskId/merge'
 import { Route as ApiSessionsSessionKeyStatusRouteImport } from './routes/api/sessions/$sessionKey.status'
 import { Route as ApiSessionsSessionKeyActiveRunRouteImport } from './routes/api/sessions/$sessionKey.active-run'
+import { Route as ApiRoomsRoomIdSummarizeRouteImport } from './routes/api/rooms/$roomId/summarize'
+import { Route as ApiRoomsRoomIdParticipantsRouteImport } from './routes/api/rooms/$roomId/participants'
+import { Route as ApiRoomsRoomIdMessagesRouteImport } from './routes/api/rooms/$roomId/messages'
+import { Route as ApiPendingTurnsIdDismissRouteImport } from './routes/api/pending-turns/$id/dismiss'
+import { Route as ApiPendingTurnsIdAnswerRouteImport } from './routes/api/pending-turns/$id/answer'
 import { Route as ApiMcpHubSourcesIdRouteImport } from './routes/api/mcp/hub-sources.$id'
 import { Route as ApiMcpNameLogsRouteImport } from './routes/api/mcp/$name.logs'
 import { Route as ApiHermesworldReservationsConfirmRouteImport } from './routes/api/hermesworld/reservations/confirm'
@@ -237,6 +249,11 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RoomsRoute = RoomsRouteImport.update({
+  id: '/rooms',
+  path: '/rooms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ReserveRoute = ReserveRouteImport.update({
   id: '/reserve',
   path: '/reserve',
@@ -255,6 +272,11 @@ const PlaygroundRoute = PlaygroundRouteImport.update({
 const OperationsRoute = OperationsRouteImport.update({
   id: '/operations',
   path: '/operations',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MissionControlRoute = MissionControlRouteImport.update({
+  id: '/mission-control',
+  path: '/mission-control',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MemoryRoute = MemoryRouteImport.update({
@@ -534,6 +556,11 @@ const ApiSendRoute = ApiSendRouteImport.update({
   path: '/api/send',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiRoomsRoute = ApiRoomsRouteImport.update({
+  id: '/api/rooms',
+  path: '/api/rooms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiProviderUsageRoute = ApiProviderUsageRouteImport.update({
   id: '/api/provider-usage',
   path: '/api/provider-usage',
@@ -562,6 +589,11 @@ const ApiPlaygroundAdminRoute = ApiPlaygroundAdminRouteImport.update({
 const ApiPingRoute = ApiPingRouteImport.update({
   id: '/api/ping',
   path: '/api/ping',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPendingTurnsRoute = ApiPendingTurnsRouteImport.update({
+  id: '/api/pending-turns',
+  path: '/api/pending-turns',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPathsRoute = ApiPathsRouteImport.update({
@@ -673,6 +705,11 @@ const ApiEventsRoute = ApiEventsRouteImport.update({
 const ApiCrewStatusRoute = ApiCrewStatusRouteImport.update({
   id: '/api/crew-status',
   path: '/api/crew-status',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCostRoute = ApiCostRouteImport.update({
+  id: '/api/cost',
+  path: '/api/cost',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiContextUsageRoute = ApiContextUsageRouteImport.update({
@@ -790,11 +827,6 @@ const ApiUpdateAgentRoute = ApiUpdateAgentRouteImport.update({
   path: '/api/update/agent',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiTasksTaskIdRoute = ApiTasksTaskIdRouteImport.update({
-  id: '/api/tasks/$taskId',
-  path: '/api/tasks/$taskId',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiSwarmRuntimeResetRoute = ApiSwarmRuntimeResetRouteImport.update({
   id: '/reset',
   path: '/reset',
@@ -870,6 +902,11 @@ const ApiRunsActiveRoute = ApiRunsActiveRouteImport.update({
   id: '/api/runs/active',
   path: '/api/runs/active',
   getParentRoute: () => rootRouteImport,
+} as any)
+const ApiRoomsRoomIdRoute = ApiRoomsRoomIdRouteImport.update({
+  id: '/$roomId',
+  path: '/$roomId',
+  getParentRoute: () => ApiRoomsRoute,
 } as any)
 const ApiProfilesUpdateAllModelProviderRoute =
   ApiProfilesUpdateAllModelProviderRouteImport.update({
@@ -1111,6 +1148,16 @@ const ApiAgentsStatusRoute = ApiAgentsStatusRouteImport.update({
   path: '/api/agents/status',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiTasksTaskIdIndexRoute = ApiTasksTaskIdIndexRouteImport.update({
+  id: '/api/tasks/$taskId/',
+  path: '/api/tasks/$taskId/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiTasksTaskIdMergeRoute = ApiTasksTaskIdMergeRouteImport.update({
+  id: '/api/tasks/$taskId/merge',
+  path: '/api/tasks/$taskId/merge',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSessionsSessionKeyStatusRoute =
   ApiSessionsSessionKeyStatusRouteImport.update({
     id: '/$sessionKey/status',
@@ -1123,6 +1170,33 @@ const ApiSessionsSessionKeyActiveRunRoute =
     path: '/$sessionKey/active-run',
     getParentRoute: () => ApiSessionsRoute,
   } as any)
+const ApiRoomsRoomIdSummarizeRoute = ApiRoomsRoomIdSummarizeRouteImport.update({
+  id: '/summarize',
+  path: '/summarize',
+  getParentRoute: () => ApiRoomsRoomIdRoute,
+} as any)
+const ApiRoomsRoomIdParticipantsRoute =
+  ApiRoomsRoomIdParticipantsRouteImport.update({
+    id: '/participants',
+    path: '/participants',
+    getParentRoute: () => ApiRoomsRoomIdRoute,
+  } as any)
+const ApiRoomsRoomIdMessagesRoute = ApiRoomsRoomIdMessagesRouteImport.update({
+  id: '/messages',
+  path: '/messages',
+  getParentRoute: () => ApiRoomsRoomIdRoute,
+} as any)
+const ApiPendingTurnsIdDismissRoute =
+  ApiPendingTurnsIdDismissRouteImport.update({
+    id: '/$id/dismiss',
+    path: '/$id/dismiss',
+    getParentRoute: () => ApiPendingTurnsRoute,
+  } as any)
+const ApiPendingTurnsIdAnswerRoute = ApiPendingTurnsIdAnswerRouteImport.update({
+  id: '/$id/answer',
+  path: '/$id/answer',
+  getParentRoute: () => ApiPendingTurnsRoute,
+} as any)
 const ApiMcpHubSourcesIdRoute = ApiMcpHubSourcesIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -1159,10 +1233,12 @@ export interface FileRoutesByFullPath {
   '/jobs': typeof JobsRoute
   '/mcp': typeof McpRoute
   '/memory': typeof MemoryRoute
+  '/mission-control': typeof MissionControlRoute
   '/operations': typeof OperationsRoute
   '/playground': typeof PlaygroundRoute
   '/profiles': typeof ProfilesRoute
   '/reserve': typeof ReserveRouteWithChildren
+  '/rooms': typeof RoomsRoute
   '/settings': typeof SettingsRouteWithChildren
   '/skills': typeof SkillsRoute
   '/swarm': typeof SwarmRoute
@@ -1189,6 +1265,7 @@ export interface FileRoutesByFullPath {
   '/api/connection-settings': typeof ApiConnectionSettingsRoute
   '/api/connection-status': typeof ApiConnectionStatusRoute
   '/api/context-usage': typeof ApiContextUsageRoute
+  '/api/cost': typeof ApiCostRoute
   '/api/crew-status': typeof ApiCrewStatusRoute
   '/api/events': typeof ApiEventsRoute
   '/api/files': typeof ApiFilesRoute
@@ -1211,12 +1288,14 @@ export interface FileRoutesByFullPath {
   '/api/orchestrator-resume': typeof ApiOrchestratorResumeRoute
   '/api/orchestrator-state': typeof ApiOrchestratorStateRoute
   '/api/paths': typeof ApiPathsRoute
+  '/api/pending-turns': typeof ApiPendingTurnsRouteWithChildren
   '/api/ping': typeof ApiPingRoute
   '/api/playground-admin': typeof ApiPlaygroundAdminRoute
   '/api/playground-npc': typeof ApiPlaygroundNpcRoute
   '/api/plugins': typeof ApiPluginsRoute
   '/api/preview-file': typeof ApiPreviewFileRoute
   '/api/provider-usage': typeof ApiProviderUsageRoute
+  '/api/rooms': typeof ApiRoomsRouteWithChildren
   '/api/send': typeof ApiSendRoute
   '/api/send-stream': typeof ApiSendStreamRoute
   '/api/session-history': typeof ApiSessionHistoryRoute
@@ -1307,6 +1386,7 @@ export interface FileRoutesByFullPath {
   '/api/profiles/toggle-skill': typeof ApiProfilesToggleSkillRoute
   '/api/profiles/update': typeof ApiProfilesUpdateRoute
   '/api/profiles/update-all-model-provider': typeof ApiProfilesUpdateAllModelProviderRoute
+  '/api/rooms/$roomId': typeof ApiRoomsRoomIdRouteWithChildren
   '/api/runs/active': typeof ApiRunsActiveRoute
   '/api/runs/detach': typeof ApiRunsDetachRoute
   '/api/sessions/search': typeof ApiSessionsSearchRoute
@@ -1322,7 +1402,6 @@ export interface FileRoutesByFullPath {
   '/api/swarm-langgraph/status': typeof ApiSwarmLanggraphStatusRoute
   '/api/swarm-memory/search': typeof ApiSwarmMemorySearchRoute
   '/api/swarm-runtime/reset': typeof ApiSwarmRuntimeResetRoute
-  '/api/tasks/$taskId': typeof ApiTasksTaskIdRoute
   '/api/update/agent': typeof ApiUpdateAgentRoute
   '/api/update/status': typeof ApiUpdateStatusRoute
   '/api/update/workspace': typeof ApiUpdateWorkspaceRoute
@@ -1331,8 +1410,15 @@ export interface FileRoutesByFullPath {
   '/api/hermesworld/reservations/confirm': typeof ApiHermesworldReservationsConfirmRoute
   '/api/mcp/$name/logs': typeof ApiMcpNameLogsRoute
   '/api/mcp/hub-sources/$id': typeof ApiMcpHubSourcesIdRoute
+  '/api/pending-turns/$id/answer': typeof ApiPendingTurnsIdAnswerRoute
+  '/api/pending-turns/$id/dismiss': typeof ApiPendingTurnsIdDismissRoute
+  '/api/rooms/$roomId/messages': typeof ApiRoomsRoomIdMessagesRoute
+  '/api/rooms/$roomId/participants': typeof ApiRoomsRoomIdParticipantsRoute
+  '/api/rooms/$roomId/summarize': typeof ApiRoomsRoomIdSummarizeRoute
   '/api/sessions/$sessionKey/active-run': typeof ApiSessionsSessionKeyActiveRunRoute
   '/api/sessions/$sessionKey/status': typeof ApiSessionsSessionKeyStatusRoute
+  '/api/tasks/$taskId/merge': typeof ApiTasksTaskIdMergeRoute
+  '/api/tasks/$taskId/': typeof ApiTasksTaskIdIndexRoute
   '/api/runs/$sessionKey/$runId/abandon': typeof ApiRunsSessionKeyRunIdAbandonRoute
 }
 export interface FileRoutesByTo {
@@ -1348,10 +1434,12 @@ export interface FileRoutesByTo {
   '/jobs': typeof JobsRoute
   '/mcp': typeof McpRoute
   '/memory': typeof MemoryRoute
+  '/mission-control': typeof MissionControlRoute
   '/operations': typeof OperationsRoute
   '/playground': typeof PlaygroundRoute
   '/profiles': typeof ProfilesRoute
   '/reserve': typeof ReserveRouteWithChildren
+  '/rooms': typeof RoomsRoute
   '/skills': typeof SkillsRoute
   '/swarm': typeof SwarmRoute
   '/swarm2': typeof Swarm2Route
@@ -1377,6 +1465,7 @@ export interface FileRoutesByTo {
   '/api/connection-settings': typeof ApiConnectionSettingsRoute
   '/api/connection-status': typeof ApiConnectionStatusRoute
   '/api/context-usage': typeof ApiContextUsageRoute
+  '/api/cost': typeof ApiCostRoute
   '/api/crew-status': typeof ApiCrewStatusRoute
   '/api/events': typeof ApiEventsRoute
   '/api/files': typeof ApiFilesRoute
@@ -1399,12 +1488,14 @@ export interface FileRoutesByTo {
   '/api/orchestrator-resume': typeof ApiOrchestratorResumeRoute
   '/api/orchestrator-state': typeof ApiOrchestratorStateRoute
   '/api/paths': typeof ApiPathsRoute
+  '/api/pending-turns': typeof ApiPendingTurnsRouteWithChildren
   '/api/ping': typeof ApiPingRoute
   '/api/playground-admin': typeof ApiPlaygroundAdminRoute
   '/api/playground-npc': typeof ApiPlaygroundNpcRoute
   '/api/plugins': typeof ApiPluginsRoute
   '/api/preview-file': typeof ApiPreviewFileRoute
   '/api/provider-usage': typeof ApiProviderUsageRoute
+  '/api/rooms': typeof ApiRoomsRouteWithChildren
   '/api/send': typeof ApiSendRoute
   '/api/send-stream': typeof ApiSendStreamRoute
   '/api/session-history': typeof ApiSessionHistoryRoute
@@ -1495,6 +1586,7 @@ export interface FileRoutesByTo {
   '/api/profiles/toggle-skill': typeof ApiProfilesToggleSkillRoute
   '/api/profiles/update': typeof ApiProfilesUpdateRoute
   '/api/profiles/update-all-model-provider': typeof ApiProfilesUpdateAllModelProviderRoute
+  '/api/rooms/$roomId': typeof ApiRoomsRoomIdRouteWithChildren
   '/api/runs/active': typeof ApiRunsActiveRoute
   '/api/runs/detach': typeof ApiRunsDetachRoute
   '/api/sessions/search': typeof ApiSessionsSearchRoute
@@ -1510,7 +1602,6 @@ export interface FileRoutesByTo {
   '/api/swarm-langgraph/status': typeof ApiSwarmLanggraphStatusRoute
   '/api/swarm-memory/search': typeof ApiSwarmMemorySearchRoute
   '/api/swarm-runtime/reset': typeof ApiSwarmRuntimeResetRoute
-  '/api/tasks/$taskId': typeof ApiTasksTaskIdRoute
   '/api/update/agent': typeof ApiUpdateAgentRoute
   '/api/update/status': typeof ApiUpdateStatusRoute
   '/api/update/workspace': typeof ApiUpdateWorkspaceRoute
@@ -1519,8 +1610,15 @@ export interface FileRoutesByTo {
   '/api/hermesworld/reservations/confirm': typeof ApiHermesworldReservationsConfirmRoute
   '/api/mcp/$name/logs': typeof ApiMcpNameLogsRoute
   '/api/mcp/hub-sources/$id': typeof ApiMcpHubSourcesIdRoute
+  '/api/pending-turns/$id/answer': typeof ApiPendingTurnsIdAnswerRoute
+  '/api/pending-turns/$id/dismiss': typeof ApiPendingTurnsIdDismissRoute
+  '/api/rooms/$roomId/messages': typeof ApiRoomsRoomIdMessagesRoute
+  '/api/rooms/$roomId/participants': typeof ApiRoomsRoomIdParticipantsRoute
+  '/api/rooms/$roomId/summarize': typeof ApiRoomsRoomIdSummarizeRoute
   '/api/sessions/$sessionKey/active-run': typeof ApiSessionsSessionKeyActiveRunRoute
   '/api/sessions/$sessionKey/status': typeof ApiSessionsSessionKeyStatusRoute
+  '/api/tasks/$taskId/merge': typeof ApiTasksTaskIdMergeRoute
+  '/api/tasks/$taskId': typeof ApiTasksTaskIdIndexRoute
   '/api/runs/$sessionKey/$runId/abandon': typeof ApiRunsSessionKeyRunIdAbandonRoute
 }
 export interface FileRoutesById {
@@ -1537,10 +1635,12 @@ export interface FileRoutesById {
   '/jobs': typeof JobsRoute
   '/mcp': typeof McpRoute
   '/memory': typeof MemoryRoute
+  '/mission-control': typeof MissionControlRoute
   '/operations': typeof OperationsRoute
   '/playground': typeof PlaygroundRoute
   '/profiles': typeof ProfilesRoute
   '/reserve': typeof ReserveRouteWithChildren
+  '/rooms': typeof RoomsRoute
   '/settings': typeof SettingsRouteWithChildren
   '/skills': typeof SkillsRoute
   '/swarm': typeof SwarmRoute
@@ -1567,6 +1667,7 @@ export interface FileRoutesById {
   '/api/connection-settings': typeof ApiConnectionSettingsRoute
   '/api/connection-status': typeof ApiConnectionStatusRoute
   '/api/context-usage': typeof ApiContextUsageRoute
+  '/api/cost': typeof ApiCostRoute
   '/api/crew-status': typeof ApiCrewStatusRoute
   '/api/events': typeof ApiEventsRoute
   '/api/files': typeof ApiFilesRoute
@@ -1589,12 +1690,14 @@ export interface FileRoutesById {
   '/api/orchestrator-resume': typeof ApiOrchestratorResumeRoute
   '/api/orchestrator-state': typeof ApiOrchestratorStateRoute
   '/api/paths': typeof ApiPathsRoute
+  '/api/pending-turns': typeof ApiPendingTurnsRouteWithChildren
   '/api/ping': typeof ApiPingRoute
   '/api/playground-admin': typeof ApiPlaygroundAdminRoute
   '/api/playground-npc': typeof ApiPlaygroundNpcRoute
   '/api/plugins': typeof ApiPluginsRoute
   '/api/preview-file': typeof ApiPreviewFileRoute
   '/api/provider-usage': typeof ApiProviderUsageRoute
+  '/api/rooms': typeof ApiRoomsRouteWithChildren
   '/api/send': typeof ApiSendRoute
   '/api/send-stream': typeof ApiSendStreamRoute
   '/api/session-history': typeof ApiSessionHistoryRoute
@@ -1685,6 +1788,7 @@ export interface FileRoutesById {
   '/api/profiles/toggle-skill': typeof ApiProfilesToggleSkillRoute
   '/api/profiles/update': typeof ApiProfilesUpdateRoute
   '/api/profiles/update-all-model-provider': typeof ApiProfilesUpdateAllModelProviderRoute
+  '/api/rooms/$roomId': typeof ApiRoomsRoomIdRouteWithChildren
   '/api/runs/active': typeof ApiRunsActiveRoute
   '/api/runs/detach': typeof ApiRunsDetachRoute
   '/api/sessions/search': typeof ApiSessionsSearchRoute
@@ -1700,7 +1804,6 @@ export interface FileRoutesById {
   '/api/swarm-langgraph/status': typeof ApiSwarmLanggraphStatusRoute
   '/api/swarm-memory/search': typeof ApiSwarmMemorySearchRoute
   '/api/swarm-runtime/reset': typeof ApiSwarmRuntimeResetRoute
-  '/api/tasks/$taskId': typeof ApiTasksTaskIdRoute
   '/api/update/agent': typeof ApiUpdateAgentRoute
   '/api/update/status': typeof ApiUpdateStatusRoute
   '/api/update/workspace': typeof ApiUpdateWorkspaceRoute
@@ -1709,8 +1812,15 @@ export interface FileRoutesById {
   '/api/hermesworld/reservations/confirm': typeof ApiHermesworldReservationsConfirmRoute
   '/api/mcp/$name/logs': typeof ApiMcpNameLogsRoute
   '/api/mcp/hub-sources/$id': typeof ApiMcpHubSourcesIdRoute
+  '/api/pending-turns/$id/answer': typeof ApiPendingTurnsIdAnswerRoute
+  '/api/pending-turns/$id/dismiss': typeof ApiPendingTurnsIdDismissRoute
+  '/api/rooms/$roomId/messages': typeof ApiRoomsRoomIdMessagesRoute
+  '/api/rooms/$roomId/participants': typeof ApiRoomsRoomIdParticipantsRoute
+  '/api/rooms/$roomId/summarize': typeof ApiRoomsRoomIdSummarizeRoute
   '/api/sessions/$sessionKey/active-run': typeof ApiSessionsSessionKeyActiveRunRoute
   '/api/sessions/$sessionKey/status': typeof ApiSessionsSessionKeyStatusRoute
+  '/api/tasks/$taskId/merge': typeof ApiTasksTaskIdMergeRoute
+  '/api/tasks/$taskId/': typeof ApiTasksTaskIdIndexRoute
   '/api/runs/$sessionKey/$runId/abandon': typeof ApiRunsSessionKeyRunIdAbandonRoute
 }
 export interface FileRouteTypes {
@@ -1728,10 +1838,12 @@ export interface FileRouteTypes {
     | '/jobs'
     | '/mcp'
     | '/memory'
+    | '/mission-control'
     | '/operations'
     | '/playground'
     | '/profiles'
     | '/reserve'
+    | '/rooms'
     | '/settings'
     | '/skills'
     | '/swarm'
@@ -1758,6 +1870,7 @@ export interface FileRouteTypes {
     | '/api/connection-settings'
     | '/api/connection-status'
     | '/api/context-usage'
+    | '/api/cost'
     | '/api/crew-status'
     | '/api/events'
     | '/api/files'
@@ -1780,12 +1893,14 @@ export interface FileRouteTypes {
     | '/api/orchestrator-resume'
     | '/api/orchestrator-state'
     | '/api/paths'
+    | '/api/pending-turns'
     | '/api/ping'
     | '/api/playground-admin'
     | '/api/playground-npc'
     | '/api/plugins'
     | '/api/preview-file'
     | '/api/provider-usage'
+    | '/api/rooms'
     | '/api/send'
     | '/api/send-stream'
     | '/api/session-history'
@@ -1876,6 +1991,7 @@ export interface FileRouteTypes {
     | '/api/profiles/toggle-skill'
     | '/api/profiles/update'
     | '/api/profiles/update-all-model-provider'
+    | '/api/rooms/$roomId'
     | '/api/runs/active'
     | '/api/runs/detach'
     | '/api/sessions/search'
@@ -1891,7 +2007,6 @@ export interface FileRouteTypes {
     | '/api/swarm-langgraph/status'
     | '/api/swarm-memory/search'
     | '/api/swarm-runtime/reset'
-    | '/api/tasks/$taskId'
     | '/api/update/agent'
     | '/api/update/status'
     | '/api/update/workspace'
@@ -1900,8 +2015,15 @@ export interface FileRouteTypes {
     | '/api/hermesworld/reservations/confirm'
     | '/api/mcp/$name/logs'
     | '/api/mcp/hub-sources/$id'
+    | '/api/pending-turns/$id/answer'
+    | '/api/pending-turns/$id/dismiss'
+    | '/api/rooms/$roomId/messages'
+    | '/api/rooms/$roomId/participants'
+    | '/api/rooms/$roomId/summarize'
     | '/api/sessions/$sessionKey/active-run'
     | '/api/sessions/$sessionKey/status'
+    | '/api/tasks/$taskId/merge'
+    | '/api/tasks/$taskId/'
     | '/api/runs/$sessionKey/$runId/abandon'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -1917,10 +2039,12 @@ export interface FileRouteTypes {
     | '/jobs'
     | '/mcp'
     | '/memory'
+    | '/mission-control'
     | '/operations'
     | '/playground'
     | '/profiles'
     | '/reserve'
+    | '/rooms'
     | '/skills'
     | '/swarm'
     | '/swarm2'
@@ -1946,6 +2070,7 @@ export interface FileRouteTypes {
     | '/api/connection-settings'
     | '/api/connection-status'
     | '/api/context-usage'
+    | '/api/cost'
     | '/api/crew-status'
     | '/api/events'
     | '/api/files'
@@ -1968,12 +2093,14 @@ export interface FileRouteTypes {
     | '/api/orchestrator-resume'
     | '/api/orchestrator-state'
     | '/api/paths'
+    | '/api/pending-turns'
     | '/api/ping'
     | '/api/playground-admin'
     | '/api/playground-npc'
     | '/api/plugins'
     | '/api/preview-file'
     | '/api/provider-usage'
+    | '/api/rooms'
     | '/api/send'
     | '/api/send-stream'
     | '/api/session-history'
@@ -2064,6 +2191,7 @@ export interface FileRouteTypes {
     | '/api/profiles/toggle-skill'
     | '/api/profiles/update'
     | '/api/profiles/update-all-model-provider'
+    | '/api/rooms/$roomId'
     | '/api/runs/active'
     | '/api/runs/detach'
     | '/api/sessions/search'
@@ -2079,7 +2207,6 @@ export interface FileRouteTypes {
     | '/api/swarm-langgraph/status'
     | '/api/swarm-memory/search'
     | '/api/swarm-runtime/reset'
-    | '/api/tasks/$taskId'
     | '/api/update/agent'
     | '/api/update/status'
     | '/api/update/workspace'
@@ -2088,8 +2215,15 @@ export interface FileRouteTypes {
     | '/api/hermesworld/reservations/confirm'
     | '/api/mcp/$name/logs'
     | '/api/mcp/hub-sources/$id'
+    | '/api/pending-turns/$id/answer'
+    | '/api/pending-turns/$id/dismiss'
+    | '/api/rooms/$roomId/messages'
+    | '/api/rooms/$roomId/participants'
+    | '/api/rooms/$roomId/summarize'
     | '/api/sessions/$sessionKey/active-run'
     | '/api/sessions/$sessionKey/status'
+    | '/api/tasks/$taskId/merge'
+    | '/api/tasks/$taskId'
     | '/api/runs/$sessionKey/$runId/abandon'
   id:
     | '__root__'
@@ -2105,10 +2239,12 @@ export interface FileRouteTypes {
     | '/jobs'
     | '/mcp'
     | '/memory'
+    | '/mission-control'
     | '/operations'
     | '/playground'
     | '/profiles'
     | '/reserve'
+    | '/rooms'
     | '/settings'
     | '/skills'
     | '/swarm'
@@ -2135,6 +2271,7 @@ export interface FileRouteTypes {
     | '/api/connection-settings'
     | '/api/connection-status'
     | '/api/context-usage'
+    | '/api/cost'
     | '/api/crew-status'
     | '/api/events'
     | '/api/files'
@@ -2157,12 +2294,14 @@ export interface FileRouteTypes {
     | '/api/orchestrator-resume'
     | '/api/orchestrator-state'
     | '/api/paths'
+    | '/api/pending-turns'
     | '/api/ping'
     | '/api/playground-admin'
     | '/api/playground-npc'
     | '/api/plugins'
     | '/api/preview-file'
     | '/api/provider-usage'
+    | '/api/rooms'
     | '/api/send'
     | '/api/send-stream'
     | '/api/session-history'
@@ -2253,6 +2392,7 @@ export interface FileRouteTypes {
     | '/api/profiles/toggle-skill'
     | '/api/profiles/update'
     | '/api/profiles/update-all-model-provider'
+    | '/api/rooms/$roomId'
     | '/api/runs/active'
     | '/api/runs/detach'
     | '/api/sessions/search'
@@ -2268,7 +2408,6 @@ export interface FileRouteTypes {
     | '/api/swarm-langgraph/status'
     | '/api/swarm-memory/search'
     | '/api/swarm-runtime/reset'
-    | '/api/tasks/$taskId'
     | '/api/update/agent'
     | '/api/update/status'
     | '/api/update/workspace'
@@ -2277,8 +2416,15 @@ export interface FileRouteTypes {
     | '/api/hermesworld/reservations/confirm'
     | '/api/mcp/$name/logs'
     | '/api/mcp/hub-sources/$id'
+    | '/api/pending-turns/$id/answer'
+    | '/api/pending-turns/$id/dismiss'
+    | '/api/rooms/$roomId/messages'
+    | '/api/rooms/$roomId/participants'
+    | '/api/rooms/$roomId/summarize'
     | '/api/sessions/$sessionKey/active-run'
     | '/api/sessions/$sessionKey/status'
+    | '/api/tasks/$taskId/merge'
+    | '/api/tasks/$taskId/'
     | '/api/runs/$sessionKey/$runId/abandon'
   fileRoutesById: FileRoutesById
 }
@@ -2295,10 +2441,12 @@ export interface RootRouteChildren {
   JobsRoute: typeof JobsRoute
   McpRoute: typeof McpRoute
   MemoryRoute: typeof MemoryRoute
+  MissionControlRoute: typeof MissionControlRoute
   OperationsRoute: typeof OperationsRoute
   PlaygroundRoute: typeof PlaygroundRoute
   ProfilesRoute: typeof ProfilesRoute
   ReserveRoute: typeof ReserveRouteWithChildren
+  RoomsRoute: typeof RoomsRoute
   SettingsRoute: typeof SettingsRouteWithChildren
   SkillsRoute: typeof SkillsRoute
   SwarmRoute: typeof SwarmRoute
@@ -2325,6 +2473,7 @@ export interface RootRouteChildren {
   ApiConnectionSettingsRoute: typeof ApiConnectionSettingsRoute
   ApiConnectionStatusRoute: typeof ApiConnectionStatusRoute
   ApiContextUsageRoute: typeof ApiContextUsageRoute
+  ApiCostRoute: typeof ApiCostRoute
   ApiCrewStatusRoute: typeof ApiCrewStatusRoute
   ApiEventsRoute: typeof ApiEventsRoute
   ApiFilesRoute: typeof ApiFilesRoute
@@ -2347,12 +2496,14 @@ export interface RootRouteChildren {
   ApiOrchestratorResumeRoute: typeof ApiOrchestratorResumeRoute
   ApiOrchestratorStateRoute: typeof ApiOrchestratorStateRoute
   ApiPathsRoute: typeof ApiPathsRoute
+  ApiPendingTurnsRoute: typeof ApiPendingTurnsRouteWithChildren
   ApiPingRoute: typeof ApiPingRoute
   ApiPlaygroundAdminRoute: typeof ApiPlaygroundAdminRoute
   ApiPlaygroundNpcRoute: typeof ApiPlaygroundNpcRoute
   ApiPluginsRoute: typeof ApiPluginsRoute
   ApiPreviewFileRoute: typeof ApiPreviewFileRoute
   ApiProviderUsageRoute: typeof ApiProviderUsageRoute
+  ApiRoomsRoute: typeof ApiRoomsRouteWithChildren
   ApiSendRoute: typeof ApiSendRoute
   ApiSendStreamRoute: typeof ApiSendStreamRoute
   ApiSessionHistoryRoute: typeof ApiSessionHistoryRoute
@@ -2430,11 +2581,12 @@ export interface RootRouteChildren {
   ApiSwarmLanggraphResumeRoute: typeof ApiSwarmLanggraphResumeRoute
   ApiSwarmLanggraphRunRoute: typeof ApiSwarmLanggraphRunRoute
   ApiSwarmLanggraphStatusRoute: typeof ApiSwarmLanggraphStatusRoute
-  ApiTasksTaskIdRoute: typeof ApiTasksTaskIdRoute
   ApiUpdateAgentRoute: typeof ApiUpdateAgentRoute
   ApiUpdateStatusRoute: typeof ApiUpdateStatusRoute
   ApiUpdateWorkspaceRoute: typeof ApiUpdateWorkspaceRoute
   ApiTasksIndexRoute: typeof ApiTasksIndexRoute
+  ApiTasksTaskIdMergeRoute: typeof ApiTasksTaskIdMergeRoute
+  ApiTasksTaskIdIndexRoute: typeof ApiTasksTaskIdIndexRoute
   ApiRunsSessionKeyRunIdAbandonRoute: typeof ApiRunsSessionKeyRunIdAbandonRoute
 }
 
@@ -2496,6 +2648,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/rooms': {
+      id: '/rooms'
+      path: '/rooms'
+      fullPath: '/rooms'
+      preLoaderRoute: typeof RoomsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reserve': {
       id: '/reserve'
       path: '/reserve'
@@ -2522,6 +2681,13 @@ declare module '@tanstack/react-router' {
       path: '/operations'
       fullPath: '/operations'
       preLoaderRoute: typeof OperationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mission-control': {
+      id: '/mission-control'
+      path: '/mission-control'
+      fullPath: '/mission-control'
+      preLoaderRoute: typeof MissionControlRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/memory': {
@@ -2909,6 +3075,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSendRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/rooms': {
+      id: '/api/rooms'
+      path: '/api/rooms'
+      fullPath: '/api/rooms'
+      preLoaderRoute: typeof ApiRoomsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/provider-usage': {
       id: '/api/provider-usage'
       path: '/api/provider-usage'
@@ -2949,6 +3122,13 @@ declare module '@tanstack/react-router' {
       path: '/api/ping'
       fullPath: '/api/ping'
       preLoaderRoute: typeof ApiPingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/pending-turns': {
+      id: '/api/pending-turns'
+      path: '/api/pending-turns'
+      fullPath: '/api/pending-turns'
+      preLoaderRoute: typeof ApiPendingTurnsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/paths': {
@@ -3103,6 +3283,13 @@ declare module '@tanstack/react-router' {
       path: '/api/crew-status'
       fullPath: '/api/crew-status'
       preLoaderRoute: typeof ApiCrewStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/cost': {
+      id: '/api/cost'
+      path: '/api/cost'
+      fullPath: '/api/cost'
+      preLoaderRoute: typeof ApiCostRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/context-usage': {
@@ -3266,13 +3453,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiUpdateAgentRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/tasks/$taskId': {
-      id: '/api/tasks/$taskId'
-      path: '/api/tasks/$taskId'
-      fullPath: '/api/tasks/$taskId'
-      preLoaderRoute: typeof ApiTasksTaskIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/swarm-runtime/reset': {
       id: '/api/swarm-runtime/reset'
       path: '/reset'
@@ -3377,6 +3557,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/runs/active'
       preLoaderRoute: typeof ApiRunsActiveRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/api/rooms/$roomId': {
+      id: '/api/rooms/$roomId'
+      path: '/$roomId'
+      fullPath: '/api/rooms/$roomId'
+      preLoaderRoute: typeof ApiRoomsRoomIdRouteImport
+      parentRoute: typeof ApiRoomsRoute
     }
     '/api/profiles/update-all-model-provider': {
       id: '/api/profiles/update-all-model-provider'
@@ -3707,6 +3894,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentsStatusRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/tasks/$taskId/': {
+      id: '/api/tasks/$taskId/'
+      path: '/api/tasks/$taskId'
+      fullPath: '/api/tasks/$taskId/'
+      preLoaderRoute: typeof ApiTasksTaskIdIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/tasks/$taskId/merge': {
+      id: '/api/tasks/$taskId/merge'
+      path: '/api/tasks/$taskId/merge'
+      fullPath: '/api/tasks/$taskId/merge'
+      preLoaderRoute: typeof ApiTasksTaskIdMergeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/sessions/$sessionKey/status': {
       id: '/api/sessions/$sessionKey/status'
       path: '/$sessionKey/status'
@@ -3720,6 +3921,41 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/sessions/$sessionKey/active-run'
       preLoaderRoute: typeof ApiSessionsSessionKeyActiveRunRouteImport
       parentRoute: typeof ApiSessionsRoute
+    }
+    '/api/rooms/$roomId/summarize': {
+      id: '/api/rooms/$roomId/summarize'
+      path: '/summarize'
+      fullPath: '/api/rooms/$roomId/summarize'
+      preLoaderRoute: typeof ApiRoomsRoomIdSummarizeRouteImport
+      parentRoute: typeof ApiRoomsRoomIdRoute
+    }
+    '/api/rooms/$roomId/participants': {
+      id: '/api/rooms/$roomId/participants'
+      path: '/participants'
+      fullPath: '/api/rooms/$roomId/participants'
+      preLoaderRoute: typeof ApiRoomsRoomIdParticipantsRouteImport
+      parentRoute: typeof ApiRoomsRoomIdRoute
+    }
+    '/api/rooms/$roomId/messages': {
+      id: '/api/rooms/$roomId/messages'
+      path: '/messages'
+      fullPath: '/api/rooms/$roomId/messages'
+      preLoaderRoute: typeof ApiRoomsRoomIdMessagesRouteImport
+      parentRoute: typeof ApiRoomsRoomIdRoute
+    }
+    '/api/pending-turns/$id/dismiss': {
+      id: '/api/pending-turns/$id/dismiss'
+      path: '/$id/dismiss'
+      fullPath: '/api/pending-turns/$id/dismiss'
+      preLoaderRoute: typeof ApiPendingTurnsIdDismissRouteImport
+      parentRoute: typeof ApiPendingTurnsRoute
+    }
+    '/api/pending-turns/$id/answer': {
+      id: '/api/pending-turns/$id/answer'
+      path: '/$id/answer'
+      fullPath: '/api/pending-turns/$id/answer'
+      preLoaderRoute: typeof ApiPendingTurnsIdAnswerRouteImport
+      parentRoute: typeof ApiPendingTurnsRoute
     }
     '/api/mcp/hub-sources/$id': {
       id: '/api/mcp/hub-sources/$id'
@@ -3902,6 +4138,48 @@ const ApiMemoryRouteWithChildren = ApiMemoryRoute._addFileChildren(
   ApiMemoryRouteChildren,
 )
 
+interface ApiPendingTurnsRouteChildren {
+  ApiPendingTurnsIdAnswerRoute: typeof ApiPendingTurnsIdAnswerRoute
+  ApiPendingTurnsIdDismissRoute: typeof ApiPendingTurnsIdDismissRoute
+}
+
+const ApiPendingTurnsRouteChildren: ApiPendingTurnsRouteChildren = {
+  ApiPendingTurnsIdAnswerRoute: ApiPendingTurnsIdAnswerRoute,
+  ApiPendingTurnsIdDismissRoute: ApiPendingTurnsIdDismissRoute,
+}
+
+const ApiPendingTurnsRouteWithChildren = ApiPendingTurnsRoute._addFileChildren(
+  ApiPendingTurnsRouteChildren,
+)
+
+interface ApiRoomsRoomIdRouteChildren {
+  ApiRoomsRoomIdMessagesRoute: typeof ApiRoomsRoomIdMessagesRoute
+  ApiRoomsRoomIdParticipantsRoute: typeof ApiRoomsRoomIdParticipantsRoute
+  ApiRoomsRoomIdSummarizeRoute: typeof ApiRoomsRoomIdSummarizeRoute
+}
+
+const ApiRoomsRoomIdRouteChildren: ApiRoomsRoomIdRouteChildren = {
+  ApiRoomsRoomIdMessagesRoute: ApiRoomsRoomIdMessagesRoute,
+  ApiRoomsRoomIdParticipantsRoute: ApiRoomsRoomIdParticipantsRoute,
+  ApiRoomsRoomIdSummarizeRoute: ApiRoomsRoomIdSummarizeRoute,
+}
+
+const ApiRoomsRoomIdRouteWithChildren = ApiRoomsRoomIdRoute._addFileChildren(
+  ApiRoomsRoomIdRouteChildren,
+)
+
+interface ApiRoomsRouteChildren {
+  ApiRoomsRoomIdRoute: typeof ApiRoomsRoomIdRouteWithChildren
+}
+
+const ApiRoomsRouteChildren: ApiRoomsRouteChildren = {
+  ApiRoomsRoomIdRoute: ApiRoomsRoomIdRouteWithChildren,
+}
+
+const ApiRoomsRouteWithChildren = ApiRoomsRoute._addFileChildren(
+  ApiRoomsRouteChildren,
+)
+
 interface ApiSessionsRouteChildren {
   ApiSessionsSearchRoute: typeof ApiSessionsSearchRoute
   ApiSessionsSendRoute: typeof ApiSessionsSendRoute
@@ -4002,10 +4280,12 @@ const rootRouteChildren: RootRouteChildren = {
   JobsRoute: JobsRoute,
   McpRoute: McpRoute,
   MemoryRoute: MemoryRoute,
+  MissionControlRoute: MissionControlRoute,
   OperationsRoute: OperationsRoute,
   PlaygroundRoute: PlaygroundRoute,
   ProfilesRoute: ProfilesRoute,
   ReserveRoute: ReserveRouteWithChildren,
+  RoomsRoute: RoomsRoute,
   SettingsRoute: SettingsRouteWithChildren,
   SkillsRoute: SkillsRoute,
   SwarmRoute: SwarmRoute,
@@ -4032,6 +4312,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiConnectionSettingsRoute: ApiConnectionSettingsRoute,
   ApiConnectionStatusRoute: ApiConnectionStatusRoute,
   ApiContextUsageRoute: ApiContextUsageRoute,
+  ApiCostRoute: ApiCostRoute,
   ApiCrewStatusRoute: ApiCrewStatusRoute,
   ApiEventsRoute: ApiEventsRoute,
   ApiFilesRoute: ApiFilesRoute,
@@ -4054,12 +4335,14 @@ const rootRouteChildren: RootRouteChildren = {
   ApiOrchestratorResumeRoute: ApiOrchestratorResumeRoute,
   ApiOrchestratorStateRoute: ApiOrchestratorStateRoute,
   ApiPathsRoute: ApiPathsRoute,
+  ApiPendingTurnsRoute: ApiPendingTurnsRouteWithChildren,
   ApiPingRoute: ApiPingRoute,
   ApiPlaygroundAdminRoute: ApiPlaygroundAdminRoute,
   ApiPlaygroundNpcRoute: ApiPlaygroundNpcRoute,
   ApiPluginsRoute: ApiPluginsRoute,
   ApiPreviewFileRoute: ApiPreviewFileRoute,
   ApiProviderUsageRoute: ApiProviderUsageRoute,
+  ApiRoomsRoute: ApiRoomsRouteWithChildren,
   ApiSendRoute: ApiSendRoute,
   ApiSendStreamRoute: ApiSendStreamRoute,
   ApiSessionHistoryRoute: ApiSessionHistoryRoute,
@@ -4138,11 +4421,12 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSwarmLanggraphResumeRoute: ApiSwarmLanggraphResumeRoute,
   ApiSwarmLanggraphRunRoute: ApiSwarmLanggraphRunRoute,
   ApiSwarmLanggraphStatusRoute: ApiSwarmLanggraphStatusRoute,
-  ApiTasksTaskIdRoute: ApiTasksTaskIdRoute,
   ApiUpdateAgentRoute: ApiUpdateAgentRoute,
   ApiUpdateStatusRoute: ApiUpdateStatusRoute,
   ApiUpdateWorkspaceRoute: ApiUpdateWorkspaceRoute,
   ApiTasksIndexRoute: ApiTasksIndexRoute,
+  ApiTasksTaskIdMergeRoute: ApiTasksTaskIdMergeRoute,
+  ApiTasksTaskIdIndexRoute: ApiTasksTaskIdIndexRoute,
   ApiRunsSessionKeyRunIdAbandonRoute: ApiRunsSessionKeyRunIdAbandonRoute,
 }
 export const routeTree = rootRouteImport

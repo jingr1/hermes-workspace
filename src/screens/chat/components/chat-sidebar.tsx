@@ -26,7 +26,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import { AnimatePresence, motion } from 'motion/react'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useRouterState } from '@tanstack/react-router'
+import { Link, useRouterState, useNavigate } from '@tanstack/react-router'
 import { CHAT_OPEN_SETTINGS_EVENT } from '../chat-events'
 import { useChatSettings as useSidebarSettings } from '../hooks/use-chat-settings'
 import { ProvidersDialog } from './providers-dialog'
@@ -168,6 +168,41 @@ function NavItem({
   transition: Record<string, unknown>
   onSelectSession?: () => void
 }) {
+  const navigate = useNavigate()
+
+  const handleSelect = () => {
+    onSelectSession?.()
+  }
+
+  const handleLinkClick = (
+    e: React.MouseEvent<HTMLAnchorElement, MouseEvent>,
+  ) => {
+    handleSelect()
+    // Defensive: some environments (assistive clicks, embedded webviews) don't
+    // reliably trigger TanStack Router's internal Link navigation. Explicitly
+    // navigate on plain left-clicks and fall back to a full page load if the
+    // route is not resolvable in the current client route tree.
+    if (
+      item.kind === 'link' &&
+      e.button === 0 &&
+      !e.ctrlKey &&
+      !e.metaKey &&
+      !e.shiftKey &&
+      !e.altKey
+    ) {
+      e.preventDefault()
+      try {
+        void navigate({
+          to: item.to,
+          search: item.search,
+          hash: item.hash,
+        })
+      } catch {
+        window.location.href = item.to
+      }
+    }
+  }
+
   const cls = cn(
     buttonVariants({ variant: 'ghost', size: 'sm' }),
     'w-full h-auto min-h-11 gap-2.5 py-2 md:min-h-0',
@@ -233,10 +268,6 @@ function NavItem({
     </AnimatePresence>
   )
 
-  const handleSelect = () => {
-    onSelectSession?.()
-  }
-
   if (item.kind === 'link') {
     if (isCollapsed) {
       return (
@@ -248,7 +279,7 @@ function NavItem({
                   to={item.to}
                   search={item.search as any}
                   hash={item.hash}
-                  onClick={handleSelect}
+                  onClick={handleLinkClick}
                   className={cls}
                   data-tour={item.dataTour}
                 >
@@ -266,7 +297,7 @@ function NavItem({
         to={item.to}
         search={item.search as any}
         hash={item.hash}
-        onClick={handleSelect}
+        onClick={handleLinkClick}
         className={cls}
         data-tour={item.dataTour}
       >
@@ -528,6 +559,7 @@ function ChatSidebarComponent({
       return state.location.pathname
     },
   })
+  const navigate = useNavigate()
 
   useEffect(() => {
     function handleOpenSettingsEvent(event: Event) {
@@ -573,6 +605,8 @@ function ChatSidebarComponent({
   const isTasksActive = pathname === '/tasks'
   const isConductorActive = pathname === '/conductor'
   const isOperationsActive = pathname === '/operations'
+  const isMissionControlActive = pathname.startsWith('/mission-control')
+  const isRoomsActive = pathname.startsWith('/rooms')
   const isSwarmActive = pathname === '/swarm' || pathname === '/swarm2'
   const echoStudioEnabled = useSettingsStore(
     (state) => state.settings.experimentalEchoStudio,
@@ -782,6 +816,20 @@ function ChatSidebarComponent({
       icon: UserGroupIcon,
       label: 'Swarm',
       active: isSwarmActive,
+    },
+    {
+      kind: 'link',
+      to: '/mission-control',
+      icon: Rocket01Icon,
+      label: 'Mission Control',
+      active: isMissionControlActive,
+    },
+    {
+      kind: 'link',
+      to: '/rooms',
+      icon: MessageMultiple01Icon,
+      label: 'Rooms',
+      active: isRoomsActive,
     },
     ...(echoStudioEnabled
       ? [

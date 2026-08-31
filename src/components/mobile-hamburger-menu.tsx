@@ -12,6 +12,7 @@ import {
   File01Icon,
   McpServerIcon,
   Menu01Icon,
+  MessageMultiple01Icon,
   PuzzleIcon,
   Rocket01Icon,
   Settings01Icon,
@@ -85,6 +86,20 @@ export const MOBILE_HAMBURGER_NAV_ITEMS = [
     icon: UserGroupIcon,
     to: '/swarm',
     match: (p: string) => p === '/swarm' || p.startsWith('/swarm2'),
+  },
+  {
+    id: 'mission-control',
+    label: 'Mission Control',
+    icon: Rocket01Icon,
+    to: '/mission-control',
+    match: (p: string) => p.startsWith('/mission-control'),
+  },
+  {
+    id: 'rooms',
+    label: 'Rooms',
+    icon: MessageMultiple01Icon,
+    to: '/rooms',
+    match: (p: string) => p.startsWith('/rooms'),
   },
   {
     id: 'echo-studio',

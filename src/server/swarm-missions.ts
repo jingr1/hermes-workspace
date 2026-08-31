@@ -83,6 +83,7 @@ export type SwarmMissionEvent = {
     | 'blocked'
     | 'assignment_cancelled'
     | 'mission_cancelled'
+    | 'mission_complete'
   at: number
   workerId?: string
   assignmentId?: string
@@ -541,6 +542,29 @@ export function recordMissionCheckpoint(input: {
   const completed = mission.state === 'complete' && previousState !== 'complete'
   writeStore(store)
   return Object.assign(mission, { _completed: completed })
+}
+
+export function markMissionComplete(
+  missionId: string,
+  opts?: { reason?: string; data?: Record<string, unknown> },
+): SwarmMission | null {
+  const store = readStore()
+  const mission = store.missions.find((item) => item.id === missionId)
+  if (!mission) return null
+  if (mission.state === 'complete') return mission
+  if (mission.state === 'cancelled') return null
+  const previousState = mission.state
+  mission.state = 'complete'
+  mission.updatedAt = now()
+  mission.events.push(
+    event(
+      'mission_complete',
+      opts?.reason ?? `Mission ${missionId} marked complete`,
+      { data: { previousState, ...(opts?.data ?? {}) } },
+    ),
+  )
+  writeStore(store)
+  return mission
 }
 
 export function recordMissionAssignmentBlocked(input: {

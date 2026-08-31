@@ -62,6 +62,7 @@ import { publishChatEvent } from '../chat-event-bus'
 import { getAgentRuntimeRouter } from '../agent-runtime/router'
 import { applyReviewVerdict } from '../task-pipeline/review'
 import { getProfileSshHost } from './agents-config'
+import { dispatchAutoHandoff, runAutoHandoffForTask } from '../group-chat/auto-handoff'
 import type { RunTerminalEvent } from '../mcp/mcp-handler'
 
 export type AdvanceHooks = {
@@ -146,6 +147,34 @@ async function handleRunTerminal(
       },
       source: 'mcp',
     })
+
+    // P4/P6: auto-handoff to the next best agent (or human) for the follow-on stage.
+    // P2b: pass the next ready assignment's capability requirements so the handoff
+    // message and target selection respect stage.requires.
+    let nextRequires: string[] | undefined
+    if (run?.roomId) {
+      try {
+        const readyNext = readyQueuedAssignments(event.missionId)[0]
+        nextRequires = readyNext?.requires
+      } catch {
+        // ignore: mission may no longer exist
+      }
+    }
+    if (run?.roomId) {
+      try {
+        await runAutoHandoffForTask({
+          roomId: run.roomId,
+          taskId: event.missionId,
+          fromAgentId: event.agentId,
+          summary: event.summary ?? 'Assignment completed',
+          nextAction: event.nextAction ?? 'Continue with next stage',
+          filesChanged: filesChanged ?? undefined,
+          requiredCapabilities: nextRequires,
+        })
+      } catch (error) {
+        console.error('[advance] auto-handoff failed', error)
+      }
+    }
   }
 
   // P2b: stamp git refs onto the assignment for diff API / merge downstream.

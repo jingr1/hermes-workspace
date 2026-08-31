@@ -12,6 +12,7 @@ import {
   File01Icon,
   McpServerIcon,
   PuzzleIcon,
+  Rocket01Icon,
   Settings01Icon,
 } from '@hugeicons/core-free-icons'
 import type React from 'react'
@@ -193,6 +194,15 @@ export function CommandPalette({ pathname, sessions }: CommandPaletteProps) {
         shortcut: 'Go',
         icon: CommandLineIcon,
         onSelect: () => void navigate({ to: '/terminal' }),
+      },
+      {
+        id: 'screen-mission-control',
+        group: 'Screens',
+        label: 'Mission Control',
+        keywords: 'agents swarm tasks pipeline overview board mission control',
+        shortcut: 'Go',
+        icon: Rocket01Icon,
+        onSelect: () => void navigate({ to: '/mission-control' }),
       },
       {
         id: 'screen-memory',

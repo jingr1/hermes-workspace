@@ -31,6 +31,8 @@ import {
 } from '../git-ops'
 import { countRunningRunsForAgent } from '../mcp/task-runs'
 import { detectExecutionFromProfile, getProfileSshHost } from './agents-config'
+import { canStartRun } from '../cost-control/start-run-gate'
+import { recordMissionAssignmentBlocked } from '../swarm-missions'
 
 export type DispatchResult =
   | { ok: true; runId: string; assignmentId: string }
@@ -184,6 +186,25 @@ export async function dispatchAssignment(input: {
   }
 
   const runId = createCollabId('run')
+
+  // Cost gate: block run if budget exceeded before any state change.
+  const gate = canStartRun({
+    runId,
+    taskId: mission.id,
+    projectId: mission.projectId ?? undefined,
+    roomId: input.roomId ?? undefined,
+    agentId,
+  })
+  if (!gate.allowed) {
+    recordMissionAssignmentBlocked({
+      missionId: mission.id,
+      assignmentId: assignment.id,
+      workerId: agentId,
+      reason: gate.reason,
+      source: 'budget_gate',
+    })
+    return { ok: false, error: gate.reason, needsHuman: true }
+  }
 
   // Step 1: JSON CAS queued → dispatched.  Persist capability-routed workerId.
   const dispatched = markMissionAssignmentDispatched({

@@ -224,8 +224,47 @@ describe('gateway-capabilities', () => {
 
       await expect(mod.fetchDashboardToken()).resolves.toBe('')
       expect(warnSpy).toHaveBeenCalledWith(
-        '[gateway] Dashboard index returned 500 — token unavailable',
+        '[gateway] Dashboard index returned 500 — token unavailable (suppressing retries for 5m)',
       )
+      warnSpy.mockRestore()
+    })
+
+    it('suppresses repeat warn and skips fetch while dashboard is unreachable', async () => {
+      fetchMock.mockRejectedValue(new TypeError('fetch failed'))
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const mod = await loadMod()
+
+      await expect(mod.fetchDashboardToken()).resolves.toBe('')
+      await expect(mod.fetchDashboardToken()).resolves.toBe('')
+      await expect(mod.fetchDashboardToken()).resolves.toBe('')
+
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(warnSpy).toHaveBeenCalledTimes(1)
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[gateway] Failed to fetch dashboard token: fetch failed (suppressing retries for 5m)',
+      )
+      warnSpy.mockRestore()
+    })
+
+    it('force=true retries scrape even during unreachable cooldown', async () => {
+      fetchMock
+        .mockRejectedValueOnce(new TypeError('fetch failed'))
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          text: async () =>
+            '<html><script>window.__HERMES_SESSION_TOKEN__="recovered";</script></html>',
+        })
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const mod = await loadMod()
+
+      await expect(mod.fetchDashboardToken()).resolves.toBe('')
+      await expect(mod.fetchDashboardToken({ force: true })).resolves.toBe(
+        'recovered',
+      )
+      expect(fetchMock).toHaveBeenCalledTimes(2)
       warnSpy.mockRestore()
     })
   })

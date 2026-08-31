@@ -109,6 +109,12 @@ export async function sendChatUnified(
       signal: options.signal,
       stream: false,
       sessionId: options.sessionId,
+      usageContext: options.sessionId
+        ? {
+            taskId: options.sessionId,
+            runtime: 'chat-ui',
+          }
+        : undefined,
     })
   }
 

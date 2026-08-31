@@ -414,6 +414,16 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
+function markDashboardUnreachable(reason: string): void {
+  const alreadyCooling = Date.now() < dashboardNegativeUntil
+  dashboardNegativeUntil = Date.now() + DASHBOARD_NEGATIVE_CACHE_MS
+  if (alreadyCooling) return
+  const cooldownMin = Math.round(DASHBOARD_NEGATIVE_CACHE_MS / 60_000)
+  console.warn(
+    `[gateway] ${reason} (suppressing retries for ${cooldownMin}m)`,
+  )
+}
+
 /**
  * Resolve the current dashboard session token by scraping the dashboard root
  * HTML. The dashboard injects a fresh ephemeral token at boot, so cached or
@@ -425,6 +435,9 @@ export async function fetchDashboardToken(options?: {
   const force = options?.force === true
 
   if (!force && dashboardTokenCache) return dashboardTokenCache
+  // Skip scrape + warn spam while dashboard probe/token fetch is in cooldown
+  // (optional :9119 down is common on zero-fork local setups).
+  if (!force && Date.now() < dashboardNegativeUntil) return ''
   if (!force && dashboardTokenPromise) return dashboardTokenPromise
 
   dashboardTokenPromise = (async () => {
@@ -438,22 +451,25 @@ export async function fetchDashboardToken(options?: {
         signal: AbortSignal.timeout(probeTimeoutMs()),
       })
       if (!res.ok) {
-        console.warn(
-          `[gateway] Dashboard index returned ${res.status} — token unavailable`,
+        markDashboardUnreachable(
+          `Dashboard index returned ${res.status} — token unavailable`,
         )
         return ''
       }
       const html = await res.text()
       const token = html.match(DASHBOARD_TOKEN_REGEX)?.[1]?.trim() || ''
       if (!token) {
-        console.warn('[gateway] Dashboard session token not found in root HTML')
+        markDashboardUnreachable(
+          'Dashboard session token not found in root HTML',
+        )
         return ''
       }
+      dashboardNegativeUntil = 0
       dashboardTokenCache = token
       return token
     } catch (err) {
-      console.warn(
-        `[gateway] Failed to fetch dashboard token: ${err instanceof Error ? err.message : err}`,
+      markDashboardUnreachable(
+        `Failed to fetch dashboard token: ${err instanceof Error ? err.message : err}`,
       )
       return ''
     }

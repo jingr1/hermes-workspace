@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { CLAUDE_API } from './gateway-capabilities'
+import { recordTokenUsage } from './cost-control/token-usage'
 
 /**
  * Optional bearer token for authenticated OpenAI-compatible endpoints
@@ -91,6 +92,8 @@ export type OpenAIChatOptions = {
   sessionId?: string
   /** Override the base URL (e.g. for local providers). Bypasses gateway. */
   baseUrl?: string
+  /** Optional context for token_usage recording when usage is returned. */
+  usageContext?: TokenUsageContext
 }
 
 type OpenAIChatRequest = {
@@ -109,6 +112,21 @@ type OpenAIChatCompletionResponse = {
       content?: string | null
     }
   }>
+  usage?: {
+    prompt_tokens?: number
+    completion_tokens?: number
+    prompt_cache_hit_tokens?: number
+    prompt_cache_miss_tokens?: number
+    total_tokens?: number
+  }
+}
+
+export type TokenUsageContext = {
+  runId?: string | null
+  taskId?: string | null
+  agentId?: string | null
+  projectId?: string | null
+  runtime?: string | null
 }
 
 export async function buildRequestBody(
@@ -313,5 +331,30 @@ export async function openaiChat(
   }
 
   const data = (await response.json()) as OpenAIChatCompletionResponse
-  return data.choices?.[0]?.message?.content ?? ''
+  const content = data.choices?.[0]?.message?.content ?? ''
+
+  // P6: record token usage when the provider returns it and the caller supplied context.
+  if (data.usage && options.usageContext) {
+    const u = data.usage
+    const modelName =
+      options.model && options.model !== 'default'
+        ? options.model
+        : 'default'
+    recordTokenUsage({
+      run_id: options.usageContext.runId ?? null,
+      task_id: options.usageContext.taskId ?? null,
+      agent_id: options.usageContext.agentId ?? null,
+      project_id: options.usageContext.projectId ?? null,
+      runtime: options.usageContext.runtime ?? null,
+      model: modelName,
+      input: u.prompt_tokens ?? null,
+      output: u.completion_tokens ?? null,
+      cache_read: u.prompt_cache_hit_tokens ?? null,
+      cache_write: u.prompt_cache_miss_tokens ?? null,
+      reasoning: null,
+      cost_estimate: null,
+    })
+  }
+
+  return content
 }

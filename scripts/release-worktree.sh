@@ -34,7 +34,7 @@ Usage: $0 <sync|build|start|rebuild>
   start    pnpm start in release worktree (default PORT=3000)
   rebuild  sync + build
 
-Dev repo:     $ROOT  →  pnpm dev  (PORT=3001)
+Dev repo:     $ROOT  →  pnpm dev  (PORT=3002)
 Release tree: $RELEASE  →  pnpm start (PORT=3000)
 
 Override release path: HERMES_RELEASE_DIR=/path/to/release $0 build
