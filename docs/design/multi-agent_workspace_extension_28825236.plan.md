@@ -22,10 +22,10 @@ todos:
     status: completed
   - id: p2b-git
     content: Phase 2b 工作区与产物模型：projects.yaml 显式声明目标项目仓库（取代 SWARM_CANONICAL_REPO 的 process.cwd 推导）；控制面/目标项目分离与自宿主校验；启用 workspaceMode=worktree（本机 Hermes tmux worker 在此类 pipeline 中不可用，模板加载即拒）；git-ops 以 GitContext 同时支持 local 与 ssh locality；per-mission worktree + 集成分支；ssh 远端工作区（分支单向 push、产物 rsync 回传）；capability 路由（stage requires）；assignment 记 baseRef/headSha；汇合自动合并、冲突降级为 pending_turn；GET /api/git/diff
-    status: in_progress
+    status: completed
   - id: p3-views
     content: Phase 3 三视图：/mission-control 的 Overview 全局态势、Board 看板、Pipeline 单任务流水线
-    status: pending
+    status: in_progress
   - id: p4-rooms
     content: Phase 4 群聊：room_participants 人与 Agent 同表、human/agent/all 三类 mention、滚动摘要、context-projection、checkpoint 自动 @ 下一棒
     status: pending

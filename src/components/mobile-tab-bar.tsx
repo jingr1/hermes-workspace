@@ -12,6 +12,7 @@ import {
   PuzzleIcon,
   Rocket01Icon,
   Settings01Icon,
+  Target02Icon,
   UserGroupIcon,
 } from '@hugeicons/core-free-icons'
 import {
@@ -89,19 +90,18 @@ export const MOBILE_NAV_TABS: Array<TabItem> = [
     match: (p) => p.startsWith('/jobs'),
   },
   {
+    id: 'mission-control',
+    label: 'Missions',
+    icon: Target02Icon,
+    to: '/mission-control',
+    match: (p) => p.startsWith('/mission-control'),
+  },
+  {
     id: 'swarm',
     label: 'Swarm',
     icon: UserGroupIcon,
     to: '/swarm',
     match: (p) => p === '/swarm' || p.startsWith('/swarm2'),
-  },
-
-  {
-    id: 'memory',
-    label: 'Memory',
-    icon: BrainIcon,
-    to: '/memory',
-    match: (p) => p.startsWith('/memory'),
   },
   {
     id: 'skills',

@@ -21,6 +21,7 @@ import {
   Search01Icon,
   Settings01Icon,
   Sun02Icon,
+  Target02Icon,
   UserGroupIcon,
   UserMultipleIcon,
 } from '@hugeicons/core-free-icons'
@@ -571,6 +572,7 @@ function ChatSidebarComponent({
   const isJobsActive = pathname === '/jobs'
   const isMemoryActive = pathname === '/memory'
   const isTasksActive = pathname === '/tasks'
+  const isMissionControlActive = pathname.startsWith('/mission-control')
   const isConductorActive = pathname === '/conductor'
   const isOperationsActive = pathname === '/operations'
   const isSwarmActive = pathname === '/swarm' || pathname === '/swarm2'
@@ -761,6 +763,13 @@ function ChatSidebarComponent({
       icon: CheckListIcon,
       label: 'Tasks',
       active: isTasksActive,
+    },
+    {
+      kind: 'link',
+      to: '/mission-control',
+      icon: Target02Icon,
+      label: 'Mission Control',
+      active: isMissionControlActive,
     },
     {
       kind: 'link',

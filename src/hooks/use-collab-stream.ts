@@ -1,89 +1,44 @@
-import { useEffect, useRef, useState } from 'react'
+'use client'
 
-export type CollabEvent = {
-  event: string
-  data: Record<string, unknown>
-}
+import { useEffect, useRef, useState } from 'react'
+import type { CollabEvent } from '@/lib/mission-control-api'
+import { subscribeCollabEvents } from '@/lib/mission-control-api'
 
 export type UseCollabStreamOptions = {
-  sessionKey?: string
-  roomId?: string
   scope?: string
-  /** Called for every matching event. Return false to stop the stream. */
-  onEvent: (evt: CollabEvent) => boolean | void
-  /** Maximum reconnect delay in ms. Default 30_000. */
-  maxDelayMs?: number
-  /** Initial reconnect delay in ms. Default 500. */
-  initialDelayMs?: number
+  roomId?: string
+  sessionKey?: string
+  enabled?: boolean
 }
 
-/**
- * SSE hook for /api/collab-events with exponential backoff reconnection.
- * Automatically unsubscribes on unmount.
- */
-export function useCollabStream(options: UseCollabStreamOptions): void {
-  const {
-    sessionKey,
-    roomId,
-    scope,
-    onEvent,
-    maxDelayMs = 30_000,
-    initialDelayMs = 500,
-  } = options
-
-  const onEventRef = useRef(onEvent)
-  onEventRef.current = onEvent
+export function useCollabStream(options: UseCollabStreamOptions = {}) {
+  const { scope, roomId, sessionKey, enabled = true } = options
+  const [events, setEvents] = useState<Array<CollabEvent>>([])
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+  const unsubscribeRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
-    let eventSource: EventSource | null = null
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-    let stopped = false
-    let delay = initialDelayMs
+    if (!enabled) return
+    setConnected(true)
+    setError(null)
 
-    const params = new URLSearchParams()
-    if (sessionKey) params.set('sessionKey', sessionKey)
-    if (roomId) params.set('roomId', roomId)
-    if (scope) params.set('scope', scope)
-    const url = `/api/collab-events?${params.toString()}`
+    unsubscribeRef.current = subscribeCollabEvents(
+      { scope, roomId, sessionKey },
+      (event) => {
+        setEvents((prev) => [...prev.slice(-199), event])
+      },
+      (err) => {
+        setError(err)
+        setConnected(false)
+      },
+    )
 
-    const connect = () => {
-      if (stopped) return
-      eventSource = new EventSource(url)
-
-      eventSource.onmessage = (msg) => {
-        try {
-          const parsed = JSON.parse(msg.data) as Record<string, unknown>
-          const shouldContinue = onEventRef.current({
-            event: msg.type,
-            data: parsed,
-          })
-          if (shouldContinue === false) stop()
-        } catch {
-          // malformed event — ignore
-        }
-      }
-
-      // Handle named events (e.g. "agent_status", "human_attention", "heartbeat")
-      eventSource.onopen = () => {
-        delay = initialDelayMs
-      }
-
-      eventSource.onerror = () => {
-        eventSource?.close()
-        if (stopped) return
-        reconnectTimer = setTimeout(connect, delay)
-        delay = Math.min(delay * 2, maxDelayMs)
-      }
+    return () => {
+      unsubscribeRef.current?.()
+      unsubscribeRef.current = null
     }
+  }, [scope, roomId, sessionKey, enabled])
 
-    const stop = () => {
-      stopped = true
-      if (reconnectTimer) clearTimeout(reconnectTimer)
-      if (eventSource) eventSource.close()
-    }
-
-    connect()
-
-    return stop
-  }, [sessionKey, roomId, scope, initialDelayMs, maxDelayMs])
+  return { events, connected, error }
 }
