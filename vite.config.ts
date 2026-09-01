@@ -307,6 +307,7 @@ const config = defineConfig(({ mode, command }) => {
 
   return {
     test: {
+      environment: 'jsdom',
       exclude: [
         '**/node_modules/**',
         '**/dist/**',
@@ -317,13 +318,17 @@ const config = defineConfig(({ mode, command }) => {
       // `import` and CJS `require('react')` share a single module instance.
       // Without this, react-dom sets the dispatcher on its CJS React copy while
       // components call hooks on the ESM React copy → null dispatcher → crash.
-      deps: {
-        inline: [
-          'react',
-          'react-dom',
-          '@testing-library/react',
-          '@testing-library/dom',
-        ],
+      server: {
+        deps: {
+          inline: [
+            'react',
+            'react-dom',
+            '@testing-library/react',
+            '@testing-library/dom',
+            'zustand',
+            'use-sync-external-store',
+          ],
+        },
       },
     },
     define: {

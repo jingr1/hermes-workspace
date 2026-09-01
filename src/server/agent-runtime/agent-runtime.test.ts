@@ -96,6 +96,11 @@ agents:
     expect(Array.isArray(registry.orphanProfiles)).toBe(true)
   })
 
+  it('always surfaces the implicit default profile', () => {
+    const registry = loadAgentsRegistry({ rawYaml: 'version: 1\nagents: []\n' })
+    expect(registry.orphanProfiles).toContain('default')
+  })
+
   it('empty/missing agents.yaml yields empty registry without throwing', () => {
     const registry = loadAgentsRegistry({ repoRoot: tempRoot })
     expect(registry.agents).toEqual([])

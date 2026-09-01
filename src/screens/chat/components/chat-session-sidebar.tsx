@@ -1,32 +1,32 @@
 'use client'
 
 import { HugeiconsIcon } from '@hugeicons/react'
-import { Add01Icon, UserGroupIcon } from '@hugeicons/core-free-icons'
+import { Add01Icon } from '@hugeicons/core-free-icons'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate } from '@tanstack/react-router'
+import { useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   setActiveProfileOptimistic,
-  useGatewayPoolStatus,
   useProfiles,
 } from '../hooks/use-profiles'
 import { useRenameSession } from '../hooks/use-rename-session'
 import { useDeleteSession } from '../hooks/use-delete-session'
 import { chatQueryKeys, fetchHistory, fetchSessions } from '../chat-queries'
 import { resolveSessionForProfile, writeLastSession } from '../last-session'
-import { requestStreamHandoffIfActive } from '@/lib/stream-handoff-bridge'
 import { SidebarSessions } from './sidebar/sidebar-sessions'
 import { SessionDeleteDialog } from './sidebar/session-delete-dialog'
+import { AgentList } from './agent-list'
 import type { SessionMeta } from '../types'
 import { preloadWorkspaceFolders } from '@/components/workspace-folder-picker'
-import { cn } from '@/lib/utils'
-import { Button, buttonVariants } from '@/components/ui/button'
+import { requestStreamHandoffIfActive } from '@/lib/stream-handoff-bridge'
+import { Button } from '@/components/ui/button'
 import {
   ScrollAreaRoot,
   ScrollAreaScrollbar,
   ScrollAreaThumb,
   ScrollAreaViewport,
 } from '@/components/ui/scroll-area'
+import { useAgentStore } from '@/stores/agent-store'
 
 type ChatSessionSidebarProps = {
   activeFriendlyId: string
@@ -41,17 +41,8 @@ type ChatSessionSidebarProps = {
 
 const SIDEBAR_MIN_WIDTH = 220
 const SIDEBAR_MAX_WIDTH = 420
-const PROFILE_MIN_HEIGHT = 220
+const AGENTS_MIN_HEIGHT = 220
 const SESSION_MIN_HEIGHT = 180
-
-function profileMeta(profile: { model?: string; provider?: string }): string {
-  const model = typeof profile.model === 'string' ? profile.model.trim() : ''
-  const provider =
-    typeof profile.provider === 'string' ? profile.provider.trim() : ''
-  return [model ? `${model}` : '', provider ? `${provider}` : '']
-    .filter(Boolean)
-    .join(' · ')
-}
 
 function prefetchSessionHistory(
   queryClient: ReturnType<typeof useQueryClient>,
@@ -84,21 +75,9 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const sidebarRef = useRef<HTMLElement | null>(null)
-  const {
-    profiles,
-    activeProfileName,
-    activateProfile,
-    isLoading: profilesLoading,
-    isError: profilesError,
-  } = useProfiles()
-  const gatewayPoolQuery = useGatewayPoolStatus()
-  const gatewayByName = useMemo(() => {
-    const map = new Map<string, { state?: string; port?: number }>()
-    for (const entry of gatewayPoolQuery.data?.gateways ?? []) {
-      map.set(entry.profile, entry)
-    }
-    return map
-  }, [gatewayPoolQuery.data?.gateways])
+  const { activeProfileName, activateProfile } = useProfiles()
+  const agents = useAgentStore((state) => state.agents)
+  const activeAgentId = useAgentStore((state) => state.activeAgentId)
 
   const { renameSession } = useRenameSession()
   const { deleteSession } = useDeleteSession()
@@ -108,7 +87,7 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
   const [deleteFriendlyId, setDeleteFriendlyId] = useState<string | null>(null)
   const [deleteSessionTitle, setDeleteSessionTitle] = useState('')
   const [sidebarWidth, setSidebarWidth] = useState(260)
-  const [profilesHeight, setProfilesHeight] = useState(480)
+  const [agentsHeight, setAgentsHeight] = useState(480)
 
   const handleRename = useCallback(
     (session: SessionMeta, newTitle: string) => {
@@ -148,15 +127,26 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
     onActiveSessionDelete,
   ])
 
-  const sortedProfiles = useMemo(() => {
-    return [...profiles].sort((a, b) => a.name.localeCompare(b.name))
-  }, [profiles])
+  // Keep the agents bar highlight in sync when the user is on a Hermes chat
+  // route where the URL does not carry an agentId.
+  useEffect(() => {
+    if (activeAgentId) return
+    if (!activeProfileName) return
+    const matchingHermesAgent = agents.find(
+      (agent) =>
+        agent.runtime === 'hermes' &&
+        (agent.runtimeConfig.profile ?? agent.agentId) === activeProfileName,
+    )
+    if (matchingHermesAgent) {
+      useAgentStore.getState().setActiveAgentId(matchingHermesAgent.agentId)
+    }
+  }, [activeAgentId, activeProfileName, agents])
 
   // Prefetch active profile sessions+history immediately; defer other
   // profiles' sessions lists only (no history) so the visible chat's
   // /api/history is not starved by N parallel history reads.
   useEffect(() => {
-    if (profiles.length === 0) return
+    if (!activeProfileName) return
 
     const prefetchSessions = (profileName: string) =>
       queryClient.prefetchQuery({
@@ -175,88 +165,73 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
         resolveSessionForProfile(cached, activeProfileName),
       )
     })
+  }, [activeProfileName, queryClient])
 
-    const deferred = profiles
-      .map((profile) => profile.name)
-      .filter((name) => name !== activeProfileName)
-    if (deferred.length === 0) return
+  const handleSelectAgent = useCallback(
+    (agentId: string) => {
+      const agent = agents.find((a) => a.agentId === agentId)
+      if (!agent) return
 
-    let cancelled = false
-    let idleId: number | undefined
-    const timers: Array<ReturnType<typeof setTimeout>> = []
-
-    const runDeferred = () => {
-      if (cancelled) return
-      deferred.forEach((name, index) => {
-        timers.push(
-          setTimeout(() => {
-            if (!cancelled) void prefetchSessions(name)
-          }, index * 150),
-        )
-      })
-    }
-
-    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      idleId = window.requestIdleCallback(runDeferred, { timeout: 2500 })
-    } else {
-      timers.push(setTimeout(runDeferred, 1200))
-    }
-
-    return () => {
-      cancelled = true
-      if (idleId !== undefined) {
-        window.cancelIdleCallback?.(idleId)
-      }
-      for (const timer of timers) clearTimeout(timer)
-    }
-  }, [profiles, activeProfileName, queryClient])
-
-  const handleSelectProfile = useCallback(
-    (profileName: string) => {
-      if (profileName === activeProfileName) return
-
-      void (async () => {
-        await requestStreamHandoffIfActive()
-
-        writeLastSession(activeFriendlyId, activeProfileName)
-        setActiveProfileOptimistic(queryClient, profileName)
-        preloadWorkspaceFolders(profileName)
-        activateProfile(profileName)
-
-        // Prefer warm cache; if miss, fetch before navigating so we don't land on "new".
-        let sessions = queryClient.getQueryData<Array<SessionMeta>>(
-          chatQueryKeys.sessionsForProfile(profileName),
-        )
-        let sessionsLoaded = Boolean(sessions)
-        if (!sessions) {
-          try {
-            sessions = await queryClient.fetchQuery({
-              queryKey: chatQueryKeys.sessionsForProfile(profileName),
-              queryFn: () => fetchSessions(profileName),
-              staleTime: 60_000,
-            })
-            sessionsLoaded = true
-          } catch {
-            sessions = []
-            sessionsLoaded = true
-          }
+      if (agent.runtime === 'hermes') {
+        const targetProfile = agent.runtimeConfig.profile ?? agent.agentId
+        if (targetProfile === activeProfileName) {
+          // Already on the right profile; just make sure we land on a chat session.
+          navigate({ to: '/chat/$sessionKey', params: { sessionKey: 'new' } })
+          return
         }
-        const targetSession = resolveSessionForProfile(sessions, profileName, {
-          sessionsLoaded,
-        })
-        prefetchSessionHistory(queryClient, profileName, targetSession)
-        navigate({
-          to: '/chat/$sessionKey',
-          params: { sessionKey: targetSession },
-        })
-      })()
+
+        void (async () => {
+          await requestStreamHandoffIfActive()
+
+          writeLastSession(activeFriendlyId, activeProfileName)
+          setActiveProfileOptimistic(queryClient, targetProfile)
+          preloadWorkspaceFolders(targetProfile)
+          activateProfile(targetProfile)
+
+          let profileSessions = queryClient.getQueryData<Array<SessionMeta>>(
+            chatQueryKeys.sessionsForProfile(targetProfile),
+          )
+          let sessionsLoaded = Boolean(profileSessions)
+          if (!profileSessions) {
+            try {
+              profileSessions = await queryClient.fetchQuery({
+                queryKey: chatQueryKeys.sessionsForProfile(targetProfile),
+                queryFn: () => fetchSessions(targetProfile),
+                staleTime: 60_000,
+              })
+              sessionsLoaded = true
+            } catch {
+              profileSessions = []
+              sessionsLoaded = true
+            }
+          }
+          const targetSession = resolveSessionForProfile(
+            profileSessions,
+            targetProfile,
+            { sessionsLoaded },
+          )
+          prefetchSessionHistory(queryClient, targetProfile, targetSession)
+          navigate({
+            to: '/chat/$sessionKey',
+            params: { sessionKey: targetSession },
+          })
+        })()
+        return
+      }
+
+      // Non-Hermes agent: switch to the agent workspace route.
+      navigate({
+        to: '/chat/agent/$agentId',
+        params: { agentId: agent.agentId },
+      })
     },
     [
-      activateProfile,
       activeFriendlyId,
       activeProfileName,
-      queryClient,
+      activateProfile,
+      agents,
       navigate,
+      queryClient,
     ],
   )
 
@@ -295,11 +270,11 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
     (event: React.MouseEvent<HTMLDivElement>) => {
       event.preventDefault()
       const startY = event.clientY
-      const startHeight = profilesHeight
+      const startHeight = agentsHeight
       const containerHeight =
         sidebarRef.current?.clientHeight ?? window.innerHeight
       const maxHeight = Math.max(
-        PROFILE_MIN_HEIGHT,
+        AGENTS_MIN_HEIGHT,
         containerHeight - SESSION_MIN_HEIGHT - 40,
       )
       const previousUserSelect = document.body.style.userSelect
@@ -309,11 +284,11 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
         const nextHeight = Math.min(
           maxHeight,
           Math.max(
-            PROFILE_MIN_HEIGHT,
+            AGENTS_MIN_HEIGHT,
             startHeight + (moveEvent.clientY - startY),
           ),
         )
-        setProfilesHeight(nextHeight)
+        setAgentsHeight(nextHeight)
       }
 
       const onUp = () => {
@@ -325,7 +300,7 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
       window.addEventListener('mousemove', onMove)
       window.addEventListener('mouseup', onUp)
     },
-    [profilesHeight],
+    [agentsHeight],
   )
 
   return (
@@ -335,97 +310,26 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
       data-tour="chat-session-sidebar"
       style={{ width: `${sidebarWidth}px` }}
     >
-      {/* Profile list */}
+      {/* Agents list */}
       <div
         className="flex min-h-0 shrink-0 flex-col"
-        style={{ height: `${profilesHeight}px` }}
+        style={{ height: `${agentsHeight}px` }}
       >
         <div className="flex shrink-0 items-center justify-between px-3 py-2">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-primary-500">
-            Profiles
+            Agents
           </span>
-          <Link
-            to="/profiles"
-            className={cn(
-              buttonVariants({ variant: 'ghost', size: 'icon-sm' }),
-              'size-6 text-primary-500 hover:bg-primary-200 dark:hover:bg-primary-800',
-            )}
-            title="Manage profiles"
-          >
-            <HugeiconsIcon icon={UserGroupIcon} size={14} strokeWidth={1.5} />
-          </Link>
         </div>
-
-        {profilesLoading && profiles.length === 0 ? (
-          <div className="px-3 py-2 text-xs text-primary-500">
-            Loading profiles…
-          </div>
-        ) : profilesError ? (
-          <div className="px-3 py-2 text-xs text-red-500">
-            Failed to load profiles.
-          </div>
-        ) : (
-          <ScrollAreaRoot className="min-h-0 flex-1 px-2 pb-2">
-            <ScrollAreaViewport>
-              <div className="flex flex-col gap-1 pr-2">
-                {sortedProfiles.map((profile) => {
-                  const isActive = profile.name === activeProfileName
-                  const gateway = gatewayByName.get(profile.name)
-                  const gatewayHealthy =
-                    gateway?.state === 'healthy' ||
-                    profile.gatewayState === 'healthy'
-                  const gatewayPort = gateway?.port ?? profile.gatewayPort
-                  return (
-                    <button
-                      key={profile.name}
-                      type="button"
-                      onClick={() => handleSelectProfile(profile.name)}
-                      className={cn(
-                        'flex w-full flex-col rounded-lg px-2.5 py-2 text-left transition-colors',
-                        isActive
-                          ? 'bg-primary-200 text-accent-500'
-                          : 'text-primary-900 hover:bg-primary-200 dark:hover:bg-primary-800',
-                      )}
-                      title={
-                        gatewayHealthy
-                          ? `${profile.name} — gateway running${gatewayPort ? ` :${gatewayPort}` : ''}`
-                          : `${profile.name} — gateway stopped`
-                      }
-                    >
-                      <span className="flex items-center gap-1.5 text-xs font-medium">
-                        <span
-                          className={cn(
-                            'size-1.5 shrink-0 rounded-full',
-                            gatewayHealthy
-                              ? 'bg-emerald-400'
-                              : 'bg-neutral-500',
-                          )}
-                          aria-hidden="true"
-                        />
-                        <span className="truncate">{profile.name}</span>
-                        {isActive ? (
-                          <span className="shrink-0 text-[9px] text-primary-700">
-                            active
-                          </span>
-                        ) : null}
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        {profileMeta(profile) ? (
-                          <span className="mt-0.5 max-w-[180px] truncate text-[10px] text-primary-500">
-                            {profileMeta(profile)}
-                          </span>
-                        ) : null}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-            </ScrollAreaViewport>
-            <ScrollAreaScrollbar orientation="vertical">
-              <ScrollAreaThumb />
-            </ScrollAreaScrollbar>
-          </ScrollAreaRoot>
-        )}
+        <ScrollAreaRoot className="min-h-0 flex-1 px-2 pb-2">
+          <ScrollAreaViewport>
+            <div className="flex flex-col gap-1 pr-2">
+              <AgentList renderContainer={false} onSelect={handleSelectAgent} />
+            </div>
+          </ScrollAreaViewport>
+          <ScrollAreaScrollbar orientation="vertical">
+            <ScrollAreaThumb />
+          </ScrollAreaScrollbar>
+        </ScrollAreaRoot>
       </div>
 
       <div

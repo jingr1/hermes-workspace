@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  readLastAgent,
   readLastSession,
   resetLastSessionStorage,
   resolveSessionForProfile,
+  writeLastAgent,
   writeLastSession,
 } from './last-session'
 
@@ -22,6 +24,13 @@ describe('last-session', () => {
     expect(readLastSession('developer')).toBe('dev-session')
     expect(readLastSession('default')).toBe('default-session')
     expect(readLastSession()).toBe('default-session')
+  })
+
+  it('stores last selected agent', () => {
+    writeLastAgent('claude-code')
+    expect(readLastAgent()).toBe('claude-code')
+    writeLastAgent('')
+    expect(readLastAgent()).toBe('claude-code')
   })
 
   it('does not restore another profile session on first load', () => {

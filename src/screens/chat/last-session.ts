@@ -1,4 +1,5 @@
 const GLOBAL_LAST_SESSION_KEY = 'claude-last-session'
+const GLOBAL_LAST_AGENT_KEY = 'hermes-last-agent'
 const memoryStore = new Map<string, string>()
 
 function profileLastSessionKey(profileName: string): string {
@@ -73,6 +74,17 @@ export function readLastSession(profileName?: string): string | null {
     if (profileLast) return profileLast
   }
   return readStorage(GLOBAL_LAST_SESSION_KEY)
+}
+
+export function writeLastAgent(agentId: string): void {
+  const trimmed = agentId.trim()
+  if (!trimmed) return
+  writeStorage(GLOBAL_LAST_AGENT_KEY, trimmed)
+}
+
+export function readLastAgent(): string | null {
+  const value = readStorage(GLOBAL_LAST_AGENT_KEY)
+  return value
 }
 
 export function resolveSessionForProfile(

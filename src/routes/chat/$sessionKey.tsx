@@ -9,9 +9,11 @@ import {
 } from '../../screens/chat/chat-queries'
 import { writeLastSession } from '../../screens/chat/last-session'
 import { ChatRouteLoading } from '../../screens/chat/chat-route-loading'
-import { ErrorBoundary } from '@/components/error-boundary'
 import { useProfiles } from '../../screens/chat/hooks/use-profiles'
 import { prefetchProfileWorkspace } from '@/lib/workspace-client'
+import { useAgentStore } from '@/stores/agent-store'
+import { fetchAgents } from '@/lib/agent-api'
+import { ErrorBoundary } from '@/components/error-boundary'
 
 const loadChatScreen = () =>
   import('../../screens/chat/chat-screen').then((module) => ({
@@ -84,6 +86,42 @@ function ChatRoute() {
     forcedSession?.friendlyId === activeFriendlyId
       ? forcedSession.sessionKey
       : undefined
+
+  // Seed agents on first mount and keep the active agent in sync with the
+  // current Hermes profile so the unified Agents sidebar highlights correctly.
+  useEffect(() => {
+    let cancelled = false
+    const syncAgents = async () => {
+      if (useAgentStore.getState().agents.length > 0) {
+        syncActiveAgent()
+        return
+      }
+      try {
+        const data = await fetchAgents()
+        if (cancelled) return
+        useAgentStore.getState().setAgents(data.agents)
+        syncActiveAgent()
+      } catch {
+        // Ignore — the sidebar will show an empty state if agents fail to load.
+      }
+    }
+    const syncActiveAgent = () => {
+      const state = useAgentStore.getState()
+      if (state.activeAgentId || !activeProfileName) return
+      const matchingHermesAgent = state.agents.find(
+        (agent) =>
+          agent.runtime === 'hermes' &&
+          (agent.runtimeConfig.profile ?? agent.agentId) === activeProfileName,
+      )
+      if (matchingHermesAgent) {
+        state.setActiveAgentId(matchingHermesAgent.agentId)
+      }
+    }
+    void syncAgents()
+    return () => {
+      cancelled = true
+    }
+  }, [activeProfileName])
 
   // Clear history cache when navigating to new chat
   useEffect(() => {

@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
@@ -110,6 +111,7 @@ function AgentCard({
 }) {
   const status = agent.status
   const currentTask = status?.currentTask ?? 'Idle'
+  const navigate = useNavigate()
   const elapsed = useMemo(() => {
     if (!status?.updatedAt) return ''
     const minutes = Math.floor((Date.now() - status.updatedAt) / 60_000)
@@ -121,7 +123,13 @@ function AgentCard({
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={() => {
+        onClick?.()
+        void navigate({
+          to: '/chat/agent/$agentId',
+          params: { agentId: agent.agentId },
+        })
+      }}
       className="flex w-full flex-col gap-2 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-3 text-left transition-colors hover:border-[var(--theme-accent)] hover:bg-[var(--theme-hover)]"
     >
       <div className="flex items-center justify-between gap-2">

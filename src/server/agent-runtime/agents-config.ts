@@ -214,6 +214,13 @@ export function loadAgentsRegistry(input?: {
     (p) => !declaredProfiles.has(p),
   )
 
+  // Always surface the implicit default profile rooted at ~/.hermes, mirroring
+  // the behavior of /api/profiles/list. The default profile may not have its
+  // own directory under ~/.hermes/profiles/default.
+  if (!declaredProfiles.has('default')) {
+    orphanProfiles.unshift('default')
+  }
+
   return {
     version: doc?.version ?? 1,
     agents,

@@ -1,6 +1,6 @@
-import {
-  lazy,
+import React, {
   Suspense,
+  lazy,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -161,6 +161,8 @@ type ChatScreenProps = {
    * user out to /chat/<uuid> on mount, refresh, or after send.
    */
   embedded?: boolean
+  /** Replace the default chat main panel with a custom node. */
+  renderMain?: React.ReactNode
 }
 
 type PortableHistoryMessage = {
@@ -500,6 +502,7 @@ export function ChatScreen({
   forcedSessionKey,
   compact = false,
   embedded = false,
+  renderMain,
 }: ChatScreenProps) {
   const navigate = useNavigate()
   const chatFocusMode = useWorkspaceStore((s) => s.chatFocusMode)
@@ -2952,7 +2955,7 @@ export function ChatScreen({
     <div
       className={cn(
         'relative min-w-0 flex flex-col overflow-hidden',
-        compact ? 'h-full flex-1 min-h-0' : 'h-full',
+        compact ? 'h-full flex-1 min-h-0' : 'h-full w-full',
       )}
       style={{ background: 'var(--theme-bg)' }}
     >
@@ -2993,159 +2996,163 @@ export function ChatScreen({
           }}
           ref={mainRef}
         >
-          {!compact && (
-            <ChatHeader
-              activeTitle={sessionVerified ? activeTitle : '\u00a0'}
-              onRenameTitle={handleRenameActiveSessionTitle}
-              renamingTitle={renamingSessionTitle}
-              wrapperRef={headerRef}
-              onOpenSessions={() => setSessionsOpen(true)}
-              sessions={sessions ?? []}
-              activeFriendlyId={activeFriendlyId}
-              onSelectSession={(key) =>
-                void navigate({
-                  to: '/chat/$sessionKey',
-                  params: { sessionKey: key },
-                })
-              }
-              dataUpdatedAt={historyQuery.dataUpdatedAt}
-              onRefresh={handleRefreshHistory}
-              agentModel={currentModel}
-              agentConnected={mobileHeaderStatus === 'connected'}
-              onOpenAgentDetails={handleOpenAgentDetails}
-              pullOffset={0}
-              statusMode={headerStatusMode}
-              activeToolName={activeHeaderToolName}
-              thinkingLevel={thinkingLevel}
-              isFocusMode={isFocusMode}
-              onToggleFocusMode={handleToggleFocusMode}
-              onUndo={undefined}
-              onClear={undefined}
-            />
-          )}
-
-          {errorNotice && (
-            <div className="sticky top-0 z-20 px-4 py-2">{errorNotice}</div>
-          )}
-          {pendingApprovals.length > 0 && (
-            <div className="mx-4 mb-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800/50 dark:bg-amber-900/15">
-              <div className="space-y-2">
-                {pendingApprovals.map((approval) => (
-                  <div
-                    key={approval.id}
-                    className="flex items-center justify-between gap-3"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">
-                        {'\uD83D\uDD10'} Approval Required -{' '}
-                        {approval.agentName || 'Agent'}
-                      </p>
-                      <p className="mt-0.5 truncate text-xs text-amber-600 dark:text-amber-500">
-                        {approval.action}
-                      </p>
-                      {approval.context ? (
-                        <p className="mt-0.5 truncate text-[10px] font-mono text-amber-500 dark:text-amber-600">
-                          {approval.context.slice(0, 100)}
-                        </p>
-                      ) : null}
-                    </div>
-                    <div className="flex shrink-0 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void resolvePendingApproval(approval, 'approved')
-                        }}
-                        className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-600"
-                      >
-                        Approve
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void resolvePendingApproval(approval, 'denied')
-                        }}
-                        className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 dark:border-red-800/50 dark:bg-red-900/10 dark:text-red-400"
-                      >
-                        Deny
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {hideUi ? null : (
-            <ChatMessageList
-              messages={visibleMessages}
-              onRetryMessage={handleRetryMessage}
-              onRefresh={handleRefreshHistory}
-              loading={historyLoading}
-              empty={historyEmpty}
-              emptyState={
-                <ChatEmptyState
-                  compact={compact}
-                  onSuggestionClick={(prompt) => {
-                    composerHandleRef.current?.setValue(prompt + ' ')
-                  }}
+          {renderMain ?? (
+            <>
+              {!compact && (
+                <ChatHeader
+                  activeTitle={sessionVerified ? activeTitle : '\u00a0'}
+                  onRenameTitle={handleRenameActiveSessionTitle}
+                  renamingTitle={renamingSessionTitle}
+                  wrapperRef={headerRef}
+                  onOpenSessions={() => setSessionsOpen(true)}
+                  sessions={sessions ?? []}
+                  activeFriendlyId={activeFriendlyId}
+                  onSelectSession={(key) =>
+                    void navigate({
+                      to: '/chat/$sessionKey',
+                      params: { sessionKey: key },
+                    })
+                  }
+                  dataUpdatedAt={historyQuery.dataUpdatedAt}
+                  onRefresh={handleRefreshHistory}
+                  agentModel={currentModel}
+                  agentConnected={mobileHeaderStatus === 'connected'}
+                  onOpenAgentDetails={handleOpenAgentDetails}
+                  pullOffset={0}
+                  statusMode={headerStatusMode}
+                  activeToolName={activeHeaderToolName}
+                  thinkingLevel={thinkingLevel}
+                  isFocusMode={isFocusMode}
+                  onToggleFocusMode={handleToggleFocusMode}
+                  onUndo={undefined}
+                  onClear={undefined}
                 />
-              }
-              notice={null}
-              noticePosition="end"
-              waitingForResponse={waitingForResponse}
-              sessionKey={activeCanonicalKey}
-              pinToTop={false}
-              pinGroupMinHeight={pinGroupMinHeight}
-              headerHeight={headerHeight}
-              contentStyle={stableContentStyle}
-              bottomOffset={isMobile ? mobileScrollBottomOffset : 0}
-              isStreaming={derivedStreamingInfo.isStreaming}
-              streamingMessageId={derivedStreamingInfo.streamingMessageId}
-              streamingText={
-                stableActiveStreamingText ||
-                completedStreamingText.current ||
-                undefined
-              }
-              streamingThinking={
-                realtimeStreamingThinking ||
-                completedStreamingThinking.current ||
-                undefined
-              }
-              lifecycleEvents={realtimeLifecycleEvents}
-              hideSystemMessages
-              activeToolCalls={activeToolCalls}
-              liveToolActivity={liveToolActivity}
-              researchCard={researchCard}
-              isCompacting={isCompacting}
-              sending={sending}
-            />
+              )}
+
+              {errorNotice && (
+                <div className="sticky top-0 z-20 px-4 py-2">{errorNotice}</div>
+              )}
+              {pendingApprovals.length > 0 && (
+                <div className="mx-4 mb-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800/50 dark:bg-amber-900/15">
+                  <div className="space-y-2">
+                    {pendingApprovals.map((approval) => (
+                      <div
+                        key={approval.id}
+                        className="flex items-center justify-between gap-3"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+                            {'\uD83D\uDD10'} Approval Required -{' '}
+                            {approval.agentName || 'Agent'}
+                          </p>
+                          <p className="mt-0.5 truncate text-xs text-amber-600 dark:text-amber-500">
+                            {approval.action}
+                          </p>
+                          {approval.context ? (
+                            <p className="mt-0.5 truncate text-[10px] font-mono text-amber-500 dark:text-amber-600">
+                              {approval.context.slice(0, 100)}
+                            </p>
+                          ) : null}
+                        </div>
+                        <div className="flex shrink-0 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void resolvePendingApproval(approval, 'approved')
+                            }}
+                            className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-600"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void resolvePendingApproval(approval, 'denied')
+                            }}
+                            className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 dark:border-red-800/50 dark:bg-red-900/10 dark:text-red-400"
+                          >
+                            Deny
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {hideUi ? null : (
+                <ChatMessageList
+                  messages={visibleMessages}
+                  onRetryMessage={handleRetryMessage}
+                  onRefresh={handleRefreshHistory}
+                  loading={historyLoading}
+                  empty={historyEmpty}
+                  emptyState={
+                    <ChatEmptyState
+                      compact={compact}
+                      onSuggestionClick={(prompt) => {
+                        composerHandleRef.current?.setValue(prompt + ' ')
+                      }}
+                    />
+                  }
+                  notice={null}
+                  noticePosition="end"
+                  waitingForResponse={waitingForResponse}
+                  sessionKey={activeCanonicalKey}
+                  pinToTop={false}
+                  pinGroupMinHeight={pinGroupMinHeight}
+                  headerHeight={headerHeight}
+                  contentStyle={stableContentStyle}
+                  bottomOffset={isMobile ? mobileScrollBottomOffset : 0}
+                  isStreaming={derivedStreamingInfo.isStreaming}
+                  streamingMessageId={derivedStreamingInfo.streamingMessageId}
+                  streamingText={
+                    stableActiveStreamingText ||
+                    completedStreamingText.current ||
+                    undefined
+                  }
+                  streamingThinking={
+                    realtimeStreamingThinking ||
+                    completedStreamingThinking.current ||
+                    undefined
+                  }
+                  lifecycleEvents={realtimeLifecycleEvents}
+                  hideSystemMessages
+                  activeToolCalls={activeToolCalls}
+                  liveToolActivity={liveToolActivity}
+                  researchCard={researchCard}
+                  isCompacting={isCompacting}
+                  sending={sending}
+                />
+              )}
+              {showComposer ? (
+                <ChatComposer
+                  onSubmit={send}
+                  onAbort={handleAbortStreaming}
+                  isLoading={headerStatusMode !== 'idle'}
+                  disabled={hideUi}
+                  isCompacting={isCompacting}
+                  contextRefreshToken={`${resolvedSessionKey || activeSessionKey || 'new'}:${lastCompletedRunAt}:${sending ? 1 : 0}:${waitingForResponse ? 1 : 0}`}
+                  sessionKey={
+                    isNewChat
+                      ? undefined
+                      : forcedSessionKey ||
+                        resolvedSessionKey ||
+                        activeCanonicalKey ||
+                        activeSessionKey
+                  }
+                  wrapperRef={composerRef}
+                  composerRef={composerHandleRef}
+                  embedded={embedded}
+                  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime safety
+                  focusKey={`${isNewChat ? 'new' : activeFriendlyId}:${activeCanonicalKey ?? ''}`}
+                  thinkingLevel={thinkingLevel}
+                  onThinkingLevelChange={handleThinkingLevelChange}
+                  gatewayQueriesEnabled={!historyLoading}
+                />
+              ) : null}
+            </>
           )}
-          {showComposer ? (
-            <ChatComposer
-              onSubmit={send}
-              onAbort={handleAbortStreaming}
-              isLoading={headerStatusMode !== 'idle'}
-              disabled={hideUi}
-              isCompacting={isCompacting}
-              contextRefreshToken={`${resolvedSessionKey || activeSessionKey || 'new'}:${lastCompletedRunAt}:${sending ? 1 : 0}:${waitingForResponse ? 1 : 0}`}
-              sessionKey={
-                isNewChat
-                  ? undefined
-                  : forcedSessionKey ||
-                    resolvedSessionKey ||
-                    activeCanonicalKey ||
-                    activeSessionKey
-              }
-              wrapperRef={composerRef}
-              composerRef={composerHandleRef}
-              embedded={embedded}
-              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime safety
-              focusKey={`${isNewChat ? 'new' : activeFriendlyId}:${activeCanonicalKey ?? ''}`}
-              thinkingLevel={thinkingLevel}
-              onThinkingLevelChange={handleThinkingLevelChange}
-              gatewayQueriesEnabled={!historyLoading}
-            />
-          ) : null}
         </main>
 
         {hideUi || compact || isFocusMode || isMobile ? null : (

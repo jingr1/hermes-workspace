@@ -124,6 +124,9 @@ import { Route as ApiAuthRouteImport } from './routes/api/auth'
 import { Route as ApiArtifactsRouteImport } from './routes/api/artifacts'
 import { Route as ApiAgentBusRouteImport } from './routes/api/agent-bus'
 import { Route as ApiTasksIndexRouteImport } from './routes/api/tasks/index'
+import { Route as ApiAgentsIndexRouteImport } from './routes/api/agents/index'
+import { Route as SettingsAgentsAgentIdRouteImport } from './routes/settings/agents/$agentId'
+import { Route as ChatAgentAgentIdRouteImport } from './routes/chat/agent/$agentId'
 import { Route as ApiWorkspaceFoldersRouteImport } from './routes/api/workspace.folders'
 import { Route as ApiUpdateWorkspaceRouteImport } from './routes/api/update/workspace'
 import { Route as ApiUpdateStatusRouteImport } from './routes/api/update/status'
@@ -196,7 +199,10 @@ import { Route as ApiSessionsSessionKeyActiveRunRouteImport } from './routes/api
 import { Route as ApiMcpHubSourcesIdRouteImport } from './routes/api/mcp/hub-sources.$id'
 import { Route as ApiMcpNameLogsRouteImport } from './routes/api/mcp/$name.logs'
 import { Route as ApiHermesworldReservationsConfirmRouteImport } from './routes/api/hermesworld/reservations/confirm'
+import { Route as ApiAgentsAgentIdSessionsRouteImport } from './routes/api/agents/$agentId/sessions'
+import { Route as ApiAgentsAgentIdSessionsIndexRouteImport } from './routes/api/agents/$agentId/sessions/index'
 import { Route as ApiRunsSessionKeyRunIdAbandonRouteImport } from './routes/api/runs/$sessionKey.$runId.abandon'
+import { Route as ApiAgentsAgentIdSessionsSessionIdRouteImport } from './routes/api/agents/$agentId/sessions/$sessionId'
 
 const WorldRoute = WorldRouteImport.update({
   id: '/world',
@@ -776,6 +782,21 @@ const ApiTasksIndexRoute = ApiTasksIndexRouteImport.update({
   path: '/api/tasks/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAgentsIndexRoute = ApiAgentsIndexRouteImport.update({
+  id: '/api/agents/',
+  path: '/api/agents/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsAgentsAgentIdRoute = SettingsAgentsAgentIdRouteImport.update({
+  id: '/agents/$agentId',
+  path: '/agents/$agentId',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const ChatAgentAgentIdRoute = ChatAgentAgentIdRouteImport.update({
+  id: '/chat/agent/$agentId',
+  path: '/chat/agent/$agentId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiWorkspaceFoldersRoute = ApiWorkspaceFoldersRouteImport.update({
   id: '/folders',
   path: '/folders',
@@ -1145,11 +1166,29 @@ const ApiHermesworldReservationsConfirmRoute =
     path: '/confirm',
     getParentRoute: () => ApiHermesworldReservationsRoute,
   } as any)
+const ApiAgentsAgentIdSessionsRoute =
+  ApiAgentsAgentIdSessionsRouteImport.update({
+    id: '/api/agents/$agentId/sessions',
+    path: '/api/agents/$agentId/sessions',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAgentsAgentIdSessionsIndexRoute =
+  ApiAgentsAgentIdSessionsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => ApiAgentsAgentIdSessionsRoute,
+  } as any)
 const ApiRunsSessionKeyRunIdAbandonRoute =
   ApiRunsSessionKeyRunIdAbandonRouteImport.update({
     id: '/api/runs/$sessionKey/$runId/abandon',
     path: '/api/runs/$sessionKey/$runId/abandon',
     getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAgentsAgentIdSessionsSessionIdRoute =
+  ApiAgentsAgentIdSessionsSessionIdRouteImport.update({
+    id: '/$sessionId',
+    path: '/$sessionId',
+    getParentRoute: () => ApiAgentsAgentIdSessionsRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -1334,13 +1373,19 @@ export interface FileRoutesByFullPath {
   '/api/update/status': typeof ApiUpdateStatusRoute
   '/api/update/workspace': typeof ApiUpdateWorkspaceRoute
   '/api/workspace/folders': typeof ApiWorkspaceFoldersRoute
+  '/chat/agent/$agentId': typeof ChatAgentAgentIdRoute
+  '/settings/agents/$agentId': typeof SettingsAgentsAgentIdRoute
+  '/api/agents/': typeof ApiAgentsIndexRoute
   '/api/tasks/': typeof ApiTasksIndexRoute
+  '/api/agents/$agentId/sessions': typeof ApiAgentsAgentIdSessionsRouteWithChildren
   '/api/hermesworld/reservations/confirm': typeof ApiHermesworldReservationsConfirmRoute
   '/api/mcp/$name/logs': typeof ApiMcpNameLogsRoute
   '/api/mcp/hub-sources/$id': typeof ApiMcpHubSourcesIdRoute
   '/api/sessions/$sessionKey/active-run': typeof ApiSessionsSessionKeyActiveRunRoute
   '/api/sessions/$sessionKey/status': typeof ApiSessionsSessionKeyStatusRoute
+  '/api/agents/$agentId/sessions/$sessionId': typeof ApiAgentsAgentIdSessionsSessionIdRoute
   '/api/runs/$sessionKey/$runId/abandon': typeof ApiRunsSessionKeyRunIdAbandonRoute
+  '/api/agents/$agentId/sessions/': typeof ApiAgentsAgentIdSessionsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -1523,13 +1568,18 @@ export interface FileRoutesByTo {
   '/api/update/status': typeof ApiUpdateStatusRoute
   '/api/update/workspace': typeof ApiUpdateWorkspaceRoute
   '/api/workspace/folders': typeof ApiWorkspaceFoldersRoute
+  '/chat/agent/$agentId': typeof ChatAgentAgentIdRoute
+  '/settings/agents/$agentId': typeof SettingsAgentsAgentIdRoute
+  '/api/agents': typeof ApiAgentsIndexRoute
   '/api/tasks': typeof ApiTasksIndexRoute
   '/api/hermesworld/reservations/confirm': typeof ApiHermesworldReservationsConfirmRoute
   '/api/mcp/$name/logs': typeof ApiMcpNameLogsRoute
   '/api/mcp/hub-sources/$id': typeof ApiMcpHubSourcesIdRoute
   '/api/sessions/$sessionKey/active-run': typeof ApiSessionsSessionKeyActiveRunRoute
   '/api/sessions/$sessionKey/status': typeof ApiSessionsSessionKeyStatusRoute
+  '/api/agents/$agentId/sessions/$sessionId': typeof ApiAgentsAgentIdSessionsSessionIdRoute
   '/api/runs/$sessionKey/$runId/abandon': typeof ApiRunsSessionKeyRunIdAbandonRoute
+  '/api/agents/$agentId/sessions': typeof ApiAgentsAgentIdSessionsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -1714,13 +1764,19 @@ export interface FileRoutesById {
   '/api/update/status': typeof ApiUpdateStatusRoute
   '/api/update/workspace': typeof ApiUpdateWorkspaceRoute
   '/api/workspace/folders': typeof ApiWorkspaceFoldersRoute
+  '/chat/agent/$agentId': typeof ChatAgentAgentIdRoute
+  '/settings/agents/$agentId': typeof SettingsAgentsAgentIdRoute
+  '/api/agents/': typeof ApiAgentsIndexRoute
   '/api/tasks/': typeof ApiTasksIndexRoute
+  '/api/agents/$agentId/sessions': typeof ApiAgentsAgentIdSessionsRouteWithChildren
   '/api/hermesworld/reservations/confirm': typeof ApiHermesworldReservationsConfirmRoute
   '/api/mcp/$name/logs': typeof ApiMcpNameLogsRoute
   '/api/mcp/hub-sources/$id': typeof ApiMcpHubSourcesIdRoute
   '/api/sessions/$sessionKey/active-run': typeof ApiSessionsSessionKeyActiveRunRoute
   '/api/sessions/$sessionKey/status': typeof ApiSessionsSessionKeyStatusRoute
+  '/api/agents/$agentId/sessions/$sessionId': typeof ApiAgentsAgentIdSessionsSessionIdRoute
   '/api/runs/$sessionKey/$runId/abandon': typeof ApiRunsSessionKeyRunIdAbandonRoute
+  '/api/agents/$agentId/sessions/': typeof ApiAgentsAgentIdSessionsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -1906,13 +1962,19 @@ export interface FileRouteTypes {
     | '/api/update/status'
     | '/api/update/workspace'
     | '/api/workspace/folders'
+    | '/chat/agent/$agentId'
+    | '/settings/agents/$agentId'
+    | '/api/agents/'
     | '/api/tasks/'
+    | '/api/agents/$agentId/sessions'
     | '/api/hermesworld/reservations/confirm'
     | '/api/mcp/$name/logs'
     | '/api/mcp/hub-sources/$id'
     | '/api/sessions/$sessionKey/active-run'
     | '/api/sessions/$sessionKey/status'
+    | '/api/agents/$agentId/sessions/$sessionId'
     | '/api/runs/$sessionKey/$runId/abandon'
+    | '/api/agents/$agentId/sessions/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -2095,13 +2157,18 @@ export interface FileRouteTypes {
     | '/api/update/status'
     | '/api/update/workspace'
     | '/api/workspace/folders'
+    | '/chat/agent/$agentId'
+    | '/settings/agents/$agentId'
+    | '/api/agents'
     | '/api/tasks'
     | '/api/hermesworld/reservations/confirm'
     | '/api/mcp/$name/logs'
     | '/api/mcp/hub-sources/$id'
     | '/api/sessions/$sessionKey/active-run'
     | '/api/sessions/$sessionKey/status'
+    | '/api/agents/$agentId/sessions/$sessionId'
     | '/api/runs/$sessionKey/$runId/abandon'
+    | '/api/agents/$agentId/sessions'
   id:
     | '__root__'
     | '/'
@@ -2285,13 +2352,19 @@ export interface FileRouteTypes {
     | '/api/update/status'
     | '/api/update/workspace'
     | '/api/workspace/folders'
+    | '/chat/agent/$agentId'
+    | '/settings/agents/$agentId'
+    | '/api/agents/'
     | '/api/tasks/'
+    | '/api/agents/$agentId/sessions'
     | '/api/hermesworld/reservations/confirm'
     | '/api/mcp/$name/logs'
     | '/api/mcp/hub-sources/$id'
     | '/api/sessions/$sessionKey/active-run'
     | '/api/sessions/$sessionKey/status'
+    | '/api/agents/$agentId/sessions/$sessionId'
     | '/api/runs/$sessionKey/$runId/abandon'
+    | '/api/agents/$agentId/sessions/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -2447,7 +2520,10 @@ export interface RootRouteChildren {
   ApiUpdateAgentRoute: typeof ApiUpdateAgentRoute
   ApiUpdateStatusRoute: typeof ApiUpdateStatusRoute
   ApiUpdateWorkspaceRoute: typeof ApiUpdateWorkspaceRoute
+  ChatAgentAgentIdRoute: typeof ChatAgentAgentIdRoute
+  ApiAgentsIndexRoute: typeof ApiAgentsIndexRoute
   ApiTasksIndexRoute: typeof ApiTasksIndexRoute
+  ApiAgentsAgentIdSessionsRoute: typeof ApiAgentsAgentIdSessionsRouteWithChildren
   ApiRunsSessionKeyRunIdAbandonRoute: typeof ApiRunsSessionKeyRunIdAbandonRoute
 }
 
@@ -3258,6 +3334,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiTasksIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/agents/': {
+      id: '/api/agents/'
+      path: '/api/agents'
+      fullPath: '/api/agents/'
+      preLoaderRoute: typeof ApiAgentsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings/agents/$agentId': {
+      id: '/settings/agents/$agentId'
+      path: '/agents/$agentId'
+      fullPath: '/settings/agents/$agentId'
+      preLoaderRoute: typeof SettingsAgentsAgentIdRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/chat/agent/$agentId': {
+      id: '/chat/agent/$agentId'
+      path: '/chat/agent/$agentId'
+      fullPath: '/chat/agent/$agentId'
+      preLoaderRoute: typeof ChatAgentAgentIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/workspace/folders': {
       id: '/api/workspace/folders'
       path: '/folders'
@@ -3762,12 +3859,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiHermesworldReservationsConfirmRouteImport
       parentRoute: typeof ApiHermesworldReservationsRoute
     }
+    '/api/agents/$agentId/sessions': {
+      id: '/api/agents/$agentId/sessions'
+      path: '/api/agents/$agentId/sessions'
+      fullPath: '/api/agents/$agentId/sessions'
+      preLoaderRoute: typeof ApiAgentsAgentIdSessionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agents/$agentId/sessions/': {
+      id: '/api/agents/$agentId/sessions/'
+      path: '/'
+      fullPath: '/api/agents/$agentId/sessions/'
+      preLoaderRoute: typeof ApiAgentsAgentIdSessionsIndexRouteImport
+      parentRoute: typeof ApiAgentsAgentIdSessionsRoute
+    }
     '/api/runs/$sessionKey/$runId/abandon': {
       id: '/api/runs/$sessionKey/$runId/abandon'
       path: '/api/runs/$sessionKey/$runId/abandon'
       fullPath: '/api/runs/$sessionKey/$runId/abandon'
       preLoaderRoute: typeof ApiRunsSessionKeyRunIdAbandonRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/api/agents/$agentId/sessions/$sessionId': {
+      id: '/api/agents/$agentId/sessions/$sessionId'
+      path: '/$sessionId'
+      fullPath: '/api/agents/$agentId/sessions/$sessionId'
+      preLoaderRoute: typeof ApiAgentsAgentIdSessionsSessionIdRouteImport
+      parentRoute: typeof ApiAgentsAgentIdSessionsRoute
     }
   }
 }
@@ -3786,11 +3904,13 @@ const ReserveRouteWithChildren =
 interface SettingsRouteChildren {
   SettingsProvidersRoute: typeof SettingsProvidersRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
+  SettingsAgentsAgentIdRoute: typeof SettingsAgentsAgentIdRoute
 }
 
 const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsProvidersRoute: SettingsProvidersRoute,
   SettingsIndexRoute: SettingsIndexRoute,
+  SettingsAgentsAgentIdRoute: SettingsAgentsAgentIdRoute,
 }
 
 const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
@@ -4009,6 +4129,23 @@ const ApiHermesworldReservationsRouteWithChildren =
     ApiHermesworldReservationsRouteChildren,
   )
 
+interface ApiAgentsAgentIdSessionsRouteChildren {
+  ApiAgentsAgentIdSessionsSessionIdRoute: typeof ApiAgentsAgentIdSessionsSessionIdRoute
+  ApiAgentsAgentIdSessionsIndexRoute: typeof ApiAgentsAgentIdSessionsIndexRoute
+}
+
+const ApiAgentsAgentIdSessionsRouteChildren: ApiAgentsAgentIdSessionsRouteChildren =
+  {
+    ApiAgentsAgentIdSessionsSessionIdRoute:
+      ApiAgentsAgentIdSessionsSessionIdRoute,
+    ApiAgentsAgentIdSessionsIndexRoute: ApiAgentsAgentIdSessionsIndexRoute,
+  }
+
+const ApiAgentsAgentIdSessionsRouteWithChildren =
+  ApiAgentsAgentIdSessionsRoute._addFileChildren(
+    ApiAgentsAgentIdSessionsRouteChildren,
+  )
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SplatRoute: SplatRoute,
@@ -4163,7 +4300,10 @@ const rootRouteChildren: RootRouteChildren = {
   ApiUpdateAgentRoute: ApiUpdateAgentRoute,
   ApiUpdateStatusRoute: ApiUpdateStatusRoute,
   ApiUpdateWorkspaceRoute: ApiUpdateWorkspaceRoute,
+  ChatAgentAgentIdRoute: ChatAgentAgentIdRoute,
+  ApiAgentsIndexRoute: ApiAgentsIndexRoute,
   ApiTasksIndexRoute: ApiTasksIndexRoute,
+  ApiAgentsAgentIdSessionsRoute: ApiAgentsAgentIdSessionsRouteWithChildren,
   ApiRunsSessionKeyRunIdAbandonRoute: ApiRunsSessionKeyRunIdAbandonRoute,
 }
 export const routeTree = rootRouteImport
