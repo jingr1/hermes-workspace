@@ -77,7 +77,12 @@ function HermesChatShell({
     }
   }, [isActivating, activeProfileName, targetProfile, queryClient])
 
-  if (activating || isActivating || activeProfileName !== targetProfile || !agent) {
+  if (
+    activating ||
+    isActivating ||
+    activeProfileName !== targetProfile ||
+    !agent
+  ) {
     return (
       <div className="flex h-full flex-col items-center justify-center">
         <ChatRouteLoading />

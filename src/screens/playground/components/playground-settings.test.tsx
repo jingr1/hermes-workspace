@@ -80,13 +80,11 @@ describe('HermesWorld settings persistence', () => {
   it('defaults photosensitive mode and reduced motion from prefers-reduced-motion on first load', () => {
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
-      value: vi
-        .fn()
-        .mockReturnValue({
-          matches: true,
-          addEventListener: vi.fn(),
-          removeEventListener: vi.fn(),
-        }),
+      value: vi.fn().mockReturnValue({
+        matches: true,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }),
     })
 
     const settings = loadHermesWorldSettings()

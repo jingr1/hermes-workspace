@@ -7,7 +7,11 @@
  */
 import { listSessionsForProfile } from './profiles-browser'
 import { getAgentRuntimeRouter } from './agent-runtime/router'
-import type { AgentRuntime, AgentSession, AgentSessionState } from '../lib/agent-types'
+import type {
+  AgentRuntime,
+  AgentSession,
+  AgentSessionState,
+} from '../lib/agent-types'
 
 function deriveSessionState(messageCount: number): AgentSessionState {
   return messageCount > 0 ? 'completed' : 'idle'

@@ -45,7 +45,13 @@ export function useAgentWorkspace() {
         setAgentsError(error instanceof Error ? error.message : String(error))
       })
       .finally(() => setAgentsLoading(false))
-  }, [activeAgentId, setActiveAgentId, setAgents, setAgentsError, setAgentsLoading])
+  }, [
+    activeAgentId,
+    setActiveAgentId,
+    setAgents,
+    setAgentsError,
+    setAgentsLoading,
+  ])
 
   // Load sessions whenever active agent changes
   useEffect(() => {

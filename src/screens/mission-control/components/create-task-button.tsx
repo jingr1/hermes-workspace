@@ -44,7 +44,9 @@ type CreateTaskButtonProps = {
   variant?: 'header' | 'inline'
 }
 
-export function CreateTaskButton({ variant = 'header' }: CreateTaskButtonProps) {
+export function CreateTaskButton({
+  variant = 'header',
+}: CreateTaskButtonProps) {
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState('')
   const [spec, setSpec] = useState('')
@@ -196,7 +198,9 @@ export function CreateTaskButton({ variant = 'header' }: CreateTaskButtonProps) 
               <button
                 type="button"
                 disabled={
-                  !title.trim() || !selectedPipelineId || createMutation.isPending
+                  !title.trim() ||
+                  !selectedPipelineId ||
+                  createMutation.isPending
                 }
                 onClick={() => {
                   createMutation.mutate({

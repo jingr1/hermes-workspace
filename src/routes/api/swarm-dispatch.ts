@@ -1794,12 +1794,13 @@ export async function dispatchSwarmAssignments(body: DispatchRequest) {
     typeof body.missionId === 'string' ? body.missionId.trim() : ''
   const hasExplicitMissionTitle =
     typeof body.missionTitle === 'string' && body.missionTitle.trim()
+  const firstTaskText = assignments[0]?.task?.trim() ?? ''
   const missionTitle = hasExplicitMissionTitle
     ? (body.missionTitle as string).trim()
     : requestedMissionId
       ? ''
-      : assignments.length === 1
-        ? assignments[0].task.slice(0, 120)
+      : firstTaskText
+        ? firstTaskText.slice(0, 120)
         : `${assignments.length} assigned tasks`
   const mission = createOrUpdateMission({
     missionId: requestedMissionId || null,

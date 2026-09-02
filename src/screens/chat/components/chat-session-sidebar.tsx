@@ -5,10 +5,7 @@ import { Add01Icon } from '@hugeicons/core-free-icons'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
-import {
-  setActiveProfileOptimistic,
-  useProfiles,
-} from '../hooks/use-profiles'
+import { setActiveProfileOptimistic, useProfiles } from '../hooks/use-profiles'
 import { useRenameSession } from '../hooks/use-rename-session'
 import { useDeleteSession } from '../hooks/use-delete-session'
 import { chatQueryKeys, fetchHistory, fetchSessions } from '../chat-queries'

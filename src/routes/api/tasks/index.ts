@@ -42,7 +42,10 @@ function assignmentProgressWeight(state: SwarmMissionAssignmentState): number {
   }
 }
 
-function computeTaskProgress(mission: SwarmMission | null, lane: string): number {
+function computeTaskProgress(
+  mission: SwarmMission | null,
+  lane: string,
+): number {
   if (mission && mission.assignments.length > 0) {
     const weighted = mission.assignments.reduce(
       (sum, assignment) => sum + assignmentProgressWeight(assignment.state),
@@ -77,7 +80,7 @@ export const Route = createFileRoute('/api/tasks/')({
           const effectiveLane = mission ? laneFromMission(mission) : card.status
           return {
             cardId: card.id,
-            title: card.title,
+            title: mission?.title?.trim() ? mission.title.trim() : card.title,
             lane: card.status,
             missionId: mission?.id ?? null,
             missionState: mission?.state ?? null,

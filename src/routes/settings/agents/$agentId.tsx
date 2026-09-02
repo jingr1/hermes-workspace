@@ -13,11 +13,21 @@ const RUNTIME_LABELS: Record<string, string> = {
   opencode: 'OpenCode',
 }
 
-function SettingsRow({ label, value }: { label: string; value: React.ReactNode }) {
+function SettingsRow({
+  label,
+  value,
+}: {
+  label: string
+  value: React.ReactNode
+}) {
   return (
     <div className="grid grid-cols-[8rem_1fr] gap-4 border-b border-primary-200 py-3 last:border-0 dark:border-primary-800">
-      <dt className="text-sm font-medium text-primary-500 dark:text-primary-400">{label}</dt>
-      <dd className="text-sm text-primary-950 dark:text-primary-100">{value}</dd>
+      <dt className="text-sm font-medium text-primary-500 dark:text-primary-400">
+        {label}
+      </dt>
+      <dd className="text-sm text-primary-950 dark:text-primary-100">
+        {value}
+      </dd>
     </div>
   )
 }
@@ -36,7 +46,9 @@ function AgentSettingsPage() {
         if (found) setAgent(found)
         else setError('Agent not found')
       })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
+      .catch((err: unknown) =>
+        setError(err instanceof Error ? err.message : String(err)),
+      )
       .finally(() => setLoading(false))
   }, [agentId])
 
@@ -76,13 +88,19 @@ function AgentSettingsPage() {
           <SettingsRow label="Runtime" value={agent.runtime} />
           <SettingsRow label="Execution" value={agent.execution} />
           {agent.runtimeConfig.profile ? (
-            <SettingsRow label="Hermes Profile" value={agent.runtimeConfig.profile} />
+            <SettingsRow
+              label="Hermes Profile"
+              value={agent.runtimeConfig.profile}
+            />
           ) : null}
           {agent.runtimeConfig.command ? (
             <SettingsRow label="Command" value={agent.runtimeConfig.command} />
           ) : null}
           {agent.runtimeConfig.args && agent.runtimeConfig.args.length > 0 ? (
-            <SettingsRow label="Args" value={agent.runtimeConfig.args.join(' ')} />
+            <SettingsRow
+              label="Args"
+              value={agent.runtimeConfig.args.join(' ')}
+            />
           ) : null}
           <SettingsRow
             label="Capabilities"
@@ -107,7 +125,10 @@ function AgentSettingsPage() {
             }
           />
           {typeof agent.runtimeConfig.maxConcurrentTasks === 'number' ? (
-            <SettingsRow label="Max Concurrency" value={agent.runtimeConfig.maxConcurrentTasks} />
+            <SettingsRow
+              label="Max Concurrency"
+              value={agent.runtimeConfig.maxConcurrentTasks}
+            />
           ) : null}
         </dl>
       </div>
@@ -116,8 +137,9 @@ function AgentSettingsPage() {
         <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800/50 dark:bg-amber-900/15 dark:text-amber-300">
           <p className="font-medium">Managed runtime configuration</p>
           <p className="mt-1">
-            {agent.runtime} adapters are still being wired. To change settings, edit
-            the agent declaration in <code>agents.yaml</code> and reload the workspace.
+            {agent.runtime} adapters are still being wired. To change settings,
+            edit the agent declaration in <code>agents.yaml</code> and reload
+            the workspace.
           </p>
         </div>
       ) : null}

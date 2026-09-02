@@ -219,7 +219,10 @@ export function getTaskRun(runId: string, dbPath?: string): TaskRun | null {
   }
 }
 
-export function countRunningRunsForAgent(agentId: string, dbPath?: string): number {
+export function countRunningRunsForAgent(
+  agentId: string,
+  dbPath?: string,
+): number {
   const path = dbPath ?? getCollabDbPath()
   if (!existsSync(path)) return 0
   const db = openSqliteDatabase(path, true)

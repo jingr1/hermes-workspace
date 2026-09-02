@@ -3,7 +3,10 @@ import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../server/auth-middleware'
 import { listKanbanCards } from '../../../server/kanban-backend'
-import { getSwarmMission } from '../../../server/swarm-missions'
+import {
+  getSwarmMission,
+  listSwarmMissions,
+} from '../../../server/swarm-missions'
 import { getCollabDbPath } from '../../../server/collab-db'
 import { openSqliteDatabase } from '../../../server/sqlite-helper'
 
@@ -22,7 +25,15 @@ export const Route = createFileRoute('/api/tasks/$taskId')({
         if (!card)
           return json({ error: `Task not found: ${taskId}` }, { status: 404 })
 
-        const mission = card.missionId ? getSwarmMission(card.missionId) : null
+        // The native kanban store does not persist missionId on the card, but
+        // swarm missions record the bound card id in taskId. Try missionId first,
+        // then fall back to taskId lookup so pipeline/timeline work for all
+        // bound missions (including backfilled ones).
+        let mission = card.missionId ? getSwarmMission(card.missionId) : null
+        if (!mission) {
+          const missions = listSwarmMissions(500)
+          mission = missions.find((m) => m.taskId === taskId) ?? null
+        }
         if (!mission) {
           return json({ task: card, pipeline: null, runs: [], events: [] })
         }
@@ -44,7 +55,10 @@ export const Route = createFileRoute('/api/tasks/$taskId')({
         }
 
         return json({
-          task: card,
+          task: {
+            ...card,
+            title: mission.title?.trim() ? mission.title.trim() : card.title,
+          },
           pipeline: {
             id: mission.pipelineId ?? null,
             specVersion: mission.specVersion ?? 1,

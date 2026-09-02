@@ -7,7 +7,11 @@ import {
   startAgentStatusWatcher,
 } from '../../../server/agent-status-watcher'
 import type { AgentDeclaration } from '../../../server/agent-runtime/agents-config'
-import type { AgentRuntime, AgentStatus, AgentWithStatus } from '../../../lib/agent-types'
+import type {
+  AgentRuntime,
+  AgentStatus,
+  AgentWithStatus,
+} from '../../../lib/agent-types'
 
 function deriveStatus(
   probeAvailable: boolean,
@@ -39,7 +43,8 @@ function buildAgentPayload(
   decl: AgentDeclaration,
   probe: { available: boolean; version?: string; detail?: string },
 ): AgentWithStatus {
-  const snapshot = decl.runtime === 'hermes' ? getAgentStatusSnapshot(decl.id) : undefined
+  const snapshot =
+    decl.runtime === 'hermes' ? getAgentStatusSnapshot(decl.id) : undefined
   const status = deriveStatus(probe.available, snapshot)
   return {
     agentId: decl.id,
@@ -75,7 +80,10 @@ export const Route = createFileRoute('/api/agents/')({
 
         const agents: Array<AgentWithStatus> = []
         for (const decl of router.registry.agents) {
-          const probe = probeById.get(decl.id) ?? { available: false, detail: 'probe missing' }
+          const probe = probeById.get(decl.id) ?? {
+            available: false,
+            detail: 'probe missing',
+          }
           agents.push(buildAgentPayload(decl, probe))
         }
 
@@ -97,7 +105,9 @@ export const Route = createFileRoute('/api/agents/')({
               capabilities: [],
             },
             probe,
-            statusSnapshot: snapshot ? buildStatusSnapshot(snapshot) : undefined,
+            statusSnapshot: snapshot
+              ? buildStatusSnapshot(snapshot)
+              : undefined,
           })
         }
 

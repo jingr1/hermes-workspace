@@ -101,8 +101,7 @@ export function inferLanguageFromContent(content: string): string | null {
     /\b(?:True|False|None)\b/.test(sample) ||
     /\b[\w.]+\.from_dict\s*\(/.test(sample) ||
     /\bLLMArgs\s*\(/.test(sample) ||
-    (/(?:^|\n)\s*[\w_]+\s*=\s*[\w.]+\(/.test(sample) &&
-      /#/.test(sample))
+    (/(?:^|\n)\s*[\w_]+\s*=\s*[\w.]+\(/.test(sample) && /#/.test(sample))
   ) {
     return 'python'
   }

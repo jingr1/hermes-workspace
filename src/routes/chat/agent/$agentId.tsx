@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, useSearch } from '@tanstack/react-router'
-import { Suspense, lazy, useEffect } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { z } from 'zod'
 import { ChatRouteLoading } from '../../../screens/chat/chat-route-loading'
 import { useAgentStore } from '../../../stores/agent-store'
@@ -54,14 +54,19 @@ function ChatAgentRoute() {
   const agentId = typeof params.agentId === 'string' ? params.agentId : ''
   const setActiveAgentId = useAgentStore((s) => s.setActiveAgentId)
   const setActiveSessionId = useAgentStore((s) => s.setActiveSessionId)
+  const [seeded, setSeeded] = useState(false)
 
   // Seed the agent store if it is empty, then set the active agent/session.
+  // Wait for seeding to finish before rendering AgentWorkspace so that
+  // useAgentWorkspace does not race with this route and pick a different
+  // default agent (e.g. orchestrator) from the URL target agent.
   useEffect(() => {
     const applyAgent = () => {
       setActiveAgentId(agentId || null)
       if (search.session) {
         setActiveSessionId(search.session)
       }
+      setSeeded(true)
     }
 
     if (useAgentStore.getState().agents.length === 0) {
@@ -94,6 +99,10 @@ function ChatAgentRoute() {
       }
     })
   }, [navigate, search.session])
+
+  if (!seeded) {
+    return <ChatRouteLoading />
+  }
 
   return (
     <ErrorBoundary>

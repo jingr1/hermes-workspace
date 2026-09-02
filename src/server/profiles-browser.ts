@@ -471,9 +471,7 @@ function openProfileStateDb(dbPath: string): {
   }
 }
 
-export function listSessionsForProfile(
-  name: string,
-): Array<{
+export function listSessionsForProfile(name: string): Array<{
   key: string
   friendlyId: string
   updatedAt: number

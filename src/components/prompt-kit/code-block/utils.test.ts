@@ -16,7 +16,9 @@ describe('extractLanguageFromClassName', () => {
 
   it('extracts common language ids', () => {
     expect(extractLanguageFromClassName('language-python')).toBe('python')
-    expect(extractLanguageFromClassName('hljs language-bash extra')).toBe('bash')
+    expect(extractLanguageFromClassName('hljs language-bash extra')).toBe(
+      'bash',
+    )
   })
 
   it('supports hyphen and plus language ids like webui', () => {

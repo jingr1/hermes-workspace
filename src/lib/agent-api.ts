@@ -2,7 +2,9 @@ import type { AgentSession, AgentWithStatus } from './agent-types'
 
 const API_BASE = '/api/agents'
 
-export async function fetchAgents(): Promise<{ agents: Array<AgentWithStatus> }> {
+export async function fetchAgents(): Promise<{
+  agents: Array<AgentWithStatus>
+}> {
   const res = await fetch(API_BASE)
   if (!res.ok) {
     const text = await res.text().catch(() => 'Unknown error')
@@ -26,11 +28,14 @@ export async function createSessionForAgent(
   agentId: string,
   payload: { title?: string; model?: string } = {},
 ): Promise<{ sessionId: string }> {
-  const res = await fetch(`${API_BASE}/${encodeURIComponent(agentId)}/sessions`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
+  const res = await fetch(
+    `${API_BASE}/${encodeURIComponent(agentId)}/sessions`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+  )
   if (!res.ok) {
     const text = await res.text().catch(() => 'Unknown error')
     throw new Error(`Failed to create session: ${res.status} ${text}`)

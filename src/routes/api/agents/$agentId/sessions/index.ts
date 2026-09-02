@@ -14,9 +14,14 @@ export const Route = createFileRoute('/api/agents/$agentId/sessions/')({
         if (!agentId) {
           return json({ error: 'agentId is required' }, { status: 400 })
         }
-        const body = (await request.json().catch(() => ({}))) as Record<string, unknown>
-        const title = typeof body.title === 'string' ? body.title.trim() : undefined
-        const model = typeof body.model === 'string' ? body.model.trim() : undefined
+        const body = (await request.json().catch(() => ({}))) as Record<
+          string,
+          unknown
+        >
+        const title =
+          typeof body.title === 'string' ? body.title.trim() : undefined
+        const model =
+          typeof body.model === 'string' ? body.model.trim() : undefined
         const created = createSessionForAgent(agentId, { title, model })
         return json({ sessionId: created.sessionId, agentId, title, model })
       },

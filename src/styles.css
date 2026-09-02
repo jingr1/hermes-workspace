@@ -352,7 +352,8 @@ body {
   min-width: 0;
   overflow: hidden;
   margin: 0.5rem 0;
-  border: 1px solid var(--code-border, var(--theme-border-subtle, rgba(128, 128, 128, 0.25)));
+  border: 1px solid
+    var(--code-border, var(--theme-border-subtle, rgba(128, 128, 128, 0.25)));
   border-radius: 10px;
   background: var(--code-bg, var(--theme-panel, #111));
 }
@@ -363,8 +364,13 @@ body {
   justify-content: space-between;
   gap: 0.5rem;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--code-border, var(--theme-border-subtle, rgba(128, 128, 128, 0.2)));
-  background: color-mix(in srgb, var(--code-bg, #111) 90%, var(--theme-text, #ccc) 10%);
+  border-bottom: 1px solid
+    var(--code-border, var(--theme-border-subtle, rgba(128, 128, 128, 0.2)));
+  background: color-mix(
+    in srgb,
+    var(--code-bg, #111) 90%,
+    var(--theme-text, #ccc) 10%
+  );
 }
 
 .code-block-lang {
@@ -416,8 +422,13 @@ body {
   margin: 0;
   padding: 14px 10px 14px 12px;
   list-style: none;
-  border-right: 1px solid var(--code-border, var(--theme-border-subtle, rgba(128, 128, 128, 0.2)));
-  background: color-mix(in srgb, var(--code-bg, #111) 82%, var(--theme-text, #ccc) 18%);
+  border-right: 1px solid
+    var(--code-border, var(--theme-border-subtle, rgba(128, 128, 128, 0.2)));
+  background: color-mix(
+    in srgb,
+    var(--code-bg, #111) 82%,
+    var(--theme-text, #ccc) 18%
+  );
   color: var(--theme-muted, rgba(255, 255, 255, 0.45));
   font-size: 0.75rem;
   line-height: 1.6;

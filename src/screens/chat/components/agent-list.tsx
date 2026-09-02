@@ -29,7 +29,10 @@ function agentSubtitle(
   if (agent.runtime === 'hermes' && profile) {
     const model = profile.model?.trim()
     const provider = profile.provider?.trim()
-    return [model, provider].filter(Boolean).join(' · ') || runtimeLabel(agent.runtime)
+    return (
+      [model, provider].filter(Boolean).join(' · ') ||
+      runtimeLabel(agent.runtime)
+    )
   }
   return runtimeLabel(agent.runtime)
 }
@@ -86,7 +89,10 @@ function AgentListItem({
         type="button"
         onClick={(event) => {
           event.stopPropagation()
-          void navigate({ to: '/settings/agents/$agentId', params: { agentId: agent.agentId } })
+          void navigate({
+            to: '/settings/agents/$agentId',
+            params: { agentId: agent.agentId },
+          })
         }}
         className={cn(
           'shrink-0 rounded-md p-1.5 opacity-0 transition-opacity',

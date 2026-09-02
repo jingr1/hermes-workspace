@@ -3,10 +3,7 @@ import { highlightWithPrism } from './prism-highlight'
 
 describe('highlightWithPrism', () => {
   it('highlights bash comments and commands synchronously', () => {
-    const html = highlightWithPrism(
-      '# comment\ndocker exec -it foo',
-      'bash',
-    )
+    const html = highlightWithPrism('# comment\ndocker exec -it foo', 'bash')
     expect(html).toContain('token')
     expect(html).toContain('comment')
     expect(html).toContain('docker')

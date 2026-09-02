@@ -156,9 +156,7 @@ async function codexLoginWorker(session: CodexSession): Promise<void> {
   session.status = 'expired'
 }
 
-export async function startCodexLogin(
-  profile: string,
-): Promise<
+export async function startCodexLogin(profile: string): Promise<
   | {
       ok: true
       session_id: string

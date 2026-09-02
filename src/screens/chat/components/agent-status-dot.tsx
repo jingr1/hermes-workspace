@@ -10,12 +10,19 @@ const STATUS_STYLES: Record<AgentStatus, string> = {
   unknown: 'bg-primary-300 dark:bg-primary-600',
 }
 
-export function AgentStatusDot({ status, className }: { status: AgentStatus; className?: string }) {
+export function AgentStatusDot({
+  status,
+  className,
+}: {
+  status: AgentStatus
+  className?: string
+}) {
   return (
     <span
       className={cn(
         'inline-block size-2.5 shrink-0 rounded-full',
-        (STATUS_STYLES as Record<string, string>)[status] ?? STATUS_STYLES.unknown,
+        (STATUS_STYLES as Record<string, string>)[status] ??
+          STATUS_STYLES.unknown,
         className,
       )}
       title={status}
