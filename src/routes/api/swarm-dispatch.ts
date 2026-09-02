@@ -17,7 +17,10 @@ import {
   markMissionAssignmentDispatched,
   recordMissionAssignmentBlocked,
   recordMissionCheckpoint,
+  setMissionTaskId,
 } from '../../server/swarm-missions'
+import { createKanbanCard } from '../../server/kanban-backend'
+import { laneFromMission } from '../../server/task-pipeline/lane-sync'
 import {
   appendSwarmMemoryEvent,
   buildSwarmStartupSnapshot,
@@ -1818,6 +1821,36 @@ export async function dispatchSwarmAssignments(body: DispatchRequest) {
     }
   }
 
+  // When a new mission is created from the Swarm Router (no explicit missionId
+  // and no explicit missionTitle), bind it to a kanban card so it appears on
+  // the Mission Control board and overview. The card title uses the first
+  // assignment's task text; the lane is derived from the mission state.
+  let cardId: string | null = null
+  if (mission._created && !requestedMissionId && !hasExplicitMissionTitle) {
+    try {
+      const status = laneFromMission(mission)
+      const card = await createKanbanCard({
+        title: missionTitle,
+        spec: assignments.map((a) => `- ${a.workerId}: ${a.task}`).join('\n'),
+        acceptanceCriteria: [],
+        assignedWorker: assignments[0]?.workerId ?? null,
+        reviewer: null,
+        status,
+        missionId: mission.id,
+        createdBy: 'swarm-dispatch',
+        tags: ['auto'],
+      })
+      cardId = card.id
+      setMissionTaskId({ missionId: mission.id, taskId: card.id })
+    } catch (cardError) {
+      console.warn(
+        '[swarm-dispatch] failed to create kanban card for mission',
+        mission.id,
+        cardError instanceof Error ? cardError.message : String(cardError),
+      )
+    }
+  }
+
   const assignmentIdByKey = new Map(
     mission.assignments.map((item) => [
       `${item.workerId}\n${item.task}`,
@@ -1868,6 +1901,7 @@ export async function dispatchSwarmAssignments(body: DispatchRequest) {
     completedAt: Date.now(),
     missionId: mission.id,
     mission: latestMission,
+    cardId,
     prompt:
       assignments.length === 1
         ? assignments[0].task

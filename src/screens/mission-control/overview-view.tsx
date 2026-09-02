@@ -172,7 +172,8 @@ function TaskProgress({ tasks }: { tasks: Array<TaskSummary> }) {
       done: 0,
     }
     for (const t of tasks) {
-      const lane = t.derivedLane ?? t.lane
+      const rawLane = t.derivedLane ?? t.lane
+      const lane = rawLane === 'ready' ? 'todo' : rawLane
       map[lane] = (map[lane] ?? 0) + 1
     }
     return map

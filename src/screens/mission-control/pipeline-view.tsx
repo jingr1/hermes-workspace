@@ -231,10 +231,16 @@ export function PipelineView({
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--theme-muted)]">
                 Pipeline
               </h3>
-              <StageBar
-                stages={stages}
-                currentStageId={currentStage?.assignmentId ?? null}
-              />
+              {stages.length > 0 ? (
+                <StageBar
+                  stages={stages}
+                  currentStageId={currentStage?.assignmentId ?? null}
+                />
+              ) : (
+                <p className="text-sm text-[var(--theme-muted)]">
+                  此任务未关联 Mission 流水线，暂无 Pipeline。
+                </p>
+              )}
             </div>
 
             {currentStage &&

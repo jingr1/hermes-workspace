@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { OverviewView } from './overview-view'
 import { BoardView } from './board-view'
 import { PipelineView } from './pipeline-view'
+import { CreateTaskButton } from './components/create-task-button'
 import { cn } from '@/lib/utils'
 
 export type MissionControlTab = 'overview' | 'board' | 'pipeline'
@@ -40,23 +41,26 @@ export function MissionControlLayout({
               Multi-agent runtime status, board, and pipeline drill-down.
             </p>
           </div>
-          <nav className="flex rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] p-0.5">
-            {TABS.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => onTabChange(tab.id)}
-                className={cn(
-                  'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-                  activeTab === tab.id
-                    ? 'bg-[var(--theme-accent)] text-white'
-                    : 'text-[var(--theme-muted)] hover:text-[var(--theme-text)]',
-                )}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </nav>
+          <div className="flex items-center gap-3">
+            <CreateTaskButton />
+            <nav className="flex rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] p-0.5">
+              {TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => onTabChange(tab.id)}
+                  className={cn(
+                    'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                    activeTab === tab.id
+                      ? 'bg-[var(--theme-accent)] text-white'
+                      : 'text-[var(--theme-muted)] hover:text-[var(--theme-text)]',
+                  )}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
+          </div>
         </div>
       </header>
 

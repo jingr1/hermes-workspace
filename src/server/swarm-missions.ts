@@ -742,6 +742,19 @@ export function setAssignmentHeadSha(
   return mission
 }
 
+export function setMissionTaskId(input: {
+  missionId: string
+  taskId: string | null
+}): SwarmMission | null {
+  const store = readStore()
+  const mission = store.missions.find((item) => item.id === input.missionId)
+  if (!mission) return null
+  mission.taskId = input.taskId
+  mission.updatedAt = now()
+  writeStore(store)
+  return mission
+}
+
 export function rewriteAssignmentDependencies(input: {
   missionId: string
   dependsOnByAssignmentId: Record<string, Array<string>>

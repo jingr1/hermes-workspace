@@ -44,7 +44,7 @@ export function BoardView({
     const map = new Map<KanbanLane, Array<TaskSummary>>()
     for (const lane of LANES) map.set(lane.id, [])
     for (const task of tasks) {
-      const lane = task.derivedLane ?? task.lane
+      const lane = (task.derivedLane ?? task.lane) === 'ready' ? 'todo' : (task.derivedLane ?? task.lane)
       const bucket = map.get(lane) ?? map.get('backlog')!
       bucket.push(task)
     }
