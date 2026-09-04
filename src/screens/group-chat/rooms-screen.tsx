@@ -49,7 +49,7 @@ export function RoomsScreen() {
   const [pendingTurns, setPendingTurns] = useState<Array<PendingTurn>>([])
   const [input, setInput] = useState('')
   const [availableAgents, setAvailableAgents] = useState<
-    Array<{ id: string; displayName: string }>
+    Array<{ id: string; displayName: string; profile?: string | null }>
   >([])
   const [loading, setLoading] = useState(false)
   const [statusText, setStatusText] = useState<string | null>(null)
@@ -122,11 +122,12 @@ export function RoomsScreen() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  async function handleAddAgent(agentId: string) {
+  async function handleAddAgent(agentId: string, profile?: string | null) {
     if (!roomId) return
     await apiAddParticipant(roomId, {
       participantId: agentId,
       kind: 'agent',
+      profile,
     })
     const res = await listParticipants(roomId)
     setParticipants(res.participants)
@@ -203,7 +204,7 @@ export function RoomsScreen() {
                   {availableAgents.map((agent) => (
                     <MenuItem
                       key={agent.id}
-                      onClick={() => handleAddAgent(agent.id)}
+                      onClick={() => handleAddAgent(agent.id, agent.profile)}
                     >
                       {agent.displayName}
                     </MenuItem>

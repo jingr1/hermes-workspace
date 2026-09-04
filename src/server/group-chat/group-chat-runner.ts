@@ -266,7 +266,7 @@ async function runGroupChatRounds(
             member: member.displayName,
             text: turnResult.text,
           })
-          await maybeSummarizeRoom(room.id)
+          await maybeSummarizeRoom(room.id, { profile: member.profile ?? undefined })
           continue
         }
       }
@@ -332,7 +332,7 @@ async function runGroupChatRounds(
             })
             posted += 1
             setWatermark(room.id, member.participantId, roomLog2.length + 1)
-            await maybeSummarizeRoom(room.id)
+            await maybeSummarizeRoom(room.id, { profile: member.profile ?? undefined })
           } else if (turnResult.kind === 'pass') {
             setWatermark(room.id, member.participantId, roomLog2.length)
           }

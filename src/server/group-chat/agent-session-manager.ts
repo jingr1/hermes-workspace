@@ -1,16 +1,28 @@
 /**
  * Canonical session manager for group-chat participants.
  *
- * Each bot participant in a room gets one persistent "Bot Chat" session on
- * the gateway. We create it lazily, cache the session id by
- * (roomId, participantId), and resume it on subsequent turns. This mirrors
- * upstream Bot Mode's canonical "Bot Chat" sessions but uses workspace's
- * claude-api instead of Desktop RPC.
+ * Each bot participant in a room gets one persistent "Bot Chat" session on its
+ * OWN profile gateway. We create it lazily, cache the session id by
+ * (roomId, participantId), and resume it on subsequent turns.
+ *
+ * This module intentionally does NOT use the global claude-api singleton,
+ * because that singleton points at the workspace's current active gateway,
+ * which may be a different profile than the participant's. Instead it builds a
+ * per-profile client via claude-api-profile and routes every session operation
+ * through that client's gateway.
  */
-import { createSession, getMessages, sendChat } from '../claude-api'
+import {
+  getClaudeApiClient,
+  type ClaudeApiClient,
+  type ClaudeMessage,
+} from '../claude-api-profile'
+import {
+  createSession as globalCreateSession,
+  getMessages as globalGetMessages,
+  sendChat as globalSendChat,
+} from '../claude-api'
 import { getCollabDbPath } from '../collab-db'
 import { openSqliteDatabase } from '../sqlite-helper'
-import type { ClaudeMessage } from '../claude-api'
 import type { GroupMember } from './types'
 
 const SESSION_KEY_PREFIX = 'group-chat-session'
@@ -38,6 +50,7 @@ function ensureSessionTable(databasePath: string): void {
         room_id TEXT NOT NULL,
         participant_id TEXT NOT NULL,
         session_id TEXT NOT NULL,
+        profile TEXT,
         updated_at INTEGER,
         PRIMARY KEY (room_id, participant_id)
       );
@@ -59,22 +72,48 @@ export function groupSessionTitle(roomId: string, participantId: string): string
   return `Group: ${roomId}:${participantId}`
 }
 
+/** Resolve the profile that owns a member's runtime session.
+ *  - For explicit profile metadata on the member, use it.
+ *  - For runtime !== 'hermes', there is no Hermes profile gateway; return null.
+ *  - Fallback to participantId when legacy rows have no profile but runtime
+ *    is hermes. This keeps old rooms working while new rooms store explicit
+ *    profile names.
+ */
+function resolveMemberProfile(member: GroupMember): string | null {
+  if (member.profile) return member.profile
+  if (member.runtime !== 'hermes') return null
+  return member.participantId
+}
+
+/** Pick the client surface for a member: per-profile when possible, global
+ *  fallback for non-Hermes runtimes. */
+function clientForMember(member: GroupMember): ClaudeApiClient | null {
+  const profile = resolveMemberProfile(member)
+  if (profile) return getClaudeApiClient(profile)
+  return null
+}
+
 export function rememberSession(
   roomId: string,
   participantId: string,
   sessionId: string,
+  member: GroupMember,
   input?: { dbPath?: string },
 ): void {
   const path = dbPath(input)
   ensureSessionTable(path)
   getCache().set(sessionCacheKey(roomId, participantId), sessionId)
+  const profile = resolveMemberProfile(member)
   const db = openSqliteDatabase(path, false)
   try {
     db.prepare(
-      `INSERT INTO group_chat_sessions (room_id, participant_id, session_id, updated_at)
-       VALUES (?, ?, ?, ?)
-       ON CONFLICT(room_id, participant_id) DO UPDATE SET session_id = excluded.session_id, updated_at = excluded.updated_at`,
-    ).run(roomId, participantId, sessionId, Date.now())
+      `INSERT INTO group_chat_sessions (room_id, participant_id, session_id, profile, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(room_id, participant_id) DO UPDATE SET
+         session_id = excluded.session_id,
+         profile = excluded.profile,
+         updated_at = excluded.updated_at`,
+    ).run(roomId, participantId, sessionId, profile, Date.now())
   } finally {
     db.close()
   }
@@ -100,13 +139,30 @@ type SessionCheckResult =
   | { kind: 'missing' }
   | { kind: 'error'; error: Error }
 
-/** Verify a stored session id. Fail closed on transient errors: only a 404-style
- *  "not found" means the session is genuinely gone. */
+/** Verify a stored session id against the member's own gateway.
+ *  Fail closed on transient errors: only a 404-style "not found" means the
+ *  session is genuinely gone. */
 async function checkStoredSession(
+  member: GroupMember,
   sessionId: string,
 ): Promise<SessionCheckResult> {
+  const client = clientForMember(member)
+  if (!client) {
+    // Non-Hermes runtime: use global client for verification.
+    try {
+      await globalGetMessages(sessionId)
+      return { kind: 'ok', sessionId }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      if (/\b404\b|Not found|not found|invalid session|session not found/i.test(msg)) {
+        return { kind: 'missing' }
+      }
+      return { kind: 'error', error: error instanceof Error ? error : new Error(String(error)) }
+    }
+  }
+
   try {
-    await getMessages(sessionId)
+    await client.getMessages(sessionId)
     return { kind: 'ok', sessionId }
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error)
@@ -121,9 +177,10 @@ export async function getOrCreateSession(
   roomId: string,
   member: GroupMember,
   input?: { dbPath?: string; title?: string },
-): Promise<{ sessionId: string; existed: boolean }> {
+): Promise<{ sessionId: string; existed: boolean; profile: string | null }> {
   const cacheKey = sessionCacheKey(roomId, member.participantId)
   const title = input?.title ?? groupSessionTitle(roomId, member.participantId)
+  const profile = resolveMemberProfile(member)
 
   // 1. Try in-memory cache first.
   let cached = getCache().get(cacheKey)
@@ -136,23 +193,29 @@ export async function getOrCreateSession(
     try {
       const rows = db
         .prepare(
-          'SELECT session_id FROM group_chat_sessions WHERE room_id = ? AND participant_id = ?',
+          'SELECT session_id, profile FROM group_chat_sessions WHERE room_id = ? AND participant_id = ?',
         )
         .all(roomId, member.participantId)
       if (rows.length > 0) {
         cached = String(rows[0].session_id)
+        const storedProfile = rows[0].profile ? String(rows[0].profile) : null
+        if (storedProfile && !member.profile) {
+          // Hydrate profile from DB into member so subsequent operations hit
+          // the same gateway. GroupMember is a mutable runtime shape here.
+          ;(member as Record<string, unknown>).profile = storedProfile
+        }
       }
     } finally {
       db.close()
     }
   }
 
-  // 3. If we have a stored session id, verify it still exists.
+  // 3. If we have a stored session id, verify it still exists on the right gateway.
   if (cached) {
-    const check = await checkStoredSession(cached)
+    const check = await checkStoredSession(member, cached)
     if (check.kind === 'ok') {
       getCache().set(cacheKey, check.sessionId)
-      return { sessionId: check.sessionId, existed: true }
+      return { sessionId: check.sessionId, existed: true, profile }
     }
     if (check.kind === 'error') {
       throw new Error(
@@ -163,22 +226,28 @@ export async function getOrCreateSession(
     getCache().delete(cacheKey)
   }
 
-  // 4. Create a new session. The deterministic title already encodes room+member,
-  //    so duplicate-title collisions should only happen if a previous session was
-  //    orphaned. Retry once with a timestamp nonce on that specific error.
+  // 4. Create a new session on the member's own gateway. The deterministic title
+  //    already encodes room+member, so duplicate-title collisions should only
+  //    happen if a previous session was orphaned. Retry once with a timestamp
+  //    nonce on that specific error.
+  const client = clientForMember(member)
   try {
-    const session = await createSession({ title })
+    const session = client
+      ? await client.createSession({ title })
+      : await globalCreateSession({ title })
     const sessionId = session.id
-    rememberSession(roomId, member.participantId, sessionId, input)
-    return { sessionId, existed: false }
+    rememberSession(roomId, member.participantId, sessionId, member, input)
+    return { sessionId, existed: false, profile }
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error)
     if (msg.includes('Title already in use')) {
       const fallbackTitle = `${title} ${Date.now()}`
-      const session = await createSession({ title: fallbackTitle })
+      const session = client
+        ? await client.createSession({ title: fallbackTitle })
+        : await globalCreateSession({ title: fallbackTitle })
       const sessionId = session.id
-      rememberSession(roomId, member.participantId, sessionId, input)
-      return { sessionId, existed: false }
+      rememberSession(roomId, member.participantId, sessionId, member, input)
+      return { sessionId, existed: false, profile }
     }
     throw error
   }
@@ -189,14 +258,14 @@ export async function submitPrompt(
   member: GroupMember,
   prompt: string,
   input?: { dbPath?: string; title?: string; model?: string },
-): Promise<{ sessionId: string; message?: ClaudeMessage }> {
-  const { sessionId } = await getOrCreateSession(roomId, member, input)
-  const result = await sendChat(sessionId, {
-    message: prompt,
-    model: input?.model,
-  })
+): Promise<{ sessionId: string; message?: ClaudeMessage; profile: string | null }> {
+  const { sessionId, profile } = await getOrCreateSession(roomId, member, input)
+  const client = clientForMember(member)
+  const result = client
+    ? await client.sendChat(sessionId, { message: prompt, model: input?.model })
+    : await globalSendChat(sessionId, { message: prompt, model: input?.model })
   const message = extractAssistantMessage(result, sessionId)
-  return { sessionId, message }
+  return { sessionId, message, profile }
 }
 
 function extractAssistantMessage(

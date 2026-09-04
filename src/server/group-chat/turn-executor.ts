@@ -1,14 +1,14 @@
 /**
  * Execute a single group-chat member turn.
  *
- * - Maintains canonical session via agent-session-manager.
+ * - Maintains canonical session via agent-session-manager (per-profile gateway).
  * - Submits the prompt via SSE stream and collects the reply from
  *   `assistant.delta` / `assistant.completed` events — NOT from getMessages,
  *   because the gateway's /chat/stream endpoint does NOT persist assistant
  *   messages to the DB that getMessages reads.
  * - Detects pass vs reply vs failure vs timeout.
  */
-import { streamChat } from '../claude-api'
+import { getClaudeApiClient } from '../claude-api-profile'
 import { GROUP_TURN_TIMEOUT_MS } from './constants'
 import { getOrCreateSession } from './agent-session-manager'
 import { isGroupPassText } from './responder-utils'
@@ -27,14 +27,23 @@ export type TurnExecutorOptions = {
 export async function executeMemberTurn(
   opts: TurnExecutorOptions,
 ): Promise<GroupTurnResult> {
-  const { sessionId } = await getOrCreateSession(opts.roomId, opts.member, {
+  const { sessionId, profile } = await getOrCreateSession(opts.roomId, opts.member, {
     dbPath: opts.dbPath,
     // Do NOT override title here — let agent-session-manager use its own
     // deterministic groupSessionTitle(roomId, participantId) so each member
     // gets a unique session and they never conflict.
   })
 
-  console.log(`[turn-executor] member=${opts.member.displayName} session=${sessionId}`)
+  console.log(
+    `[turn-executor] member=${opts.member.displayName} profile=${profile ?? 'n/a'} session=${sessionId}`,
+  )
+
+  // Resolve the per-profile streaming client. For legacy non-Hermes runtimes
+  // without a stored profile, fall back to the global claude-api singleton.
+  const client =
+    opts.member.runtime === 'hermes' && profile
+      ? getClaudeApiClient(profile)
+      : undefined
 
   const startedAt = Date.now()
 
@@ -45,39 +54,65 @@ export async function executeMemberTurn(
   let completedText: string | null = null
 
   class StreamTimeoutError extends Error {
-    constructor() { super('stream timeout') }
+    constructor() {
+      super('stream timeout')
+    }
   }
 
   try {
     console.log(`[turn-executor] member=${opts.member.displayName} starting stream...`)
     await Promise.race([
-      streamChat(
-        sessionId,
-        { message: opts.prompt, model: opts.model },
-        {
-          onEvent: (payload) => {
-            const { event, data } = payload
+      client
+        ? client.streamChat(
+            sessionId,
+            { message: opts.prompt, model: opts.model },
+            {
+              onEvent: (payload) => {
+                const { event, data } = payload
 
-            // TEMP: log every unique event name so we can learn what gateway emits
-            console.log(`[turn-executor][sse] member=${opts.member.displayName} event=${event} dataKeys=${Object.keys(data).join(',')}`)
+                // Forward to caller (UI SSE relay)
+                opts.onEvent?.(event, data)
 
-            // Forward to caller (UI SSE relay)
-            opts.onEvent?.(event, data)
-
-            if (event === 'assistant.delta' && typeof data.delta === 'string') {
-              replyAccum += data.delta
-            }
-            if (event === 'assistant.completed' && typeof data.content === 'string') {
-              completedText = data.content
-            }
-          },
-        },
-      ),
+                if (event === 'assistant.delta' && typeof data.delta === 'string') {
+                  replyAccum += data.delta
+                }
+                if (
+                  event === 'assistant.completed' &&
+                  typeof data.content === 'string'
+                ) {
+                  completedText = data.content
+                }
+              },
+            },
+          )
+        : import('../claude-api').then((m) =>
+            m.streamChat(
+              sessionId,
+              { message: opts.prompt, model: opts.model },
+              {
+                onEvent: (payload) => {
+                  const { event, data } = payload
+                  opts.onEvent?.(event, data)
+                  if (event === 'assistant.delta' && typeof data.delta === 'string') {
+                    replyAccum += data.delta
+                  }
+                  if (
+                    event === 'assistant.completed' &&
+                    typeof data.content === 'string'
+                  ) {
+                    completedText = data.content
+                  }
+                },
+              },
+            ),
+          ),
       new Promise<never>((_, reject) => {
         setTimeout(() => reject(new StreamTimeoutError()), GROUP_TURN_TIMEOUT_MS)
       }),
     ])
-    console.log(`[turn-executor] member=${opts.member.displayName} stream done in ${Date.now() - startedAt}ms`)
+    console.log(
+      `[turn-executor] member=${opts.member.displayName} stream done in ${Date.now() - startedAt}ms`,
+    )
   } catch (error) {
     if (error instanceof StreamTimeoutError) {
       console.log(`[turn-executor] member=${opts.member.displayName} stream TIMEOUT`)
@@ -90,16 +125,23 @@ export async function executeMemberTurn(
       }
       return { kind: 'timeout' }
     }
-    console.error(`[turn-executor] member=${opts.member.displayName} stream error:`, error)
+    console.error(
+      `[turn-executor] member=${opts.member.displayName} stream error:`,
+      error,
+    )
     return {
       kind: 'failed',
-      reason: 'submit failed: ' + (error instanceof Error ? error.message : String(error)),
+      reason:
+        'submit failed: ' +
+        (error instanceof Error ? error.message : String(error)),
     }
   }
 
   // Prefer the completed event (canonical full text); fall back to accumulated deltas.
   const replyText = (completedText ?? replyAccum).trim()
-  console.log(`[turn-executor] member=${opts.member.displayName} replyText=${replyText ? replyText.slice(0, 80) : 'EMPTY'}`)
+  console.log(
+    `[turn-executor] member=${opts.member.displayName} replyText=${replyText ? replyText.slice(0, 80) : 'EMPTY'}`,
+  )
 
   if (!replyText) {
     return { kind: 'timeout' }

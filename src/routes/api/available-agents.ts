@@ -14,6 +14,7 @@ export const Route = createFileRoute('/api/available-agents')({
         const agents = router.registry.agents.map((a) => ({
           id: a.id,
           runtime: a.runtime,
+          profile: a.profile ?? null,
           displayName: a.displayName || a.id,
           mentionName: a.mentionName || a.id,
           capabilities: a.capabilities,

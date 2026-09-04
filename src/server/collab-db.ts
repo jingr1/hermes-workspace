@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS room_participants (
   display_name TEXT,
   mention_name TEXT,
   description TEXT,
+  profile TEXT,            -- hermes profile name (runtime=hermes)
   runtime TEXT,           -- hermes | claude-code | codex | deepseek-harness
   is_owner INTEGER DEFAULT 0,
   online INTEGER DEFAULT 0,
@@ -215,6 +216,41 @@ CREATE TABLE IF NOT EXISTS room_watermarks (
   updated_at INTEGER,
   PRIMARY KEY (room_id, participant_id)
 );
+`,
+  },
+  {
+    version: 5,
+    sql: `
+-- Add profile column to room_participants for per-profile gateway routing.
+-- Use temp-table recreation in case a previous partial migration left the
+-- table without the column despite a schema_migrations row being written.
+CREATE TABLE IF NOT EXISTS room_participants_new (
+  id TEXT PRIMARY KEY,
+  room_id TEXT,
+  kind TEXT,
+  participant_id TEXT,
+  display_name TEXT,
+  mention_name TEXT,
+  description TEXT,
+  profile TEXT,
+  runtime TEXT,
+  is_owner INTEGER DEFAULT 0,
+  online INTEGER DEFAULT 0,
+  joined_at INTEGER,
+  removed_at INTEGER DEFAULT 0
+);
+INSERT OR IGNORE INTO room_participants_new (
+  id, room_id, kind, participant_id, display_name, mention_name,
+  description, profile, runtime, is_owner, online, joined_at, removed_at
+)
+  SELECT
+    id, room_id, kind, participant_id, display_name, mention_name,
+    description, NULL, runtime, is_owner, online, joined_at, removed_at
+  FROM room_participants;
+DROP TABLE room_participants;
+ALTER TABLE room_participants_new RENAME TO room_participants;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_participants_mention
+  ON room_participants(room_id, mention_name);
 `,
   },
 ]

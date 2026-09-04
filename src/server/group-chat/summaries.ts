@@ -4,8 +4,17 @@
  * Keeps context windows bounded by summarizing older messages. When the number
  * of messages since the last summary reaches GROUP_SUMMARY_THRESHOLD, a new
  * summary is generated from the un-summarized tail and persisted.
+ *
+ * Summary generation is done on a throwaway session on a profile gateway so it
+ * does not pollute any member's canonical session. The profile is taken from the
+ * member whose turn just finished; if none is supplied, the active gateway is
+ * used as a fallback.
  */
-import { sendChat } from '../claude-api'
+import { getClaudeApiClient } from '../claude-api-profile'
+import {
+  createSession as globalCreateSession,
+  sendChat as globalSendChat,
+} from '../claude-api'
 import { getLatestMessages, getLatestSummary, saveSummary } from './room-store'
 import { GROUP_SUMMARY_THRESHOLD } from './constants'
 import type { RoomSummary } from './types'
@@ -14,7 +23,7 @@ const SUMMARY_PROMPT = `Summarize the following group chat messages concisely. C
 
 export async function maybeSummarizeRoom(
   roomId: string,
-  input?: { dbPath?: string; model?: string },
+  input?: { dbPath?: string; model?: string; profile?: string },
 ): Promise<RoomSummary | null> {
   const latest = getLatestSummary(roomId, input)
   const messages = getLatestMessages(roomId, { dbPath: input?.dbPath, limit: 200 })
@@ -37,28 +46,42 @@ export async function maybeSummarizeRoom(
   const fullPrompt = `${SUMMARY_PROMPT}\n\n${transcript}`
 
   // We generate the summary via a throwaway session to avoid polluting any
-  // member's canonical session. Use a deterministic title; if a previous
-  // summary session was orphaned, retry once with a nonce.
-  const { createSession } = await import('../claude-api')
+  // member's canonical session. Route to the supplied profile's gateway when
+  // available; otherwise fall back to the active gateway.
+  const profile = input?.profile
+  const client = profile ? getClaudeApiClient(profile) : null
   let session
   try {
-    session = await createSession({
-      title: `Summary for room ${roomId}`,
-    })
+    session = client
+      ? await client.createSession({
+          title: `Summary for room ${roomId}`,
+        })
+      : await globalCreateSession({
+          title: `Summary for room ${roomId}`,
+        })
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error)
     if (msg.includes('Title already in use')) {
-      session = await createSession({
-        title: `Summary for room ${roomId} ${Date.now()}`,
-      })
+      session = client
+        ? await client.createSession({
+            title: `Summary for room ${roomId} ${Date.now()}`,
+          })
+        : await globalCreateSession({
+            title: `Summary for room ${roomId} ${Date.now()}`,
+          })
     } else {
       throw error
     }
   }
-  const result = await sendChat(session.id, {
-    message: fullPrompt,
-    model: input?.model,
-  })
+  const result = client
+    ? await client.sendChat(session.id, {
+        message: fullPrompt,
+        model: input?.model,
+      })
+    : await globalSendChat(session.id, {
+        message: fullPrompt,
+        model: input?.model,
+      })
   const text = extractText(result)
   const lastMessage = unsummarized[unsummarized.length - 1]
   return saveSummary(

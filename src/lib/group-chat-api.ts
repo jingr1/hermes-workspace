@@ -19,6 +19,7 @@ export type AddParticipantRequest = {
   participantId: string
   displayName?: string
   mentionName?: string
+  profile?: string | null
   runtime?: string
   kind?: 'human' | 'agent'
 }

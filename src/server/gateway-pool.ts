@@ -68,11 +68,15 @@ export type PooledGateway = {
   state: GatewayPoolState
 }
 
-export type EnsureGatewayResult = StartClaudeAgentResult & {
-  port?: number
-  url?: string
-  started?: boolean
-}
+export type EnsureGatewayResult = Omit<
+  StartClaudeAgentResult,
+  'ok' | 'error'
+> &
+  StartClaudeAgentResult & {
+    port?: number
+    url?: string
+    started?: boolean
+  }
 
 const ensurePromises = new Map<string, Promise<EnsureGatewayResult>>()
 

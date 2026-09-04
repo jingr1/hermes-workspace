@@ -37,6 +37,8 @@ export type RoomParticipant = {
   displayName: string
   mentionName: string
   description: string | null
+  /** Hermes profile name (runtime = 'hermes'). Null for non-Hermes runtimes. */
+  profile: string | null
   runtime: RoomRuntime
   isOwner: boolean
   online: boolean
@@ -115,12 +117,18 @@ export type GroupTurnResult =
 /** Minimal participant shape used by the runner/mention resolver. */
 export type GroupMember = Pick<
   RoomParticipant,
-  'id' | 'participantId' | 'displayName' | 'mentionName' | 'runtime' | 'kind'
+  'id' | 'participantId' | 'displayName' | 'mentionName' | 'runtime' | 'kind' | 'profile'
 > & {
   /** Alias for displayName to match upstream naming. */
   name: string
   /** True if the member is a bot that can take turns. */
   isBot: boolean
+  /**
+   * Hermes profile name that owns this participant's runtime.
+   * For runtime === 'hermes' this is the profile whose gateway the turn
+   * must hit. For other runtimes it is null/undefined.
+   */
+  profile: string | null
 }
 
 /** Room activity event published on chat-event-bus. */

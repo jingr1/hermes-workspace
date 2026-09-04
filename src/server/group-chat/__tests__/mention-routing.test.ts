@@ -20,8 +20,9 @@ function makeAgent(id: string, overrides?: Partial<GroupMember>): GroupMember {
     displayName: overrides?.displayName ?? id,
     name: overrides?.displayName ?? id,
     mentionName: overrides?.mentionName ?? '',
-    runtime: overrides?.runtime ?? 'hermes',
+    runtime: (overrides?.runtime ?? 'hermes') as GroupMember['runtime'],
     isBot: true,
+    profile: overrides?.profile ?? null,
   }
 }
 
@@ -33,8 +34,9 @@ function makeHuman(id: string, overrides?: Partial<GroupMember>): GroupMember {
     displayName: overrides?.displayName ?? id,
     name: overrides?.displayName ?? id,
     mentionName: overrides?.mentionName ?? '',
-    runtime: overrides?.runtime ?? 'human',
+    runtime: (overrides?.runtime ?? 'human') as GroupMember['runtime'],
     isBot: false,
+    profile: overrides?.profile ?? null,
   }
 }
 

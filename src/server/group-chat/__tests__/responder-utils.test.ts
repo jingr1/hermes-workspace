@@ -17,6 +17,7 @@ function makeAgent(id: string, displayName: string): GroupMember {
     mentionName: id,
     runtime: 'hermes',
     isBot: true,
+    profile: null,
   }
 }
 
@@ -30,6 +31,7 @@ function makeHuman(id: string, displayName: string): GroupMember {
     mentionName: id,
     runtime: 'human',
     isBot: false,
+    profile: null,
   }
 }
 

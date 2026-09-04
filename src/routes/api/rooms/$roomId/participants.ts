@@ -46,6 +46,7 @@ export const Route = createFileRoute('/api/rooms/$roomId/participants')({
           participantId?: string
           displayName?: string
           mentionName?: string
+          profile?: string | null
           runtime?: string
           kind?: 'human' | 'agent'
         }
@@ -62,18 +63,22 @@ export const Route = createFileRoute('/api/rooms/$roomId/participants')({
           )
         }
         const kind = body.kind === 'human' ? 'human' : 'agent'
+        const runtime =
+          body.runtime === 'claude-code' ||
+          body.runtime === 'codex' ||
+          body.runtime === 'deepseek-harness'
+            ? (body.runtime as 'claude-code' | 'codex' | 'deepseek-harness')
+            : 'hermes'
+        const profile =
+          body.profile === null ? null : String(body.profile ?? '').trim() || null
         const participant = addParticipant({
           roomId: params.roomId,
           kind,
           participantId,
           displayName: body.displayName,
           mentionName: body.mentionName,
-          runtime: body.runtime as
-            | 'hermes'
-            | 'claude-code'
-            | 'codex'
-            | 'deepseek-harness'
-            | undefined,
+          profile,
+          runtime,
         })
         return json({ ok: true, room, participant })
       },

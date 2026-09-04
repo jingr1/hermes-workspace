@@ -351,21 +351,36 @@ let dashboardTokenCache = ''
  * Read at call time — Vite SSR can evaluate this module before .env is loaded.
  */
 function readLocalApiServerKey(): string {
+  return readProfileApiServerKey(getActiveProfileNameSafe())
+}
+
+function getActiveProfileNameSafe(): string {
+  try {
+    const activePath = path.join(
+      process.env.HERMES_HOME ||
+        process.env.CLAUDE_HOME ||
+        path.join(os.homedir(), '.hermes'),
+      'active_profile',
+    )
+    const active = fs.readFileSync(activePath, 'utf-8').trim()
+    return active || 'default'
+  } catch {
+    return 'default'
+  }
+}
+
+/** Read a profile's own API_SERVER_KEY from its .env file.
+ *  `default` maps to the Hermes root; named profiles to ~/.hermes/profiles/<name>.
+ */
+export function readProfileApiServerKey(profileName: string): string {
   try {
     const home =
       process.env.HERMES_HOME ||
       process.env.CLAUDE_HOME ||
       path.join(os.homedir(), '.hermes')
-    const activePath = path.join(home, 'active_profile')
-    let profileHome = home
-    try {
-      const active = fs.readFileSync(activePath, 'utf-8').trim()
-      if (active && active !== 'default') {
-        profileHome = path.join(home, 'profiles', active)
-      }
-    } catch {
-      // default home
-    }
+    const name = (profileName || 'default').trim() || 'default'
+    const profileHome =
+      name === 'default' ? home : path.join(home, 'profiles', name)
     const raw = fs.readFileSync(path.join(profileHome, '.env'), 'utf-8')
     for (const line of raw.split('\n')) {
       const trimmed = line.trim()
@@ -385,7 +400,7 @@ function readLocalApiServerKey(): string {
   return ''
 }
 
-export function getGatewayBearerToken(): string {
+export function getGatewayBearerToken() {
   const fromEnv = (
     process.env.HERMES_API_TOKEN ||
     process.env.CLAUDE_API_TOKEN ||

@@ -26,6 +26,8 @@ export type StartClaudeAgentResult =
   | {
       ok: false
       error: string
+      profile?: string
+      hermesHome?: string
     }
 
 type StartGatewayOptions = {

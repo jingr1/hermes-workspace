@@ -241,6 +241,7 @@ export function addParticipant(input: {
   displayName?: string
   mentionName?: string
   description?: string | null
+  profile?: string | null
   runtime?: RoomRuntime
   isOwner?: boolean
   online?: boolean
@@ -253,6 +254,7 @@ export function addParticipant(input: {
   const mentionName =
     input.mentionName ??
     displayName.toLowerCase().replace(/[^a-z0-9_-]+/g, '')
+  const profile = input.profile ?? null
   const participant: RoomParticipant = {
     id,
     roomId: input.roomId,
@@ -261,6 +263,7 @@ export function addParticipant(input: {
     displayName,
     mentionName,
     description: input.description ?? null,
+    profile,
     runtime: input.runtime ?? 'hermes',
     isOwner: input.isOwner ?? false,
     online: input.online ?? true,
@@ -271,8 +274,8 @@ export function addParticipant(input: {
   try {
     d.prepare(
       `INSERT INTO room_participants
-       (id, room_id, kind, participant_id, display_name, mention_name, description, runtime, is_owner, online, joined_at, removed_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, room_id, kind, participant_id, display_name, mention_name, description, profile, runtime, is_owner, online, joined_at, removed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       participant.id,
       participant.roomId,
@@ -281,6 +284,7 @@ export function addParticipant(input: {
       participant.displayName,
       participant.mentionName,
       participant.description,
+      participant.profile,
       participant.runtime,
       participant.isOwner ? 1 : 0,
       participant.online ? 1 : 0,
@@ -301,9 +305,9 @@ export function listParticipants(
   const d = openSqliteDatabase(dbPath(input), true)
   try {
     const sql = input?.includeRemoved
-      ? `SELECT id, room_id, kind, participant_id, display_name, mention_name, description, runtime, is_owner, online, joined_at, removed_at
+      ? `SELECT id, room_id, kind, participant_id, display_name, mention_name, description, profile, runtime, is_owner, online, joined_at, removed_at
          FROM room_participants WHERE room_id = ? ORDER BY joined_at`
-      : `SELECT id, room_id, kind, participant_id, display_name, mention_name, description, runtime, is_owner, online, joined_at, removed_at
+      : `SELECT id, room_id, kind, participant_id, display_name, mention_name, description, profile, runtime, is_owner, online, joined_at, removed_at
          FROM room_participants WHERE room_id = ? AND (removed_at = 0 OR removed_at IS NULL) ORDER BY joined_at`
     const rows = d.prepare(sql).all(roomId)
     return rows.map((r) => rowToParticipant(r))
@@ -321,7 +325,7 @@ export function getParticipant(
   try {
     const rows = d
       .prepare(
-        `SELECT id, room_id, kind, participant_id, display_name, mention_name, description, runtime, is_owner, online, joined_at, removed_at
+        `SELECT id, room_id, kind, participant_id, display_name, mention_name, description, profile, runtime, is_owner, online, joined_at, removed_at
          FROM room_participants WHERE id = ?`,
       )
       .all(participantId)
@@ -342,7 +346,7 @@ export function findParticipantByMention(
   try {
     const rows = d
       .prepare(
-        `SELECT id, room_id, kind, participant_id, display_name, mention_name, description, runtime, is_owner, online, joined_at, removed_at
+        `SELECT id, room_id, kind, participant_id, display_name, mention_name, description, profile, runtime, is_owner, online, joined_at, removed_at
          FROM room_participants WHERE room_id = ? AND mention_name = ? AND removed_at = 0`,
       )
       .all(roomId, mentionName.toLowerCase())
@@ -390,11 +394,12 @@ export function toGroupMember(p: RoomParticipant): GroupMember {
     id: p.id,
     participantId: p.participantId,
     displayName: p.displayName,
-    name: p.displayName,
     mentionName: p.mentionName,
+    name: p.displayName,
     runtime: p.runtime,
     kind: p.kind,
     isBot: p.kind === 'agent',
+    profile: p.profile ?? null,
   }
 }
 
@@ -407,6 +412,7 @@ function rowToParticipant(r: Record<string, unknown>): RoomParticipant {
     displayName: String(r.display_name),
     mentionName: String(r.mention_name),
     description: r.description ? String(r.description) : null,
+    profile: r.profile ? String(r.profile) : null,
     runtime: String(r.runtime) as RoomRuntime,
     isOwner: Number(r.is_owner) === 1,
     online: Number(r.online) === 1,
