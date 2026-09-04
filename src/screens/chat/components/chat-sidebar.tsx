@@ -24,6 +24,7 @@ import {
   Target02Icon,
   UserGroupIcon,
   UserMultipleIcon,
+  MessageMultiple02Icon,
 } from '@hugeicons/core-free-icons'
 import { AnimatePresence, motion } from 'motion/react'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
@@ -573,6 +574,7 @@ function ChatSidebarComponent({
   const isMemoryActive = pathname === '/memory'
   const isTasksActive = pathname === '/tasks'
   const isMissionControlActive = pathname.startsWith('/mission-control')
+  const isGroupChatActive = pathname.startsWith('/group-chat')
   const isConductorActive = pathname === '/conductor'
   const isOperationsActive = pathname === '/operations'
   const isSwarmActive = pathname === '/swarm' || pathname === '/swarm2'
@@ -770,6 +772,13 @@ function ChatSidebarComponent({
       icon: Target02Icon,
       label: 'Mission Control',
       active: isMissionControlActive,
+    },
+    {
+      kind: 'link',
+      to: '/group-chat',
+      icon: MessageMultiple02Icon,
+      label: 'Group Chat',
+      active: isGroupChatActive,
     },
     {
       kind: 'link',

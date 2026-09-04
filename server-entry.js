@@ -334,6 +334,18 @@ function listenOn(bindHost) {
 
 listenOn(host)
 
+// Start the Bot Mode group-chat runner for production server entry.
+;(async () => {
+  try {
+    const { startGroupChatRunner } = await import(
+      './dist/server/group-chat/group-chat-runner.js'
+    )
+    startGroupChatRunner()
+  } catch (err) {
+    console.error('[group-chat] failed to start runner:', err)
+  }
+})()
+
 // Cloudflared remote-managed ingress currently points at http://localhost:10280.
 // On macOS, localhost may resolve to ::1 before 127.0.0.1; if Workspace only
 // listens on IPv4 loopback, tunneled requests intermittently fail with

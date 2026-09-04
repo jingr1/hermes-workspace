@@ -152,6 +152,71 @@ CREATE INDEX IF NOT EXISTS idx_run_tokens_expiry
   ON run_tokens(expires_at);
 `,
   },
+  {
+    version: 2,
+    sql: `
+-- Idempotent v2: ensure rooms has state column and room_watermarks exists.
+-- Use temp-table recreation in case an older rooms table lacks the column.
+CREATE TABLE IF NOT EXISTS rooms_new (
+  id TEXT PRIMARY KEY,
+  title TEXT,
+  state TEXT DEFAULT 'active',
+  task_id TEXT,
+  mission_id TEXT,
+  workspace_path TEXT,
+  owner_participant_id TEXT,
+  created_at INTEGER,
+  updated_at INTEGER
+);
+INSERT OR IGNORE INTO rooms_new (id, title, task_id, mission_id, workspace_path, owner_participant_id, created_at, updated_at)
+  SELECT id, title, task_id, mission_id, workspace_path, owner_participant_id, created_at, updated_at FROM rooms;
+DROP TABLE rooms;
+ALTER TABLE rooms_new RENAME TO rooms;
+
+CREATE TABLE IF NOT EXISTS room_watermarks (
+  room_id TEXT NOT NULL,
+  participant_id TEXT NOT NULL,
+  message_count INTEGER DEFAULT 0,
+  updated_at INTEGER,
+  PRIMARY KEY (room_id, participant_id)
+);
+`,
+  },
+  {
+    version: 3,
+    sql: `
+-- Repair any database where v2's ALTER TABLE failed silently and rooms lacks state.
+CREATE TABLE IF NOT EXISTS rooms_new (
+  id TEXT PRIMARY KEY,
+  title TEXT,
+  state TEXT DEFAULT 'active',
+  task_id TEXT,
+  mission_id TEXT,
+  workspace_path TEXT,
+  owner_participant_id TEXT,
+  created_at INTEGER,
+  updated_at INTEGER
+);
+INSERT OR IGNORE INTO rooms_new (id, title, task_id, mission_id, workspace_path, owner_participant_id, created_at, updated_at)
+  SELECT id, title, task_id, mission_id, workspace_path, owner_participant_id, created_at, updated_at FROM rooms;
+DROP TABLE rooms;
+ALTER TABLE rooms_new RENAME TO rooms;
+`,
+  },
+  {
+    version: 4,
+    sql: `
+-- Ensure room_watermarks exists even if a previous v2/v3 migration ran without
+-- creating it (some dev databases applied v2 before the table was added).
+CREATE TABLE IF NOT EXISTS room_watermarks (
+  room_id TEXT NOT NULL,
+  participant_id TEXT NOT NULL,
+  message_count INTEGER DEFAULT 0,
+  updated_at INTEGER,
+  PRIMARY KEY (room_id, participant_id)
+);
+`,
+  },
 ]
 
 export function ensureCollabDb(dbPath: string = getCollabDbPath()): void {

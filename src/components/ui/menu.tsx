@@ -1,5 +1,6 @@
 'use client'
 
+import * as React from 'react'
 import { Menu } from '@base-ui/react/menu'
 import { cn } from '@/lib/utils'
 
@@ -11,8 +12,12 @@ function MenuRoot({ children, ...props }: MenuRootProps) {
 
 type MenuTriggerProps = React.ComponentProps<typeof Menu.Trigger>
 
-function MenuTrigger({ className, ...props }: MenuTriggerProps) {
-  return <Menu.Trigger className={cn(className)} {...props} />
+function MenuTrigger({ className, children, ...props }: MenuTriggerProps) {
+  return (
+    <Menu.Trigger className={cn(className)} {...props}>
+      {children}
+    </Menu.Trigger>
+  )
 }
 
 type MenuContentProps = {

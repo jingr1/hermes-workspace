@@ -26,6 +26,8 @@ export const Route = createFileRoute('/api/chat-events')({
         const url = new URL(request.url)
         const sessionKeyParam =
           url.searchParams.get('sessionKey')?.trim() || undefined
+        const roomIdParam = url.searchParams.get('roomId')?.trim() || undefined
+        const scopeParam = url.searchParams.get('scope')?.trim() || undefined
 
         const encoder = new TextEncoder()
         let streamClosed = false
@@ -69,13 +71,15 @@ export const Route = createFileRoute('/api/chat-events')({
               sendEvent('connected', {
                 timestamp: Date.now(),
                 sessionKey: sessionKeyParam || 'all',
+                roomId: roomIdParam || 'all',
+                scope: scopeParam || 'all',
               })
 
               // Subscribe to the deduplicated event stream
               unsubscribe = subscribeToChatEvents((evt) => {
                 if (streamClosed) return
                 sendEvent(evt.event, evt.data)
-              }, sessionKeyParam)
+              }, { sessionKey: sessionKeyParam, roomId: roomIdParam, scope: scopeParam })
 
               // Heartbeat to keep SSE alive
               heartbeatTimer = setInterval(() => {

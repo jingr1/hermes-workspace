@@ -752,6 +752,14 @@ const config = defineConfig(({ mode, command }) => {
             void startClaudeAgent()
           }
 
+          // Start group-chat runner for Bot Mode rooms.
+          void (async () => {
+            const { startGroupChatRunner } = await import(
+              './src/server/group-chat/group-chat-runner'
+            )
+            startGroupChatRunner()
+          })()
+
           if (
             command !== 'serve' ||
             workspaceDaemonStarted ||

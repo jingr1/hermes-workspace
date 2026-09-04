@@ -1,5 +1,6 @@
 'use client'
 
+import type * as React from 'react'
 import { Dialog } from '@base-ui/react/dialog'
 import { Button } from './button'
 import { cn } from '@/lib/utils'
@@ -12,8 +13,12 @@ function DialogRoot({ children, ...props }: DialogRootProps) {
 
 type DialogTriggerProps = React.ComponentProps<typeof Dialog.Trigger>
 
-function DialogTrigger({ className, ...props }: DialogTriggerProps) {
-  return <Dialog.Trigger className={cn(className)} {...props} />
+function DialogTrigger({ className, children, ...props }: DialogTriggerProps) {
+  return (
+    <Dialog.Trigger className={cn(className)} {...props}>
+      {children}
+    </Dialog.Trigger>
+  )
 }
 
 type DialogContentProps = {
@@ -80,10 +85,16 @@ type DialogCloseProps = React.ComponentProps<typeof Dialog.Close> & {
   render?: React.ReactElement
 }
 
-function DialogClose({ className, render, ...props }: DialogCloseProps) {
+function DialogClose({ className, render, children, ...props }: DialogCloseProps) {
   return (
     <Dialog.Close
-      render={render || <Button variant="outline" className={cn(className)} />}
+      render={
+        render || (
+          <Button variant="outline" className={cn(className)}>
+            {children}
+          </Button>
+        )
+      }
       {...props}
     />
   )

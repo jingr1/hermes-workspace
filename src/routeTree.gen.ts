@@ -26,6 +26,7 @@ import { Route as MemoryRouteImport } from './routes/memory'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as JobsRouteImport } from './routes/jobs'
 import { Route as HermesWorldRouteImport } from './routes/hermes-world'
+import { Route as GroupChatRouteImport } from './routes/group-chat'
 import { Route as FilesRouteImport } from './routes/files'
 import { Route as EchoStudioRouteImport } from './routes/echo-studio'
 import { Route as EarlyAccessRouteImport } from './routes/early-access'
@@ -35,9 +36,11 @@ import { Route as AgoraRouteImport } from './routes/agora'
 import { Route as SplatRouteImport } from './routes/$'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
+import { Route as GroupChatIndexRouteImport } from './routes/group-chat/index'
 import { Route as ChatIndexRouteImport } from './routes/chat/index'
 import { Route as SettingsProvidersRouteImport } from './routes/settings/providers'
 import { Route as ReserveConfirmRouteImport } from './routes/reserve/confirm'
+import { Route as GroupChatRoomIdRouteImport } from './routes/group-chat/$roomId'
 import { Route as ChatSessionKeyRouteImport } from './routes/chat/$sessionKey'
 import { Route as ApiWorkspaceRouteImport } from './routes/api/workspace'
 import { Route as ApiVtCapitalRouteImport } from './routes/api/vt-capital'
@@ -77,6 +80,7 @@ import { Route as ApiSessionSendRouteImport } from './routes/api/session-send'
 import { Route as ApiSessionHistoryRouteImport } from './routes/api/session-history'
 import { Route as ApiSendStreamRouteImport } from './routes/api/send-stream'
 import { Route as ApiSendRouteImport } from './routes/api/send'
+import { Route as ApiRoomsRouteImport } from './routes/api/rooms'
 import { Route as ApiProviderUsageRouteImport } from './routes/api/provider-usage'
 import { Route as ApiPreviewFileRouteImport } from './routes/api/preview-file'
 import { Route as ApiPluginsRouteImport } from './routes/api/plugins'
@@ -120,6 +124,7 @@ import { Route as ApiClaudeTasksRouteImport } from './routes/api/claude-tasks'
 import { Route as ApiClaudeJobsRouteImport } from './routes/api/claude-jobs'
 import { Route as ApiClaudeConfigRouteImport } from './routes/api/claude-config'
 import { Route as ApiChatEventsRouteImport } from './routes/api/chat-events'
+import { Route as ApiAvailableAgentsRouteImport } from './routes/api/available-agents'
 import { Route as ApiAuthCheckRouteImport } from './routes/api/auth-check'
 import { Route as ApiAuthRouteImport } from './routes/api/auth'
 import { Route as ApiArtifactsRouteImport } from './routes/api/artifacts'
@@ -148,6 +153,7 @@ import { Route as ApiSessionsSendRouteImport } from './routes/api/sessions/send'
 import { Route as ApiSessionsSearchRouteImport } from './routes/api/sessions/search'
 import { Route as ApiRunsDetachRouteImport } from './routes/api/runs/detach'
 import { Route as ApiRunsActiveRouteImport } from './routes/api/runs/active'
+import { Route as ApiRoomsRoomIdRouteImport } from './routes/api/rooms/$roomId'
 import { Route as ApiProfilesUpdateAllModelProviderRouteImport } from './routes/api/profiles/update-all-model-provider'
 import { Route as ApiProfilesUpdateRouteImport } from './routes/api/profiles/update'
 import { Route as ApiProfilesToggleSkillRouteImport } from './routes/api/profiles/toggle-skill'
@@ -197,13 +203,19 @@ import { Route as ApiArtifactsArtifactIdRouteImport } from './routes/api/artifac
 import { Route as ApiAgentsStatusRouteImport } from './routes/api/agents/status'
 import { Route as ApiSessionsSessionKeyStatusRouteImport } from './routes/api/sessions/$sessionKey.status'
 import { Route as ApiSessionsSessionKeyActiveRunRouteImport } from './routes/api/sessions/$sessionKey.active-run'
+import { Route as ApiRoomsRoomIdPendingTurnsRouteImport } from './routes/api/rooms/$roomId/pending-turns'
+import { Route as ApiRoomsRoomIdParticipantsRouteImport } from './routes/api/rooms/$roomId/participants'
+import { Route as ApiRoomsRoomIdMessagesRouteImport } from './routes/api/rooms/$roomId/messages'
 import { Route as ApiMcpHubSourcesIdRouteImport } from './routes/api/mcp/hub-sources.$id'
 import { Route as ApiMcpNameLogsRouteImport } from './routes/api/mcp/$name.logs'
 import { Route as ApiHermesworldReservationsConfirmRouteImport } from './routes/api/hermesworld/reservations/confirm'
 import { Route as ApiAgentsAgentIdSessionsRouteImport } from './routes/api/agents/$agentId/sessions'
 import { Route as ApiAgentsAgentIdSessionsIndexRouteImport } from './routes/api/agents/$agentId/sessions/index'
 import { Route as ApiRunsSessionKeyRunIdAbandonRouteImport } from './routes/api/runs/$sessionKey.$runId.abandon'
+import { Route as ApiRoomsRoomIdParticipantsParticipantIdRouteImport } from './routes/api/rooms/$roomId/participants/$participantId'
 import { Route as ApiAgentsAgentIdSessionsSessionIdRouteImport } from './routes/api/agents/$agentId/sessions/$sessionId'
+import { Route as ApiRoomsRoomIdPendingTurnsTurnIdDismissRouteImport } from './routes/api/rooms/$roomId/pending-turns/$turnId/dismiss'
+import { Route as ApiRoomsRoomIdPendingTurnsTurnIdAnswerRouteImport } from './routes/api/rooms/$roomId/pending-turns/$turnId/answer'
 
 const WorldRoute = WorldRouteImport.update({
   id: '/world',
@@ -290,6 +302,11 @@ const HermesWorldRoute = HermesWorldRouteImport.update({
   path: '/hermes-world',
   getParentRoute: () => rootRouteImport,
 } as any)
+const GroupChatRoute = GroupChatRouteImport.update({
+  id: '/group-chat',
+  path: '/group-chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FilesRoute = FilesRouteImport.update({
   id: '/files',
   path: '/files',
@@ -335,6 +352,11 @@ const SettingsIndexRoute = SettingsIndexRouteImport.update({
   path: '/',
   getParentRoute: () => SettingsRoute,
 } as any)
+const GroupChatIndexRoute = GroupChatIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => GroupChatRoute,
+} as any)
 const ChatIndexRoute = ChatIndexRouteImport.update({
   id: '/chat/',
   path: '/chat/',
@@ -349,6 +371,11 @@ const ReserveConfirmRoute = ReserveConfirmRouteImport.update({
   id: '/confirm',
   path: '/confirm',
   getParentRoute: () => ReserveRoute,
+} as any)
+const GroupChatRoomIdRoute = GroupChatRoomIdRouteImport.update({
+  id: '/$roomId',
+  path: '/$roomId',
+  getParentRoute: () => GroupChatRoute,
 } as any)
 const ChatSessionKeyRoute = ChatSessionKeyRouteImport.update({
   id: '/chat/$sessionKey',
@@ -545,6 +572,11 @@ const ApiSendStreamRoute = ApiSendStreamRouteImport.update({
 const ApiSendRoute = ApiSendRouteImport.update({
   id: '/api/send',
   path: '/api/send',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiRoomsRoute = ApiRoomsRouteImport.update({
+  id: '/api/rooms',
+  path: '/api/rooms',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiProviderUsageRoute = ApiProviderUsageRouteImport.update({
@@ -763,6 +795,11 @@ const ApiChatEventsRoute = ApiChatEventsRouteImport.update({
   path: '/api/chat-events',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAvailableAgentsRoute = ApiAvailableAgentsRouteImport.update({
+  id: '/api/available-agents',
+  path: '/api/available-agents',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthCheckRoute = ApiAuthCheckRouteImport.update({
   id: '/api/auth-check',
   path: '/api/auth-check',
@@ -903,6 +940,11 @@ const ApiRunsActiveRoute = ApiRunsActiveRouteImport.update({
   id: '/api/runs/active',
   path: '/api/runs/active',
   getParentRoute: () => rootRouteImport,
+} as any)
+const ApiRoomsRoomIdRoute = ApiRoomsRoomIdRouteImport.update({
+  id: '/$roomId',
+  path: '/$roomId',
+  getParentRoute: () => ApiRoomsRoute,
 } as any)
 const ApiProfilesUpdateAllModelProviderRoute =
   ApiProfilesUpdateAllModelProviderRouteImport.update({
@@ -1156,6 +1198,23 @@ const ApiSessionsSessionKeyActiveRunRoute =
     path: '/$sessionKey/active-run',
     getParentRoute: () => ApiSessionsRoute,
   } as any)
+const ApiRoomsRoomIdPendingTurnsRoute =
+  ApiRoomsRoomIdPendingTurnsRouteImport.update({
+    id: '/pending-turns',
+    path: '/pending-turns',
+    getParentRoute: () => ApiRoomsRoomIdRoute,
+  } as any)
+const ApiRoomsRoomIdParticipantsRoute =
+  ApiRoomsRoomIdParticipantsRouteImport.update({
+    id: '/participants',
+    path: '/participants',
+    getParentRoute: () => ApiRoomsRoomIdRoute,
+  } as any)
+const ApiRoomsRoomIdMessagesRoute = ApiRoomsRoomIdMessagesRouteImport.update({
+  id: '/messages',
+  path: '/messages',
+  getParentRoute: () => ApiRoomsRoomIdRoute,
+} as any)
 const ApiMcpHubSourcesIdRoute = ApiMcpHubSourcesIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -1190,11 +1249,29 @@ const ApiRunsSessionKeyRunIdAbandonRoute =
     path: '/api/runs/$sessionKey/$runId/abandon',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiRoomsRoomIdParticipantsParticipantIdRoute =
+  ApiRoomsRoomIdParticipantsParticipantIdRouteImport.update({
+    id: '/$participantId',
+    path: '/$participantId',
+    getParentRoute: () => ApiRoomsRoomIdParticipantsRoute,
+  } as any)
 const ApiAgentsAgentIdSessionsSessionIdRoute =
   ApiAgentsAgentIdSessionsSessionIdRouteImport.update({
     id: '/$sessionId',
     path: '/$sessionId',
     getParentRoute: () => ApiAgentsAgentIdSessionsRoute,
+  } as any)
+const ApiRoomsRoomIdPendingTurnsTurnIdDismissRoute =
+  ApiRoomsRoomIdPendingTurnsTurnIdDismissRouteImport.update({
+    id: '/$turnId/dismiss',
+    path: '/$turnId/dismiss',
+    getParentRoute: () => ApiRoomsRoomIdPendingTurnsRoute,
+  } as any)
+const ApiRoomsRoomIdPendingTurnsTurnIdAnswerRoute =
+  ApiRoomsRoomIdPendingTurnsTurnIdAnswerRouteImport.update({
+    id: '/$turnId/answer',
+    path: '/$turnId/answer',
+    getParentRoute: () => ApiRoomsRoomIdPendingTurnsRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -1206,6 +1283,7 @@ export interface FileRoutesByFullPath {
   '/early-access': typeof EarlyAccessRoute
   '/echo-studio': typeof EchoStudioRoute
   '/files': typeof FilesRoute
+  '/group-chat': typeof GroupChatRouteWithChildren
   '/hermes-world': typeof HermesWorldRoute
   '/jobs': typeof JobsRoute
   '/mcp': typeof McpRoute
@@ -1227,6 +1305,7 @@ export interface FileRoutesByFullPath {
   '/api/artifacts': typeof ApiArtifactsRouteWithChildren
   '/api/auth': typeof ApiAuthRouteWithChildren
   '/api/auth-check': typeof ApiAuthCheckRoute
+  '/api/available-agents': typeof ApiAvailableAgentsRoute
   '/api/chat-events': typeof ApiChatEventsRoute
   '/api/claude-config': typeof ApiClaudeConfigRoute
   '/api/claude-jobs': typeof ApiClaudeJobsRouteWithChildren
@@ -1270,6 +1349,7 @@ export interface FileRoutesByFullPath {
   '/api/plugins': typeof ApiPluginsRoute
   '/api/preview-file': typeof ApiPreviewFileRoute
   '/api/provider-usage': typeof ApiProviderUsageRoute
+  '/api/rooms': typeof ApiRoomsRouteWithChildren
   '/api/send': typeof ApiSendRoute
   '/api/send-stream': typeof ApiSendStreamRoute
   '/api/session-history': typeof ApiSessionHistoryRoute
@@ -1309,9 +1389,11 @@ export interface FileRoutesByFullPath {
   '/api/vt-capital': typeof ApiVtCapitalRoute
   '/api/workspace': typeof ApiWorkspaceRouteWithChildren
   '/chat/$sessionKey': typeof ChatSessionKeyRoute
+  '/group-chat/$roomId': typeof GroupChatRoomIdRoute
   '/reserve/confirm': typeof ReserveConfirmRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/chat/': typeof ChatIndexRoute
+  '/group-chat/': typeof GroupChatIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/api/agents/status': typeof ApiAgentsStatusRoute
   '/api/artifacts/$artifactId': typeof ApiArtifactsArtifactIdRoute
@@ -1360,6 +1442,7 @@ export interface FileRoutesByFullPath {
   '/api/profiles/toggle-skill': typeof ApiProfilesToggleSkillRoute
   '/api/profiles/update': typeof ApiProfilesUpdateRoute
   '/api/profiles/update-all-model-provider': typeof ApiProfilesUpdateAllModelProviderRoute
+  '/api/rooms/$roomId': typeof ApiRoomsRoomIdRouteWithChildren
   '/api/runs/active': typeof ApiRunsActiveRoute
   '/api/runs/detach': typeof ApiRunsDetachRoute
   '/api/sessions/search': typeof ApiSessionsSearchRoute
@@ -1388,11 +1471,17 @@ export interface FileRoutesByFullPath {
   '/api/hermesworld/reservations/confirm': typeof ApiHermesworldReservationsConfirmRoute
   '/api/mcp/$name/logs': typeof ApiMcpNameLogsRoute
   '/api/mcp/hub-sources/$id': typeof ApiMcpHubSourcesIdRoute
+  '/api/rooms/$roomId/messages': typeof ApiRoomsRoomIdMessagesRoute
+  '/api/rooms/$roomId/participants': typeof ApiRoomsRoomIdParticipantsRouteWithChildren
+  '/api/rooms/$roomId/pending-turns': typeof ApiRoomsRoomIdPendingTurnsRouteWithChildren
   '/api/sessions/$sessionKey/active-run': typeof ApiSessionsSessionKeyActiveRunRoute
   '/api/sessions/$sessionKey/status': typeof ApiSessionsSessionKeyStatusRoute
   '/api/agents/$agentId/sessions/$sessionId': typeof ApiAgentsAgentIdSessionsSessionIdRoute
+  '/api/rooms/$roomId/participants/$participantId': typeof ApiRoomsRoomIdParticipantsParticipantIdRoute
   '/api/runs/$sessionKey/$runId/abandon': typeof ApiRunsSessionKeyRunIdAbandonRoute
   '/api/agents/$agentId/sessions/': typeof ApiAgentsAgentIdSessionsIndexRoute
+  '/api/rooms/$roomId/pending-turns/$turnId/answer': typeof ApiRoomsRoomIdPendingTurnsTurnIdAnswerRoute
+  '/api/rooms/$roomId/pending-turns/$turnId/dismiss': typeof ApiRoomsRoomIdPendingTurnsTurnIdDismissRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -1423,6 +1512,7 @@ export interface FileRoutesByTo {
   '/api/artifacts': typeof ApiArtifactsRouteWithChildren
   '/api/auth': typeof ApiAuthRouteWithChildren
   '/api/auth-check': typeof ApiAuthCheckRoute
+  '/api/available-agents': typeof ApiAvailableAgentsRoute
   '/api/chat-events': typeof ApiChatEventsRoute
   '/api/claude-config': typeof ApiClaudeConfigRoute
   '/api/claude-jobs': typeof ApiClaudeJobsRouteWithChildren
@@ -1466,6 +1556,7 @@ export interface FileRoutesByTo {
   '/api/plugins': typeof ApiPluginsRoute
   '/api/preview-file': typeof ApiPreviewFileRoute
   '/api/provider-usage': typeof ApiProviderUsageRoute
+  '/api/rooms': typeof ApiRoomsRouteWithChildren
   '/api/send': typeof ApiSendRoute
   '/api/send-stream': typeof ApiSendStreamRoute
   '/api/session-history': typeof ApiSessionHistoryRoute
@@ -1505,9 +1596,11 @@ export interface FileRoutesByTo {
   '/api/vt-capital': typeof ApiVtCapitalRoute
   '/api/workspace': typeof ApiWorkspaceRouteWithChildren
   '/chat/$sessionKey': typeof ChatSessionKeyRoute
+  '/group-chat/$roomId': typeof GroupChatRoomIdRoute
   '/reserve/confirm': typeof ReserveConfirmRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/chat': typeof ChatIndexRoute
+  '/group-chat': typeof GroupChatIndexRoute
   '/settings': typeof SettingsIndexRoute
   '/api/agents/status': typeof ApiAgentsStatusRoute
   '/api/artifacts/$artifactId': typeof ApiArtifactsArtifactIdRoute
@@ -1556,6 +1649,7 @@ export interface FileRoutesByTo {
   '/api/profiles/toggle-skill': typeof ApiProfilesToggleSkillRoute
   '/api/profiles/update': typeof ApiProfilesUpdateRoute
   '/api/profiles/update-all-model-provider': typeof ApiProfilesUpdateAllModelProviderRoute
+  '/api/rooms/$roomId': typeof ApiRoomsRoomIdRouteWithChildren
   '/api/runs/active': typeof ApiRunsActiveRoute
   '/api/runs/detach': typeof ApiRunsDetachRoute
   '/api/sessions/search': typeof ApiSessionsSearchRoute
@@ -1583,11 +1677,17 @@ export interface FileRoutesByTo {
   '/api/hermesworld/reservations/confirm': typeof ApiHermesworldReservationsConfirmRoute
   '/api/mcp/$name/logs': typeof ApiMcpNameLogsRoute
   '/api/mcp/hub-sources/$id': typeof ApiMcpHubSourcesIdRoute
+  '/api/rooms/$roomId/messages': typeof ApiRoomsRoomIdMessagesRoute
+  '/api/rooms/$roomId/participants': typeof ApiRoomsRoomIdParticipantsRouteWithChildren
+  '/api/rooms/$roomId/pending-turns': typeof ApiRoomsRoomIdPendingTurnsRouteWithChildren
   '/api/sessions/$sessionKey/active-run': typeof ApiSessionsSessionKeyActiveRunRoute
   '/api/sessions/$sessionKey/status': typeof ApiSessionsSessionKeyStatusRoute
   '/api/agents/$agentId/sessions/$sessionId': typeof ApiAgentsAgentIdSessionsSessionIdRoute
+  '/api/rooms/$roomId/participants/$participantId': typeof ApiRoomsRoomIdParticipantsParticipantIdRoute
   '/api/runs/$sessionKey/$runId/abandon': typeof ApiRunsSessionKeyRunIdAbandonRoute
   '/api/agents/$agentId/sessions': typeof ApiAgentsAgentIdSessionsIndexRoute
+  '/api/rooms/$roomId/pending-turns/$turnId/answer': typeof ApiRoomsRoomIdPendingTurnsTurnIdAnswerRoute
+  '/api/rooms/$roomId/pending-turns/$turnId/dismiss': typeof ApiRoomsRoomIdPendingTurnsTurnIdDismissRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -1599,6 +1699,7 @@ export interface FileRoutesById {
   '/early-access': typeof EarlyAccessRoute
   '/echo-studio': typeof EchoStudioRoute
   '/files': typeof FilesRoute
+  '/group-chat': typeof GroupChatRouteWithChildren
   '/hermes-world': typeof HermesWorldRoute
   '/jobs': typeof JobsRoute
   '/mcp': typeof McpRoute
@@ -1620,6 +1721,7 @@ export interface FileRoutesById {
   '/api/artifacts': typeof ApiArtifactsRouteWithChildren
   '/api/auth': typeof ApiAuthRouteWithChildren
   '/api/auth-check': typeof ApiAuthCheckRoute
+  '/api/available-agents': typeof ApiAvailableAgentsRoute
   '/api/chat-events': typeof ApiChatEventsRoute
   '/api/claude-config': typeof ApiClaudeConfigRoute
   '/api/claude-jobs': typeof ApiClaudeJobsRouteWithChildren
@@ -1663,6 +1765,7 @@ export interface FileRoutesById {
   '/api/plugins': typeof ApiPluginsRoute
   '/api/preview-file': typeof ApiPreviewFileRoute
   '/api/provider-usage': typeof ApiProviderUsageRoute
+  '/api/rooms': typeof ApiRoomsRouteWithChildren
   '/api/send': typeof ApiSendRoute
   '/api/send-stream': typeof ApiSendStreamRoute
   '/api/session-history': typeof ApiSessionHistoryRoute
@@ -1702,9 +1805,11 @@ export interface FileRoutesById {
   '/api/vt-capital': typeof ApiVtCapitalRoute
   '/api/workspace': typeof ApiWorkspaceRouteWithChildren
   '/chat/$sessionKey': typeof ChatSessionKeyRoute
+  '/group-chat/$roomId': typeof GroupChatRoomIdRoute
   '/reserve/confirm': typeof ReserveConfirmRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/chat/': typeof ChatIndexRoute
+  '/group-chat/': typeof GroupChatIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/api/agents/status': typeof ApiAgentsStatusRoute
   '/api/artifacts/$artifactId': typeof ApiArtifactsArtifactIdRoute
@@ -1753,6 +1858,7 @@ export interface FileRoutesById {
   '/api/profiles/toggle-skill': typeof ApiProfilesToggleSkillRoute
   '/api/profiles/update': typeof ApiProfilesUpdateRoute
   '/api/profiles/update-all-model-provider': typeof ApiProfilesUpdateAllModelProviderRoute
+  '/api/rooms/$roomId': typeof ApiRoomsRoomIdRouteWithChildren
   '/api/runs/active': typeof ApiRunsActiveRoute
   '/api/runs/detach': typeof ApiRunsDetachRoute
   '/api/sessions/search': typeof ApiSessionsSearchRoute
@@ -1781,11 +1887,17 @@ export interface FileRoutesById {
   '/api/hermesworld/reservations/confirm': typeof ApiHermesworldReservationsConfirmRoute
   '/api/mcp/$name/logs': typeof ApiMcpNameLogsRoute
   '/api/mcp/hub-sources/$id': typeof ApiMcpHubSourcesIdRoute
+  '/api/rooms/$roomId/messages': typeof ApiRoomsRoomIdMessagesRoute
+  '/api/rooms/$roomId/participants': typeof ApiRoomsRoomIdParticipantsRouteWithChildren
+  '/api/rooms/$roomId/pending-turns': typeof ApiRoomsRoomIdPendingTurnsRouteWithChildren
   '/api/sessions/$sessionKey/active-run': typeof ApiSessionsSessionKeyActiveRunRoute
   '/api/sessions/$sessionKey/status': typeof ApiSessionsSessionKeyStatusRoute
   '/api/agents/$agentId/sessions/$sessionId': typeof ApiAgentsAgentIdSessionsSessionIdRoute
+  '/api/rooms/$roomId/participants/$participantId': typeof ApiRoomsRoomIdParticipantsParticipantIdRoute
   '/api/runs/$sessionKey/$runId/abandon': typeof ApiRunsSessionKeyRunIdAbandonRoute
   '/api/agents/$agentId/sessions/': typeof ApiAgentsAgentIdSessionsIndexRoute
+  '/api/rooms/$roomId/pending-turns/$turnId/answer': typeof ApiRoomsRoomIdPendingTurnsTurnIdAnswerRoute
+  '/api/rooms/$roomId/pending-turns/$turnId/dismiss': typeof ApiRoomsRoomIdPendingTurnsTurnIdDismissRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -1798,6 +1910,7 @@ export interface FileRouteTypes {
     | '/early-access'
     | '/echo-studio'
     | '/files'
+    | '/group-chat'
     | '/hermes-world'
     | '/jobs'
     | '/mcp'
@@ -1819,6 +1932,7 @@ export interface FileRouteTypes {
     | '/api/artifacts'
     | '/api/auth'
     | '/api/auth-check'
+    | '/api/available-agents'
     | '/api/chat-events'
     | '/api/claude-config'
     | '/api/claude-jobs'
@@ -1862,6 +1976,7 @@ export interface FileRouteTypes {
     | '/api/plugins'
     | '/api/preview-file'
     | '/api/provider-usage'
+    | '/api/rooms'
     | '/api/send'
     | '/api/send-stream'
     | '/api/session-history'
@@ -1901,9 +2016,11 @@ export interface FileRouteTypes {
     | '/api/vt-capital'
     | '/api/workspace'
     | '/chat/$sessionKey'
+    | '/group-chat/$roomId'
     | '/reserve/confirm'
     | '/settings/providers'
     | '/chat/'
+    | '/group-chat/'
     | '/settings/'
     | '/api/agents/status'
     | '/api/artifacts/$artifactId'
@@ -1952,6 +2069,7 @@ export interface FileRouteTypes {
     | '/api/profiles/toggle-skill'
     | '/api/profiles/update'
     | '/api/profiles/update-all-model-provider'
+    | '/api/rooms/$roomId'
     | '/api/runs/active'
     | '/api/runs/detach'
     | '/api/sessions/search'
@@ -1980,11 +2098,17 @@ export interface FileRouteTypes {
     | '/api/hermesworld/reservations/confirm'
     | '/api/mcp/$name/logs'
     | '/api/mcp/hub-sources/$id'
+    | '/api/rooms/$roomId/messages'
+    | '/api/rooms/$roomId/participants'
+    | '/api/rooms/$roomId/pending-turns'
     | '/api/sessions/$sessionKey/active-run'
     | '/api/sessions/$sessionKey/status'
     | '/api/agents/$agentId/sessions/$sessionId'
+    | '/api/rooms/$roomId/participants/$participantId'
     | '/api/runs/$sessionKey/$runId/abandon'
     | '/api/agents/$agentId/sessions/'
+    | '/api/rooms/$roomId/pending-turns/$turnId/answer'
+    | '/api/rooms/$roomId/pending-turns/$turnId/dismiss'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -2015,6 +2139,7 @@ export interface FileRouteTypes {
     | '/api/artifacts'
     | '/api/auth'
     | '/api/auth-check'
+    | '/api/available-agents'
     | '/api/chat-events'
     | '/api/claude-config'
     | '/api/claude-jobs'
@@ -2058,6 +2183,7 @@ export interface FileRouteTypes {
     | '/api/plugins'
     | '/api/preview-file'
     | '/api/provider-usage'
+    | '/api/rooms'
     | '/api/send'
     | '/api/send-stream'
     | '/api/session-history'
@@ -2097,9 +2223,11 @@ export interface FileRouteTypes {
     | '/api/vt-capital'
     | '/api/workspace'
     | '/chat/$sessionKey'
+    | '/group-chat/$roomId'
     | '/reserve/confirm'
     | '/settings/providers'
     | '/chat'
+    | '/group-chat'
     | '/settings'
     | '/api/agents/status'
     | '/api/artifacts/$artifactId'
@@ -2148,6 +2276,7 @@ export interface FileRouteTypes {
     | '/api/profiles/toggle-skill'
     | '/api/profiles/update'
     | '/api/profiles/update-all-model-provider'
+    | '/api/rooms/$roomId'
     | '/api/runs/active'
     | '/api/runs/detach'
     | '/api/sessions/search'
@@ -2175,11 +2304,17 @@ export interface FileRouteTypes {
     | '/api/hermesworld/reservations/confirm'
     | '/api/mcp/$name/logs'
     | '/api/mcp/hub-sources/$id'
+    | '/api/rooms/$roomId/messages'
+    | '/api/rooms/$roomId/participants'
+    | '/api/rooms/$roomId/pending-turns'
     | '/api/sessions/$sessionKey/active-run'
     | '/api/sessions/$sessionKey/status'
     | '/api/agents/$agentId/sessions/$sessionId'
+    | '/api/rooms/$roomId/participants/$participantId'
     | '/api/runs/$sessionKey/$runId/abandon'
     | '/api/agents/$agentId/sessions'
+    | '/api/rooms/$roomId/pending-turns/$turnId/answer'
+    | '/api/rooms/$roomId/pending-turns/$turnId/dismiss'
   id:
     | '__root__'
     | '/'
@@ -2190,6 +2325,7 @@ export interface FileRouteTypes {
     | '/early-access'
     | '/echo-studio'
     | '/files'
+    | '/group-chat'
     | '/hermes-world'
     | '/jobs'
     | '/mcp'
@@ -2211,6 +2347,7 @@ export interface FileRouteTypes {
     | '/api/artifacts'
     | '/api/auth'
     | '/api/auth-check'
+    | '/api/available-agents'
     | '/api/chat-events'
     | '/api/claude-config'
     | '/api/claude-jobs'
@@ -2254,6 +2391,7 @@ export interface FileRouteTypes {
     | '/api/plugins'
     | '/api/preview-file'
     | '/api/provider-usage'
+    | '/api/rooms'
     | '/api/send'
     | '/api/send-stream'
     | '/api/session-history'
@@ -2293,9 +2431,11 @@ export interface FileRouteTypes {
     | '/api/vt-capital'
     | '/api/workspace'
     | '/chat/$sessionKey'
+    | '/group-chat/$roomId'
     | '/reserve/confirm'
     | '/settings/providers'
     | '/chat/'
+    | '/group-chat/'
     | '/settings/'
     | '/api/agents/status'
     | '/api/artifacts/$artifactId'
@@ -2344,6 +2484,7 @@ export interface FileRouteTypes {
     | '/api/profiles/toggle-skill'
     | '/api/profiles/update'
     | '/api/profiles/update-all-model-provider'
+    | '/api/rooms/$roomId'
     | '/api/runs/active'
     | '/api/runs/detach'
     | '/api/sessions/search'
@@ -2372,11 +2513,17 @@ export interface FileRouteTypes {
     | '/api/hermesworld/reservations/confirm'
     | '/api/mcp/$name/logs'
     | '/api/mcp/hub-sources/$id'
+    | '/api/rooms/$roomId/messages'
+    | '/api/rooms/$roomId/participants'
+    | '/api/rooms/$roomId/pending-turns'
     | '/api/sessions/$sessionKey/active-run'
     | '/api/sessions/$sessionKey/status'
     | '/api/agents/$agentId/sessions/$sessionId'
+    | '/api/rooms/$roomId/participants/$participantId'
     | '/api/runs/$sessionKey/$runId/abandon'
     | '/api/agents/$agentId/sessions/'
+    | '/api/rooms/$roomId/pending-turns/$turnId/answer'
+    | '/api/rooms/$roomId/pending-turns/$turnId/dismiss'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -2388,6 +2535,7 @@ export interface RootRouteChildren {
   EarlyAccessRoute: typeof EarlyAccessRoute
   EchoStudioRoute: typeof EchoStudioRoute
   FilesRoute: typeof FilesRoute
+  GroupChatRoute: typeof GroupChatRouteWithChildren
   HermesWorldRoute: typeof HermesWorldRoute
   JobsRoute: typeof JobsRoute
   McpRoute: typeof McpRoute
@@ -2409,6 +2557,7 @@ export interface RootRouteChildren {
   ApiArtifactsRoute: typeof ApiArtifactsRouteWithChildren
   ApiAuthRoute: typeof ApiAuthRouteWithChildren
   ApiAuthCheckRoute: typeof ApiAuthCheckRoute
+  ApiAvailableAgentsRoute: typeof ApiAvailableAgentsRoute
   ApiChatEventsRoute: typeof ApiChatEventsRoute
   ApiClaudeConfigRoute: typeof ApiClaudeConfigRoute
   ApiClaudeJobsRoute: typeof ApiClaudeJobsRouteWithChildren
@@ -2452,6 +2601,7 @@ export interface RootRouteChildren {
   ApiPluginsRoute: typeof ApiPluginsRoute
   ApiPreviewFileRoute: typeof ApiPreviewFileRoute
   ApiProviderUsageRoute: typeof ApiProviderUsageRoute
+  ApiRoomsRoute: typeof ApiRoomsRouteWithChildren
   ApiSendRoute: typeof ApiSendRoute
   ApiSendStreamRoute: typeof ApiSendStreamRoute
   ApiSessionHistoryRoute: typeof ApiSessionHistoryRoute
@@ -2661,6 +2811,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HermesWorldRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/group-chat': {
+      id: '/group-chat'
+      path: '/group-chat'
+      fullPath: '/group-chat'
+      preLoaderRoute: typeof GroupChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/files': {
       id: '/files'
       path: '/files'
@@ -2724,6 +2881,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsIndexRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/group-chat/': {
+      id: '/group-chat/'
+      path: '/'
+      fullPath: '/group-chat/'
+      preLoaderRoute: typeof GroupChatIndexRouteImport
+      parentRoute: typeof GroupChatRoute
+    }
     '/chat/': {
       id: '/chat/'
       path: '/chat'
@@ -2744,6 +2908,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/reserve/confirm'
       preLoaderRoute: typeof ReserveConfirmRouteImport
       parentRoute: typeof ReserveRoute
+    }
+    '/group-chat/$roomId': {
+      id: '/group-chat/$roomId'
+      path: '/$roomId'
+      fullPath: '/group-chat/$roomId'
+      preLoaderRoute: typeof GroupChatRoomIdRouteImport
+      parentRoute: typeof GroupChatRoute
     }
     '/chat/$sessionKey': {
       id: '/chat/$sessionKey'
@@ -3016,6 +3187,13 @@ declare module '@tanstack/react-router' {
       path: '/api/send'
       fullPath: '/api/send'
       preLoaderRoute: typeof ApiSendRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/rooms': {
+      id: '/api/rooms'
+      path: '/api/rooms'
+      fullPath: '/api/rooms'
+      preLoaderRoute: typeof ApiRoomsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/provider-usage': {
@@ -3319,6 +3497,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatEventsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/available-agents': {
+      id: '/api/available-agents'
+      path: '/api/available-agents'
+      fullPath: '/api/available-agents'
+      preLoaderRoute: typeof ApiAvailableAgentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth-check': {
       id: '/api/auth-check'
       path: '/api/auth-check'
@@ -3514,6 +3699,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/runs/active'
       preLoaderRoute: typeof ApiRunsActiveRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/api/rooms/$roomId': {
+      id: '/api/rooms/$roomId'
+      path: '/$roomId'
+      fullPath: '/api/rooms/$roomId'
+      preLoaderRoute: typeof ApiRoomsRoomIdRouteImport
+      parentRoute: typeof ApiRoomsRoute
     }
     '/api/profiles/update-all-model-provider': {
       id: '/api/profiles/update-all-model-provider'
@@ -3858,6 +4050,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSessionsSessionKeyActiveRunRouteImport
       parentRoute: typeof ApiSessionsRoute
     }
+    '/api/rooms/$roomId/pending-turns': {
+      id: '/api/rooms/$roomId/pending-turns'
+      path: '/pending-turns'
+      fullPath: '/api/rooms/$roomId/pending-turns'
+      preLoaderRoute: typeof ApiRoomsRoomIdPendingTurnsRouteImport
+      parentRoute: typeof ApiRoomsRoomIdRoute
+    }
+    '/api/rooms/$roomId/participants': {
+      id: '/api/rooms/$roomId/participants'
+      path: '/participants'
+      fullPath: '/api/rooms/$roomId/participants'
+      preLoaderRoute: typeof ApiRoomsRoomIdParticipantsRouteImport
+      parentRoute: typeof ApiRoomsRoomIdRoute
+    }
+    '/api/rooms/$roomId/messages': {
+      id: '/api/rooms/$roomId/messages'
+      path: '/messages'
+      fullPath: '/api/rooms/$roomId/messages'
+      preLoaderRoute: typeof ApiRoomsRoomIdMessagesRouteImport
+      parentRoute: typeof ApiRoomsRoomIdRoute
+    }
     '/api/mcp/hub-sources/$id': {
       id: '/api/mcp/hub-sources/$id'
       path: '/$id'
@@ -3900,6 +4113,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiRunsSessionKeyRunIdAbandonRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/rooms/$roomId/participants/$participantId': {
+      id: '/api/rooms/$roomId/participants/$participantId'
+      path: '/$participantId'
+      fullPath: '/api/rooms/$roomId/participants/$participantId'
+      preLoaderRoute: typeof ApiRoomsRoomIdParticipantsParticipantIdRouteImport
+      parentRoute: typeof ApiRoomsRoomIdParticipantsRoute
+    }
     '/api/agents/$agentId/sessions/$sessionId': {
       id: '/api/agents/$agentId/sessions/$sessionId'
       path: '/$sessionId'
@@ -3907,8 +4127,36 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentsAgentIdSessionsSessionIdRouteImport
       parentRoute: typeof ApiAgentsAgentIdSessionsRoute
     }
+    '/api/rooms/$roomId/pending-turns/$turnId/dismiss': {
+      id: '/api/rooms/$roomId/pending-turns/$turnId/dismiss'
+      path: '/$turnId/dismiss'
+      fullPath: '/api/rooms/$roomId/pending-turns/$turnId/dismiss'
+      preLoaderRoute: typeof ApiRoomsRoomIdPendingTurnsTurnIdDismissRouteImport
+      parentRoute: typeof ApiRoomsRoomIdPendingTurnsRoute
+    }
+    '/api/rooms/$roomId/pending-turns/$turnId/answer': {
+      id: '/api/rooms/$roomId/pending-turns/$turnId/answer'
+      path: '/$turnId/answer'
+      fullPath: '/api/rooms/$roomId/pending-turns/$turnId/answer'
+      preLoaderRoute: typeof ApiRoomsRoomIdPendingTurnsTurnIdAnswerRouteImport
+      parentRoute: typeof ApiRoomsRoomIdPendingTurnsRoute
+    }
   }
 }
+
+interface GroupChatRouteChildren {
+  GroupChatRoomIdRoute: typeof GroupChatRoomIdRoute
+  GroupChatIndexRoute: typeof GroupChatIndexRoute
+}
+
+const GroupChatRouteChildren: GroupChatRouteChildren = {
+  GroupChatRoomIdRoute: GroupChatRoomIdRoute,
+  GroupChatIndexRoute: GroupChatIndexRoute,
+}
+
+const GroupChatRouteWithChildren = GroupChatRoute._addFileChildren(
+  GroupChatRouteChildren,
+)
 
 interface ReserveRouteChildren {
   ReserveConfirmRoute: typeof ReserveConfirmRoute
@@ -4062,6 +4310,67 @@ const ApiMemoryRouteWithChildren = ApiMemoryRoute._addFileChildren(
   ApiMemoryRouteChildren,
 )
 
+interface ApiRoomsRoomIdParticipantsRouteChildren {
+  ApiRoomsRoomIdParticipantsParticipantIdRoute: typeof ApiRoomsRoomIdParticipantsParticipantIdRoute
+}
+
+const ApiRoomsRoomIdParticipantsRouteChildren: ApiRoomsRoomIdParticipantsRouteChildren =
+  {
+    ApiRoomsRoomIdParticipantsParticipantIdRoute:
+      ApiRoomsRoomIdParticipantsParticipantIdRoute,
+  }
+
+const ApiRoomsRoomIdParticipantsRouteWithChildren =
+  ApiRoomsRoomIdParticipantsRoute._addFileChildren(
+    ApiRoomsRoomIdParticipantsRouteChildren,
+  )
+
+interface ApiRoomsRoomIdPendingTurnsRouteChildren {
+  ApiRoomsRoomIdPendingTurnsTurnIdAnswerRoute: typeof ApiRoomsRoomIdPendingTurnsTurnIdAnswerRoute
+  ApiRoomsRoomIdPendingTurnsTurnIdDismissRoute: typeof ApiRoomsRoomIdPendingTurnsTurnIdDismissRoute
+}
+
+const ApiRoomsRoomIdPendingTurnsRouteChildren: ApiRoomsRoomIdPendingTurnsRouteChildren =
+  {
+    ApiRoomsRoomIdPendingTurnsTurnIdAnswerRoute:
+      ApiRoomsRoomIdPendingTurnsTurnIdAnswerRoute,
+    ApiRoomsRoomIdPendingTurnsTurnIdDismissRoute:
+      ApiRoomsRoomIdPendingTurnsTurnIdDismissRoute,
+  }
+
+const ApiRoomsRoomIdPendingTurnsRouteWithChildren =
+  ApiRoomsRoomIdPendingTurnsRoute._addFileChildren(
+    ApiRoomsRoomIdPendingTurnsRouteChildren,
+  )
+
+interface ApiRoomsRoomIdRouteChildren {
+  ApiRoomsRoomIdMessagesRoute: typeof ApiRoomsRoomIdMessagesRoute
+  ApiRoomsRoomIdParticipantsRoute: typeof ApiRoomsRoomIdParticipantsRouteWithChildren
+  ApiRoomsRoomIdPendingTurnsRoute: typeof ApiRoomsRoomIdPendingTurnsRouteWithChildren
+}
+
+const ApiRoomsRoomIdRouteChildren: ApiRoomsRoomIdRouteChildren = {
+  ApiRoomsRoomIdMessagesRoute: ApiRoomsRoomIdMessagesRoute,
+  ApiRoomsRoomIdParticipantsRoute: ApiRoomsRoomIdParticipantsRouteWithChildren,
+  ApiRoomsRoomIdPendingTurnsRoute: ApiRoomsRoomIdPendingTurnsRouteWithChildren,
+}
+
+const ApiRoomsRoomIdRouteWithChildren = ApiRoomsRoomIdRoute._addFileChildren(
+  ApiRoomsRoomIdRouteChildren,
+)
+
+interface ApiRoomsRouteChildren {
+  ApiRoomsRoomIdRoute: typeof ApiRoomsRoomIdRouteWithChildren
+}
+
+const ApiRoomsRouteChildren: ApiRoomsRouteChildren = {
+  ApiRoomsRoomIdRoute: ApiRoomsRoomIdRouteWithChildren,
+}
+
+const ApiRoomsRouteWithChildren = ApiRoomsRoute._addFileChildren(
+  ApiRoomsRouteChildren,
+)
+
 interface ApiSessionsRouteChildren {
   ApiSessionsSearchRoute: typeof ApiSessionsSearchRoute
   ApiSessionsSendRoute: typeof ApiSessionsSendRoute
@@ -4175,6 +4484,7 @@ const rootRouteChildren: RootRouteChildren = {
   EarlyAccessRoute: EarlyAccessRoute,
   EchoStudioRoute: EchoStudioRoute,
   FilesRoute: FilesRoute,
+  GroupChatRoute: GroupChatRouteWithChildren,
   HermesWorldRoute: HermesWorldRoute,
   JobsRoute: JobsRoute,
   McpRoute: McpRoute,
@@ -4196,6 +4506,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiArtifactsRoute: ApiArtifactsRouteWithChildren,
   ApiAuthRoute: ApiAuthRouteWithChildren,
   ApiAuthCheckRoute: ApiAuthCheckRoute,
+  ApiAvailableAgentsRoute: ApiAvailableAgentsRoute,
   ApiChatEventsRoute: ApiChatEventsRoute,
   ApiClaudeConfigRoute: ApiClaudeConfigRoute,
   ApiClaudeJobsRoute: ApiClaudeJobsRouteWithChildren,
@@ -4239,6 +4550,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPluginsRoute: ApiPluginsRoute,
   ApiPreviewFileRoute: ApiPreviewFileRoute,
   ApiProviderUsageRoute: ApiProviderUsageRoute,
+  ApiRoomsRoute: ApiRoomsRouteWithChildren,
   ApiSendRoute: ApiSendRoute,
   ApiSendStreamRoute: ApiSendStreamRoute,
   ApiSessionHistoryRoute: ApiSessionHistoryRoute,

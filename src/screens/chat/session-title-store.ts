@@ -89,10 +89,24 @@ function persist() {
   }
 }
 
+// Batch rapid notify() calls into a single microtask notification.
+// useSyncExternalStore calls forceStoreRerender when getSnapshot() returns a
+// different reference after a listener fires. If notify() fires many times in
+// the same synchronous turn (e.g. auto-title updates while ChatPanel is
+// mounted on a non-chat route), getSnapshot() keeps returning new objects and
+// React hits the "Maximum update depth exceeded" limit. Deferring to a
+// microtask means React only sees one snapshot change per event-loop tick.
+let notifyScheduled = false
 function notify() {
-  // Invalidate cached snapshot when data changes
+  // Invalidate cached snapshot immediately so getSnapshot() rebuilds on next
+  // call, but defer the actual listener notification to a microtask.
   cachedSnapshot = null
-  for (const listener of listeners) listener()
+  if (notifyScheduled) return
+  notifyScheduled = true
+  Promise.resolve().then(() => {
+    notifyScheduled = false
+    for (const listener of listeners) listener()
+  })
 }
 
 function buildInfo(friendlyId: string): SessionTitleInfo {
