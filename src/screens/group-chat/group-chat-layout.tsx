@@ -42,6 +42,8 @@ export function GroupChatLayout() {
   const [rooms, setRooms] = useState<Array<Room>>([])
   const [createTitle, setCreateTitle] = useState('')
   const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Room | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     loadRooms()
@@ -62,11 +64,19 @@ export function GroupChatLayout() {
     navigate({ to: `/group-chat/${res.room.id}` })
   }
 
-  async function handleDeleteRoom(id: string) {
-    await deleteRoom(id)
-    await loadRooms()
-    if (roomId === id) {
-      navigate({ to: '/group-chat' })
+  async function handleConfirmDelete() {
+    if (!deleteTarget || deleting) return
+    const id = deleteTarget.id
+    setDeleting(true)
+    try {
+      await deleteRoom(id)
+      setDeleteTarget(null)
+      await loadRooms()
+      if (roomId === id) {
+        navigate({ to: '/group-chat' })
+      }
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -123,57 +133,66 @@ export function GroupChatLayout() {
                   <span>{room.state}</span>
                 </div>
               </button>
-              <div className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                <DialogRoot>
-                  <MenuRoot>
-                    <MenuTrigger type="button" className="inline-flex">
-                      <Button
-                        size="icon-sm"
-                        variant="ghost"
-                        aria-label={`Room options for ${room.title}`}
-                      >
-                        <HugeiconsIcon
-                          icon={MoreVerticalCircle01Icon}
-                          size={18}
-                          strokeWidth={1.5}
-                        />
-                      </Button>
-                    </MenuTrigger>
-                    <MenuContent align="end" side="bottom">
-                      <DialogTrigger type="button" className="w-full">
-                        <MenuItem className="text-red-400 focus:text-red-400">
-                          <HugeiconsIcon
-                            icon={Delete01Icon}
-                            size={16}
-                            strokeWidth={1.5}
-                          />
-                          Delete room
-                        </MenuItem>
-                      </DialogTrigger>
-                    </MenuContent>
-                  </MenuRoot>
-                  <DialogContent>
-                    <DialogTitle>Delete room?</DialogTitle>
-                    <DialogDescription>
-                      This will permanently remove <strong>{room.title}</strong>{' '}
-                      and all its messages, participants, and pending turns.
-                    </DialogDescription>
-                    <div className="mt-5 flex justify-end gap-2">
-                      <DialogClose>Cancel</DialogClose>
-                      <DialogClose
-                        onClick={() => handleDeleteRoom(room.id)}
-                        render={
-                          <Button variant="destructive">Delete</Button>
-                        }
+              <div className="shrink-0">
+                <MenuRoot>
+                  <MenuTrigger
+                    type="button"
+                    className="inline-flex items-center justify-center size-8 rounded-md"
+                    style={{ color: 'var(--theme-muted)' }}
+                    aria-label={`Room options for ${room.title}`}
+                  >
+                    <HugeiconsIcon
+                      icon={MoreVerticalCircle01Icon}
+                      size={18}
+                      strokeWidth={2}
+                      color="currentColor"
+                    />
+                  </MenuTrigger>
+                  <MenuContent align="end" side="bottom">
+                    <MenuItem
+                      className="text-red-400 focus:text-red-400"
+                      onClick={() => setDeleteTarget(room)}
+                    >
+                      <HugeiconsIcon
+                        icon={Delete01Icon}
+                        size={16}
+                        strokeWidth={1.5}
                       />
-                    </div>
-                  </DialogContent>
-                </DialogRoot>
+                      Delete room
+                    </MenuItem>
+                  </MenuContent>
+                </MenuRoot>
               </div>
             </div>
           ))}
         </div>
       </aside>
+
+      <DialogRoot
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleting) setDeleteTarget(null)
+        }}
+      >
+        <DialogContent>
+          <DialogTitle>Delete room?</DialogTitle>
+          <DialogDescription>
+            This will permanently remove{' '}
+            <strong>{deleteTarget?.title}</strong> and all its messages,
+            participants, and pending turns.
+          </DialogDescription>
+          <div className="mt-5 flex justify-end gap-2">
+            <DialogClose disabled={deleting}>Cancel</DialogClose>
+            <Button
+              variant="destructive"
+              disabled={deleting}
+              onClick={() => void handleConfirmDelete()}
+            >
+              {deleting ? 'Deleting…' : 'Delete'}
+            </Button>
+          </div>
+        </DialogContent>
+      </DialogRoot>
 
       <main className="flex-1 min-w-0 bg-[var(--theme-bg)]">
         <Outlet />

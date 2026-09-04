@@ -154,9 +154,16 @@ export function RoomsScreen() {
 
   async function handleRemoveParticipant(participantId: string) {
     if (!roomId) return
-    await apiRemoveParticipant(roomId, participantId)
-    const res = await listParticipants(roomId)
-    setParticipants(res.participants)
+    try {
+      await apiRemoveParticipant(roomId, participantId)
+      const res = await listParticipants(roomId)
+      setParticipants(res.participants)
+    } catch (error) {
+      console.error('[group-chat] remove participant failed:', error)
+      setStatusText(
+        `Remove failed: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
   }
 
   async function handleSend() {

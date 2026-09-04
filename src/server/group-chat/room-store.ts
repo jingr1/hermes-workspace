@@ -210,6 +210,11 @@ export function deleteRoom(roomId: string, input?: { dbPath?: string }): void {
     d.prepare('DELETE FROM room_summaries WHERE room_id = ?').run(roomId)
     d.prepare('DELETE FROM room_watermarks WHERE room_id = ?').run(roomId)
     d.prepare('DELETE FROM pending_turns WHERE room_id = ?').run(roomId)
+    try {
+      d.prepare('DELETE FROM group_chat_sessions WHERE room_id = ?').run(roomId)
+    } catch {
+      // table may not exist yet in older DBs
+    }
     d.prepare('DELETE FROM rooms WHERE id = ?').run(roomId)
   } finally {
     d.close()
@@ -252,13 +257,57 @@ export function addParticipant(input: {
   dbPath?: string
 }): RoomParticipant {
   ensureDb(input)
-  const id = createCollabId('part')
-  const ts = now()
   const displayName = input.displayName ?? input.participantId
   const mentionName =
     input.mentionName ??
     displayName.toLowerCase().replace(/[^a-z0-9_-]+/g, '')
   const profile = input.profile ?? null
+
+  // Revive a soft-removed row instead of inserting — UNIQUE(room_id, mention_name)
+  // still covers removed rows, so a fresh INSERT would 500.
+  const prior = getParticipantBySlug(input.roomId, input.participantId, {
+    dbPath: input.dbPath,
+    includeRemoved: true,
+  })
+  if (prior) {
+    const ts = now()
+    const d = openSqliteDatabase(dbPath(input), false)
+    try {
+      d.prepare(
+        `UPDATE room_participants
+         SET removed_at = 0, online = ?, display_name = ?, mention_name = ?,
+             description = ?, profile = ?, runtime = ?, is_owner = ?, joined_at = ?
+         WHERE id = ?`,
+      ).run(
+        input.online ?? true ? 1 : 0,
+        displayName,
+        mentionName,
+        input.description ?? prior.description,
+        profile ?? prior.profile,
+        input.runtime ?? prior.runtime,
+        (input.isOwner ?? prior.isOwner) ? 1 : 0,
+        ts,
+        prior.id,
+      )
+    } finally {
+      d.close()
+    }
+    return {
+      ...prior,
+      displayName,
+      mentionName,
+      description: input.description ?? prior.description,
+      profile: profile ?? prior.profile,
+      runtime: input.runtime ?? prior.runtime,
+      isOwner: input.isOwner ?? prior.isOwner,
+      online: input.online ?? true,
+      joinedAt: ts,
+      removedAt: null,
+    }
+  }
+
+  const id = createCollabId('part')
+  const ts = now()
   const participant: RoomParticipant = {
     id,
     roomId: input.roomId,
@@ -293,7 +342,7 @@ export function addParticipant(input: {
       participant.isOwner ? 1 : 0,
       participant.online ? 1 : 0,
       participant.joinedAt,
-      participant.removedAt,
+      0,
     )
   } finally {
     d.close()
@@ -321,7 +370,7 @@ export function listParticipants(
 }
 
 export function getParticipant(
-  participantId: string,
+  participantRowId: string,
   input?: { dbPath?: string },
 ): RoomParticipant | null {
   ensureDb(input)
@@ -332,7 +381,32 @@ export function getParticipant(
         `SELECT id, room_id, kind, participant_id, display_name, mention_name, description, profile, runtime, is_owner, online, joined_at, removed_at
          FROM room_participants WHERE id = ?`,
       )
-      .all(participantId)
+      .all(participantRowId)
+    if (rows.length === 0) return null
+    return rowToParticipant(rows[0])
+  } finally {
+    d.close()
+  }
+}
+
+/** Look up an active-or-removed participant by room + agent/human slug. */
+export function getParticipantBySlug(
+  roomId: string,
+  participantId: string,
+  input?: { dbPath?: string; includeRemoved?: boolean },
+): RoomParticipant | null {
+  ensureDb(input)
+  const d = openSqliteDatabase(dbPath(input), true)
+  try {
+    const sql = input?.includeRemoved
+      ? `SELECT id, room_id, kind, participant_id, display_name, mention_name, description, profile, runtime, is_owner, online, joined_at, removed_at
+         FROM room_participants WHERE room_id = ? AND participant_id = ?
+         ORDER BY joined_at DESC LIMIT 1`
+      : `SELECT id, room_id, kind, participant_id, display_name, mention_name, description, profile, runtime, is_owner, online, joined_at, removed_at
+         FROM room_participants WHERE room_id = ? AND participant_id = ?
+         AND (removed_at = 0 OR removed_at IS NULL)
+         ORDER BY joined_at DESC LIMIT 1`
+    const rows = d.prepare(sql).all(roomId, participantId)
     if (rows.length === 0) return null
     return rowToParticipant(rows[0])
   } finally {
@@ -351,7 +425,7 @@ export function findParticipantByMention(
     const rows = d
       .prepare(
         `SELECT id, room_id, kind, participant_id, display_name, mention_name, description, profile, runtime, is_owner, online, joined_at, removed_at
-         FROM room_participants WHERE room_id = ? AND mention_name = ? AND removed_at = 0`,
+         FROM room_participants WHERE room_id = ? AND mention_name = ? AND (removed_at = 0 OR removed_at IS NULL)`,
       )
       .all(roomId, mentionName.toLowerCase())
     if (rows.length === 0) return null
@@ -361,19 +435,30 @@ export function findParticipantByMention(
   }
 }
 
+/**
+ * Soft-remove a participant. `participantId` is the agent/human slug
+ * (room_participants.participant_id), NOT the row primary key.
+ */
 export function removeParticipant(
+  roomId: string,
   participantId: string,
   input?: { dbPath?: string },
-): void {
+): RoomParticipant | null {
   ensureDb(input)
+  const existing = getParticipantBySlug(roomId, participantId, {
+    ...input,
+    includeRemoved: false,
+  })
+  if (!existing) return null
   const d = openSqliteDatabase(dbPath(input), false)
   try {
     d.prepare(
-      'UPDATE room_participants SET removed_at = ?, online = 0 WHERE id = ?',
-    ).run(now(), participantId)
+      'UPDATE room_participants SET removed_at = ?, online = 0 WHERE room_id = ? AND participant_id = ? AND (removed_at = 0 OR removed_at IS NULL)',
+    ).run(now(), roomId, participantId)
   } finally {
     d.close()
   }
+  return { ...existing, removedAt: now(), online: false }
 }
 
 export function setParticipantOnline(

@@ -9,6 +9,7 @@ import {
   getLatestMessages,
   updateRoom,
   deleteRoom,
+  removeParticipant,
   resetCollabDbForTests,
 } from '../room-store'
 
@@ -60,6 +61,32 @@ describe('room-store', () => {
       dbPath,
     })
     expect(listParticipants(room.id, { dbPath }).length).toBe(2)
+  })
+
+  it('removes participants by slug and allows re-add', () => {
+    const room = createRoom({ title: 'Test', dbPath })
+    addParticipant({
+      roomId: room.id,
+      kind: 'agent',
+      participantId: 'architect',
+      dbPath,
+    })
+    const removed = removeParticipant(room.id, 'architect', { dbPath })
+    expect(removed?.participantId).toBe('architect')
+    expect(listParticipants(room.id, { dbPath }).map((p) => p.participantId)).toEqual(
+      [],
+    )
+    // Re-add must revive instead of UNIQUE-failing on mention_name.
+    const revived = addParticipant({
+      roomId: room.id,
+      kind: 'agent',
+      participantId: 'architect',
+      dbPath,
+    })
+    expect(revived.removedAt).toBeNull()
+    expect(listParticipants(room.id, { dbPath }).map((p) => p.participantId)).toEqual([
+      'architect',
+    ])
   })
 
   it('inserts and retrieves messages', () => {
