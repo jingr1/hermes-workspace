@@ -83,40 +83,59 @@ export function RoomsScreen() {
       .finally(() => setLoading(false))
   }, [roomId])
 
-  // Subscribe to server-sent events for this room. We consume only the most
-  // recent event per render tick to avoid effect storms.
-  const lastEvent = useMemo(() => {
-    return events.length > 0 ? events[events.length - 1] : undefined
-  }, [events])
+  // Process *all* new SSE events, not just the latest. reply + settled often
+  // land in the same React batch; looking only at lastEvent drops the refetch.
+  const handledEventIdRef = useRef(0)
 
   useEffect(() => {
-    if (!roomId || !lastEvent) return
-    if (
-      lastEvent.event === 'group_chat_reply' ||
-      lastEvent.event === 'group_chat_message'
-    ) {
-      listMessages(roomId).then((res) => {
+    handledEventIdRef.current = 0
+  }, [roomId])
+
+  useEffect(() => {
+    if (!roomId || events.length === 0) return
+    const pending = events.filter((e) => e.id > handledEventIdRef.current)
+    if (pending.length === 0) return
+    handledEventIdRef.current = pending[pending.length - 1]!.id
+
+    let refreshMessages = false
+    let refreshPending = false
+    let nextStatus: string | null | undefined
+
+    for (const ev of pending) {
+      if (ev.event === 'group_chat_reply' || ev.event === 'group_chat_message') {
+        refreshMessages = true
+      }
+      if (
+        ev.event === 'group_chat_human_attention' ||
+        ev.event === 'group_chat_human_answered' ||
+        ev.event === 'group_chat_human_dismissed'
+      ) {
+        refreshPending = true
+      }
+      if (ev.event === 'group_chat_turn_started') {
+        nextStatus = `• ${String(ev.data.member ?? '')} is thinking...`
+      } else if (ev.event === 'group_chat_settled') {
+        nextStatus = 'Group settled'
+      } else if (ev.event === 'group_chat_capped') {
+        nextStatus = 'Cap reached'
+      } else if (ev.event === 'group_chat_turn_ended') {
+        nextStatus = null
+      }
+    }
+
+    if (refreshMessages) {
+      void listMessages(roomId).then((res) => {
         setMessages(res.messages)
         setActiveRoom(res.room)
       })
     }
-    if (
-      lastEvent.event === 'group_chat_human_attention' ||
-      lastEvent.event === 'group_chat_human_answered' ||
-      lastEvent.event === 'group_chat_human_dismissed'
-    ) {
-      listPendingTurns(roomId).then((res) => setPendingTurns(res.pendingTurns))
+    if (refreshPending) {
+      void listPendingTurns(roomId).then((res) => setPendingTurns(res.pendingTurns))
     }
-    if (lastEvent.event === 'group_chat_turn_started') {
-      setStatusText(`• ${String(lastEvent.data.member ?? '')} is thinking...`)
-    } else if (lastEvent.event === 'group_chat_settled') {
-      setStatusText('Group settled')
-    } else if (lastEvent.event === 'group_chat_capped') {
-      setStatusText('Cap reached')
-    } else if (lastEvent.event === 'group_chat_turn_ended') {
-      setStatusText(null)
+    if (nextStatus !== undefined) {
+      setStatusText(nextStatus)
     }
-  }, [lastEvent, roomId])
+  }, [events, roomId])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })

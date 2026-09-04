@@ -23,6 +23,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { getStateDir } from './workspace-state-dir'
+import { resolveProfileHermesHome } from './profiles-browser'
 
 type WorkspaceOverrides = {
   claudeApiUrl?: string
@@ -374,13 +375,8 @@ function getActiveProfileNameSafe(): string {
  */
 export function readProfileApiServerKey(profileName: string): string {
   try {
-    const home =
-      process.env.HERMES_HOME ||
-      process.env.CLAUDE_HOME ||
-      path.join(os.homedir(), '.hermes')
     const name = (profileName || 'default').trim() || 'default'
-    const profileHome =
-      name === 'default' ? home : path.join(home, 'profiles', name)
+    const profileHome = resolveProfileHermesHome(name)
     const raw = fs.readFileSync(path.join(profileHome, '.env'), 'utf-8')
     for (const line of raw.split('\n')) {
       const trimmed = line.trim()

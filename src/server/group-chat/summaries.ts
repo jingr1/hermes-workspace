@@ -11,6 +11,7 @@
  * used as a fallback.
  */
 import { getClaudeApiClient } from '../claude-api-profile'
+import { ensureProfileGateway } from '../gateway-pool'
 import {
   createSession as globalCreateSession,
   sendChat as globalSendChat,
@@ -49,6 +50,14 @@ export async function maybeSummarizeRoom(
   // member's canonical session. Route to the supplied profile's gateway when
   // available; otherwise fall back to the active gateway.
   const profile = input?.profile
+  if (profile) {
+    await ensureProfileGateway(profile).catch((error) => {
+      console.warn(
+        `[summaries] could not ensure gateway for ${profile}:`,
+        error instanceof Error ? error.message : String(error),
+      )
+    })
+  }
   const client = profile ? getClaudeApiClient(profile) : null
   let session
   try {
@@ -73,14 +82,18 @@ export async function maybeSummarizeRoom(
       throw error
     }
   }
+  // Omit model/provider unless the caller supplied an explicit model override.
+  // Passing profile defaults here poisons Hermes session routing (see
+  // turn-executor / agent-session-manager comments).
+  const effectiveModel = input?.model
   const result = client
     ? await client.sendChat(session.id, {
         message: fullPrompt,
-        model: input?.model,
+        ...(effectiveModel ? { model: effectiveModel } : {}),
       })
     : await globalSendChat(session.id, {
         message: fullPrompt,
-        model: input?.model,
+        ...(effectiveModel ? { model: effectiveModel } : {}),
       })
   const text = extractText(result)
   const lastMessage = unsummarized[unsummarized.length - 1]

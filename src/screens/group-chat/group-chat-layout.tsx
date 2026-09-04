@@ -8,12 +8,26 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogRoot,
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import {
+  MenuContent,
+  MenuItem,
+  MenuRoot,
+  MenuTrigger,
+} from '@/components/ui/menu'
+import {
+  HugeiconsIcon,
+} from '@hugeicons/react'
+import {
+  MoreVerticalCircle01Icon,
+  Delete01Icon,
+} from '@hugeicons/core-free-icons'
 import { createRoom, deleteRoom, listRooms } from '@/lib/group-chat-api'
 import type { Room } from '@/lib/group-chat-types'
 
@@ -92,29 +106,71 @@ export function GroupChatLayout() {
         </div>
         <div className="flex-1 overflow-auto">
           {rooms.map((room) => (
-            <button
+            <div
               key={room.id}
-              onClick={() => navigate({ to: `/group-chat/${room.id}` })}
               className={cn(
-                'w-full text-left px-3 py-2 border-b transition-colors',
+                'group w-full text-left px-3 py-2 border-b transition-colors flex items-center justify-between gap-2',
                 roomId === room.id && 'bg-accent/30',
               )}
               style={{ borderColor: 'var(--theme-border)' }}
             >
-              <div className="font-medium truncate">{room.title}</div>
-              <div className="flex items-center gap-2 text-xs opacity-70">
-                <span>{room.state}</span>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    void handleDeleteRoom(room.id)
-                  }}
-                  className="ml-auto text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100"
-                >
-                  ×
-                </button>
+              <button
+                onClick={() => navigate({ to: `/group-chat/${room.id}` })}
+                className="flex-1 min-w-0 text-left"
+              >
+                <div className="font-medium truncate">{room.title}</div>
+                <div className="flex items-center gap-2 text-xs opacity-70">
+                  <span>{room.state}</span>
+                </div>
+              </button>
+              <div className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                <DialogRoot>
+                  <MenuRoot>
+                    <MenuTrigger type="button" className="inline-flex">
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label={`Room options for ${room.title}`}
+                      >
+                        <HugeiconsIcon
+                          icon={MoreVerticalCircle01Icon}
+                          size={18}
+                          strokeWidth={1.5}
+                        />
+                      </Button>
+                    </MenuTrigger>
+                    <MenuContent align="end" side="bottom">
+                      <DialogTrigger type="button" className="w-full">
+                        <MenuItem className="text-red-400 focus:text-red-400">
+                          <HugeiconsIcon
+                            icon={Delete01Icon}
+                            size={16}
+                            strokeWidth={1.5}
+                          />
+                          Delete room
+                        </MenuItem>
+                      </DialogTrigger>
+                    </MenuContent>
+                  </MenuRoot>
+                  <DialogContent>
+                    <DialogTitle>Delete room?</DialogTitle>
+                    <DialogDescription>
+                      This will permanently remove <strong>{room.title}</strong>{' '}
+                      and all its messages, participants, and pending turns.
+                    </DialogDescription>
+                    <div className="mt-5 flex justify-end gap-2">
+                      <DialogClose>Cancel</DialogClose>
+                      <DialogClose
+                        onClick={() => handleDeleteRoom(room.id)}
+                        render={
+                          <Button variant="destructive">Delete</Button>
+                        }
+                      />
+                    </div>
+                  </DialogContent>
+                </DialogRoot>
               </div>
-            </button>
+            </div>
           ))}
         </div>
       </aside>

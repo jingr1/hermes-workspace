@@ -334,17 +334,10 @@ function listenOn(bindHost) {
 
 listenOn(host)
 
-// Start the Bot Mode group-chat runner for production server entry.
-;(async () => {
-  try {
-    const { startGroupChatRunner } = await import(
-      './dist/server/group-chat/group-chat-runner.js'
-    )
-    startGroupChatRunner()
-  } catch (err) {
-    console.error('[group-chat] failed to start runner:', err)
-  }
-})()
+// The Bot Mode group-chat runner is started automatically when the server
+// module loads (see src/routes/api/connection-status.ts). It is idempotent,
+// so this keeps production and dev behavior identical without relying on a
+// separate bundled entry point that may be tree-shaken away.
 
 // Cloudflared remote-managed ingress currently points at http://localhost:10280.
 // On macOS, localhost may resolve to ::1 before 127.0.0.1; if Workspace only

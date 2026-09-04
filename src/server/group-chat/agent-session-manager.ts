@@ -55,6 +55,14 @@ function ensureSessionTable(databasePath: string): void {
         PRIMARY KEY (room_id, participant_id)
       );
     `)
+    // Migrate older tables that were created before the profile column existed.
+    const columns = db
+      .prepare("PRAGMA table_info(group_chat_sessions)")
+      .all() as Array<{ name: string }>
+    const hasProfile = columns.some((c) => c.name === 'profile')
+    if (!hasProfile) {
+      db.exec('ALTER TABLE group_chat_sessions ADD COLUMN profile TEXT')
+    }
   } finally {
     db.close()
   }
@@ -141,7 +149,12 @@ type SessionCheckResult =
 
 /** Verify a stored session id against the member's own gateway.
  *  Fail closed on transient errors: only a 404-style "not found" means the
- *  session is genuinely gone. */
+ *  session is genuinely gone.
+ *
+ *  Retire sessions that carry any persisted model override. Hermes api_server
+ *  then fails chat/stream with "No LLM provider configured" under
+ *  route_source=global — even when has_model_config is false but session.model
+ *  is set (observed on group sessions created while model was being pinned). */
 async function checkStoredSession(
   member: GroupMember,
   sessionId: string,
@@ -162,7 +175,20 @@ async function checkStoredSession(
   }
 
   try {
-    await client.getMessages(sessionId)
+    if (client.getSession) {
+      const session = await client.getSession(sessionId)
+      const pinnedModel =
+        typeof session.model === 'string' && session.model.trim().length > 0
+      if (session.has_model_config || pinnedModel) {
+        console.warn(
+          `[agent-session-manager] retiring poisoned session ${sessionId} (has_model_config=${Boolean(session.has_model_config)} model=${session.model ?? 'n/a'}) for ${member.displayName}`,
+        )
+        await client.deleteSession(sessionId).catch(() => undefined)
+        return { kind: 'missing' }
+      }
+    } else {
+      await client.getMessages(sessionId)
+    }
     return { kind: 'ok', sessionId }
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error)
@@ -232,9 +258,16 @@ export async function getOrCreateSession(
   //    nonce on that specific error.
   const client = clientForMember(member)
   try {
+    console.log(`[agent-session-manager] createSession member=${member.displayName} profile=${profile ?? 'n/a'} client=${client ? client.baseUrl : 'global'} model=(profile default)`)
+    // Do NOT pass model/provider here. Persisting a session model causes Hermes
+    // api_server to prefer session_row_model on later turns and skip global
+    // provider resolution — which currently mis-routes to DeepSeek when a
+    // placeholder DEEPSEEK_API_KEY is present. Create a bare session and let
+    // each turn use profile config.yaml defaults (route_source=global).
     const session = client
       ? await client.createSession({ title })
       : await globalCreateSession({ title })
+    console.log(`[agent-session-manager] created sessionId=${session.id} model=${session.model ?? 'n/a'} for member=${member.displayName} profile=${profile ?? 'n/a'}`)
     const sessionId = session.id
     rememberSession(roomId, member.participantId, sessionId, member, input)
     return { sessionId, existed: false, profile }
@@ -257,13 +290,24 @@ export async function submitPrompt(
   roomId: string,
   member: GroupMember,
   prompt: string,
-  input?: { dbPath?: string; title?: string; model?: string },
+  input?: { dbPath?: string; title?: string; model?: string; provider?: string },
 ): Promise<{ sessionId: string; message?: ClaudeMessage; profile: string | null }> {
   const { sessionId, profile } = await getOrCreateSession(roomId, member, input)
   const client = clientForMember(member)
+  // Only forward an explicit caller override. Otherwise omit model/provider so
+  // the gateway uses profile config defaults.
+  const model = input?.model
+  const provider = input?.provider
   const result = client
-    ? await client.sendChat(sessionId, { message: prompt, model: input?.model })
-    : await globalSendChat(sessionId, { message: prompt, model: input?.model })
+    ? await client.sendChat(sessionId, {
+        message: prompt,
+        ...(model ? { model } : {}),
+        ...(provider ? { provider } : {}),
+      })
+    : await globalSendChat(sessionId, {
+        message: prompt,
+        ...(model ? { model } : {}),
+      })
   const message = extractAssistantMessage(result, sessionId)
   return { sessionId, message, profile }
 }

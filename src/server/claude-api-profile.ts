@@ -20,6 +20,13 @@ import {
   isGatewayPoolEnabled,
 } from './gateway-ports'
 import { readProfileApiServerKey } from './gateway-capabilities'
+import {
+  readModelProviderFromConfig,
+  resolveProfileHermesHome,
+} from './profiles-browser'
+import * as fs from 'node:fs'
+import * as path from 'node:path'
+import YAML from 'yaml'
 
 const PROFILE_CLIENT_CACHE = new Map<string, ClaudeApiClient>()
 
@@ -39,6 +46,7 @@ export type ClaudeSession = {
   parent_session_id?: string | null
   last_active?: number | null
   preview?: string | null
+  has_model_config?: boolean
 }
 
 export type ClaudeMessage = {
@@ -65,15 +73,23 @@ type StreamChatOptions = {
 export interface ClaudeApiClient {
   baseUrl: string
   profileName: string
+  /** The profile's current default model read from config.yaml, if any. */
+  defaultModel: string | null
+  /** The profile's current default provider read from config.yaml, if any. */
+  defaultProvider: string | null
   createSession(opts?: {
     id?: string
     title?: string
     model?: string
+    provider?: string
   }): Promise<ClaudeSession>
   getMessages(sessionId: string): Promise<Array<ClaudeMessage>>
+  getSession?(sessionId: string): Promise<ClaudeSession>
   sendChat(
     sessionId: string,
-    messageOrOpts: string | { message: string; model?: string },
+    messageOrOpts:
+      | string
+      | { message: string; model?: string; provider?: string },
     model?: string,
   ): Promise<Record<string, unknown>>
   streamChat(
@@ -81,6 +97,7 @@ export interface ClaudeApiClient {
     body: {
       message: string
       model?: string
+      provider?: string
       system_message?: string
       attachments?: Array<Record<string, unknown>>
     },
@@ -152,6 +169,7 @@ async function profileStreamChat(
   body: {
     message: string
     model?: string
+    provider?: string
     system_message?: string
     attachments?: Array<Record<string, unknown>>
   },
@@ -207,11 +225,42 @@ async function profileStreamChat(
   }
 }
 
+function readProfileConfig(profileName: string): Record<string, unknown> {
+  try {
+    const name = (profileName || 'default').trim() || 'default'
+    const profileHome = resolveProfileHermesHome(name)
+    const configPath = path.join(profileHome, 'config.yaml')
+    if (!fs.existsSync(configPath)) return {}
+    const raw = fs.readFileSync(configPath, 'utf-8')
+    return (YAML.parse(raw) as Record<string, unknown>) ?? {}
+  } catch {
+    return {}
+  }
+}
+
+/** Read the profile's current default model from its config.yaml. */
+export function readProfileDefaultModel(profileName: string): string | null {
+  const config = readProfileConfig(profileName)
+  const { model } = readModelProviderFromConfig(config)
+  return model || null
+}
+
+/** Read the profile's current default provider from its config.yaml. */
+export function readProfileDefaultProvider(profileName: string): string | null {
+  const config = readProfileConfig(profileName)
+  const { provider } = readModelProviderFromConfig(config)
+  return provider || null
+}
+
 function buildClient(profileName: string, baseUrl: string): ClaudeApiClient {
   const url = normalizeUrl(baseUrl)
+  const defaultModel = readProfileDefaultModel(profileName)
+  const defaultProvider = readProfileDefaultProvider(profileName)
   return {
     baseUrl: url,
     profileName,
+    defaultModel,
+    defaultProvider,
 
     createSession: (opts) =>
       profileFetch<{ session?: ClaudeSession; data?: ClaudeSession; id?: string }>(
@@ -240,6 +289,18 @@ function buildClient(profileName: string, baseUrl: string): ClaudeApiClient {
         (resp) => resp.items ?? resp.data ?? resp.messages ?? [],
       ),
 
+    getSession: (sessionId) =>
+      profileFetch<{ session?: ClaudeSession; data?: ClaudeSession }>(
+        profileName,
+        url,
+        'GET',
+        `/api/sessions/${sessionId}`,
+      ).then((resp) => {
+        const session = resp.session ?? resp.data ?? (resp as ClaudeSession)
+        if (!session?.id) throw new Error('Invalid session response')
+        return session
+      }),
+
     sendChat: (sessionId, messageOrOpts, model) => {
       const msg =
         typeof messageOrOpts === 'string'
@@ -247,12 +308,14 @@ function buildClient(profileName: string, baseUrl: string): ClaudeApiClient {
           : messageOrOpts.message
       const mdl =
         typeof messageOrOpts === 'string' ? model : messageOrOpts.model
+      const provider =
+        typeof messageOrOpts === 'string' ? undefined : messageOrOpts.provider
       return profileFetch(
         profileName,
         url,
         'POST',
         `/api/sessions/${sessionId}/chat`,
-        { message: msg, model: mdl },
+        { message: msg, model: mdl, provider },
       )
     },
 

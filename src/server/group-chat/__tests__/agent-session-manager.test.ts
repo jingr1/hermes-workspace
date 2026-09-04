@@ -14,12 +14,38 @@ const backend = new Map<string, boolean>()
 const clients = new Map<string, ReturnType<typeof makeMockClient>>()
 
 function makeMockClient(profile: string) {
+  const sessions = new Map<string, { model?: string | null; has_model_config?: boolean }>()
   return {
+    baseUrl: `http://127.0.0.1:8643`,
+    profileName: profile,
+    defaultModel: profile === 'architect' ? 'Kimi-K2.7-Code' : null,
+    defaultProvider: profile === 'architect' ? 'tokenx' : null,
     createSession: vi.fn(async ({ title }: { title: string }) => {
       const id = `${profile}:${title}`
       backend.set(id, true)
-      return { id }
+      sessions.set(id, { model: null, has_model_config: false })
+      return { id, model: null, has_model_config: false }
     }),
+    getSession: vi.fn(async (sessionId: string) => {
+      if (!backend.has(sessionId)) {
+        const err = new Error('session not found')
+        err.name = 'NotFoundError'
+        throw err
+      }
+      const meta = sessions.get(sessionId) ?? {
+        model: null,
+        has_model_config: false,
+      }
+      return { id: sessionId, ...meta }
+    }),
+    deleteSession: vi.fn(async (sessionId: string) => {
+      backend.delete(sessionId)
+      sessions.delete(sessionId)
+    }),
+    /** Test helper: mark a session as model-poisoned. */
+    __poison(sessionId: string, model = 'Kimi-K2.7-Code') {
+      sessions.set(sessionId, { model, has_model_config: false })
+    },
     getMessages: vi.fn(async (sessionId: string) => {
       if (backend.has(sessionId)) return []
       const err = new Error('session not found')
@@ -162,6 +188,20 @@ describe('agent-session-manager', () => {
     const second = await mod.getOrCreateSession('room1', member, { dbPath })
     // A new session must have been created because the old one no longer exists.
     expect(second.existed).toBe(false)
+    expect(client.createSession.mock.calls.length).toBeGreaterThan(createCalls)
+  })
+
+  it('retires sessions that persist a model even when has_model_config is false', async () => {
+    const mod = await import('../agent-session-manager')
+    const member = makeMember('architect')
+    const first = await mod.getOrCreateSession('room1', member, { dbPath })
+    const client = mockClient('architect') as ReturnType<typeof makeMockClient>
+    client.__poison(first.sessionId)
+    const createCalls = client.createSession.mock.calls.length
+    const second = await mod.getOrCreateSession('room1', member, { dbPath })
+    expect(second.existed).toBe(false)
+    expect(second.sessionId).not.toBe(first.sessionId)
+    expect(client.deleteSession).toHaveBeenCalledWith(first.sessionId)
     expect(client.createSession.mock.calls.length).toBeGreaterThan(createCalls)
   })
 

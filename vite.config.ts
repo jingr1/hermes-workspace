@@ -752,13 +752,8 @@ const config = defineConfig(({ mode, command }) => {
             void startClaudeAgent()
           }
 
-          // Start group-chat runner for Bot Mode rooms.
-          void (async () => {
-            const { startGroupChatRunner } = await import(
-              './src/server/group-chat/group-chat-runner'
-            )
-            startGroupChatRunner()
-          })()
+          // The group-chat runner is started by the server module import in
+          // src/routes/api/connection-status.ts, so no extra startup is needed here.
 
           if (
             command !== 'serve' ||

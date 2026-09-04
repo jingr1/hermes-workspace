@@ -12,6 +12,8 @@
  * storage and claude-api sessions.
  */
 import { publishChatEvent } from '../chat-event-bus'
+import { ensureCollabDb, getCollabDbPath } from '../collab-db'
+import { openSqliteDatabase } from '../sqlite-helper'
 import {
   GROUP_CHAT_HISTORY_LIMIT,
   GROUP_CHAT_MAX_CONTINUATIONS,
@@ -66,6 +68,23 @@ let runnerBusy = false
 
 export function startGroupChatRunner(): void {
   if (runnerTimer) return
+  // Apply any pending collab.db migrations before the first tick.
+  ensureCollabDb()
+  // Diagnostic: confirm the resolved db path and schema at startup.
+  try {
+    const dbPath = getCollabDbPath()
+    const db = openSqliteDatabase(dbPath, true)
+    const cols = db
+      .prepare("PRAGMA table_info(room_participants)")
+      .all()
+      .map((r: any) => r.name)
+    db.close()
+    console.log(
+      `[group-chat-runner] dbPath=${dbPath} room_participants columns=${cols.join(',')}`,
+    )
+  } catch (e) {
+    console.error('[group-chat-runner] schema probe error:', e)
+  }
   runnerTimer = setInterval(async () => {
     if (runnerBusy) return
     runnerBusy = true
@@ -107,13 +126,17 @@ export function triggerRoomRun(roomId: string): void {
     } catch (error) {
       console.error(
         `[group-chat-runner] trigger ${roomId} error:`,
-        error instanceof Error ? error.message : String(error),
+        error instanceof Error ? error.stack ?? error.message : String(error),
       )
     }
   })()
 }
 
 export async function tickAllRooms(): Promise<void> {
+  // Ensure the default collab.db is migrated before each tick. This lets a
+  // long-running server process pick up schema changes deployed by a code
+  // update without requiring a manual restart.
+  ensureCollabDb()
   const rooms = listRooms()
   for (const room of rooms) {
     if (room.state !== 'active') continue
@@ -275,11 +298,15 @@ async function runGroupChatRounds(
         setWatermark(room.id, member.participantId, roomLog.length)
       }
 
-      if (turnResult.kind === 'failed') {
+      // Advance watermark on failed/timeout so empty streams cannot spin the
+      // runner (same delta → retry forever every tick / continuation).
+      if (turnResult.kind === 'failed' || turnResult.kind === 'timeout') {
+        setWatermark(room.id, member.participantId, roomLog.length)
         publishChatEvent('group_chat_failed', {
           roomId: room.id,
           member: member.displayName,
-          reason: turnResult.reason,
+          reason:
+            turnResult.kind === 'failed' ? turnResult.reason : 'turn timed out',
         })
       }
     }
@@ -317,7 +344,7 @@ async function runGroupChatRounds(
           if (delta.length === 0) continue
           const turnResult = await runMemberTurn(room, member, delta, members)
           if (turnResult.kind === 'reply') {
-            insertMessage({
+            const newMessage = insertMessage({
               roomId: room.id,
               senderKind: 'agent',
               senderParticipantId: member.participantId,
@@ -332,9 +359,29 @@ async function runGroupChatRounds(
             })
             posted += 1
             setWatermark(room.id, member.participantId, roomLog2.length + 1)
+            publishChatEvent('group_chat_reply', {
+              roomId: room.id,
+              messageId: newMessage.id,
+              member: member.displayName,
+              text: turnResult.text,
+            })
             await maybeSummarizeRoom(room.id, { profile: member.profile ?? undefined })
-          } else if (turnResult.kind === 'pass') {
+          } else if (
+            turnResult.kind === 'pass' ||
+            turnResult.kind === 'failed' ||
+            turnResult.kind === 'timeout'
+          ) {
             setWatermark(room.id, member.participantId, roomLog2.length)
+            if (turnResult.kind === 'failed' || turnResult.kind === 'timeout') {
+              publishChatEvent('group_chat_failed', {
+                roomId: room.id,
+                member: member.displayName,
+                reason:
+                  turnResult.kind === 'failed'
+                    ? turnResult.reason
+                    : 'turn timed out',
+              })
+            }
           }
         }
       }

@@ -14,6 +14,8 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { MemberAvatar } from './member-avatar'
+import { HugeiconsIcon } from '@hugeicons/react'
+import { Delete01Icon } from '@hugeicons/core-free-icons'
 import type { RoomParticipant } from '@/lib/group-chat-types'
 
 type MemberRosterProps = {
@@ -54,16 +56,25 @@ export function MemberRoster({ participants, onRemove }: MemberRosterProps) {
             <DialogDescription>
               @{p.mentionName} · {p.kind} · {p.runtime}
             </DialogDescription>
-            <div className="mt-3 flex justify-end gap-2">
-              <DialogClose>Close</DialogClose>
+            <div className="mt-3 flex flex-col gap-3">
               {p.kind === 'agent' && (
                 <DialogClose
                   onClick={() => onRemove(p.participantId)}
                   render={
-                    <Button variant="destructive">Remove</Button>
+                    <Button variant="destructive" className="w-full">
+                      <HugeiconsIcon
+                        icon={Delete01Icon}
+                        size={16}
+                        strokeWidth={1.5}
+                      />
+                      Remove from room
+                    </Button>
                   }
                 />
               )}
+              <div className="flex justify-end">
+                <DialogClose>Close</DialogClose>
+              </div>
             </div>
           </DialogContent>
         </DialogRoot>

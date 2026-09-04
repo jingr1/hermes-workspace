@@ -28,14 +28,18 @@ import type {
   RoomWatermark,
 } from './types'
 
-const DEFAULT_DB_PATH = getCollabDbPath()
-
 function now(): number {
   return Date.now()
 }
 
+/** Resolve the active collab.db path lazily so that runtime HERMES_HOME changes
+ *  (e.g. profile directory set by the active gateway) are picked up. */
+function defaultDbPath(): string {
+  return getCollabDbPath()
+}
+
 function dbPath(input?: { dbPath?: string }): string {
-  return input?.dbPath ?? DEFAULT_DB_PATH
+  return input?.dbPath ?? defaultDbPath()
 }
 
 /** Create a fresh collab.db for tests and return its path. */
