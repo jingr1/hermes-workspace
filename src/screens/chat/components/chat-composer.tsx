@@ -89,6 +89,7 @@ import { useProfiles } from '@/screens/chat/hooks/use-profiles'
 import {
   getComposerPrimaryAction,
   composerPrimaryActionLabel,
+  type BusyMessageMode,
 } from '@/screens/chat/lib/composer-primary-action'
 
 type ChatComposerAttachment = {
@@ -110,6 +111,24 @@ type ChatComposerProps = {
     fastMode: boolean,
     helpers: ChatComposerHelpers,
   ) => void
+  /** Busy + draft → queue for after the current turn */
+  onQueue?: (
+    value: string,
+    attachments: Array<ChatComposerAttachment>,
+    helpers: ChatComposerHelpers,
+  ) => void
+  /** Busy + draft → interrupt current turn then send */
+  onInterruptSend?: (
+    value: string,
+    attachments: Array<ChatComposerAttachment>,
+    helpers: ChatComposerHelpers,
+  ) => void
+  /** Busy + draft → inject into the live run */
+  onSteer?: (
+    value: string,
+    attachments: Array<ChatComposerAttachment>,
+    helpers: ChatComposerHelpers,
+  ) => void | Promise<void>
   isLoading: boolean
   disabled: boolean
   sessionKey?: string
@@ -126,6 +145,10 @@ type ChatComposerProps = {
   onAbort?: () => void
   /** True while context compression/compaction UI is active */
   isCompacting?: boolean
+  /** Busy-mode Enter behavior from settings */
+  busyMessageMode?: BusyMessageMode
+  /** Whether a live run id is available for steer */
+  canSteer?: boolean
   /** Bumps context indicator refresh after stream lifecycle events */
   contextRefreshToken?: string | number
   /** Embedded inside another surface (e.g. Operations card), so mobile composer
@@ -137,6 +160,9 @@ type ChatComposerProps = {
    * payload is not competing with models/session-status/etc. on a cold gateway.
    */
   gatewayQueriesEnabled?: boolean
+  /** Number of follow-ups waiting to send after the current turn */
+  queuedCount?: number
+  onClearQueue?: () => void
 }
 
 type ChatComposerHelpers = {
@@ -875,6 +901,9 @@ function focusPromptTarget(target: HTMLTextAreaElement | null) {
 
 function ChatComposerComponent({
   onSubmit,
+  onQueue,
+  onInterruptSend,
+  onSteer,
   isLoading,
   disabled,
   sessionKey,
@@ -890,8 +919,12 @@ function ChatComposerComponent({
   embedded = false,
   hideModelSelector = false,
   isCompacting = false,
+  busyMessageMode = 'queue',
+  canSteer = false,
   contextRefreshToken,
   gatewayQueriesEnabled = true,
+  queuedCount = 0,
+  onClearQueue,
 }: ChatComposerProps) {
   const queryClient = useQueryClient()
   const mobileKeyboardInset = useWorkspaceStore((s) => s.mobileKeyboardInset)
@@ -1686,37 +1719,72 @@ function ChatComposerComponent({
     const attachmentPayload = attachments.map((attachment) => ({
       ...attachment,
     }))
+    const helpers: ChatComposerHelpers = {
+      reset,
+      setValue: setComposerValue,
+      setAttachments: setComposerAttachments,
+    }
+    let clearComposerDraft = true
     try {
-      // Fast mode is incompatible with extended thinking — disable if thinking is on
-      const effectiveFastMode =
-        fastMode && thinkingLevel === 'off' ? true : false
-      onSubmit(body, attachmentPayload, effectiveFastMode, {
-        reset,
-        setValue: setComposerValue,
-        setAttachments: setComposerAttachments,
-      })
+      const busy = isLoading || isCompacting
+      if (busy) {
+        const action = getComposerPrimaryAction({
+          disabled: false,
+          isBusy: isLoading,
+          hasContent: true,
+          isCompacting,
+          busyMessageMode,
+          canSteer,
+        })
+        if (action === 'steer' && onSteer) {
+          // Keep draft until steer is accepted (handler resets on success).
+          clearComposerDraft = false
+          void onSteer(body, attachmentPayload, helpers)
+        } else if (action === 'interrupt' && onInterruptSend) {
+          onInterruptSend(body, attachmentPayload, helpers)
+        } else if (onQueue) {
+          onQueue(body, attachmentPayload, helpers)
+        } else {
+          const effectiveFastMode =
+            fastMode && thinkingLevel === 'off' ? true : false
+          onSubmit(body, attachmentPayload, effectiveFastMode, helpers)
+        }
+      } else {
+        // Fast mode is incompatible with extended thinking — disable if thinking is on
+        const effectiveFastMode =
+          fastMode && thinkingLevel === 'off' ? true : false
+        onSubmit(body, attachmentPayload, effectiveFastMode, helpers)
+      }
     } finally {
       // Reset after a tick so rapid re-fires (double-click, Enter+form submit) are blocked
       setTimeout(() => {
         submittingRef.current = false
       }, 300)
     }
-    clearDraft()
+    if (clearComposerDraft) clearDraft()
     shouldRefocusAfterSendRef.current = true
     setFocusAfterSubmitTick((prev) => prev + 1)
     focusPrompt()
   }, [
     attachmentProcessingCount,
     attachments,
+    busyMessageMode,
+    canSteer,
     clearDraft,
     disabled,
+    fastMode,
     focusPrompt,
+    isCompacting,
+    isLoading,
+    onInterruptSend,
+    onQueue,
+    onSteer,
     onSubmit,
     reset,
     setComposerAttachments,
     setComposerValue,
+    thinkingLevel,
     value,
-    fastMode,
   ])
 
   // Fire queued submit once all in-flight attachment processing finishes
@@ -1746,7 +1814,22 @@ function ChatComposerComponent({
   }, [])
 
   const hasDraft = value.trim().length > 0 || attachments.length > 0
-  const promptPlaceholder = isMobileViewport ? 'Message...' : 'Ask anything...'
+  const promptPlaceholder =
+    (isLoading || isCompacting) && !hasDraft
+      ? isMobileViewport
+        ? busyMessageMode === 'steer'
+          ? 'Enter = steer · empty = stop'
+          : busyMessageMode === 'interrupt'
+            ? 'Enter = interrupt · empty = stop'
+            : 'Enter = queue · empty = stop'
+        : busyMessageMode === 'steer'
+          ? 'Enter steers the live reply · empty Stop · /queue /interrupt'
+          : busyMessageMode === 'interrupt'
+            ? 'Enter interrupts and sends · empty Stop · /queue /steer'
+            : 'Enter queues a follow-up · empty Stop · /interrupt /steer'
+      : isMobileViewport
+        ? 'Message...'
+        : 'Ask anything...'
   const [serverCommands, setServerCommands] = useState<
     Array<SlashCommandDefinition>
   >([])
@@ -2084,6 +2167,8 @@ function ChatComposerComponent({
     isBusy: isLoading,
     hasContent: hasComposerContent,
     isCompacting,
+    busyMessageMode,
+    canSteer,
   })
 
   // Only show mic when the primary button would otherwise be disabled (empty
@@ -2382,6 +2467,30 @@ function ChatComposerComponent({
         className="hidden"
         onChange={handleAttachmentInputChange}
       />
+      {queuedCount > 0 ? (
+        <div
+          className={cn(
+            'mb-2 flex items-center justify-between gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100',
+            isMobileViewport && 'mx-2 mb-1',
+          )}
+          role="status"
+        >
+          <span className="min-w-0 truncate">
+            {queuedCount === 1
+              ? '1 message queued — sends after this reply'
+              : `${queuedCount} messages queued — send after this reply`}
+          </span>
+          {onClearQueue ? (
+            <button
+              type="button"
+              className="shrink-0 rounded-md px-2 py-0.5 font-medium text-amber-800 hover:bg-amber-500/20 dark:text-amber-50"
+              onClick={onClearQueue}
+            >
+              Clear
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       <PromptInput
         value={value}
         onValueChange={handleValueChange}

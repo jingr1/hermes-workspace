@@ -1,23 +1,27 @@
 /**
  * Execute a single group-chat member turn.
  *
- * - Maintains canonical session via agent-session-manager (per-profile gateway).
- * - Submits the prompt via SSE stream and collects the reply from
- *   `assistant.delta` / `assistant.completed` events — NOT from getMessages,
- *   because the gateway's /chat/stream endpoint does NOT persist assistant
- *   messages to the DB that getMessages reads.
- * - Detects pass vs reply vs failure vs timeout.
- * - Self-heals once when a poisoned session (persisted model) yields
- *   "No LLM provider configured" by retiring it and retrying on a bare session.
+ * Bot Mode semantics (Desktop hermes-bots/group-turns.ts):
+ * - Soft deadline (3 min) that EXTENDS while the stream is still producing
+ *   events, capped by GROUP_TURN_HARD_CAP_MS (20 min).
+ * - On true timeout: do NOT post partial early-ack text. Return `timeout`
+ *   with the pre-submit message baseline so the runner can stranded-harvest
+ *   the finished reply later. Leave the gateway stream running (no abort).
+ * - On success: prefer pickGroupTurnReply over the session transcript so the
+ *   newest substantive (non-pass) assistant message wins — not the first ack.
+ * - Self-heals once when a poisoned session yields "No LLM provider configured".
  */
 import { getClaudeApiClient } from '../claude-api-profile'
-import { ensureProfileGateway } from '../gateway-pool'
-import { GROUP_TURN_TIMEOUT_MS } from './constants'
+import {
+  GROUP_TURN_HARD_CAP_MS,
+  GROUP_TURN_POLL_MS,
+  GROUP_TURN_TIMEOUT_MS,
+} from './constants'
 import {
   forgetSession,
   getOrCreateSession,
 } from './agent-session-manager'
-import { isGroupPassText } from './responder-utils'
+import { isGroupPassText, pickGroupTurnReply } from './responder-utils'
 import type { GroupMember, GroupTurnResult } from './types'
 
 export type TurnExecutorOptions = {
@@ -32,15 +36,22 @@ export type TurnExecutorOptions = {
 
 const PROVIDER_CONFIG_RE = /No LLM provider configured/i
 
-class StreamTimeoutError extends Error {
-  constructor() {
-    super('stream timeout')
-  }
-}
-
 type StreamCapture = {
   replyText: string
   streamError: string | null
+  /** True when the soft/hard deadline elapsed before streamChat resolved. */
+  timedOut: boolean
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function extendDeadline(startedAt: number, deadline: number): number {
+  return Math.min(
+    startedAt + GROUP_TURN_HARD_CAP_MS,
+    Math.max(deadline, Date.now() + GROUP_TURN_TIMEOUT_MS),
+  )
 }
 
 async function streamOnce(
@@ -57,8 +68,11 @@ async function streamOnce(
   let completedText: string | null = null
   let streamError: string | null = null
   const startedAt = Date.now()
+  let deadline = startedAt + GROUP_TURN_TIMEOUT_MS
 
   const handleStreamEvent = (event: string, data: Record<string, unknown>) => {
+    // Any activity means the turn is still visibly working — extend soft deadline.
+    deadline = extendDeadline(startedAt, deadline)
     opts.onEvent?.(event, data)
 
     if (event === 'assistant.delta' && typeof data.delta === 'string') {
@@ -89,70 +103,143 @@ async function streamOnce(
     `[turn-executor] member=${opts.member.displayName} profile=${profile ?? 'n/a'} url=${client?.baseUrl ?? 'global'} model=${effectiveModel ?? '(profile default)'} starting stream...`,
   )
 
-  try {
-    await Promise.race([
-      client
-        ? client.streamChat(
+  let streamSettled = false
+  let streamRejected: unknown = null
+
+  const streamPromise = (
+    client
+      ? client.streamChat(
+          sessionId,
+          {
+            message: opts.prompt,
+            ...(effectiveModel ? { model: effectiveModel } : {}),
+          },
+          {
+            onEvent: (payload) => handleStreamEvent(payload.event, payload.data),
+          },
+        )
+      : import('../claude-api').then((m) =>
+          m.streamChat(
             sessionId,
             {
               message: opts.prompt,
               ...(effectiveModel ? { model: effectiveModel } : {}),
             },
             {
-              onEvent: (payload) => handleStreamEvent(payload.event, payload.data),
+              onEvent: (payload) =>
+                handleStreamEvent(payload.event, payload.data),
             },
-          )
-        : import('../claude-api').then((m) =>
-            m.streamChat(
-              sessionId,
-              {
-                message: opts.prompt,
-                ...(effectiveModel ? { model: effectiveModel } : {}),
-              },
-              {
-                onEvent: (payload) =>
-                  handleStreamEvent(payload.event, payload.data),
-              },
-            ),
           ),
-      new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new StreamTimeoutError()), GROUP_TURN_TIMEOUT_MS)
-      }),
-    ])
-    console.log(
-      `[turn-executor] member=${opts.member.displayName} stream done in ${Date.now() - startedAt}ms`,
-    )
-  } catch (error) {
-    if (error instanceof StreamTimeoutError) {
-      console.log(`[turn-executor] member=${opts.member.displayName} stream TIMEOUT`)
-      const partial = (completedText ?? replyAccum).trim()
-      return { replyText: partial, streamError: streamError ?? 'stream timeout' }
+        )
+  )
+    .then(() => {
+      streamSettled = true
+    })
+    .catch((error) => {
+      streamSettled = true
+      streamRejected = error
+    })
+
+  // Soft-deadline loop: tick until stream settles or hard/soft deadline elapses.
+  // On timeout we deliberately do NOT abort the fetch — the gateway turn keeps
+  // running so stranded harvest can pick up the finished reply later.
+  while (!streamSettled) {
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) {
+      console.log(
+        `[turn-executor] member=${opts.member.displayName} soft/hard deadline elapsed after ${Date.now() - startedAt}ms — stranding (stream left running)`,
+      )
+      // Detach: swallow late settle so it doesn't become an unhandled rejection.
+      void streamPromise.catch(() => undefined)
+      return {
+        replyText: (completedText ?? replyAccum).trim(),
+        streamError: streamError ?? 'stream timeout',
+        timedOut: true,
+      }
     }
-    throw error
+    await Promise.race([
+      streamPromise.then(() => undefined),
+      sleep(Math.min(remaining, GROUP_TURN_POLL_MS)),
+    ])
   }
+
+  if (streamRejected && !(streamRejected instanceof Error && /timeout/i.test(streamRejected.message))) {
+    // Real stream failure (not our soft timeout).
+    if (streamRejected instanceof Error) throw streamRejected
+    throw new Error(String(streamRejected))
+  }
+
+  console.log(
+    `[turn-executor] member=${opts.member.displayName} stream done in ${Date.now() - startedAt}ms`,
+  )
 
   return {
     replyText: (completedText ?? replyAccum).trim(),
     streamError,
+    timedOut: false,
   }
 }
 
-function toTurnResult(
-  memberName: string,
+async function pickReplyFromSession(
+  opts: TurnExecutorOptions,
+  sessionId: string,
+  profile: string | null,
+  before: number,
+  streamFallback: string,
+): Promise<string> {
+  try {
+    const client =
+      opts.member.runtime === 'hermes' && profile
+        ? getClaudeApiClient(profile)
+        : undefined
+    const messages = client
+      ? await client.getMessages(sessionId)
+      : await import('../claude-api').then((m) => m.getMessages(sessionId))
+    const picked = pickGroupTurnReply(
+      messages.map((m) => ({ role: m.role, content: m.content })),
+      before,
+    )
+    if (picked && !isGroupPassText(picked)) return picked
+    if (picked) return picked
+  } catch (error) {
+    console.warn(
+      `[turn-executor] member=${opts.member.displayName} session pick failed:`,
+      error instanceof Error ? error.message : String(error),
+    )
+  }
+  return streamFallback
+}
+
+async function toTurnResult(
+  opts: TurnExecutorOptions,
+  sessionId: string,
+  profile: string | null,
+  before: number,
   capture: StreamCapture,
-  timedOut: boolean,
-): GroupTurnResult {
+): Promise<GroupTurnResult> {
   console.log(
-    `[turn-executor] member=${memberName} replyText=${capture.replyText ? capture.replyText.slice(0, 80) : 'EMPTY'}`,
+    `[turn-executor] member=${opts.member.displayName} replyText=${capture.replyText ? capture.replyText.slice(0, 80) : 'EMPTY'} timedOut=${capture.timedOut}`,
   )
-  if (capture.replyText) {
-    return isGroupPassText(capture.replyText)
+
+  // Bot Mode: timeout → null/pass + stranded marker. Never post partial ack.
+  if (capture.timedOut) {
+    return { kind: 'timeout', before, sessionId }
+  }
+
+  const replyText = await pickReplyFromSession(
+    opts,
+    sessionId,
+    profile,
+    before,
+    capture.replyText,
+  )
+
+  if (replyText) {
+    return isGroupPassText(replyText)
       ? { kind: 'pass' }
-      : { kind: 'reply', text: capture.replyText }
+      : { kind: 'reply', text: replyText }
   }
-  if (timedOut && !capture.streamError) {
-    return { kind: 'timeout' }
-  }
+
   return {
     kind: 'failed',
     reason:
@@ -163,6 +250,9 @@ function toTurnResult(
 export async function executeMemberTurn(
   opts: TurnExecutorOptions,
 ): Promise<GroupTurnResult> {
+  // getOrCreateSession ensures the profile gateway before verifying/creating
+  // the session — do not call ensureProfileGateway again here (avoids a second
+  // health probe on every turn).
   let { sessionId, profile } = await getOrCreateSession(opts.roomId, opts.member, {
     dbPath: opts.dbPath,
     // Do NOT override title here — let agent-session-manager use its own
@@ -170,26 +260,33 @@ export async function executeMemberTurn(
     // gets a unique session and they never conflict.
   })
 
-  if (profile) {
-    await ensureProfileGateway(profile).catch((error) => {
-      console.warn(
-        `[turn-executor] could not ensure gateway for ${profile}:`,
-        error instanceof Error ? error.message : String(error),
-      )
-    })
-  }
-
   console.log(
     `[turn-executor] member=${opts.member.displayName} profile=${profile ?? 'n/a'} session=${sessionId}`,
   )
 
   try {
+    // Baseline message count before submit — harvest/pick scan from here.
+    let before = 0
+    try {
+      const client =
+        opts.member.runtime === 'hermes' && profile
+          ? getClaudeApiClient(profile)
+          : undefined
+      const pre = client
+        ? await client.getMessages(sessionId)
+        : await import('../claude-api').then((m) => m.getMessages(sessionId))
+      before = pre.length
+    } catch {
+      before = 0
+    }
+
     let capture = await streamOnce(opts, sessionId, profile)
 
     // Poisoned sessions (persisted model, often has_model_config=false) fail
     // instantly with this error. Retire and retry once on a bare session.
     if (
       !capture.replyText &&
+      !capture.timedOut &&
       capture.streamError &&
       PROVIDER_CONFIG_RE.test(capture.streamError)
     ) {
@@ -211,12 +308,11 @@ export async function executeMemberTurn(
       console.log(
         `[turn-executor] member=${opts.member.displayName} retry session=${sessionId}`,
       )
+      before = 0
       capture = await streamOnce(opts, sessionId, profile)
     }
 
-    const timedOut =
-      !capture.replyText && capture.streamError === 'stream timeout'
-    return toTurnResult(opts.member.displayName, capture, timedOut)
+    return await toTurnResult(opts, sessionId, profile, before, capture)
   } catch (error) {
     console.error(
       `[turn-executor] member=${opts.member.displayName} stream error:`,

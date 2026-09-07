@@ -2,22 +2,22 @@
  * AgentRuntimeRouter — resolves agent id → adapter, owns probe() and
  * status aggregation. hermes agents are intentionally NOT adapted here:
  * they keep their existing send-stream / swarm-dispatch path (plan:
- * «hermes：完全不动») and appear in status via a read-only stub.
+ * «hermes：完全不动») and appear in status via a read-only stub that
+ * *does* probe the profile's gateway health so UI status reflects reachability.
  */
 import { ClaudeCodeAdapter } from './claude-code-adapter'
 import { loadAgentsRegistry } from './agents-config'
 import type { AgentDeclaration, AgentsRegistry } from './agents-config'
 import type { AgentProbeResult, AgentRuntimeAdapter } from './types'
+import { probeHermesProfileGateway } from './hermes-gateway-probe'
 
 /** Read-only stand-in for hermes-runtime agents (they are not spawned here). */
 class HermesAdapterStub implements AgentRuntimeAdapter {
   readonly kind = 'hermes' as const
   constructor(private readonly decl: AgentDeclaration) {}
   async probe(): Promise<AgentProbeResult> {
-    return {
-      available: true,
-      detail: `hermes profile ${this.decl.profile} (unmanaged path)`,
-    }
+    const profile = (this.decl.profile || this.decl.id).trim() || 'default'
+    return probeHermesProfileGateway(profile)
   }
   async startRun(): Promise<{ runId: string }> {
     throw new Error(
@@ -89,30 +89,39 @@ export class AgentRuntimeRouter {
       agentId: string
       runtime: string
       execution: string
-      probe: AgentProbeResult
-    }>
+    } & AgentProbeResult>
   > {
-    const results = []
-    for (const decl of this.registry.agents) {
-      const adapter = this.adapters.get(decl.id)
-      if (!adapter) continue
-      let probe: AgentProbeResult
-      try {
-        probe = await adapter.probe()
-      } catch (error) {
-        probe = {
-          available: false,
-          detail: error instanceof Error ? error.message : String(error),
+    // Probe in parallel — sequential health checks stall /api/agents/status
+    // when several profile gateways are down (each waits the fetch timeout).
+    return Promise.all(
+      this.registry.agents.map(async (decl) => {
+        const adapter = this.adapters.get(decl.id)
+        if (!adapter) {
+          return {
+            agentId: decl.id,
+            runtime: decl.runtime,
+            execution: decl.execution,
+            available: false,
+            detail: 'no adapter',
+          }
         }
-      }
-      results.push({
-        agentId: decl.id,
-        runtime: decl.runtime,
-        execution: decl.execution,
-        probe,
-      })
-    }
-    return results
+        let probe: AgentProbeResult
+        try {
+          probe = await adapter.probe()
+        } catch (error) {
+          probe = {
+            available: false,
+            detail: error instanceof Error ? error.message : String(error),
+          }
+        }
+        return {
+          agentId: decl.id,
+          runtime: decl.runtime,
+          execution: decl.execution,
+          ...probe,
+        }
+      }),
+    )
   }
 }
 

@@ -22,12 +22,23 @@ import {
   buildChatNavKey,
   createOptimisticMessage,
   createResponseWaitSnapshot,
-  isTerminalActiveRunStatus,
   shouldCancelStreamOnSessionNav,
   shouldClearWaitingForAssistantMessage,
   shouldHandoffStreamOnProfileNav,
+  shouldSettleWaitingFromActiveRun,
 } from './chat-screen-utils'
-import { registerStreamHandoffHandler } from '@/lib/stream-handoff-bridge'
+import {
+  findLastUserMessage,
+  historyIndexOf,
+  keepCountForEdit,
+  keepCountForRegenerate,
+} from './session-fork'
+import {
+  clearSessionQueue,
+  dequeueSessionMessage,
+  enqueueSessionMessage,
+  queuedMessageCount,
+} from './lib/session-message-queue'
 import {
   appendHistoryMessage,
   chatQueryKeys,
@@ -43,6 +54,10 @@ import { ChatHeader } from './components/chat-header'
 import { ChatMessageList } from './components/chat-message-list'
 import { ChatEmptyState } from './components/chat-empty-state'
 import { ChatComposer } from './components/chat-composer'
+import {
+  BackgroundTasksBadge,
+  SideQuestionCard,
+} from './components/side-channel-cards'
 import { ChatSessionSidebar } from './components/chat-session-sidebar'
 import { ConnectionStatusMessage } from './components/connection-status-message'
 import {
@@ -97,6 +112,7 @@ import {
   saveApprovals,
 } from '@/screens/gateway/lib/approvals-store'
 import { stripQueuedWrapper } from '@/lib/strip-queued-wrapper'
+import { registerStreamHandoffHandler } from '@/lib/stream-handoff-bridge'
 import { cn } from '@/lib/utils'
 import { toast } from '@/components/ui/toast'
 import { hapticTap } from '@/lib/haptics'
@@ -509,6 +525,7 @@ export function ChatScreen({
   const setChatFocusMode = useWorkspaceStore((s) => s.setChatFocusMode)
   const queryClient = useQueryClient()
   const [sending, setSending] = useState(false)
+  const [queueVersion, setQueueVersion] = useState(0)
   const [_creatingSession, setCreatingSession] = useState(false)
   const [sessionsOpen, setSessionsOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -531,10 +548,29 @@ export function ChatScreen({
   const retriedQueuedMessageKeysRef = useRef(new Set<string>())
   const hasSeenDisconnectRef = useRef(false)
   const hadErrorRef = useRef(false)
+  const abortActiveStreamRef = useRef<() => void>(() => {})
+  const wasBusyForQueueRef = useRef(false)
+  const mountDrainKeyRef = useRef<string | null>(null)
   const [pendingApprovals, setPendingApprovals] = useState<
     Array<ApprovalRequest>
   >([])
   const [isCompacting, setIsCompacting] = useState(false)
+  const [btwCard, setBtwCard] = useState<{
+    question: string
+    answer?: string
+    error?: string
+    loading: boolean
+  } | null>(null)
+  const [backgroundTasks, setBackgroundTasks] = useState<
+    Array<{
+      taskId: string
+      status: 'running' | 'done' | 'error'
+      prompt: string
+      sessionId: string
+      answer?: string
+      error?: string
+    }>
+  >([])
   const [researchResetKey, setResearchResetKey] = useState(0)
   // Per-session thinking level — stored in sessionStorage keyed by session
   const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>(() => {
@@ -1026,32 +1062,66 @@ export function ChatScreen({
     return () => window.clearTimeout(fallback)
   }, [waitingForResponse])
 
-  // Issue #43 polling fallback: when waiting but SSE hasn't reconnected,
-  // poll the active-run endpoint every 5s to detect completion.
+  // Issue #43 polling fallback: while waiting, probe active-run even if SSE
+  // reports connected. After gateway interrupt / client disconnect the run is
+  // often already gone (or terminal) and no `done` event will arrive — the old
+  // path skipped polling when connected and treated `!run` as "keep waiting",
+  // which left Thinking stuck until the 120s failsafe.
   useEffect(() => {
     if (!waitingForResponse || !resolvedSessionKey) return
-    if (sseConnectionState === 'connected') return // SSE will deliver the event
-    const interval = window.setInterval(async () => {
+
+    let missingRunCount = 0
+    let cancelled = false
+
+    async function probeActiveRun() {
+      // Live send-stream tokens mean the run is still in progress.
+      if (activeRealtimeStreamingRef.current) {
+        missingRunCount = 0
+        return
+      }
       try {
         const res = await fetch(
           `/api/sessions/${encodeURIComponent(resolvedSessionKey)}/active-run`,
         )
-        if (!res.ok) return
+        if (cancelled || !res.ok) return
         const data = await res.json()
-        if (!data.ok) return
-        // Run not yet registered (gateway lag during silent processing) → keep waiting
-        if (!data.run) return
-        // Treat unknown / transient statuses as still-active to avoid premature teardown
-        if (isTerminalActiveRunStatus(data.run.status)) {
-          streamFinish()
+        if (cancelled || !data.ok) return
+
+        const decision = shouldSettleWaitingFromActiveRun(data.run)
+        if (decision === 'keep') {
+          missingRunCount = 0
+          // Still registered — refresh history in case an interrupt message landed.
           refreshHistoryRef.current()
+          return
         }
+        if (decision === 'missing') {
+          missingRunCount += 1
+          // Allow ~one registration lag window (2 probes) before settling.
+          if (missingRunCount < 2) {
+            refreshHistoryRef.current()
+            return
+          }
+        }
+
+        streamFinish()
+        refreshHistoryRef.current()
       } catch {
         // ignore network errors
       }
+    }
+
+    const initial = window.setTimeout(() => {
+      void probeActiveRun()
+    }, 2500)
+    const interval = window.setInterval(() => {
+      void probeActiveRun()
     }, 5000)
-    return () => window.clearInterval(interval)
-  }, [waitingForResponse, resolvedSessionKey, sseConnectionState, streamFinish])
+    return () => {
+      cancelled = true
+      window.clearTimeout(initial)
+      window.clearInterval(interval)
+    }
+  }, [waitingForResponse, resolvedSessionKey, streamFinish])
 
   useAutoSessionTitle({
     friendlyId: activeFriendlyId,
@@ -1234,6 +1304,7 @@ export function ChatScreen({
     isStreaming: localIsStreaming,
     streamingText: localStreamingText,
     streamingMessageId: localStreamingMessageId,
+    streamingRunId: localStreamingRunId,
     startStreaming,
     cancelStreaming,
     handoffActiveStreamForProfileSwitch,
@@ -1869,12 +1940,29 @@ export function ChatScreen({
   useEffect(() => {
     function handleSSEDrop() {
       void historyQuery.refetch()
+      // Stream dropped while we still show Thinking — settle if the server
+      // no longer has an active run (typical after gateway interrupt).
+      if (!waitingForResponseRef.current || !resolvedSessionKey) return
+      void fetch(
+        `/api/sessions/${encodeURIComponent(resolvedSessionKey)}/active-run`,
+      )
+        .then(async (res) => {
+          if (!res.ok) return
+          const data = await res.json()
+          if (!data.ok) return
+          const decision = shouldSettleWaitingFromActiveRun(data.run)
+          if (decision === 'keep') return
+          streamFinish()
+        })
+        .catch(() => {
+          /* ignore */
+        })
     }
     window.addEventListener('claude:sse-dropped', handleSSEDrop)
     return () => {
       window.removeEventListener('claude:sse-dropped', handleSSEDrop)
     }
-  }, [historyQuery])
+  }, [historyQuery, resolvedSessionKey, streamFinish])
 
   const terminalPanelInset =
     !isMobile && isTerminalPanelOpen && !chatFocusMode ? terminalPanelHeight : 0
@@ -2531,6 +2619,128 @@ export function ChatScreen({
     [],
   )
 
+  const truncateCurrentSession = useCallback(
+    async (keepCount: number) => {
+      const sessionKey =
+        forcedSessionKey ||
+        resolvedSessionKey ||
+        activeSessionKey ||
+        activeFriendlyId
+      if (!sessionKey || sessionKey === 'new' || sessionKey === 'main') {
+        throw new Error('Open a session first')
+      }
+      const res = await fetch(
+        `/api/sessions/${encodeURIComponent(sessionKey)}/truncate`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keepCount }),
+        },
+      )
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean
+        error?: string
+        removedCount?: number
+      }
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || `Truncate failed (${res.status})`)
+      }
+      await historyQuery.refetch({ cancelRefetch: true })
+      return data.removedCount ?? 0
+    },
+    [
+      activeFriendlyId,
+      activeSessionKey,
+      forcedSessionKey,
+      historyQuery,
+      resolvedSessionKey,
+    ],
+  )
+
+  const handleEditMessage = useCallback(
+    (message: ChatMessage) => {
+      if (waitingForResponse || activeIsRealtimeStreaming) {
+        toast('Wait for the current reply to finish', { type: 'error' })
+        return
+      }
+      const historyIndex = historyIndexOf(message)
+      if (historyIndex === null) {
+        toast('Cannot edit this message', { type: 'error' })
+        return
+      }
+      const text = textFromMessage(message).trim()
+      if (!text) {
+        toast('Nothing to edit', { type: 'error' })
+        return
+      }
+      void (async () => {
+        try {
+          await truncateCurrentSession(keepCountForEdit(historyIndex))
+          composerHandleRef.current?.setValue(text)
+          toast('Editing — change the text and send', { type: 'success' })
+        } catch (err) {
+          toast(
+            `Edit failed. ${err instanceof Error ? err.message : String(err)}`,
+            { type: 'error' },
+          )
+        }
+      })()
+    },
+    [activeIsRealtimeStreaming, truncateCurrentSession, waitingForResponse],
+  )
+
+  const handleRegenerateMessage = useCallback(
+    (message: ChatMessage) => {
+      if (waitingForResponse || activeIsRealtimeStreaming) {
+        toast('Wait for the current reply to finish', { type: 'error' })
+        return
+      }
+      const historyIndex = historyIndexOf(message)
+      if (historyIndex === null) {
+        toast('Cannot regenerate this message', { type: 'error' })
+        return
+      }
+      const lastUser = findLastUserMessage(finalDisplayMessages)
+      const userText = lastUser ? textFromMessage(lastUser).trim() : ''
+      if (!userText) {
+        toast('No user message to regenerate from', { type: 'error' })
+        return
+      }
+      const sessionKey =
+        forcedSessionKey ||
+        resolvedSessionKey ||
+        activeSessionKey ||
+        activeFriendlyId
+      const friendlyId = activeFriendlyId || sessionKey
+      if (!sessionKey || sessionKey === 'new') {
+        toast('Open a session first', { type: 'error' })
+        return
+      }
+      void (async () => {
+        try {
+          await truncateCurrentSession(keepCountForRegenerate(historyIndex))
+          sendMessage(sessionKey, friendlyId, userText, [], false)
+        } catch (err) {
+          toast(
+            `Regenerate failed. ${err instanceof Error ? err.message : String(err)}`,
+            { type: 'error' },
+          )
+        }
+      })()
+    },
+    [
+      activeFriendlyId,
+      activeIsRealtimeStreaming,
+      activeSessionKey,
+      finalDisplayMessages,
+      forcedSessionKey,
+      resolvedSessionKey,
+      sendMessage,
+      truncateCurrentSession,
+      waitingForResponse,
+    ],
+  )
+
   const handleUiSlashCommand = useCallback(
     (command: string) => {
       const trimmedCommand = command.trim()
@@ -2583,16 +2793,429 @@ export function ChatScreen({
         return true
       }
 
+      if (trimmedCommand === '/retry') {
+        if (waitingForResponse || activeIsRealtimeStreaming) {
+          toast('Wait for the current reply to finish', { type: 'error' })
+          return true
+        }
+        const lastUser = findLastUserMessage(finalDisplayMessages)
+        const historyIndex = lastUser ? historyIndexOf(lastUser) : null
+        const userText = lastUser ? textFromMessage(lastUser).trim() : ''
+        if (!lastUser || historyIndex === null || !userText) {
+          toast('No previous message to retry', { type: 'error' })
+          return true
+        }
+        const sessionKey =
+          forcedSessionKey ||
+          resolvedSessionKey ||
+          activeSessionKey ||
+          activeFriendlyId
+        const friendlyId = activeFriendlyId || sessionKey
+        if (!sessionKey || sessionKey === 'new') {
+          toast('Open a session first', { type: 'error' })
+          return true
+        }
+        void (async () => {
+          try {
+            await truncateCurrentSession(keepCountForEdit(historyIndex))
+            sendMessage(sessionKey, friendlyId, userText, [], false)
+          } catch (err) {
+            toast(
+              `Retry failed. ${err instanceof Error ? err.message : String(err)}`,
+              { type: 'error' },
+            )
+          }
+        })()
+        return true
+      }
+
+      if (trimmedCommand === '/undo') {
+        if (waitingForResponse || activeIsRealtimeStreaming) {
+          toast('Wait for the current reply to finish', { type: 'error' })
+          return true
+        }
+        const lastUser = findLastUserMessage(finalDisplayMessages)
+        const historyIndex = lastUser ? historyIndexOf(lastUser) : null
+        if (historyIndex === null) {
+          toast('Nothing to undo', { type: 'error' })
+          return true
+        }
+        void (async () => {
+          try {
+            const removed = await truncateCurrentSession(
+              keepCountForEdit(historyIndex),
+            )
+            toast(`Undid ${removed} message${removed === 1 ? '' : 's'}`, {
+              type: 'success',
+            })
+          } catch (err) {
+            toast(
+              `Undo failed. ${err instanceof Error ? err.message : String(err)}`,
+              { type: 'error' },
+            )
+          }
+        })()
+        return true
+      }
+
+      if (
+        trimmedCommand === '/queue' ||
+        trimmedCommand.startsWith('/queue ')
+      ) {
+        const rest = trimmedCommand.slice('/queue'.length).trim()
+        const sessionKey =
+          forcedSessionKey ||
+          resolvedSessionKey ||
+          activeSessionKey ||
+          activeFriendlyId
+        if (!rest) {
+          const count =
+            sessionKey && sessionKey !== 'new'
+              ? queuedMessageCount(sessionKey)
+              : 0
+          toast(
+            count === 0
+              ? 'Queue is empty — /queue <text> to add a follow-up'
+              : count === 1
+                ? '1 message queued'
+                : `${count} messages queued`,
+            { type: 'info' },
+          )
+          return true
+        }
+        if (!sessionKey || sessionKey === 'new') {
+          toast('Open a session first', { type: 'error' })
+          return true
+        }
+        const busy =
+          waitingForResponse || activeIsRealtimeStreaming || sending
+        if (!busy) {
+          sendMessage(sessionKey, activeFriendlyId || sessionKey, rest, [], false)
+          return true
+        }
+        const entry = enqueueSessionMessage(sessionKey, { text: rest })
+        if (!entry) {
+          toast('Could not queue message', { type: 'error' })
+          return true
+        }
+        setQueueVersion((version) => version + 1)
+        toast(
+          `Queued (${queuedMessageCount(sessionKey)}) — sends after this reply`,
+          { type: 'success' },
+        )
+        return true
+      }
+
+      if (
+        trimmedCommand === '/interrupt' ||
+        trimmedCommand.startsWith('/interrupt ')
+      ) {
+        const rest = trimmedCommand.slice('/interrupt'.length).trim()
+        const sessionKey =
+          forcedSessionKey ||
+          resolvedSessionKey ||
+          activeSessionKey ||
+          activeFriendlyId
+        const busy =
+          waitingForResponse || activeIsRealtimeStreaming || sending
+        if (!busy) {
+          if (!rest) {
+            toast('Nothing to interrupt', { type: 'info' })
+            return true
+          }
+          if (!sessionKey || sessionKey === 'new') {
+            toast('Open a session first', { type: 'error' })
+            return true
+          }
+          sendMessage(sessionKey, activeFriendlyId || sessionKey, rest, [], false)
+          return true
+        }
+        if (rest) {
+          if (!sessionKey || sessionKey === 'new') {
+            toast('Open a session first', { type: 'error' })
+            return true
+          }
+          // Queue first so drain after cancel picks it up.
+          enqueueSessionMessage(sessionKey, { text: rest })
+          setQueueVersion((version) => version + 1)
+        }
+        abortActiveStreamRef.current()
+        toast(
+          rest
+            ? 'Interrupted — queued follow-up will send next'
+            : 'Interrupted',
+          { type: 'success' },
+        )
+        return true
+      }
+
+      if (
+        trimmedCommand === '/steer' ||
+        trimmedCommand.startsWith('/steer ')
+      ) {
+        const rest = trimmedCommand.slice('/steer'.length).trim()
+        if (!rest) {
+          toast('Usage: /steer <text>', { type: 'info' })
+          return true
+        }
+        const sessionKey =
+          forcedSessionKey ||
+          resolvedSessionKey ||
+          activeSessionKey ||
+          activeFriendlyId
+        const runId = localStreamingRunId || streamingRunId || null
+        const busy =
+          waitingForResponse || activeIsRealtimeStreaming || sending
+        if (!busy || !runId) {
+          if (!sessionKey || sessionKey === 'new') {
+            toast('Open a session first', { type: 'error' })
+            return true
+          }
+          if (!busy) {
+            sendMessage(
+              sessionKey,
+              activeFriendlyId || sessionKey,
+              rest,
+              [],
+              false,
+            )
+            return true
+          }
+          enqueueSessionMessage(sessionKey, { text: rest })
+          setQueueVersion((version) => version + 1)
+          toast('No live run — queued for next turn', { type: 'info' })
+          return true
+        }
+        void (async () => {
+          try {
+            const res = await fetch(
+              `/api/runs/${encodeURIComponent(runId)}/steer`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: rest }),
+              },
+            )
+            const data = (await res.json().catch(() => ({}))) as {
+              ok?: boolean
+              error?: string
+              fallback?: string
+            }
+            if (!res.ok || !data.ok) {
+              if (sessionKey && sessionKey !== 'new') {
+                enqueueSessionMessage(sessionKey, { text: rest })
+                setQueueVersion((version) => version + 1)
+                toast('Steer unavailable — queued for next turn', {
+                  type: 'warning',
+                })
+                return
+              }
+              toast(data.error || 'Steer failed', { type: 'error' })
+              return
+            }
+            toast('Steered current reply', { type: 'success' })
+          } catch (err) {
+            toast(
+              `Steer failed. ${err instanceof Error ? err.message : String(err)}`,
+              { type: 'error' },
+            )
+          }
+        })()
+        return true
+      }
+
+      if (
+        trimmedCommand === '/compress' ||
+        trimmedCommand === '/compact' ||
+        trimmedCommand.startsWith('/compress ') ||
+        trimmedCommand.startsWith('/compact ')
+      ) {
+        const focusTopic = trimmedCommand
+          .replace(/^\/(?:compress|compact)\s*/i, '')
+          .trim()
+        const sessionKey =
+          forcedSessionKey ||
+          resolvedSessionKey ||
+          activeSessionKey ||
+          activeFriendlyId
+        if (!sessionKey || sessionKey === 'new') {
+          toast('Open a session first', { type: 'error' })
+          return true
+        }
+        if (waitingForResponse || activeIsRealtimeStreaming || sending) {
+          toast('Wait for the current reply to finish', { type: 'error' })
+          return true
+        }
+        setIsCompacting(true)
+        void (async () => {
+          try {
+            const res = await fetch(
+              `/api/sessions/${encodeURIComponent(sessionKey)}/compress`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  focusTopic: focusTopic || undefined,
+                  keepCount: 6,
+                }),
+              },
+            )
+            const data = (await res.json().catch(() => ({}))) as {
+              ok?: boolean
+              error?: string
+              beforeCount?: number
+              afterCount?: number
+            }
+            if (!res.ok || !data.ok) {
+              toast(data.error || 'Compress failed', { type: 'error' })
+              return
+            }
+            toast(
+              `Compressed ${data.beforeCount ?? '?'} → ${data.afterCount ?? '?'} messages`,
+              { type: 'success' },
+            )
+            refreshHistoryRef.current()
+          } catch (err) {
+            toast(
+              `Compress failed. ${err instanceof Error ? err.message : String(err)}`,
+              { type: 'error' },
+            )
+          } finally {
+            setIsCompacting(false)
+          }
+        })()
+        return true
+      }
+
+      if (
+        trimmedCommand === '/btw' ||
+        trimmedCommand.startsWith('/btw ')
+      ) {
+        const question = trimmedCommand.slice('/btw'.length).trim()
+        if (!question) {
+          toast('Usage: /btw <question>', { type: 'info' })
+          return true
+        }
+        const sessionKey =
+          forcedSessionKey ||
+          resolvedSessionKey ||
+          activeSessionKey ||
+          activeFriendlyId
+        if (!sessionKey || sessionKey === 'new') {
+          toast('Open a session first', { type: 'error' })
+          return true
+        }
+        setBtwCard({ question, loading: true })
+        void (async () => {
+          try {
+            const res = await fetch('/api/btw', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sessionId: sessionKey, question }),
+            })
+            const data = (await res.json().catch(() => ({}))) as {
+              ok?: boolean
+              error?: string
+              answer?: string
+            }
+            if (!res.ok || !data.ok || !data.answer) {
+              setBtwCard({
+                question,
+                loading: false,
+                error: data.error || 'Side question failed',
+              })
+              return
+            }
+            setBtwCard({ question, answer: data.answer, loading: false })
+          } catch (err) {
+            setBtwCard({
+              question,
+              loading: false,
+              error: err instanceof Error ? err.message : String(err),
+            })
+          }
+        })()
+        return true
+      }
+
+      if (
+        trimmedCommand === '/bg' ||
+        trimmedCommand === '/background' ||
+        trimmedCommand.startsWith('/bg ') ||
+        trimmedCommand.startsWith('/background ')
+      ) {
+        const prompt = trimmedCommand
+          .replace(/^\/(?:bg|background)\s*/i, '')
+          .trim()
+        if (!prompt) {
+          toast('Usage: /bg <prompt>', { type: 'info' })
+          return true
+        }
+        const sessionKey =
+          forcedSessionKey ||
+          resolvedSessionKey ||
+          activeSessionKey ||
+          activeFriendlyId
+        if (!sessionKey || sessionKey === 'new') {
+          toast('Open a session first', { type: 'error' })
+          return true
+        }
+        void (async () => {
+          try {
+            const res = await fetch('/api/background', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sessionId: sessionKey, prompt }),
+            })
+            const data = (await res.json().catch(() => ({}))) as {
+              ok?: boolean
+              error?: string
+              taskId?: string
+              sessionId?: string
+            }
+            if (!res.ok || !data.ok || !data.taskId) {
+              toast(data.error || 'Background task failed to start', {
+                type: 'error',
+              })
+              return
+            }
+            setBackgroundTasks((prev) => [
+              {
+                taskId: data.taskId!,
+                status: 'running',
+                prompt,
+                sessionId: data.sessionId || '',
+              },
+              ...prev,
+            ])
+            toast('Background task started', { type: 'success' })
+          } catch (err) {
+            toast(
+              `Background failed. ${err instanceof Error ? err.message : String(err)}`,
+              { type: 'error' },
+            )
+          }
+        })()
+        return true
+      }
+
       return false
     },
     [
       activeFriendlyId,
+      activeIsRealtimeStreaming,
       activeSessionKey,
       finalDisplayMessages,
       forcedSessionKey,
+      localStreamingRunId,
       navigate,
       queryClient,
       resolvedSessionKey,
+      sending,
+      sendMessage,
+      streamingRunId,
+      truncateCurrentSession,
+      waitingForResponse,
     ],
   )
 
@@ -2780,6 +3403,284 @@ export function ChatScreen({
     isMobile,
     queryClient,
     streamFinish,
+  ])
+  abortActiveStreamRef.current = handleAbortStreaming
+
+  // Poll background tasks while any are running.
+  const backgroundRunningCount = backgroundTasks.filter(
+    (task) => task.status === 'running',
+  ).length
+  useEffect(() => {
+    const sessionKey =
+      forcedSessionKey ||
+      resolvedSessionKey ||
+      activeSessionKey ||
+      activeFriendlyId
+    if (!sessionKey || sessionKey === 'new') return
+    if (backgroundRunningCount === 0) return
+
+    let cancelled = false
+    const poll = async () => {
+      try {
+        const res = await fetch(
+          `/api/background?session_id=${encodeURIComponent(sessionKey)}`,
+        )
+        if (!res.ok) return
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean
+          tasks?: Array<{
+            taskId: string
+            status: 'running' | 'done' | 'error'
+            prompt: string
+            sessionId: string
+            answer?: string
+            error?: string
+          }>
+        }
+        if (cancelled || !data.ok || !data.tasks) return
+        setBackgroundTasks(data.tasks)
+      } catch {
+        // ignore transient poll errors
+      }
+    }
+    void poll()
+    const timer = window.setInterval(() => {
+      void poll()
+    }, 2500)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [
+    activeFriendlyId,
+    activeSessionKey,
+    backgroundRunningCount,
+    forcedSessionKey,
+    resolvedSessionKey,
+  ])
+
+  const queueSessionKey = useMemo(() => {
+    if (isNewChat) return ''
+    return (
+      forcedSessionKey ||
+      resolvedSessionKey ||
+      activeCanonicalKey ||
+      activeSessionKey ||
+      activeFriendlyId ||
+      ''
+    )
+  }, [
+    activeCanonicalKey,
+    activeFriendlyId,
+    activeSessionKey,
+    forcedSessionKey,
+    isNewChat,
+    resolvedSessionKey,
+  ])
+
+  const queuedCount = useMemo(() => {
+    if (!queueSessionKey || queueSessionKey === 'new') return 0
+    return queuedMessageCount(queueSessionKey)
+    // queueVersion intentionally invalidates the memoized count
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- queueVersion is the bump signal
+  }, [queueSessionKey, queueVersion])
+
+  const handleQueueFromComposer = useCallback(
+    (
+      body: string,
+      attachments: Array<ChatComposerAttachment>,
+      helpers: ChatComposerHelpers,
+    ) => {
+      if (!queueSessionKey || queueSessionKey === 'new') {
+        toast('Open a session first', { type: 'error' })
+        return
+      }
+      const entry = enqueueSessionMessage(queueSessionKey, {
+        text: body,
+        attachments,
+      })
+      if (!entry) {
+        toast('Could not queue message', { type: 'error' })
+        return
+      }
+      helpers.reset()
+      setQueueVersion((version) => version + 1)
+      toast(
+        `Queued (${queuedMessageCount(queueSessionKey)}) — sends after this reply`,
+        { type: 'success' },
+      )
+    },
+    [queueSessionKey],
+  )
+
+  const handleClearQueue = useCallback(() => {
+    if (!queueSessionKey || queueSessionKey === 'new') return
+    clearSessionQueue(queueSessionKey)
+    setQueueVersion((version) => version + 1)
+    toast('Queue cleared', { type: 'success' })
+  }, [queueSessionKey])
+
+  const busyMessageMode = useChatSettingsStore(
+    (s) => s.settings.busyMessageMode ?? 'queue',
+  )
+  const activeSteerRunId = localStreamingRunId || streamingRunId || null
+  const canSteer = Boolean(activeSteerRunId)
+
+  const handleSteerFromComposer = useCallback(
+    async (
+      body: string,
+      attachments: Array<ChatComposerAttachment>,
+      helpers: ChatComposerHelpers,
+    ) => {
+      const text = body.trim()
+      if (!text && attachments.length === 0) return
+
+      // Attachments aren't supported on the Hermes steer API yet — queue instead.
+      if (attachments.length > 0 || !activeSteerRunId) {
+        if (!queueSessionKey || queueSessionKey === 'new') {
+          toast('Open a session first', { type: 'error' })
+          return
+        }
+        const entry = enqueueSessionMessage(queueSessionKey, {
+          text: text || '(attachment)',
+          attachments,
+        })
+        if (entry) {
+          helpers.reset()
+          setQueueVersion((version) => version + 1)
+          toast(
+            activeSteerRunId
+              ? 'Attachments queued (steer is text-only)'
+              : 'No live run — queued for next turn',
+            { type: 'info' },
+          )
+        }
+        return
+      }
+
+      try {
+        const res = await fetch(
+          `/api/runs/${encodeURIComponent(activeSteerRunId)}/steer`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text }),
+          },
+        )
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean
+          error?: string
+          fallback?: string
+        }
+        if (!res.ok || !data.ok) {
+          if (
+            data.fallback === 'queue' ||
+            res.status === 409 ||
+            !queueSessionKey ||
+            queueSessionKey === 'new'
+          ) {
+            if (queueSessionKey && queueSessionKey !== 'new') {
+              enqueueSessionMessage(queueSessionKey, { text })
+              setQueueVersion((version) => version + 1)
+              helpers.reset()
+              toast('Steer unavailable — queued for next turn', {
+                type: 'warning',
+              })
+              return
+            }
+          }
+          toast(data.error || 'Steer failed', { type: 'error' })
+          return
+        }
+        helpers.reset()
+        toast('Steered current reply', { type: 'success' })
+      } catch (err) {
+        toast(
+          `Steer failed. ${err instanceof Error ? err.message : String(err)}`,
+          { type: 'error' },
+        )
+      }
+    },
+    [activeSteerRunId, queueSessionKey],
+  )
+
+  const handleInterruptSendFromComposer = useCallback(
+    (
+      body: string,
+      attachments: Array<ChatComposerAttachment>,
+      helpers: ChatComposerHelpers,
+    ) => {
+      if (!queueSessionKey || queueSessionKey === 'new') {
+        toast('Open a session first', { type: 'error' })
+        return
+      }
+      const entry = enqueueSessionMessage(queueSessionKey, {
+        text: body,
+        attachments,
+      })
+      if (!entry) {
+        toast('Could not queue interrupt message', { type: 'error' })
+        return
+      }
+      helpers.reset()
+      setQueueVersion((version) => version + 1)
+      abortActiveStreamRef.current()
+      toast('Interrupted — follow-up will send next', { type: 'success' })
+    },
+    [queueSessionKey],
+  )
+
+  // Drain one queued follow-up when the current turn becomes idle.
+  useEffect(() => {
+    const busy =
+      sending ||
+      waitingForResponse ||
+      activeIsRealtimeStreaming ||
+      isCompacting
+    if (busy) {
+      wasBusyForQueueRef.current = true
+      return
+    }
+    if (!queueSessionKey || queueSessionKey === 'new') return
+
+    const shouldDrain =
+      wasBusyForQueueRef.current ||
+      mountDrainKeyRef.current !== queueSessionKey
+    mountDrainKeyRef.current = queueSessionKey
+    wasBusyForQueueRef.current = false
+    if (!shouldDrain) return
+    if (queuedMessageCount(queueSessionKey) === 0) return
+
+    const next = dequeueSessionMessage(queueSessionKey)
+    if (!next) return
+    setQueueVersion((version) => version + 1)
+
+    const attachments: Array<ChatAttachment> = (next.attachments ?? []).map(
+      (attachment) => ({
+        id: attachment.id ?? crypto.randomUUID(),
+        name: attachment.name ?? 'file',
+        contentType: attachment.contentType ?? 'application/octet-stream',
+        size: attachment.size ?? 0,
+        dataUrl: attachment.dataUrl,
+        previewUrl: attachment.previewUrl,
+        kind: attachment.kind,
+      }),
+    )
+    sendMessage(
+      queueSessionKey,
+      activeFriendlyId || queueSessionKey,
+      next.text,
+      attachments,
+      false,
+    )
+  }, [
+    activeFriendlyId,
+    activeIsRealtimeStreaming,
+    isCompacting,
+    queueSessionKey,
+    sendMessage,
+    sending,
+    waitingForResponse,
   ])
 
   const runPaletteSlashCommand = useCallback(
@@ -3084,6 +3985,8 @@ export function ChatScreen({
                 <ChatMessageList
                   messages={visibleMessages}
                   onRetryMessage={handleRetryMessage}
+                  onEditMessage={handleEditMessage}
+                  onRegenerateMessage={handleRegenerateMessage}
                   onRefresh={handleRefreshHistory}
                   loading={historyLoading}
                   empty={historyEmpty}
@@ -3126,12 +4029,45 @@ export function ChatScreen({
                 />
               )}
               {showComposer ? (
-                <ChatComposer
+                <>
+                  {btwCard ? (
+                    <div className="px-3 pt-2 md:px-4">
+                      <SideQuestionCard
+                        question={btwCard.question}
+                        answer={btwCard.answer}
+                        loading={btwCard.loading}
+                        error={btwCard.error}
+                        onClose={() => setBtwCard(null)}
+                      />
+                    </div>
+                  ) : null}
+                  {backgroundTasks.length > 0 ? (
+                    <div className="px-3 pt-2 md:px-4">
+                      <BackgroundTasksBadge
+                        tasks={backgroundTasks}
+                        onOpenSession={(sessionId) => {
+                          if (!sessionId) return
+                          navigate({
+                            to: '/chat/$sessionKey',
+                            params: { sessionKey: sessionId },
+                          })
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                  <ChatComposer
                   onSubmit={send}
+                  onQueue={handleQueueFromComposer}
+                  onInterruptSend={handleInterruptSendFromComposer}
+                  onSteer={handleSteerFromComposer}
                   onAbort={handleAbortStreaming}
                   isLoading={headerStatusMode !== 'idle'}
                   disabled={hideUi}
                   isCompacting={isCompacting}
+                  busyMessageMode={busyMessageMode}
+                  canSteer={canSteer}
+                  queuedCount={queuedCount}
+                  onClearQueue={handleClearQueue}
                   contextRefreshToken={`${resolvedSessionKey || activeSessionKey || 'new'}:${lastCompletedRunAt}:${sending ? 1 : 0}:${waitingForResponse ? 1 : 0}`}
                   sessionKey={
                     isNewChat
@@ -3150,6 +4086,7 @@ export function ChatScreen({
                   onThinkingLevelChange={handleThinkingLevelChange}
                   gatewayQueriesEnabled={!historyLoading}
                 />
+                </>
               ) : null}
             </>
           )}

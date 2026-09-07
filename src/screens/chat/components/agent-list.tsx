@@ -9,6 +9,7 @@ import { AgentStatusDot } from './agent-status-dot'
 import type { AgentRuntime, AgentWithStatus } from '@/lib/agent-types'
 import { cn } from '@/lib/utils'
 import { useAgentStore } from '@/stores/agent-store'
+import { statusLabel, type UnifiedAgentStatus } from '@/lib/agent-status'
 
 const RUNTIME_LABELS: Record<AgentRuntime, string> = {
   hermes: 'Hermes',
@@ -25,7 +26,11 @@ function runtimeLabel(runtime: AgentRuntime): string {
 function agentSubtitle(
   agent: AgentWithStatus,
   profile?: { model?: string; provider?: string },
+  unifiedStatus?: UnifiedAgentStatus,
 ): string {
+  if (unifiedStatus === 'needsSetup') {
+    return 'No model configured'
+  }
   if (agent.runtime === 'hermes' && profile) {
     const model = profile.model?.trim()
     const provider = profile.provider?.trim()
@@ -35,6 +40,35 @@ function agentSubtitle(
     )
   }
   return runtimeLabel(agent.runtime)
+}
+
+/** Convert legacy AgentStatus to the unified status used for rendering. */
+function toUnifiedStatus(
+  agent: AgentWithStatus,
+  profile?: { model?: string; provider?: string },
+): UnifiedAgentStatus {
+  // The server already factors in needsSetup via runtime snapshot, but the
+  // snapshot is only available for hermes profiles. Re-check config.yaml here
+  // so non-Hermes adapters and orphan profiles also surface setup issues.
+  if (agent.runtime === 'hermes' && agent.runtimeConfig.profile) {
+    const hasModel = Boolean(profile?.model?.trim())
+    if (!hasModel) return 'needsSetup'
+  }
+
+  const status = agent.status
+  switch (status) {
+    case 'busy':
+      return 'active'
+    case 'idle':
+    case 'online':
+      return 'idle'
+    case 'blocked':
+      return agent.statusSnapshot?.needsHuman ? 'blocked' : 'error'
+    case 'offline':
+      return 'offline'
+    default:
+      return 'offline'
+  }
 }
 
 function AgentListItem({
@@ -71,7 +105,10 @@ function AgentListItem({
         isActive && 'bg-primary-200',
       )}
     >
-      <AgentStatusDot status={agent.status} />
+      <AgentStatusDot
+        status={agent.status}
+        needsSetup={toUnifiedStatus(agent, profile) === 'needsSetup'}
+      />
       <div className="min-w-0 flex-1">
         <p
           className={cn(
@@ -82,7 +119,7 @@ function AgentListItem({
           {agent.name}
         </p>
         <p className="truncate text-xs text-primary-500">
-          {agentSubtitle(agent, profile)}
+          {agentSubtitle(agent, profile, toUnifiedStatus(agent, profile))}
         </p>
       </div>
       <button
@@ -136,9 +173,14 @@ export function AgentList({
       // Group Hermes agents together before non-Hermes runtimes.
       if (a.runtime === 'hermes' && b.runtime !== 'hermes') return -1
       if (a.runtime !== 'hermes' && b.runtime === 'hermes') return 1
-      // Online/busy agents before offline ones within each group.
-      const aPriority = a.status === 'online' || a.status === 'busy' ? 0 : 1
-      const bPriority = b.status === 'online' || b.status === 'busy' ? 0 : 1
+      // Active/busy agents before idle, idle before offline.
+      const priority = (status: AgentWithStatus['status']) => {
+        if (status === 'busy') return 0
+        if (status === 'online' || status === 'idle') return 1
+        return 2
+      }
+      const aPriority = priority(a.status)
+      const bPriority = priority(b.status)
       if (aPriority !== bPriority) return aPriority - bPriority
       return a.name.localeCompare(b.name)
     })

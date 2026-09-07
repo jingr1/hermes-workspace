@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { createContext, useEffect, useState } from 'react'
 import {
   Outlet,
   useNavigate,
@@ -27,9 +27,22 @@ import {
 import {
   MoreVerticalCircle01Icon,
   Delete01Icon,
+  Edit02Icon,
 } from '@hugeicons/core-free-icons'
-import { createRoom, deleteRoom, listRooms } from '@/lib/group-chat-api'
+import {
+  createRoom,
+  deleteRoom,
+  listRooms,
+  updateRoom,
+} from '@/lib/group-chat-api'
 import type { Room } from '@/lib/group-chat-types'
+import { clearLastRoom, resolveRoomToOpen } from './last-room'
+
+/** Shared header height so the sidebar/main divider lines align. */
+const ROOM_HEADER_CLASS =
+  'h-16 shrink-0 border-b flex items-center justify-between'
+
+export const GroupChatRoomsContext = createContext<Array<Room>>([])
 
 export function GroupChatLayout() {
   const navigate = useNavigate()
@@ -37,16 +50,19 @@ export function GroupChatLayout() {
   const pathname = routerState.location?.pathname ?? ''
   const roomId =
     pathname.startsWith('/group-chat/') && pathname.length > '/group-chat/'.length
-      ? pathname.slice('/group-chat/'.length)
+      ? pathname.slice('/group-chat/'.length).split(/[/?#]/)[0]
       : undefined
   const [rooms, setRooms] = useState<Array<Room>>([])
   const [createTitle, setCreateTitle] = useState('')
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Room | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [renameTarget, setRenameTarget] = useState<Room | null>(null)
+  const [renameTitle, setRenameTitle] = useState('')
+  const [renaming, setRenaming] = useState(false)
 
   useEffect(() => {
-    loadRooms()
+    void loadRooms()
   }, [])
 
   async function loadRooms() {
@@ -61,7 +77,7 @@ export function GroupChatLayout() {
     setCreateTitle('')
     setIsCreateOpen(false)
     await loadRooms()
-    navigate({ to: `/group-chat/${res.room.id}` })
+    navigate({ to: '/group-chat/$roomId', params: { roomId: res.room.id } })
   }
 
   async function handleConfirmDelete() {
@@ -70,13 +86,44 @@ export function GroupChatLayout() {
     setDeleting(true)
     try {
       await deleteRoom(id)
+      clearLastRoom(id)
       setDeleteTarget(null)
-      await loadRooms()
+      const res = await listRooms()
+      setRooms(res.rooms)
       if (roomId === id) {
-        navigate({ to: '/group-chat' })
+        const next = resolveRoomToOpen(res.rooms)
+        if (next) {
+          navigate({
+            to: '/group-chat/$roomId',
+            params: { roomId: next },
+            replace: true,
+          })
+        } else {
+          navigate({ to: '/group-chat', replace: true })
+        }
       }
     } finally {
       setDeleting(false)
+    }
+  }
+
+  async function handleConfirmRename() {
+    if (!renameTarget || renaming) return
+    const title = renameTitle.trim()
+    if (!title || title === renameTarget.title) {
+      setRenameTarget(null)
+      return
+    }
+    setRenaming(true)
+    try {
+      const res = await updateRoom(renameTarget.id, { title })
+      setRooms((prev) =>
+        prev.map((r) => (r.id === res.room.id ? res.room : r)),
+      )
+      setRenameTarget(null)
+      setRenameTitle('')
+    } finally {
+      setRenaming(false)
     }
   }
 
@@ -89,7 +136,10 @@ export function GroupChatLayout() {
           background: 'var(--theme-card)',
         }}
       >
-        <div className="p-3 border-b flex items-center justify-between">
+        <div
+          className={cn(ROOM_HEADER_CLASS, 'px-3')}
+          style={{ borderColor: 'var(--theme-border)' }}
+        >
           <h2 className="font-semibold">Group Chat</h2>
           <DialogRoot open={isCreateOpen} onOpenChange={setIsCreateOpen}>
             <DialogTrigger type="button" className="inline-flex">
@@ -125,7 +175,12 @@ export function GroupChatLayout() {
               style={{ borderColor: 'var(--theme-border)' }}
             >
               <button
-                onClick={() => navigate({ to: `/group-chat/${room.id}` })}
+                onClick={() =>
+                  navigate({
+                    to: '/group-chat/$roomId',
+                    params: { roomId: room.id },
+                  })
+                }
                 className="flex-1 min-w-0 text-left"
               >
                 <div className="font-medium truncate">{room.title}</div>
@@ -150,6 +205,19 @@ export function GroupChatLayout() {
                   </MenuTrigger>
                   <MenuContent align="end" side="bottom">
                     <MenuItem
+                      onClick={() => {
+                        setRenameTarget(room)
+                        setRenameTitle(room.title)
+                      }}
+                    >
+                      <HugeiconsIcon
+                        icon={Edit02Icon}
+                        size={16}
+                        strokeWidth={1.5}
+                      />
+                      Rename
+                    </MenuItem>
+                    <MenuItem
                       className="text-red-400 focus:text-red-400"
                       onClick={() => setDeleteTarget(room)}
                     >
@@ -167,6 +235,41 @@ export function GroupChatLayout() {
           ))}
         </div>
       </aside>
+
+      <DialogRoot
+        open={renameTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !renaming) {
+            setRenameTarget(null)
+            setRenameTitle('')
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogTitle>Rename room</DialogTitle>
+          <DialogDescription>
+            Change the display name for this room.
+          </DialogDescription>
+          <div className="flex gap-2 mt-4">
+            <Input
+              placeholder="Room title"
+              value={renameTitle}
+              onChange={(e) => setRenameTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void handleConfirmRename()
+              }}
+              disabled={renaming}
+              autoFocus
+            />
+            <Button
+              disabled={renaming || !renameTitle.trim()}
+              onClick={() => void handleConfirmRename()}
+            >
+              {renaming ? 'Saving…' : 'Save'}
+            </Button>
+          </div>
+        </DialogContent>
+      </DialogRoot>
 
       <DialogRoot
         open={deleteTarget !== null}
@@ -195,7 +298,9 @@ export function GroupChatLayout() {
       </DialogRoot>
 
       <main className="flex-1 min-w-0 bg-[var(--theme-bg)]">
-        <Outlet />
+        <GroupChatRoomsContext.Provider value={rooms}>
+          <Outlet />
+        </GroupChatRoomsContext.Provider>
       </main>
     </div>
   )

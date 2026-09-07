@@ -42,5 +42,17 @@ export const PENDING_TURN_EXPIRY_MS = 30 * 60_000
 /** Tick interval for the room runner. */
 export const GROUP_RUNNER_TICK_MS = 5_000
 
+/**
+ * After a transient gateway/session verify failure, skip re-driving the room
+ * for this long. Prevents tight retry storms when a profile port is down.
+ */
+export const GROUP_RUNNER_ERROR_COOLDOWN_MS = 30_000
+
 /** Max pending turns processed per tick. */
 export const GROUP_MAX_PENDING_PER_TICK = 10
+
+/** Background stranded-harvest poll interval (Bot Mode: 5s). */
+export const GROUP_HARVEST_INTERVAL_MS = 5_000
+
+/** Max background harvest attempts after a drive settles (~5 min). */
+export const GROUP_HARVEST_MAX_TRIES = 60

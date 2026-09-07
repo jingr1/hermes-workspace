@@ -8,12 +8,21 @@ export type StickyStreamingTextState = {
 export type ResponseWaitSnapshot = {
   messageCount: number
   lastAssistantId: string | null
+  lastAssistantText: string | null
 }
 
 export function isTerminalActiveRunStatus(status: unknown): boolean {
   return (
     typeof status === 'string' &&
-    ['complete', 'completed', 'failed', 'cancelled', 'error'].includes(status)
+    [
+      'complete',
+      'completed',
+      'failed',
+      'cancelled',
+      'canceled',
+      'error',
+      'interrupted',
+    ].includes(status)
   )
 }
 
@@ -27,14 +36,30 @@ function assistantMessageIdentity(message: ChatMessage): string {
   )
 }
 
+function assistantPlainText(message: ChatMessage): string {
+  const content = message.content
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  return content
+    .map((part) => {
+      if (typeof part === 'string') return part
+      if (part && typeof part === 'object' && 'text' in part) {
+        return String((part as { text?: unknown }).text ?? '')
+      }
+      return ''
+    })
+    .join('')
+}
+
 export function createResponseWaitSnapshot(
   messages: Array<ChatMessage>,
 ): ResponseWaitSnapshot {
   const last = messages[messages.length - 1]
+  const isAssistant = last?.role === 'assistant'
   return {
     messageCount: messages.length,
-    lastAssistantId:
-      last?.role === 'assistant' ? assistantMessageIdentity(last) : null,
+    lastAssistantId: isAssistant ? assistantMessageIdentity(last) : null,
+    lastAssistantText: isAssistant ? assistantPlainText(last) : null,
   }
 }
 
@@ -53,7 +78,31 @@ export function shouldClearWaitingForAssistantMessage(
     return true
   }
 
+  // Same assistant row can be rewritten in place (e.g. "Operation interrupted…")
+  // after SSE disconnect — identity/count stay equal but waiting must clear.
+  const currentText = assistantPlainText(last)
+  if (
+    snapshot.lastAssistantText !== null &&
+    currentText.length > 0 &&
+    currentText !== snapshot.lastAssistantText
+  ) {
+    return true
+  }
+
   return snapshot.lastAssistantId === null
+}
+
+/**
+ * Decide whether the waiting spinner can settle from an active-run probe.
+ * `missing` means the server has no active run — callers should apply a short
+ * grace period so registration lag right after send does not flicker the UI.
+ */
+export function shouldSettleWaitingFromActiveRun(run: {
+  status?: unknown
+} | null): 'keep' | 'settle' | 'missing' {
+  if (!run) return 'missing'
+  if (isTerminalActiveRunStatus(run.status)) return 'settle'
+  return 'keep'
 }
 
 export function advanceStickyStreamingText(params: {

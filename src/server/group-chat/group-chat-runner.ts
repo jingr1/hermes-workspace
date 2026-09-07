@@ -20,11 +20,13 @@ import {
   GROUP_CHAT_MAX_MESSAGES,
   GROUP_CHAT_MAX_ROUNDS,
   GROUP_DUPLICATE_APPEND_WINDOW_MS,
+  GROUP_HARVEST_INTERVAL_MS,
+  GROUP_HARVEST_MAX_TRIES,
+  GROUP_RUNNER_ERROR_COOLDOWN_MS,
   GROUP_RUNNER_TICK_MS,
   GROUP_TURN_HARD_CAP_MS,
 } from './constants'
 import {
-  createPendingTurn,
   expirePendingTurns,
   getLatestMessages,
   getRoom,
@@ -33,7 +35,7 @@ import {
   listParticipants,
   listRooms,
   setWatermark,
-  toGroupMember, updateRoom 
+  toGroupMember,
 } from './room-store'
 import { executeMemberTurn } from './turn-executor'
 import { buildTurnContext } from './prompt-builder'
@@ -41,33 +43,86 @@ import {
   expandMentionTargets,
   groupMemberKey,
   parseMentions,
-  resolveHumanMentions,
 } from './mention-routing'
 import {
   isGroupPassText,
+  isGroupTranscriptBusy,
+  pickGroupTurnReply,
   resolveGroupResponders,
   rotateGroupSpeakers,
   unaddressedGroupMentions,
 } from './responder-utils'
 import {
   bumpRoomEpoch,
+  clearRoomErrorCooldown,
+  clearStranded,
   clearTurnInFlight,
   expireStaleInFlight,
   getInFlightMembers,
   getRoomEpoch,
   getRoomRunnerState,
-  isTurnInFlight,
+  getStranded,
+  hasStranded,
+  isRoomInErrorCooldown,
+  isRoomRunning,
+  listStrandedMembers,
   setLastRunAt,
+  setRoomErrorCooldown,
+  setRoomRunning,
+  setStranded,
   setTurnInFlight,
+  shouldLogRoomError,
 } from './runner-state'
+import { getMemberSessionMessages } from './agent-session-manager'
 import { maybeSummarizeRoom } from './summaries'
 import type { GroupMember, GroupTurnResult, Room, RoomMessage } from './types'
 
-let runnerTimer: ReturnType<typeof setInterval> | null = null
-let runnerBusy = false
+type RunnerControl = {
+  timer: ReturnType<typeof setInterval> | null
+  busy: boolean
+}
+
+/** HMR-safe singleton so dispose/start share one timer across module reloads. */
+function getRunnerControl(): RunnerControl {
+  const g = globalThis as Record<string, unknown>
+  const key = '__group_chat_runner_control__'
+  if (!g[key]) {
+    g[key] = { timer: null, busy: false } satisfies RunnerControl
+  }
+  return g[key] as RunnerControl
+}
+
+/** Vite SSR HMR closes the module runner; stale timers must stop immediately. */
+function isViteRunnerClosedError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error)
+  return /Vite module runner has been closed/i.test(msg)
+}
+
+function isTransientGatewayError(message: string): boolean {
+  return /fetch failed|Could not verify .+ group session|ECONNREFUSED|ENOTFOUND|network error|timeout/i.test(
+    message,
+  )
+}
+
+function handleRunnerFatalError(error: unknown, context: string): boolean {
+  if (!isViteRunnerClosedError(error)) return false
+  console.warn(
+    `[group-chat-runner] ${context}: Vite module runner closed; stopping stale timer`,
+  )
+  stopGroupChatRunner()
+  return true
+}
+
+function logRoomError(roomId: string, message: string): void {
+  if (!shouldLogRoomError(roomId, message, GROUP_RUNNER_ERROR_COOLDOWN_MS)) {
+    return
+  }
+  console.error(`[group-chat-runner] room ${roomId} error:`, message)
+}
 
 export function startGroupChatRunner(): void {
-  if (runnerTimer) return
+  const control = getRunnerControl()
+  if (control.timer) return
   // Apply any pending collab.db migrations before the first tick.
   ensureCollabDb()
   // Diagnostic: confirm the resolved db path and schema at startup.
@@ -85,33 +140,43 @@ export function startGroupChatRunner(): void {
   } catch (e) {
     console.error('[group-chat-runner] schema probe error:', e)
   }
-  runnerTimer = setInterval(async () => {
-    if (runnerBusy) return
-    runnerBusy = true
+  control.timer = setInterval(async () => {
+    if (control.busy) return
+    control.busy = true
     try {
       await tickAllRooms()
     } catch (error) {
+      if (handleRunnerFatalError(error, 'tick')) return
       console.error(
         '[group-chat-runner] tick error:',
         error instanceof Error ? error.message : String(error),
       )
     } finally {
-      runnerBusy = false
+      control.busy = false
     }
   }, GROUP_RUNNER_TICK_MS)
   console.log('[group-chat-runner] started')
 }
 
 export function stopGroupChatRunner(): void {
-  if (runnerTimer) {
-    clearInterval(runnerTimer)
-    runnerTimer = null
+  const control = getRunnerControl()
+  if (control.timer) {
+    clearInterval(control.timer)
+    control.timer = null
   }
-  runnerBusy = false
+  control.busy = false
+}
+
+// Dev HMR: clear the interval from the dying module graph so a closed Vite
+// runner cannot keep ticking and flood the console every GROUP_RUNNER_TICK_MS.
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    stopGroupChatRunner()
+  })
 }
 
 export function isGroupChatRunnerRunning(): boolean {
-  return runnerTimer !== null
+  return getRunnerControl().timer !== null
 }
 
 /**
@@ -122,12 +187,18 @@ export function isGroupChatRunnerRunning(): boolean {
 export function triggerRoomRun(roomId: string): void {
   void (async () => {
     try {
+      // Human message ignition should not wait out a gateway cooldown — clear
+      // it so ensure+verify can run immediately after the user speaks.
+      clearRoomErrorCooldown(roomId)
       await runRoomInternal(roomId)
     } catch (error) {
-      console.error(
-        `[group-chat-runner] trigger ${roomId} error:`,
-        error instanceof Error ? error.stack ?? error.message : String(error),
-      )
+      if (handleRunnerFatalError(error, `trigger ${roomId}`)) return
+      const message =
+        error instanceof Error ? error.stack ?? error.message : String(error)
+      if (isTransientGatewayError(message)) {
+        setRoomErrorCooldown(roomId, GROUP_RUNNER_ERROR_COOLDOWN_MS)
+      }
+      console.error(`[group-chat-runner] trigger ${roomId} error:`, message)
     }
   })()
 }
@@ -140,13 +211,17 @@ export async function tickAllRooms(): Promise<void> {
   const rooms = listRooms()
   for (const room of rooms) {
     if (room.state !== 'active') continue
+    if (isRoomInErrorCooldown(room.id)) continue
     try {
       await runRoomInternal(room.id)
     } catch (error) {
-      console.error(
-        `[group-chat-runner] room ${room.id} error:`,
-        error instanceof Error ? error.message : String(error),
-      )
+      if (handleRunnerFatalError(error, `room ${room.id}`)) return
+      const message =
+        error instanceof Error ? error.message : String(error)
+      if (isTransientGatewayError(message)) {
+        setRoomErrorCooldown(room.id, GROUP_RUNNER_ERROR_COOLDOWN_MS)
+      }
+      logRoomError(room.id, message)
     }
   }
 }
@@ -156,12 +231,13 @@ export async function runRoom(room: Room): Promise<void> {
 }
 
 async function runRoomInternal(roomId: string): Promise<void> {
-  const { isRoomRunning, setRoomRunning } = await import('./runner-state')
   if (isRoomRunning(roomId)) return
+  if (isRoomInErrorCooldown(roomId)) return
   setRoomRunning(roomId, true)
 
   try {
     await driveRoom(roomId)
+    clearRoomErrorCooldown(roomId)
   } finally {
     setRoomRunning(roomId, false)
   }
@@ -186,11 +262,9 @@ async function driveRoom(roomId: string): Promise<void> {
   // Summarize if needed.
   await maybeSummarizeRoom(roomId)
 
-  // Stranded reply harvest: check any in-flight member for a finished reply.
+  // Stranded reply harvest: check any timed-out member for a finished reply.
   for (const member of members) {
-    if (isTurnInFlight(room.id, member)) {
-      harvestStrandedReply(room, member, allMessages)
-    }
+    await harvestStrandedReply(room, member)
   }
 
   // If any member is still in flight after harvest, don't start new turns.
@@ -203,6 +277,10 @@ async function driveRoom(roomId: string): Promise<void> {
     return allMessages.length > watermark
   })
   if (!hasUnseenDelta) {
+    // Still may have stranded work; keep background harvest going.
+    if (listStrandedMembers(roomId).length > 0) {
+      void harvestStrandedUntilSettled(roomId, members)
+    }
     return
   }
 
@@ -224,25 +302,31 @@ async function runGroupChatRounds(
   const isCurrent = () => getRoomEpoch(room.id) === startEpoch
 
   for (let round = 0; round < GROUP_CHAT_MAX_ROUNDS; round++) {
-    // Re-harvest stranded replies at the top of every round.
+    // Deliver any replies that finished after their turn timed out —
+    // every member, not just this round's responders (Bot Mode).
     for (const member of members) {
       if (!isCurrent()) return
-      harvestStrandedReply(room, member, getLatestMessages(room.id, { limit: 200 }))
+      await harvestStrandedReply(room, member)
     }
 
     const roomLog = getLatestMessages(room.id, { limit: 200 })
     const inFlight = getInFlightMembers(room.id)
+    // Skip members still stranded (gateway turn still running). Re-prompting
+    // them would interrupt the long work harvest exists to protect.
     const responders = rotateGroupSpeakers(
       resolveGroupResponders(roomLog, members),
       round,
-    ).filter((m) => !inFlight.includes(groupMemberKey(m)))
+    ).filter(
+      (m) =>
+        !inFlight.includes(groupMemberKey(m)) && !hasStranded(room.id, m),
+    )
 
     let spokeThisRound = 0
 
     for (const member of responders) {
       if (!isCurrent() || posted >= GROUP_CHAT_MAX_MESSAGES) {
         if (isCurrent()) exitKind = 'capped'
-        finishDrive(room, exitKind)
+        finishDrive(room, members, exitKind)
         return
       }
 
@@ -256,7 +340,7 @@ async function runGroupChatRounds(
 
       if (turnResult.kind === 'blocked') {
         // Human gate was raised; stop the drive.
-        finishDrive(room, 'settled')
+        finishDrive(room, members, 'settled')
         return
       }
 
@@ -298,15 +382,25 @@ async function runGroupChatRounds(
         setWatermark(room.id, member.participantId, roomLog.length)
       }
 
-      // Advance watermark on failed/timeout so empty streams cannot spin the
-      // runner (same delta → retry forever every tick / continuation).
-      if (turnResult.kind === 'failed' || turnResult.kind === 'timeout') {
+      // Timeout: advance watermark (don't re-prompt same delta) + strand so
+      // the finished reply can be harvested late. Failed: advance + emit.
+      if (turnResult.kind === 'timeout') {
+        setWatermark(room.id, member.participantId, roomLog.length)
+        setStranded(room.id, member, {
+          before: turnResult.before,
+          sessionId: turnResult.sessionId,
+        })
+        publishChatEvent('group_chat_failed', {
+          roomId: room.id,
+          member: member.displayName,
+          reason: 'turn timed out — will harvest late reply if it finishes',
+        })
+      } else if (turnResult.kind === 'failed') {
         setWatermark(room.id, member.participantId, roomLog.length)
         publishChatEvent('group_chat_failed', {
           roomId: room.id,
           member: member.displayName,
-          reason:
-            turnResult.kind === 'failed' ? turnResult.reason : 'turn timed out',
+          reason: turnResult.reason,
         })
       }
     }
@@ -327,7 +421,9 @@ async function runGroupChatRounds(
         )
         const stillInFlight = getInFlightMembers(room.id)
         const continuationResponders = citedMembers.filter(
-          (m) => !stillInFlight.includes(groupMemberKey(m)),
+          (m) =>
+            !stillInFlight.includes(groupMemberKey(m)) &&
+            !hasStranded(room.id, m),
         )
         for (const member of continuationResponders) {
           if (
@@ -335,7 +431,7 @@ async function runGroupChatRounds(
             posted >= GROUP_CHAT_MAX_MESSAGES ||
             continuations > GROUP_CHAT_MAX_CONTINUATIONS
           ) {
-            finishDrive(room, 'capped')
+            finishDrive(room, members, 'capped')
             return
           }
           const roomLog2 = getLatestMessages(room.id, { limit: 200 })
@@ -366,20 +462,27 @@ async function runGroupChatRounds(
               text: turnResult.text,
             })
             await maybeSummarizeRoom(room.id, { profile: member.profile ?? undefined })
+          } else if (turnResult.kind === 'timeout') {
+            setWatermark(room.id, member.participantId, roomLog2.length)
+            setStranded(room.id, member, {
+              before: turnResult.before,
+              sessionId: turnResult.sessionId,
+            })
+            publishChatEvent('group_chat_failed', {
+              roomId: room.id,
+              member: member.displayName,
+              reason: 'turn timed out — will harvest late reply if it finishes',
+            })
           } else if (
             turnResult.kind === 'pass' ||
-            turnResult.kind === 'failed' ||
-            turnResult.kind === 'timeout'
+            turnResult.kind === 'failed'
           ) {
             setWatermark(room.id, member.participantId, roomLog2.length)
-            if (turnResult.kind === 'failed' || turnResult.kind === 'timeout') {
+            if (turnResult.kind === 'failed') {
               publishChatEvent('group_chat_failed', {
                 roomId: room.id,
                 member: member.displayName,
-                reason:
-                  turnResult.kind === 'failed'
-                    ? turnResult.reason
-                    : 'turn timed out',
+                reason: turnResult.reason,
               })
             }
           }
@@ -388,7 +491,7 @@ async function runGroupChatRounds(
     }
   }
 
-  finishDrive(room, exitKind)
+  finishDrive(room, members, exitKind)
 }
 
 async function runMemberTurn(
@@ -427,20 +530,115 @@ async function runMemberTurn(
   }
 }
 
-function harvestStrandedReply(
+/**
+ * Post a timed-out member's finished reply into the room, if it landed after
+ * we stopped waiting. Bot Mode: late, never lost.
+ */
+async function harvestStrandedReply(
   room: Room,
   member: GroupMember,
-  roomLog: Array<RoomMessage>,
-): void {
-  if (!isTurnInFlight(room.id, member)) return
-  // TODO: implement real harvest by re-reading the member's canonical session
-  // and appending any new assistant message that arrived after the turn started.
-  // For now we simply expire very old in-flight markers and rely on the next
-  // full run to re-drive.
-  const state = getRoomRunnerState(room.id)
-  const turn = state.inFlight.get(groupMemberKey(member))
-  if (turn && Date.now() - turn.startedAt > GROUP_TURN_HARD_CAP_MS) {
-    clearTurnInFlight(room.id, member)
+): Promise<boolean> {
+  const marker = getStranded(room.id, member)
+  if (!marker) {
+    // Expire very old in-flight markers (hard cap) even without stranded.
+    const state = getRoomRunnerState(room.id)
+    const turn = state.inFlight.get(groupMemberKey(member))
+    if (turn && Date.now() - turn.startedAt > GROUP_TURN_HARD_CAP_MS) {
+      clearTurnInFlight(room.id, member)
+    }
+    return false
+  }
+
+  const { messages } = await getMemberSessionMessages(room.id, member)
+  if (messages.length === 0) {
+    // Session unreachable — leave marker for next boundary.
+    return false
+  }
+
+  if (isGroupTranscriptBusy(messages, marker.before)) {
+    // Still grinding — keep waiting.
+    return false
+  }
+
+  // Done (or dead): consume the marker either way.
+  clearStranded(room.id, member)
+
+  if (messages.length <= marker.before) {
+    return false
+  }
+
+  const reply = pickGroupTurnReply(
+    messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+      tool_calls: m.tool_calls,
+    })),
+    marker.before,
+  )
+
+  if (!reply || isGroupPassText(reply)) {
+    return false
+  }
+
+  const roomLog = getLatestMessages(room.id, { limit: 200 })
+  if (isDuplicateAppend(roomLog[roomLog.length - 1], member, reply)) {
+    return false
+  }
+
+  const participants = listParticipants(room.id)
+    .filter((p) => !p.removedAt)
+    .map(toGroupMember)
+  const newMessage = insertMessage({
+    roomId: room.id,
+    senderKind: 'agent',
+    senderParticipantId: member.participantId,
+    senderName: member.displayName,
+    content: reply,
+    mentions: expandMentionTargets(
+      parseMentions(reply, participants),
+      room.id,
+      participants,
+    ),
+  })
+  setWatermark(room.id, member.participantId, roomLog.length + 1)
+  publishChatEvent('group_chat_reply', {
+    roomId: room.id,
+    messageId: newMessage.id,
+    member: member.displayName,
+    text: reply,
+  })
+  console.log(
+    `[group-chat-runner] harvested stranded reply from ${member.displayName} (${reply.slice(0, 80)})`,
+  )
+  return true
+}
+
+/**
+ * Bounded background harvest after a drive settles (Bot Mode:
+ * harvestStrandedUntilSettled — 5s × 60 ≈ 5 min).
+ */
+async function harvestStrandedUntilSettled(
+  roomId: string,
+  members: Array<GroupMember>,
+): Promise<void> {
+  for (let attempt = 0; attempt < GROUP_HARVEST_MAX_TRIES; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, GROUP_HARVEST_INTERVAL_MS))
+    if (isRoomRunning(roomId)) return
+    const room = getRoom(roomId)
+    if (!room || room.state !== 'active') return
+    if (listStrandedMembers(roomId).length === 0) return
+
+    for (const member of members) {
+      if (!hasStranded(roomId, member)) continue
+      try {
+        await harvestStrandedReply(room, member)
+      } catch (error) {
+        console.warn(
+          `[group-chat-runner] harvest ${member.displayName}:`,
+          error instanceof Error ? error.message : String(error),
+        )
+      }
+    }
   }
 }
 
@@ -456,8 +654,16 @@ function isDuplicateAppend(
   return Date.now() - lastEntry.createdAt < GROUP_DUPLICATE_APPEND_WINDOW_MS
 }
 
-function finishDrive(room: Room, kind: 'settled' | 'capped'): void {
+function finishDrive(
+  room: Room,
+  members: Array<GroupMember>,
+  kind: 'settled' | 'capped',
+): void {
   publishChatEvent(kind === 'settled' ? 'group_chat_settled' : 'group_chat_capped', {
     roomId: room.id,
   })
+  // Poll for late replies that outlived the turn loop.
+  if (listStrandedMembers(room.id).length > 0) {
+    void harvestStrandedUntilSettled(room.id, members)
+  }
 }

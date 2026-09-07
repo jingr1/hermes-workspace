@@ -35,14 +35,49 @@ describe('getComposerPrimaryAction', () => {
     ).toBe('stop')
   })
 
-  it('returns send when busy with draft content', () => {
+  it('returns queue when busy with draft content (default mode)', () => {
     expect(
       getComposerPrimaryAction({
         disabled: false,
         isBusy: true,
         hasContent: true,
       }),
-    ).toBe('send')
+    ).toBe('queue')
+  })
+
+  it('returns interrupt when busy mode is interrupt', () => {
+    expect(
+      getComposerPrimaryAction({
+        disabled: false,
+        isBusy: true,
+        hasContent: true,
+        busyMessageMode: 'interrupt',
+      }),
+    ).toBe('interrupt')
+  })
+
+  it('returns steer when busy mode is steer and canSteer', () => {
+    expect(
+      getComposerPrimaryAction({
+        disabled: false,
+        isBusy: true,
+        hasContent: true,
+        busyMessageMode: 'steer',
+        canSteer: true,
+      }),
+    ).toBe('steer')
+  })
+
+  it('falls back to queue when steer mode but no live run', () => {
+    expect(
+      getComposerPrimaryAction({
+        disabled: false,
+        isBusy: true,
+        hasContent: true,
+        busyMessageMode: 'steer',
+        canSteer: false,
+      }),
+    ).toBe('queue')
   })
 
   it('returns queue when compacting without draft content', () => {
@@ -58,8 +93,11 @@ describe('getComposerPrimaryAction', () => {
 })
 
 describe('composerPrimaryActionLabel', () => {
-  it('labels stop and send actions', () => {
+  it('labels busy-mode actions', () => {
     expect(composerPrimaryActionLabel('stop')).toBe('Stop generation')
+    expect(composerPrimaryActionLabel('queue')).toBe('Queue message')
+    expect(composerPrimaryActionLabel('interrupt')).toBe('Interrupt and send')
+    expect(composerPrimaryActionLabel('steer')).toBe('Steer current response')
     expect(composerPrimaryActionLabel('send')).toBe('Send message')
   })
 })

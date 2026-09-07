@@ -31,7 +31,7 @@ function getStatusStyles(
   status: OperationsAgent['status'],
   needsSetup: boolean,
 ) {
-  if (needsSetup) {
+  if (needsSetup || status === 'needsSetup') {
     return {
       dot: 'bg-amber-400',
       ring: 'text-amber-400',
@@ -40,29 +40,42 @@ function getStatusStyles(
     }
   }
 
-  if (status === 'error') {
-    return {
-      dot: 'bg-red-500',
-      ring: 'text-red-500',
-      label: 'Error',
-      border: 'border-red-300/30',
-    }
-  }
-
-  if (status === 'active') {
-    return {
-      dot: 'bg-emerald-500',
-      ring: 'text-emerald-500',
-      label: 'Active',
-      border: 'border-emerald-300/30',
-    }
-  }
-
-  return {
-    dot: 'bg-primary-300',
-    ring: 'text-primary-300',
-    label: 'Idle',
-    border: 'border-[var(--theme-border)]',
+  switch (status) {
+    case 'active':
+      return {
+        dot: 'bg-emerald-500',
+        ring: 'text-emerald-500',
+        label: 'Active',
+        border: 'border-emerald-300/30',
+      }
+    case 'idle':
+      return {
+        dot: 'bg-sky-400',
+        ring: 'text-sky-400',
+        label: 'Idle',
+        border: 'border-sky-300/30',
+      }
+    case 'offline':
+      return {
+        dot: 'bg-neutral-400',
+        ring: 'text-neutral-400',
+        label: 'Offline',
+        border: 'border-neutral-300/30',
+      }
+    case 'blocked':
+      return {
+        dot: 'bg-rose-500',
+        ring: 'text-rose-500',
+        label: 'Blocked',
+        border: 'border-rose-300/30',
+      }
+    case 'error':
+      return {
+        dot: 'bg-red-500',
+        ring: 'text-red-500',
+        label: 'Error',
+        border: 'border-red-300/30',
+      }
   }
 }
 
@@ -444,7 +457,7 @@ export function OperationsAgentCard({
               color={agent.meta.color}
               accentColor="#ffffff"
               status={
-                agent.status === 'error'
+                agent.status === 'error' || agent.status === 'blocked'
                   ? 'failed'
                   : agent.status === 'active'
                     ? 'running'
@@ -633,11 +646,7 @@ export function OperationsAgentCard({
       <div className="mx-2 mt-auto rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2">
         <p className="flex items-center gap-1.5 text-[10px] font-medium text-[var(--theme-muted)]">
           <span className={cn('h-1.5 w-1.5 rounded-full', status.dot)} />
-          {agent.status === 'active'
-            ? 'Active'
-            : agent.status === 'error'
-              ? 'Error'
-              : 'Idle'}
+          {status.label}
           <span className="text-[var(--theme-muted)]/70">·</span>
           <span className="truncate">{agent.activityLabel}</span>
         </p>

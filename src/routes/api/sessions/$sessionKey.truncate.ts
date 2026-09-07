@@ -1,0 +1,59 @@
+import { createFileRoute } from '@tanstack/react-router'
+import { json } from '@tanstack/react-start'
+import { isAuthenticated } from '../../../server/auth-middleware'
+import { requireJsonContentType } from '../../../server/rate-limit'
+import { truncateSession } from '../../../server/claude-api'
+import { ensureActiveProfileGateway } from '../../../server/gateway-pool'
+
+export const Route = createFileRoute('/api/sessions/$sessionKey/truncate')({
+  server: {
+    handlers: {
+      POST: async ({ request, params }) => {
+        if (!isAuthenticated(request)) {
+          return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
+        }
+        const csrf = requireJsonContentType(request)
+        if (csrf) return csrf
+
+        const sessionKey = params.sessionKey?.trim()
+        if (!sessionKey || sessionKey === 'new' || sessionKey === 'main') {
+          return json(
+            { ok: false, error: 'sessionKey required' },
+            { status: 400 },
+          )
+        }
+
+        const body = (await request.json().catch(() => ({}))) as Record<
+          string,
+          unknown
+        >
+        const keepRaw = body.keepCount ?? body.keep_count
+        const keepCount = Number(keepRaw)
+        if (!Number.isInteger(keepCount) || keepCount < 0) {
+          return json(
+            { ok: false, error: 'keepCount must be a non-negative integer' },
+            { status: 400 },
+          )
+        }
+
+        try {
+          await ensureActiveProfileGateway()
+          const result = await truncateSession(sessionKey, keepCount)
+          return json({
+            ok: true,
+            keepCount: result.keep_count,
+            removedCount: result.removed_count,
+          })
+        } catch (err) {
+          return json(
+            {
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            },
+            { status: 500 },
+          )
+        }
+      },
+    },
+  },
+})

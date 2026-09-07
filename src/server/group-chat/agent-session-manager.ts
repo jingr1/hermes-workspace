@@ -22,6 +22,7 @@ import {
   sendChat as globalSendChat,
 } from '../claude-api'
 import { getCollabDbPath } from '../collab-db'
+import { ensureProfileGateway } from '../gateway-pool'
 import { openSqliteDatabase } from '../sqlite-helper'
 import type { GroupMember } from './types'
 
@@ -141,6 +142,56 @@ export function forgetSession(roomId: string, participantId: string): void {
   }
 }
 
+/** Read a previously mapped session id without creating one. */
+export function peekSession(
+  roomId: string,
+  participantId: string,
+  input?: { dbPath?: string },
+): string | null {
+  const cacheKey = sessionCacheKey(roomId, participantId)
+  const cached = getCache().get(cacheKey)
+  if (cached) return cached
+  const path = dbPath(input)
+  ensureSessionTable(path)
+  const db = openSqliteDatabase(path, true)
+  try {
+    const rows = db
+      .prepare(
+        'SELECT session_id FROM group_chat_sessions WHERE room_id = ? AND participant_id = ?',
+      )
+      .all(roomId, participantId)
+    if (rows.length === 0) return null
+    const sessionId = String(rows[0].session_id)
+    getCache().set(cacheKey, sessionId)
+    return sessionId
+  } finally {
+    db.close()
+  }
+}
+
+/** Load transcript for a member's group session (empty if unmapped). */
+export async function getMemberSessionMessages(
+  roomId: string,
+  member: GroupMember,
+  input?: { dbPath?: string },
+): Promise<{ sessionId: string | null; messages: Array<ClaudeMessage> }> {
+  const sessionId = peekSession(roomId, member.participantId, input)
+  if (!sessionId) return { sessionId: null, messages: [] }
+  const client = clientForMember(member)
+  try {
+    const messages = client
+      ? await client.getMessages(sessionId)
+      : await globalGetMessages(sessionId)
+    return { sessionId, messages }
+  } catch (error) {
+    console.warn(
+      `[agent-session-manager] getMessages failed for ${member.displayName}:`,
+      error instanceof Error ? error.message : String(error),
+    )
+    return { sessionId, messages: [] }
+  }
+}
+
 /** Result of verifying a stored session id. */
 type SessionCheckResult =
   | { kind: 'ok'; sessionId: string }
@@ -207,6 +258,18 @@ export async function getOrCreateSession(
   const cacheKey = sessionCacheKey(roomId, member.participantId)
   const title = input?.title ?? groupSessionTitle(roomId, member.participantId)
   const profile = resolveMemberProfile(member)
+
+  // Bring the member's gateway up BEFORE verifying a stored session. Otherwise
+  // a temporarily-down profile port (e.g. developer:8644) fails closed with
+  // "fetch failed" and the runner never gets a chance to spawn it.
+  if (profile) {
+    await ensureProfileGateway(profile).catch((error) => {
+      console.warn(
+        `[agent-session-manager] could not ensure gateway for ${profile}:`,
+        error instanceof Error ? error.message : String(error),
+      )
+    })
+  }
 
   // 1. Try in-memory cache first.
   let cached = getCache().get(cacheKey)

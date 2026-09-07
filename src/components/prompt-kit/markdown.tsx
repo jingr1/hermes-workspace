@@ -1,5 +1,6 @@
 import { marked } from 'marked'
 import { createContext, memo, useContext, useId, useMemo, useRef } from 'react'
+import type { ComponentProps } from 'react'
 import ReactMarkdown from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
 import rehypeRaw from 'rehype-raw'
@@ -9,6 +10,8 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import { CodeBlock } from './code-block'
 import { extractLanguageFromClassName } from './code-block/utils'
+import { ExcalidrawEmbed, ExcalidrawFromUrl } from './embeds/excalidraw-embed'
+import { MermaidEmbed } from './embeds/mermaid-embed'
 import type { Components } from 'react-markdown'
 import { normalizeMathDelimiters } from '@/lib/markdown-math'
 import { cn } from '@/lib/utils'
@@ -20,12 +23,32 @@ import 'katex/dist/katex.min.css'
  * rendering; the web chat sees raw markdown/HTML and needs this client-side
  * rewrite so browsers can load the file through Workspace instead of trying to
  * resolve a local filesystem path directly.
+ *
+ * Also expands bare `MEDIA:…` tokens (not already inside markdown/HTML) into
+ * images, audio/video players, or download links — matching WebUI's common case.
  */
 export function rewriteLocalMediaSources(content: string): string {
   const rewritePath = (rawPath: string): string | null => {
-    const path = rawPath.trim()
-    if (!path || /^https?:\/\//i.test(path)) return null
+    let path = rawPath.trim()
+    if (!path) return null
+    if (/^file:\/\//i.test(path)) {
+      try {
+        path = decodeURIComponent(new URL(path).pathname || path)
+      } catch {
+        path = path.replace(/^file:\/\//i, '')
+      }
+    }
+    if (/^https?:\/\//i.test(path)) {
+      // Keep remote URLs as-is (callers may still wrap them as media).
+      return path
+    }
     return `/api/media?path=${encodeURIComponent(path)}`
+  }
+
+  const basename = (path: string) => {
+    const cleaned = path.split('?')[0] || path
+    const parts = cleaned.split(/[/\\]/)
+    return parts[parts.length - 1] || cleaned
   }
 
   const markdownImage = /(!\[[^\]]*\]\()MEDIA:([^\)\s]+)(\))/g
@@ -40,13 +63,38 @@ export function rewriteLocalMediaSources(content: string): string {
   )
 
   const htmlImage = /(<img\b[^>]*\bsrc=)(["'])MEDIA:([^"']+)\2/gi
-  return withMarkdownImages.replace(
+  const withHtmlImages = withMarkdownImages.replace(
     htmlImage,
     (_match, prefix: string, quote: string, mediaPath: string) => {
       const rewritten = rewritePath(mediaPath)
       return rewritten
         ? `${prefix}${quote}${rewritten}${quote}`
         : `${prefix}${quote}MEDIA:${mediaPath}${quote}`
+    },
+  )
+
+  // Bare MEDIA:path tokens → concrete media markup.
+  return withHtmlImages.replace(
+    /(?<![[(\/"'=])MEDIA:([^\s\)\]]+)/g,
+    (_match, mediaPath: string) => {
+      const rewritten = rewritePath(mediaPath)
+      if (!rewritten) return `MEDIA:${mediaPath}`
+      const name = basename(mediaPath)
+      const lower = name.toLowerCase()
+      if (/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(lower)) {
+        return `![${name}](${rewritten})`
+      }
+      if (/\.(mp4|webm|mov|m4v)$/i.test(lower)) {
+        return `<video controls preload="metadata" src="${rewritten}" style="max-width:100%;border-radius:8px"></video>`
+      }
+      if (/\.(mp3|wav|ogg|m4a|aac|flac)$/i.test(lower)) {
+        return `<audio controls preload="metadata" src="${rewritten}" style="width:100%"></audio>`
+      }
+      if (/\.excalidraw$/i.test(lower)) {
+        // Custom host node → ExcalidrawFromUrl via markdown `div` component.
+        return `<div class="hermes-excalidraw" data-src="${rewritten}" data-title="${name}"></div>`
+      }
+      return `[📎 ${name}](${rewritten})`
     },
   )
 }
@@ -107,12 +155,26 @@ function isFencedCodeBlock(className: string, content: string): boolean {
   return content.includes('\n')
 }
 
+function normalizeFenceLanguage(language: string): string {
+  const lower = language.trim().toLowerCase()
+  if (lower === 'mmd') return 'mermaid'
+  return lower
+}
+
 const INITIAL_COMPONENTS: Partial<Components> = {
   code: function CodeComponent({ className, children, ...props }) {
     const content = extractFencedCodeContent(children)
-    const fenceLanguage = extractLanguageFromClassName(className)
+    const fenceLanguage = normalizeFenceLanguage(
+      extractLanguageFromClassName(className),
+    )
 
     if (isFencedCodeBlock(className ?? '', content)) {
+      if (fenceLanguage === 'mermaid') {
+        return <MermaidEmbed code={content} className="w-full my-2" />
+      }
+      if (fenceLanguage === 'excalidraw') {
+        return <ExcalidrawEmbed code={content} className="w-full my-2" />
+      }
       return (
         <CodeBlock
           content={content}
@@ -137,6 +199,33 @@ const INITIAL_COMPONENTS: Partial<Components> = {
   pre: function PreComponent({ children }) {
     // Fenced blocks are rendered by `code`; avoid an extra <pre> wrapper.
     return <>{children}</>
+  },
+  div: function DivComponent({ className, children, ...props }) {
+    const classes = Array.isArray(className)
+      ? className.filter(Boolean).join(' ')
+      : String(className ?? '')
+    const src =
+      (props as { 'data-src'?: string; dataSrc?: string })['data-src'] ??
+      (props as { dataSrc?: string }).dataSrc
+    const title =
+      (props as { 'data-title'?: string; dataTitle?: string })['data-title'] ??
+      (props as { dataTitle?: string }).dataTitle
+
+    if (classes.includes('hermes-excalidraw') && typeof src === 'string' && src) {
+      return (
+        <ExcalidrawFromUrl
+          src={src}
+          title={typeof title === 'string' ? title : undefined}
+          className="w-full my-2"
+        />
+      )
+    }
+
+    return (
+      <div className={className} {...props}>
+        {children}
+      </div>
+    )
   },
   h1: function H1Component({ children }) {
     return (
@@ -440,12 +529,16 @@ const HTML_SANITIZE_SCHEMA = {
     'u',
     'ul',
     'var',
+    'video',
     'wbr',
   ],
   attributes: {
     '*': ['className', 'class', 'title', 'lang', 'dir'],
     a: ['href', 'target', 'rel', 'download'],
     img: ['src', 'alt', 'width', 'height', 'loading'],
+    audio: ['src', 'controls', 'preload', 'style'],
+    video: ['src', 'controls', 'preload', 'style'],
+    div: ['dataSrc', 'dataTitle', 'style'],
     td: ['colspan', 'rowspan', 'headers'],
     th: ['colspan', 'rowspan', 'headers', 'scope'],
     col: ['span'],
@@ -459,8 +552,10 @@ const HTML_SANITIZE_SCHEMA = {
     ins: ['datetime'],
   },
   protocols: {
-    a: { href: ['http', 'https', 'mailto', 'tel'] },
-    img: { src: ['http', 'https', 'data'] },
+    a: { href: ['http', 'https', 'mailto', 'tel', 'relative'] },
+    img: { src: ['http', 'https', 'data', 'relative'] },
+    audio: { src: ['http', 'https', 'relative'] },
+    video: { src: ['http', 'https', 'relative'] },
   },
 }
 
@@ -468,7 +563,7 @@ const REMARK_PLUGINS = [
   remarkGfm,
   [remarkMath, { singleDollarTextMath: true }],
   remarkBreaks,
-]
+] as NonNullable<ComponentProps<typeof ReactMarkdown>['remarkPlugins']>
 
 // Sanitize first so KaTeX HTML (style + MathML) is not stripped by the schema.
 // Matches webui: markdown/HTML is cleaned, then katex.render runs last with
@@ -484,7 +579,7 @@ const REHYPE_PLUGINS = [
       strict: 'ignore',
     },
   ],
-]
+] as NonNullable<ComponentProps<typeof ReactMarkdown>['rehypePlugins']>
 
 const MemoizedMarkdownBlock = memo(
   function MarkdownBlock({

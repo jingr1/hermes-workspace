@@ -15,15 +15,15 @@ describe('rewriteLocalMediaSources', () => {
     ).toBe('<img src="/api/media?path=%2Ftmp%2Fcat.png" alt="cat" />')
   })
 
-  it('leaves remote MEDIA URLs untouched', () => {
+  it('unwraps remote MEDIA URLs in markdown/html image forms', () => {
     expect(
       rewriteLocalMediaSources('![cat](MEDIA:https://example.com/cat.png)'),
-    ).toBe('![cat](MEDIA:https://example.com/cat.png)')
+    ).toBe('![cat](https://example.com/cat.png)')
     expect(
       rewriteLocalMediaSources(
         '<img src="MEDIA:https://example.com/cat.png" />',
       ),
-    ).toBe('<img src="MEDIA:https://example.com/cat.png" />')
+    ).toBe('<img src="https://example.com/cat.png" />')
   })
 
   it('handles multiple local MEDIA tokens in one message', () => {
@@ -32,6 +32,30 @@ describe('rewriteLocalMediaSources', () => {
     const result = rewriteLocalMediaSources(input)
     expect(result).toContain('/api/media?path=%2Ftmp%2Fa.png')
     expect(result).toContain('/api/media?path=%2Ftmp%2Fb.png')
+  })
+
+  it('expands bare local MEDIA image tokens', () => {
+    expect(rewriteLocalMediaSources('See MEDIA:/tmp/shot.png please')).toBe(
+      'See ![shot.png](/api/media?path=%2Ftmp%2Fshot.png) please',
+    )
+  })
+
+  it('expands bare MEDIA audio/video tokens into players', () => {
+    expect(rewriteLocalMediaSources('MEDIA:/tmp/note.mp3')).toContain(
+      '<audio controls',
+    )
+    expect(rewriteLocalMediaSources('MEDIA:/tmp/clip.mp4')).toContain(
+      '<video controls',
+    )
+  })
+
+  it('expands bare MEDIA .excalidraw tokens into host nodes', () => {
+    const result = rewriteLocalMediaSources(
+      'MEDIA:/tmp/arch.excalidraw',
+    )
+    expect(result).toContain('class="hermes-excalidraw"')
+    expect(result).toContain('/api/media?path=%2Ftmp%2Farch.excalidraw')
+    expect(result).toContain('data-title="arch.excalidraw"')
   })
 
   it('passes through content without MEDIA tokens unchanged', () => {

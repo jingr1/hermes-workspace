@@ -257,6 +257,84 @@ export async function forkSession(
   return claudePost(`/api/sessions/${sessionId}/fork`)
 }
 
+export async function truncateSession(
+  sessionId: string,
+  keepCount: number,
+): Promise<{ keep_count: number; removed_count: number }> {
+  if (!Number.isInteger(keepCount) || keepCount < 0) {
+    throw new Error('keepCount must be a non-negative integer')
+  }
+  if (useDashboardSessions()) {
+    throw new Error('Session truncate is not available on dashboard sessions')
+  }
+  const resp = await claudePost<{
+    keep_count?: number
+    removed_count?: number
+  }>(`/api/sessions/${sessionId}/truncate`, { keep_count: keepCount })
+  return {
+    keep_count: resp.keep_count ?? keepCount,
+    removed_count: resp.removed_count ?? 0,
+  }
+}
+
+/** Apply a precomputed compression summary + keep trailing messages. */
+export async function compressSession(
+  sessionId: string,
+  input: { summary: string; keepCount?: number; focusTopic?: string },
+): Promise<{
+  before_count: number
+  after_count: number
+  keep_count: number
+  summary: string
+  focus_topic: string | null
+}> {
+  const summary = input.summary.trim()
+  if (!summary) throw new Error('summary required')
+  if (useDashboardSessions()) {
+    throw new Error('Session compress is not available on dashboard sessions')
+  }
+  return claudePost(`/api/sessions/${sessionId}/compress`, {
+    summary,
+    keep_count: input.keepCount ?? 6,
+    focus_topic: input.focusTopic || undefined,
+  })
+}
+
+/** Stateless chat completion (no session write) — used for /btw and compress summary. */
+export async function oneshotCompletion(input: {
+  messages: Array<{ role: string; content: string }>
+  model?: string
+}): Promise<string> {
+  const resp = await claudePost<{
+    choices?: Array<{ message?: { content?: string } }>
+    message?: { content?: string }
+    content?: string
+  }>('/v1/chat/completions', {
+    messages: input.messages,
+    model: input.model,
+    stream: false,
+  })
+  const text =
+    resp.choices?.[0]?.message?.content ||
+    resp.message?.content ||
+    (typeof resp.content === 'string' ? resp.content : '')
+  return String(text || '').trim()
+}
+
+/** Inject mid-turn guidance into a live Hermes run. */
+export async function steerRun(
+  runId: string,
+  text: string,
+): Promise<{ accepted: boolean; run_id: string }> {
+  const trimmedRunId = runId.trim()
+  const trimmedText = text.trim()
+  if (!trimmedRunId) throw new Error('runId required')
+  if (!trimmedText) throw new Error('steer text required')
+  return claudePost(`/v1/runs/${encodeURIComponent(trimmedRunId)}/steer`, {
+    text: trimmedText,
+  })
+}
+
 // ── Conversion helpers (Claude → Chat format) ─────────────────
 
 /** Convert a ClaudeMessage to the ChatMessage format the frontend expects */

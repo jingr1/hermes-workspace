@@ -20,6 +20,14 @@ export type AgentProbeResult = {
   detail?: string | null
 }
 
+export type UnifiedAgentStatus =
+  | 'active'
+  | 'idle'
+  | 'offline'
+  | 'blocked'
+  | 'error'
+  | 'needsSetup'
+
 export type AgentStatusEntry = {
   agentId: string
   runtime: AgentRuntimeLabel
@@ -36,6 +44,9 @@ export type AgentStatusEntry = {
     checkpointStatus: string
     lastSummary: string | null
     updatedAt: number
+    /** Unified status derived from runtime, probe, group-chat and model config. */
+    unifiedStatus: UnifiedAgentStatus
+    needsSetup: boolean
   } | null
 }
 

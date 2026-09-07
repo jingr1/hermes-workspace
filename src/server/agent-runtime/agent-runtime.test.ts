@@ -1,8 +1,9 @@
+/** @vitest-environment node */
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { loadAgentsRegistry } from './agents-config'
 import {
   isProcessGroupAlive,
@@ -14,6 +15,14 @@ import {
   unregisterPid,
 } from './pid-registry'
 import { AgentRuntimeRouter } from './router'
+
+vi.mock('./hermes-gateway-probe', () => ({
+  probeHermesProfileGateway: vi.fn(async (profile: string) => ({
+    available: true,
+    detail: `hermes gateway mock://${profile}`,
+  })),
+  clearHermesGatewayProbeCache: vi.fn(),
+}))
 
 let tempRoot: string
 
@@ -264,9 +273,10 @@ agents:
     const rows = await router.probeAll()
     expect(rows).toHaveLength(2)
     const cc = rows.find((r) => r.agentId === 'cc')!
-    expect(cc.probe.available).toBe(false) // binary doesn't exist
+    expect(cc.available).toBe(false) // binary doesn't exist
     const dev = rows.find((r) => r.agentId === 'dev')!
-    expect(dev.probe.available).toBe(true) // hermes stub
+    expect(dev.available).toBe(true) // hermes gateway probe (mocked healthy)
+    expect(dev.detail).toMatch(/hermes gateway/)
   })
 })
 

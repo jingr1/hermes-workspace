@@ -6,6 +6,7 @@ import {
   getRoom,
   updateRoom,
 } from '../../../server/group-chat/room-store'
+import { getSwarmMission } from '../../../server/swarm-missions'
 
 export const Route = createFileRoute('/api/rooms/$roomId')({
   server: {
@@ -34,7 +35,19 @@ export const Route = createFileRoute('/api/rooms/$roomId')({
         if (typeof body.title === 'string') patch.title = body.title
         if (typeof body.state === 'string') patch.state = body.state
         if (body.missionId !== undefined) patch.missionId = body.missionId
-        if (body.taskId !== undefined) patch.taskId = body.taskId
+        if (body.taskId !== undefined) {
+          const taskId = body.taskId
+          if (taskId === null) {
+            patch.missionId = null
+            patch.taskId = null
+          } else if (typeof taskId === 'string') {
+            const existingMission = getSwarmMission(taskId)
+            if (existingMission) {
+              patch.missionId = taskId
+            }
+            patch.taskId = taskId
+          }
+        }
         const room = updateRoom(params.roomId, patch)
         if (!room) {
           return json({ ok: false, error: 'Not found' }, { status: 404 })

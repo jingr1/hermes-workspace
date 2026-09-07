@@ -1,10 +1,20 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import {
   isGroupPassText,
+  isGroupTranscriptBusy,
+  pickGroupTurnReply,
   resolveGroupResponders,
   rotateGroupSpeakers,
   unaddressedGroupMentions,
 } from '../responder-utils'
+import {
+  clearAllRunnerState,
+  clearStranded,
+  getStranded,
+  hasStranded,
+  listStrandedMembers,
+  setStranded,
+} from '../runner-state'
 import type { GroupMember, MentionTarget, RoomMessage } from '../types'
 
 function makeAgent(id: string, displayName: string): GroupMember {
@@ -79,6 +89,77 @@ describe('responder-utils', () => {
     })
   })
 
+  describe('pickGroupTurnReply', () => {
+    it('prefers the newest substantive reply over an earlier ack', () => {
+      const messages = [
+        { role: 'user', content: 'go' },
+        { role: 'assistant', content: '我先去查一下' },
+        { role: 'assistant', content: '', tool_calls: [{ id: '1' }] },
+        { role: 'tool', content: '{}' },
+        { role: 'assistant', content: '结论：两层截断都存在' },
+      ]
+      expect(pickGroupTurnReply(messages, 1)).toBe('结论：两层截断都存在')
+    })
+
+    it('skips trailing pass in favor of earlier real answer', () => {
+      const messages = [
+        { role: 'user', content: 'go' },
+        { role: 'assistant', content: 'real answer' },
+        { role: 'assistant', content: '(pass)' },
+      ]
+      expect(pickGroupTurnReply(messages, 1)).toBe('real answer')
+    })
+
+    it('returns newest pass when only passes exist', () => {
+      const messages = [
+        { role: 'assistant', content: 'pass' },
+        { role: 'assistant', content: '(pass)' },
+      ]
+      expect(pickGroupTurnReply(messages, 0)).toBe('(pass)')
+    })
+  })
+
+  describe('isGroupTranscriptBusy', () => {
+    it('is busy when last message is a tool result', () => {
+      expect(
+        isGroupTranscriptBusy(
+          [
+            { role: 'user' },
+            { role: 'assistant', tool_calls: [{ id: '1' }] },
+            { role: 'tool' },
+          ],
+          1,
+        ),
+      ).toBe(true)
+    })
+
+    it('is busy when last assistant still has tool_calls', () => {
+      expect(
+        isGroupTranscriptBusy(
+          [{ role: 'assistant', tool_calls: [{ id: '1' }] }],
+          0,
+        ),
+      ).toBe(true)
+    })
+
+    it('is idle when last assistant is final text', () => {
+      expect(
+        isGroupTranscriptBusy(
+          [
+            { role: 'assistant', tool_calls: [{ id: '1' }] },
+            { role: 'tool' },
+            { role: 'assistant' },
+          ],
+          0,
+        ),
+      ).toBe(false)
+    })
+
+    it('is busy when nothing new after baseline', () => {
+      expect(isGroupTranscriptBusy([{ role: 'user' }], 1)).toBe(true)
+    })
+  })
+
   describe('rotateGroupSpeakers', () => {
     it('rotates round-robin', () => {
       expect(rotateGroupSpeakers(members, 0).map((m) => m.participantId)).toEqual(
@@ -140,5 +221,23 @@ describe('responder-utils', () => {
       ]
       expect(unaddressedGroupMentions(messages, members)).toEqual([])
     })
+  })
+})
+
+describe('stranded runner-state', () => {
+  const member = makeAgent('developer', 'developer')
+
+  beforeEach(() => {
+    clearAllRunnerState()
+  })
+
+  it('records and clears stranded markers', () => {
+    expect(hasStranded('room1', member)).toBe(false)
+    setStranded('room1', member, { before: 4, sessionId: 'sess_1' })
+    expect(hasStranded('room1', member)).toBe(true)
+    expect(getStranded('room1', member)?.before).toBe(4)
+    expect(listStrandedMembers('room1')).toEqual(['agent:developer'])
+    clearStranded('room1', member)
+    expect(hasStranded('room1', member)).toBe(false)
   })
 })

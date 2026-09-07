@@ -920,6 +920,60 @@ function ChatContent() {
           />
         </Row>
         <Row
+          label="Busy message mode"
+          description="When the agent is replying: queue follow-ups, interrupt, or steer the live turn."
+        >
+          <select
+            value={cs.busyMessageMode ?? 'queue'}
+            onChange={(e) =>
+              updateCS({
+                busyMessageMode: e.target.value as
+                  | 'queue'
+                  | 'interrupt'
+                  | 'steer',
+              })
+            }
+            className="h-8 rounded-md border border-primary-200 bg-primary-50 px-2 text-sm text-primary-900 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary-400"
+            aria-label="Busy message mode"
+          >
+            <option value="queue">Queue (after reply)</option>
+            <option value="interrupt">Interrupt and send</option>
+            <option value="steer">Steer live reply</option>
+          </select>
+        </Row>
+        <Row
+          label="Activity display"
+          description="How tool calls and thinking appear while the agent works."
+        >
+          <select
+            value={cs.chatActivityDisplayMode ?? 'compact'}
+            onChange={(e) =>
+              updateCS({
+                chatActivityDisplayMode: e.target.value as
+                  | 'compact'
+                  | 'stream'
+                  | 'hidden',
+              })
+            }
+            className="h-8 rounded-md border border-primary-200 bg-primary-50 px-2 text-sm text-primary-900 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary-400"
+            aria-label="Activity display mode"
+          >
+            <option value="compact">Compact worklog</option>
+            <option value="stream">Expanded stream</option>
+            <option value="hidden">Hide activity</option>
+          </select>
+        </Row>
+        <Row
+          label="Conversation outline"
+          description="Desktop jump list of user questions in the current chat."
+        >
+          <Switch
+            checked={cs.showConversationOutline === true}
+            onCheckedChange={(c) => updateCS({ showConversationOutline: c })}
+            aria-label="Show conversation outline"
+          />
+        </Row>
+        <Row
           label="Chat content width"
           description="Max-width of the message column on wide screens."
         >

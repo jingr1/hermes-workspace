@@ -13,11 +13,24 @@ type MemberTurnState = {
   memberKey: string
 }
 
+/** Baseline for a turn that timed out while the gateway may still be working. */
+export type StrandedMarker = {
+  before: number
+  sessionId: string
+  startedAt: number
+}
+
 type RoomRunnerState = {
   epoch: number
   inFlight: Map<string, MemberTurnState>
+  stranded: Map<string, StrandedMarker>
   lastRunAt: number
   running: boolean
+  /** Skip driveRoom until this timestamp after a transient gateway failure. */
+  errorCooldownUntil: number
+  /** Last error message we rate-limited for this room. */
+  lastErrorMessage: string | null
+  lastErrorLoggedAt: number
 }
 
 const STATE_KEY = '__group_chat_runner_state__'
@@ -36,11 +49,62 @@ export function getRoomRunnerState(roomId: string): RoomRunnerState {
     state.set(roomId, {
       epoch: 0,
       inFlight: new Map(),
+      stranded: new Map(),
       lastRunAt: 0,
       running: false,
+      errorCooldownUntil: 0,
+      lastErrorMessage: null,
+      lastErrorLoggedAt: 0,
     })
   }
-  return state.get(roomId)!
+  const rs = state.get(roomId)!
+  // HMR / older process state may lack stranded — hydrate in place.
+  if (!rs.stranded) rs.stranded = new Map()
+  if (typeof rs.errorCooldownUntil !== 'number') rs.errorCooldownUntil = 0
+  if (rs.lastErrorMessage === undefined) rs.lastErrorMessage = null
+  if (typeof rs.lastErrorLoggedAt !== 'number') rs.lastErrorLoggedAt = 0
+  return rs
+}
+
+export function isRoomInErrorCooldown(roomId: string, now = Date.now()): boolean {
+  return getRoomRunnerState(roomId).errorCooldownUntil > now
+}
+
+export function setRoomErrorCooldown(
+  roomId: string,
+  cooldownMs: number,
+  now = Date.now(),
+): void {
+  getRoomRunnerState(roomId).errorCooldownUntil = now + cooldownMs
+}
+
+export function clearRoomErrorCooldown(roomId: string): void {
+  const rs = getRoomRunnerState(roomId)
+  rs.errorCooldownUntil = 0
+  rs.lastErrorMessage = null
+  rs.lastErrorLoggedAt = 0
+}
+
+/**
+ * Rate-limit identical room error logs. Returns true when the caller should
+ * print (first occurrence or after `minIntervalMs`).
+ */
+export function shouldLogRoomError(
+  roomId: string,
+  message: string,
+  minIntervalMs: number,
+  now = Date.now(),
+): boolean {
+  const rs = getRoomRunnerState(roomId)
+  if (
+    rs.lastErrorMessage === message &&
+    now - rs.lastErrorLoggedAt < minIntervalMs
+  ) {
+    return false
+  }
+  rs.lastErrorMessage = message
+  rs.lastErrorLoggedAt = now
+  return true
 }
 
 export function bumpRoomEpoch(roomId: string): number {
@@ -94,6 +158,38 @@ export function getInFlightMembers(roomId: string): Array<string> {
   return [...getRoomRunnerState(roomId).inFlight.keys()]
 }
 
+export function setStranded(
+  roomId: string,
+  member: GroupMember,
+  marker: Omit<StrandedMarker, 'startedAt'> & { startedAt?: number },
+): void {
+  const rs = getRoomRunnerState(roomId)
+  rs.stranded.set(groupMemberKey(member), {
+    before: marker.before,
+    sessionId: marker.sessionId,
+    startedAt: marker.startedAt ?? Date.now(),
+  })
+}
+
+export function clearStranded(roomId: string, member: GroupMember): void {
+  getRoomRunnerState(roomId).stranded.delete(groupMemberKey(member))
+}
+
+export function getStranded(
+  roomId: string,
+  member: GroupMember,
+): StrandedMarker | undefined {
+  return getRoomRunnerState(roomId).stranded.get(groupMemberKey(member))
+}
+
+export function hasStranded(roomId: string, member: GroupMember): boolean {
+  return getRoomRunnerState(roomId).stranded.has(groupMemberKey(member))
+}
+
+export function listStrandedMembers(roomId: string): Array<string> {
+  return [...getRoomRunnerState(roomId).stranded.keys()]
+}
+
 export function setLastRunAt(roomId: string, at: number): void {
   getRoomRunnerState(roomId).lastRunAt = at
 }
@@ -119,4 +215,9 @@ export function expireStaleInFlight(
     }
   }
   return expired
+}
+
+/** Test helper: wipe all runner state. */
+export function clearAllRunnerState(): void {
+  getState().clear()
 }

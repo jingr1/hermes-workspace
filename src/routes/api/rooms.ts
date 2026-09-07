@@ -5,6 +5,7 @@ import {
   createRoom,
   listRooms,
 } from '../../server/group-chat/room-store'
+import { getSwarmMission } from '../../server/swarm-missions'
 
 export const Route = createFileRoute('/api/rooms')({
   server: {
@@ -29,10 +30,12 @@ export const Route = createFileRoute('/api/rooms')({
         if (!title) {
           return json({ ok: false, error: 'title required' }, { status: 400 })
         }
+        const taskId = body.taskId ?? null
+        const existingMission = taskId ? getSwarmMission(taskId) : null
         const room = createRoom({
           title,
-          missionId: body.missionId ?? null,
-          taskId: body.taskId ?? null,
+          missionId: existingMission ? taskId : (body.missionId ?? null),
+          taskId,
         })
         return json({ ok: true, room })
       },

@@ -12,6 +12,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import type { AgentStatusEntry, TaskSummary } from '@/lib/mission-control-api'
 import { fetchAgentsStatus, fetchTasks } from '@/lib/mission-control-api'
+import { AgentStatusDot } from '@/screens/chat/components/agent-status-dot'
 import { cn } from '@/lib/utils'
 
 const AGENTS_QUERY_KEY = ['mission-control', 'agents'] as const
@@ -49,22 +50,6 @@ function RuntimeBadge({ runtime }: { runtime: AgentStatusEntry['runtime'] }) {
       {runtime}
     </span>
   )
-}
-
-function StateDot({
-  state,
-  needsHuman,
-}: {
-  state: string
-  needsHuman: boolean
-}) {
-  let color = 'bg-slate-400'
-  if (needsHuman) color = 'bg-red-500'
-  else if (state === 'executing' || state === 'running')
-    color = 'bg-emerald-500'
-  else if (state === 'blocked') color = 'bg-red-400'
-  else if (state === 'idle') color = 'bg-blue-400'
-  return <span className={cn('h-2 w-2 rounded-full', color)} />
 }
 
 function KpiCard({
@@ -134,9 +119,9 @@ function AgentCard({
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <StateDot
-            state={status?.state ?? 'idle'}
-            needsHuman={status?.needsHuman ?? false}
+          <AgentStatusDot
+            status={status?.unifiedStatus ?? 'offline'}
+            needsSetup={status?.needsSetup ?? false}
           />
           <span className="text-sm font-medium">{agent.agentId}</span>
         </div>
@@ -235,14 +220,22 @@ export function OverviewView({
   const tasks = tasksQuery.data?.tasks ?? []
 
   const stats = useMemo(() => {
-    const online = agents.filter((a) => a.probe.available).length
+    const online = agents.filter(
+      (a) =>
+        a.status?.unifiedStatus === 'active' ||
+        a.status?.unifiedStatus === 'idle',
+    ).length
     const running = agents.filter(
-      (a) => a.status?.state === 'executing' || a.status?.state === 'running',
+      (a) => a.status?.unifiedStatus === 'active',
     ).length
     const blocked = agents.filter(
-      (a) => a.status?.needsHuman || a.status?.state === 'blocked',
+      (a) =>
+        a.status?.unifiedStatus === 'blocked' ||
+        a.status?.unifiedStatus === 'error',
     ).length
-    const pendingHuman = agents.filter((a) => a.status?.needsHuman).length
+    const pendingHuman = agents.filter(
+      (a) => a.status?.unifiedStatus === 'blocked',
+    ).length
     const doneToday = 0 // TODO: derive from task completedAt once API exposes it
     return { online, running, blocked, pendingHuman, doneToday }
   }, [agents])

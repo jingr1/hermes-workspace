@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { Copy01Icon, RefreshIcon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { Copy01Icon, Edit02Icon, RefreshIcon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { MessageTimestamp } from './message-timestamp'
 import {
   TooltipContent,
@@ -19,6 +19,8 @@ type MessageActionsBarProps = {
   isQueued?: boolean
   isFailed?: boolean
   onRetry?: () => void
+  onEdit?: () => void
+  onRegenerate?: () => void
 }
 
 async function copyToClipboard(text: string): Promise<boolean> {
@@ -54,6 +56,8 @@ export function MessageActionsBar({
   isQueued = false,
   isFailed = false,
   onRetry,
+  onEdit,
+  onRegenerate,
 }: MessageActionsBarProps) {
   const [copied, setCopied] = useState(false)
 
@@ -92,6 +96,34 @@ export function MessageActionsBar({
           </TooltipRoot>
         </TooltipProvider>
       )}
+      {onEdit ? (
+        <TooltipProvider>
+          <TooltipRoot>
+            <TooltipTrigger
+              type="button"
+              onClick={onEdit}
+              className="inline-flex items-center justify-center rounded border border-transparent bg-transparent p-1 text-primary-700 hover:text-primary-900 hover:bg-primary-100 dark:hover:bg-primary-800"
+            >
+              <HugeiconsIcon icon={Edit02Icon} size={16} strokeWidth={1.6} />
+            </TooltipTrigger>
+            <TooltipContent side="top">Edit message</TooltipContent>
+          </TooltipRoot>
+        </TooltipProvider>
+      ) : null}
+      {onRegenerate ? (
+        <TooltipProvider>
+          <TooltipRoot>
+            <TooltipTrigger
+              type="button"
+              onClick={onRegenerate}
+              className="inline-flex items-center justify-center rounded border border-transparent bg-transparent p-1 text-primary-700 hover:text-primary-900 hover:bg-primary-100 dark:hover:bg-primary-800"
+            >
+              <HugeiconsIcon icon={RefreshIcon} size={16} strokeWidth={1.6} />
+            </TooltipTrigger>
+            <TooltipContent side="top">Regenerate</TooltipContent>
+          </TooltipRoot>
+        </TooltipProvider>
+      ) : null}
       <TooltipProvider>
         <TooltipRoot>
           <TooltipTrigger

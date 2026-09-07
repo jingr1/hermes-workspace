@@ -55,7 +55,13 @@ export type OperationsSettings = {
   activityFeedLength: number
 }
 
-export type OperationsAgentStatus = 'active' | 'idle' | 'error'
+export type OperationsAgentStatus =
+  | 'active'
+  | 'idle'
+  | 'offline'
+  | 'blocked'
+  | 'error'
+  | 'needsSetup'
 
 export type OperationsOutputItem = {
   id: string
@@ -519,7 +525,10 @@ function getAgentStatus(
   latestSession: GatewaySession | null,
   runtimeState?: string | null,
   runtimeLastOutputAt?: number | null,
+  needsSetup = false,
 ): OperationsAgentStatus {
+  if (needsSetup) return 'needsSetup'
+
   // Prefer the live Swarm runtime signal when available.
   const busyStates = new Set([
     'executing',
@@ -528,25 +537,40 @@ function getAgentStatus(
     'reviewing',
     'syncing',
   ])
+  const recentActivityThreshold = 10 * 60 * 1000
   if (runtimeState && busyStates.has(runtimeState.toLowerCase())) {
-    return 'active'
+    const isStale =
+      !runtimeLastOutputAt ||
+      Date.now() - runtimeLastOutputAt > recentActivityThreshold
+    return isStale ? 'idle' : 'active'
   }
-  // If runtime explicitly says idle/blocked, trust that — don't override
-  // with the 2-min lastOutputAt window (ping tasks finish in seconds but
-  // lastOutputAt is still fresh, causing a false "active" reading).
-  const idleStates = new Set(['idle', 'blocked', 'stopped', 'waiting'])
+
+  // Blocked is its own state, distinct from a generic error.
+  if (runtimeState && runtimeState.toLowerCase() === 'blocked') {
+    return 'blocked'
+  }
+
+  const errorStates = new Set(['error', 'failed'])
+  if (runtimeState && errorStates.has(runtimeState.toLowerCase())) {
+    return 'error'
+  }
+
+  const idleStates = new Set(['idle', 'waiting', 'stopped'])
   if (runtimeState && idleStates.has(runtimeState.toLowerCase())) {
-    if (runtimeState.toLowerCase() === 'blocked') return 'error'
     return 'idle'
   }
 
-  if (!latestSession) return 'idle'
+  // No runtime entry yet: fall back to session activity.
+  if (!latestSession) return 'offline'
 
   const status = readString(latestSession.status).toLowerCase()
+  if (status === 'blocked') return 'blocked'
   if (status.includes('fail') || status.includes('error')) return 'error'
 
   const updatedAt = readTimestamp(latestSession.updatedAt)
-  if (updatedAt && Date.now() - updatedAt < 120_000) return 'active'
+  if (updatedAt && Date.now() - updatedAt < 120_000) {
+    return 'active'
+  }
 
   return 'idle'
 }
@@ -555,8 +579,9 @@ function getProgressStatus(
   status: OperationsAgentStatus,
   latestSession: GatewaySession | null,
 ): OperationsAgent['progressStatus'] {
-  if (status === 'error') return 'failed'
+  if (status === 'error' || status === 'blocked') return 'failed'
   if (status === 'active') return 'running'
+  if (status === 'idle' || status === 'needsSetup') return 'queued'
 
   const sessionStatus = readString(latestSession?.status).toLowerCase()
   if (sessionStatus.includes('complete') || sessionStatus.includes('done')) {
@@ -574,7 +599,8 @@ function getProgressValue(
     return Math.max(5, Math.min(100, rawProgress))
   }
   if (status === 'active') return 72
-  if (status === 'error') return 100
+  if (status === 'error' || status === 'blocked') return 100
+  if (status === 'needsSetup') return 30
   if (latestSession) return 100
   return 18
 }
@@ -789,6 +815,14 @@ export function useOperations() {
       ]),
     )
     const capsMap = capabilitiesQuery.data ?? {}
+    const crewMap = new Map(
+      (crewStatusQuery.data?.crew ?? []).map((member) => [
+        member.id,
+        member.profileFound &&
+          member.gatewayState === 'running' &&
+          member.processAlive,
+      ]),
+    )
 
     return configAgents.map((agent) => {
       const meta = loadAgentMeta(agent.id, {
@@ -813,10 +847,12 @@ export function useOperations() {
           .filter((value): value is number => value !== null)
           .sort((left, right) => right - left)[0] ??
         null
+      const needsSetup = !agent.model || agent.model.trim().length === 0
       const status = getAgentStatus(
         latestSession,
         runtime?.state,
         runtime?.lastOutputAt,
+        needsSetup,
       )
       const recentOutputs = [
         ...agentSessions.map((session) =>
@@ -827,8 +863,6 @@ export function useOperations() {
         .filter((item): item is OperationsOutputItem => Boolean(item))
         .sort((left, right) => right.timestamp - left.timestamp)
         .slice(0, 5)
-
-      const needsSetup = !agent.model || agent.model.trim().length === 0
 
       // Use real capabilities data when available, fall back to counts
       const caps = capsMap[agent.id]
@@ -917,6 +951,7 @@ export function useOperations() {
     cronJobsQuery.data,
     swarmRuntimeQuery.data,
     capabilitiesQuery.data,
+    crewStatusQuery.data,
     metaVersion,
   ])
 

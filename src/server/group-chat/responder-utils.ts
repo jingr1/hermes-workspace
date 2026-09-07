@@ -73,7 +73,7 @@ export function isGroupPassText(text: string | null | undefined): boolean {
  * case where a model emits an answer followed by a synthetic "(pass)".
  */
 export function pickGroupTurnReply(
-  messages: Array<{ role: string; content?: string | null }>,
+  messages: Array<{ role: string; content?: string | null; tool_calls?: unknown }>,
   before: number,
 ): string | null {
   let passText: string | null = null
@@ -93,6 +93,33 @@ export function pickGroupTurnReply(
   }
 
   return passText
+}
+
+/**
+ * Heuristic for "session still grinding" when the gateway does not expose
+ * session.running/inflight to REST. A tool-loop leaves the last message as
+ * either a tool result or an assistant message that still has tool_calls.
+ */
+export function isGroupTranscriptBusy(
+  messages: Array<{ role: string; tool_calls?: unknown }>,
+  before: number,
+): boolean {
+  if (messages.length <= before) return true
+  const last = messages[messages.length - 1]
+  if (!last) return false
+  if (last.role === 'tool') return true
+  if (last.role === 'assistant' && hasToolCalls(last.tool_calls)) return true
+  return false
+}
+
+function hasToolCalls(toolCalls: unknown): boolean {
+  if (!toolCalls) return false
+  if (Array.isArray(toolCalls)) return toolCalls.length > 0
+  if (typeof toolCalls === 'string') {
+    const trimmed = toolCalls.trim()
+    return trimmed.length > 0 && trimmed !== '[]' && trimmed !== 'null'
+  }
+  return false
 }
 
 /**

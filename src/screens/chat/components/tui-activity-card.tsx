@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 
 /**
@@ -18,6 +18,24 @@ import { cn } from '@/lib/utils'
  *   ○ exec pnpm build
  *     ⎿ running…
  */
+
+/** Keep the live tool list short so stick-to-bottom does not push narration
+ * off the top of the chat viewport. */
+export const STREAMING_TOOL_WINDOW = 8
+
+export function visibleStreamingToolSections<T>(
+  sections: Array<T>,
+  isStreaming: boolean,
+  windowSize = STREAMING_TOOL_WINDOW,
+): { visible: Array<T>; hiddenCount: number } {
+  if (!isStreaming || sections.length <= windowSize) {
+    return { visible: sections, hiddenCount: 0 }
+  }
+  return {
+    visible: sections.slice(-windowSize),
+    hiddenCount: sections.length - windowSize,
+  }
+}
 
 export type TuiToolSection = {
   key: string
@@ -342,8 +360,13 @@ function TuiActivityCardComponent({
   formatLabel,
   formatArg,
 }: TuiActivityCardProps) {
+  const bodyRef = useRef<HTMLDivElement | null>(null)
   const hasThinking = !!(thinking && thinking.trim().length > 0)
   const hasTools = toolSections.length > 0
+  const { visible: visibleTools, hiddenCount } = useMemo(
+    () => visibleStreamingToolSections(toolSections, isStreaming),
+    [toolSections, isStreaming],
+  )
 
   const summary = useMemo(() => {
     if (!hasTools) return null
@@ -365,6 +388,15 @@ function TuiActivityCardComponent({
       ? 'var(--theme-accent, #6366f1)'
       : 'var(--theme-success, #22c55e)'
 
+  // Keep the tool list pinned to the latest row while streaming so new calls
+  // stay visible inside the capped scroll region.
+  useEffect(() => {
+    if (!isStreaming) return
+    const el = bodyRef.current
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+  }, [isStreaming, visibleTools.length, toolSections.length, hasThinking])
+
   // During streaming with nothing to show yet, render a minimal "working" stub
   // so we don't pretend the agent is thinking when no thinking text was emitted.
   // (Hermes Agent currently emits tool.completed only after the run, not live.)
@@ -381,11 +413,11 @@ function TuiActivityCardComponent({
       }}
     >
       <div
-        className="flex items-center gap-2 border-b px-4 py-2.5"
+        className="sticky top-0 z-[1] flex items-center gap-2 border-b px-4 py-2.5"
         style={{
           borderColor:
             'color-mix(in srgb, var(--theme-border) 70%, transparent)',
-          background: 'color-mix(in srgb, var(--theme-card) 50%, transparent)',
+          background: 'color-mix(in srgb, var(--theme-card) 92%, transparent)',
         }}
       >
         <span
@@ -410,7 +442,15 @@ function TuiActivityCardComponent({
           />
         ) : null}
       </div>
-      <div className="flex flex-col gap-1.5 px-2 py-3">
+      <div
+        ref={bodyRef}
+        className={cn(
+          'flex flex-col gap-1.5 px-2 py-3',
+          // Cap height while streaming so stick-to-bottom keeps the assistant
+          // narration (above this card) in the viewport instead of burying it.
+          isStreaming && 'max-h-[min(40vh,280px)] overflow-y-auto',
+        )}
+      >
         {hasThinking ? (
           <ThinkingRow
             thinking={thinking!}
@@ -419,7 +459,15 @@ function TuiActivityCardComponent({
             expandAll={expandAll}
           />
         ) : null}
-        {toolSections.map((section, index) => (
+        {hiddenCount > 0 ? (
+          <div
+            className="px-3 py-1 font-mono text-[11px] opacity-60"
+            style={{ color: 'var(--theme-muted)' }}
+          >
+            +{hiddenCount} earlier {hiddenCount === 1 ? 'tool' : 'tools'}
+          </div>
+        ) : null}
+        {visibleTools.map((section, index) => (
           <ToolRow
             key={section.key || `${section.type}-${index}`}
             section={section}

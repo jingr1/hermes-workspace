@@ -124,6 +124,8 @@ import { Route as ApiClaudeTasksRouteImport } from './routes/api/claude-tasks'
 import { Route as ApiClaudeJobsRouteImport } from './routes/api/claude-jobs'
 import { Route as ApiClaudeConfigRouteImport } from './routes/api/claude-config'
 import { Route as ApiChatEventsRouteImport } from './routes/api/chat-events'
+import { Route as ApiBtwRouteImport } from './routes/api/btw'
+import { Route as ApiBackgroundRouteImport } from './routes/api/background'
 import { Route as ApiAvailableAgentsRouteImport } from './routes/api/available-agents'
 import { Route as ApiAuthCheckRouteImport } from './routes/api/auth-check'
 import { Route as ApiAuthRouteImport } from './routes/api/auth'
@@ -201,8 +203,11 @@ import { Route as ApiAuthCodexRouteImport } from './routes/api/auth.codex'
 import { Route as ApiAuthAnthropicRouteImport } from './routes/api/auth.anthropic'
 import { Route as ApiArtifactsArtifactIdRouteImport } from './routes/api/artifacts.$artifactId'
 import { Route as ApiAgentsStatusRouteImport } from './routes/api/agents/status'
+import { Route as ApiSessionsSessionKeyTruncateRouteImport } from './routes/api/sessions/$sessionKey.truncate'
 import { Route as ApiSessionsSessionKeyStatusRouteImport } from './routes/api/sessions/$sessionKey.status'
+import { Route as ApiSessionsSessionKeyCompressRouteImport } from './routes/api/sessions/$sessionKey.compress'
 import { Route as ApiSessionsSessionKeyActiveRunRouteImport } from './routes/api/sessions/$sessionKey.active-run'
+import { Route as ApiRunsRunIdSteerRouteImport } from './routes/api/runs/$runId.steer'
 import { Route as ApiRoomsRoomIdPendingTurnsRouteImport } from './routes/api/rooms/$roomId/pending-turns'
 import { Route as ApiRoomsRoomIdParticipantsRouteImport } from './routes/api/rooms/$roomId/participants'
 import { Route as ApiRoomsRoomIdMessagesRouteImport } from './routes/api/rooms/$roomId/messages'
@@ -795,6 +800,16 @@ const ApiChatEventsRoute = ApiChatEventsRouteImport.update({
   path: '/api/chat-events',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiBtwRoute = ApiBtwRouteImport.update({
+  id: '/api/btw',
+  path: '/api/btw',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBackgroundRoute = ApiBackgroundRouteImport.update({
+  id: '/api/background',
+  path: '/api/background',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAvailableAgentsRoute = ApiAvailableAgentsRouteImport.update({
   id: '/api/available-agents',
   path: '/api/available-agents',
@@ -1186,10 +1201,22 @@ const ApiAgentsStatusRoute = ApiAgentsStatusRouteImport.update({
   path: '/api/agents/status',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiSessionsSessionKeyTruncateRoute =
+  ApiSessionsSessionKeyTruncateRouteImport.update({
+    id: '/$sessionKey/truncate',
+    path: '/$sessionKey/truncate',
+    getParentRoute: () => ApiSessionsRoute,
+  } as any)
 const ApiSessionsSessionKeyStatusRoute =
   ApiSessionsSessionKeyStatusRouteImport.update({
     id: '/$sessionKey/status',
     path: '/$sessionKey/status',
+    getParentRoute: () => ApiSessionsRoute,
+  } as any)
+const ApiSessionsSessionKeyCompressRoute =
+  ApiSessionsSessionKeyCompressRouteImport.update({
+    id: '/$sessionKey/compress',
+    path: '/$sessionKey/compress',
     getParentRoute: () => ApiSessionsRoute,
   } as any)
 const ApiSessionsSessionKeyActiveRunRoute =
@@ -1198,6 +1225,11 @@ const ApiSessionsSessionKeyActiveRunRoute =
     path: '/$sessionKey/active-run',
     getParentRoute: () => ApiSessionsRoute,
   } as any)
+const ApiRunsRunIdSteerRoute = ApiRunsRunIdSteerRouteImport.update({
+  id: '/api/runs/$runId/steer',
+  path: '/api/runs/$runId/steer',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiRoomsRoomIdPendingTurnsRoute =
   ApiRoomsRoomIdPendingTurnsRouteImport.update({
     id: '/pending-turns',
@@ -1306,6 +1338,8 @@ export interface FileRoutesByFullPath {
   '/api/auth': typeof ApiAuthRouteWithChildren
   '/api/auth-check': typeof ApiAuthCheckRoute
   '/api/available-agents': typeof ApiAvailableAgentsRoute
+  '/api/background': typeof ApiBackgroundRoute
+  '/api/btw': typeof ApiBtwRoute
   '/api/chat-events': typeof ApiChatEventsRoute
   '/api/claude-config': typeof ApiClaudeConfigRoute
   '/api/claude-jobs': typeof ApiClaudeJobsRouteWithChildren
@@ -1474,8 +1508,11 @@ export interface FileRoutesByFullPath {
   '/api/rooms/$roomId/messages': typeof ApiRoomsRoomIdMessagesRoute
   '/api/rooms/$roomId/participants': typeof ApiRoomsRoomIdParticipantsRouteWithChildren
   '/api/rooms/$roomId/pending-turns': typeof ApiRoomsRoomIdPendingTurnsRouteWithChildren
+  '/api/runs/$runId/steer': typeof ApiRunsRunIdSteerRoute
   '/api/sessions/$sessionKey/active-run': typeof ApiSessionsSessionKeyActiveRunRoute
+  '/api/sessions/$sessionKey/compress': typeof ApiSessionsSessionKeyCompressRoute
   '/api/sessions/$sessionKey/status': typeof ApiSessionsSessionKeyStatusRoute
+  '/api/sessions/$sessionKey/truncate': typeof ApiSessionsSessionKeyTruncateRoute
   '/api/agents/$agentId/sessions/$sessionId': typeof ApiAgentsAgentIdSessionsSessionIdRoute
   '/api/rooms/$roomId/participants/$participantId': typeof ApiRoomsRoomIdParticipantsParticipantIdRoute
   '/api/runs/$sessionKey/$runId/abandon': typeof ApiRunsSessionKeyRunIdAbandonRoute
@@ -1513,6 +1550,8 @@ export interface FileRoutesByTo {
   '/api/auth': typeof ApiAuthRouteWithChildren
   '/api/auth-check': typeof ApiAuthCheckRoute
   '/api/available-agents': typeof ApiAvailableAgentsRoute
+  '/api/background': typeof ApiBackgroundRoute
+  '/api/btw': typeof ApiBtwRoute
   '/api/chat-events': typeof ApiChatEventsRoute
   '/api/claude-config': typeof ApiClaudeConfigRoute
   '/api/claude-jobs': typeof ApiClaudeJobsRouteWithChildren
@@ -1680,8 +1719,11 @@ export interface FileRoutesByTo {
   '/api/rooms/$roomId/messages': typeof ApiRoomsRoomIdMessagesRoute
   '/api/rooms/$roomId/participants': typeof ApiRoomsRoomIdParticipantsRouteWithChildren
   '/api/rooms/$roomId/pending-turns': typeof ApiRoomsRoomIdPendingTurnsRouteWithChildren
+  '/api/runs/$runId/steer': typeof ApiRunsRunIdSteerRoute
   '/api/sessions/$sessionKey/active-run': typeof ApiSessionsSessionKeyActiveRunRoute
+  '/api/sessions/$sessionKey/compress': typeof ApiSessionsSessionKeyCompressRoute
   '/api/sessions/$sessionKey/status': typeof ApiSessionsSessionKeyStatusRoute
+  '/api/sessions/$sessionKey/truncate': typeof ApiSessionsSessionKeyTruncateRoute
   '/api/agents/$agentId/sessions/$sessionId': typeof ApiAgentsAgentIdSessionsSessionIdRoute
   '/api/rooms/$roomId/participants/$participantId': typeof ApiRoomsRoomIdParticipantsParticipantIdRoute
   '/api/runs/$sessionKey/$runId/abandon': typeof ApiRunsSessionKeyRunIdAbandonRoute
@@ -1722,6 +1764,8 @@ export interface FileRoutesById {
   '/api/auth': typeof ApiAuthRouteWithChildren
   '/api/auth-check': typeof ApiAuthCheckRoute
   '/api/available-agents': typeof ApiAvailableAgentsRoute
+  '/api/background': typeof ApiBackgroundRoute
+  '/api/btw': typeof ApiBtwRoute
   '/api/chat-events': typeof ApiChatEventsRoute
   '/api/claude-config': typeof ApiClaudeConfigRoute
   '/api/claude-jobs': typeof ApiClaudeJobsRouteWithChildren
@@ -1890,8 +1934,11 @@ export interface FileRoutesById {
   '/api/rooms/$roomId/messages': typeof ApiRoomsRoomIdMessagesRoute
   '/api/rooms/$roomId/participants': typeof ApiRoomsRoomIdParticipantsRouteWithChildren
   '/api/rooms/$roomId/pending-turns': typeof ApiRoomsRoomIdPendingTurnsRouteWithChildren
+  '/api/runs/$runId/steer': typeof ApiRunsRunIdSteerRoute
   '/api/sessions/$sessionKey/active-run': typeof ApiSessionsSessionKeyActiveRunRoute
+  '/api/sessions/$sessionKey/compress': typeof ApiSessionsSessionKeyCompressRoute
   '/api/sessions/$sessionKey/status': typeof ApiSessionsSessionKeyStatusRoute
+  '/api/sessions/$sessionKey/truncate': typeof ApiSessionsSessionKeyTruncateRoute
   '/api/agents/$agentId/sessions/$sessionId': typeof ApiAgentsAgentIdSessionsSessionIdRoute
   '/api/rooms/$roomId/participants/$participantId': typeof ApiRoomsRoomIdParticipantsParticipantIdRoute
   '/api/runs/$sessionKey/$runId/abandon': typeof ApiRunsSessionKeyRunIdAbandonRoute
@@ -1933,6 +1980,8 @@ export interface FileRouteTypes {
     | '/api/auth'
     | '/api/auth-check'
     | '/api/available-agents'
+    | '/api/background'
+    | '/api/btw'
     | '/api/chat-events'
     | '/api/claude-config'
     | '/api/claude-jobs'
@@ -2101,8 +2150,11 @@ export interface FileRouteTypes {
     | '/api/rooms/$roomId/messages'
     | '/api/rooms/$roomId/participants'
     | '/api/rooms/$roomId/pending-turns'
+    | '/api/runs/$runId/steer'
     | '/api/sessions/$sessionKey/active-run'
+    | '/api/sessions/$sessionKey/compress'
     | '/api/sessions/$sessionKey/status'
+    | '/api/sessions/$sessionKey/truncate'
     | '/api/agents/$agentId/sessions/$sessionId'
     | '/api/rooms/$roomId/participants/$participantId'
     | '/api/runs/$sessionKey/$runId/abandon'
@@ -2140,6 +2192,8 @@ export interface FileRouteTypes {
     | '/api/auth'
     | '/api/auth-check'
     | '/api/available-agents'
+    | '/api/background'
+    | '/api/btw'
     | '/api/chat-events'
     | '/api/claude-config'
     | '/api/claude-jobs'
@@ -2307,8 +2361,11 @@ export interface FileRouteTypes {
     | '/api/rooms/$roomId/messages'
     | '/api/rooms/$roomId/participants'
     | '/api/rooms/$roomId/pending-turns'
+    | '/api/runs/$runId/steer'
     | '/api/sessions/$sessionKey/active-run'
+    | '/api/sessions/$sessionKey/compress'
     | '/api/sessions/$sessionKey/status'
+    | '/api/sessions/$sessionKey/truncate'
     | '/api/agents/$agentId/sessions/$sessionId'
     | '/api/rooms/$roomId/participants/$participantId'
     | '/api/runs/$sessionKey/$runId/abandon'
@@ -2348,6 +2405,8 @@ export interface FileRouteTypes {
     | '/api/auth'
     | '/api/auth-check'
     | '/api/available-agents'
+    | '/api/background'
+    | '/api/btw'
     | '/api/chat-events'
     | '/api/claude-config'
     | '/api/claude-jobs'
@@ -2516,8 +2575,11 @@ export interface FileRouteTypes {
     | '/api/rooms/$roomId/messages'
     | '/api/rooms/$roomId/participants'
     | '/api/rooms/$roomId/pending-turns'
+    | '/api/runs/$runId/steer'
     | '/api/sessions/$sessionKey/active-run'
+    | '/api/sessions/$sessionKey/compress'
     | '/api/sessions/$sessionKey/status'
+    | '/api/sessions/$sessionKey/truncate'
     | '/api/agents/$agentId/sessions/$sessionId'
     | '/api/rooms/$roomId/participants/$participantId'
     | '/api/runs/$sessionKey/$runId/abandon'
@@ -2558,6 +2620,8 @@ export interface RootRouteChildren {
   ApiAuthRoute: typeof ApiAuthRouteWithChildren
   ApiAuthCheckRoute: typeof ApiAuthCheckRoute
   ApiAvailableAgentsRoute: typeof ApiAvailableAgentsRoute
+  ApiBackgroundRoute: typeof ApiBackgroundRoute
+  ApiBtwRoute: typeof ApiBtwRoute
   ApiChatEventsRoute: typeof ApiChatEventsRoute
   ApiClaudeConfigRoute: typeof ApiClaudeConfigRoute
   ApiClaudeJobsRoute: typeof ApiClaudeJobsRouteWithChildren
@@ -2687,6 +2751,7 @@ export interface RootRouteChildren {
   ApiAgentsIndexRoute: typeof ApiAgentsIndexRoute
   ApiTasksIndexRoute: typeof ApiTasksIndexRoute
   ApiAgentsAgentIdSessionsRoute: typeof ApiAgentsAgentIdSessionsRouteWithChildren
+  ApiRunsRunIdSteerRoute: typeof ApiRunsRunIdSteerRoute
   ApiRunsSessionKeyRunIdAbandonRoute: typeof ApiRunsSessionKeyRunIdAbandonRoute
 }
 
@@ -3497,6 +3562,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatEventsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/btw': {
+      id: '/api/btw'
+      path: '/api/btw'
+      fullPath: '/api/btw'
+      preLoaderRoute: typeof ApiBtwRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/background': {
+      id: '/api/background'
+      path: '/api/background'
+      fullPath: '/api/background'
+      preLoaderRoute: typeof ApiBackgroundRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/available-agents': {
       id: '/api/available-agents'
       path: '/api/available-agents'
@@ -4036,11 +4115,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentsStatusRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/sessions/$sessionKey/truncate': {
+      id: '/api/sessions/$sessionKey/truncate'
+      path: '/$sessionKey/truncate'
+      fullPath: '/api/sessions/$sessionKey/truncate'
+      preLoaderRoute: typeof ApiSessionsSessionKeyTruncateRouteImport
+      parentRoute: typeof ApiSessionsRoute
+    }
     '/api/sessions/$sessionKey/status': {
       id: '/api/sessions/$sessionKey/status'
       path: '/$sessionKey/status'
       fullPath: '/api/sessions/$sessionKey/status'
       preLoaderRoute: typeof ApiSessionsSessionKeyStatusRouteImport
+      parentRoute: typeof ApiSessionsRoute
+    }
+    '/api/sessions/$sessionKey/compress': {
+      id: '/api/sessions/$sessionKey/compress'
+      path: '/$sessionKey/compress'
+      fullPath: '/api/sessions/$sessionKey/compress'
+      preLoaderRoute: typeof ApiSessionsSessionKeyCompressRouteImport
       parentRoute: typeof ApiSessionsRoute
     }
     '/api/sessions/$sessionKey/active-run': {
@@ -4049,6 +4142,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/sessions/$sessionKey/active-run'
       preLoaderRoute: typeof ApiSessionsSessionKeyActiveRunRouteImport
       parentRoute: typeof ApiSessionsRoute
+    }
+    '/api/runs/$runId/steer': {
+      id: '/api/runs/$runId/steer'
+      path: '/api/runs/$runId/steer'
+      fullPath: '/api/runs/$runId/steer'
+      preLoaderRoute: typeof ApiRunsRunIdSteerRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/rooms/$roomId/pending-turns': {
       id: '/api/rooms/$roomId/pending-turns'
@@ -4375,14 +4475,18 @@ interface ApiSessionsRouteChildren {
   ApiSessionsSearchRoute: typeof ApiSessionsSearchRoute
   ApiSessionsSendRoute: typeof ApiSessionsSendRoute
   ApiSessionsSessionKeyActiveRunRoute: typeof ApiSessionsSessionKeyActiveRunRoute
+  ApiSessionsSessionKeyCompressRoute: typeof ApiSessionsSessionKeyCompressRoute
   ApiSessionsSessionKeyStatusRoute: typeof ApiSessionsSessionKeyStatusRoute
+  ApiSessionsSessionKeyTruncateRoute: typeof ApiSessionsSessionKeyTruncateRoute
 }
 
 const ApiSessionsRouteChildren: ApiSessionsRouteChildren = {
   ApiSessionsSearchRoute: ApiSessionsSearchRoute,
   ApiSessionsSendRoute: ApiSessionsSendRoute,
   ApiSessionsSessionKeyActiveRunRoute: ApiSessionsSessionKeyActiveRunRoute,
+  ApiSessionsSessionKeyCompressRoute: ApiSessionsSessionKeyCompressRoute,
   ApiSessionsSessionKeyStatusRoute: ApiSessionsSessionKeyStatusRoute,
+  ApiSessionsSessionKeyTruncateRoute: ApiSessionsSessionKeyTruncateRoute,
 }
 
 const ApiSessionsRouteWithChildren = ApiSessionsRoute._addFileChildren(
@@ -4507,6 +4611,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAuthRoute: ApiAuthRouteWithChildren,
   ApiAuthCheckRoute: ApiAuthCheckRoute,
   ApiAvailableAgentsRoute: ApiAvailableAgentsRoute,
+  ApiBackgroundRoute: ApiBackgroundRoute,
+  ApiBtwRoute: ApiBtwRoute,
   ApiChatEventsRoute: ApiChatEventsRoute,
   ApiClaudeConfigRoute: ApiClaudeConfigRoute,
   ApiClaudeJobsRoute: ApiClaudeJobsRouteWithChildren,
@@ -4637,6 +4743,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentsIndexRoute: ApiAgentsIndexRoute,
   ApiTasksIndexRoute: ApiTasksIndexRoute,
   ApiAgentsAgentIdSessionsRoute: ApiAgentsAgentIdSessionsRouteWithChildren,
+  ApiRunsRunIdSteerRoute: ApiRunsRunIdSteerRoute,
   ApiRunsSessionKeyRunIdAbandonRoute: ApiRunsSessionKeyRunIdAbandonRoute,
 }
 export const routeTree = rootRouteImport

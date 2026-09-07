@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from '@tanstack/react-router'
+import { useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { useParams } from '@tanstack/react-router'
 import { MemberAvatar } from './components/member-avatar'
 import { MemberRoster } from './components/member-roster'
 import { MentionPicker } from './components/mention-picker'
@@ -13,7 +13,6 @@ import type {
 } from '@/lib/group-chat-types'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import {
   MenuContent,
   MenuItem,
@@ -32,6 +31,8 @@ import {
   listPendingTurns,
 } from '@/lib/group-chat-api'
 import { useGroupChatEvents } from '@/lib/use-group-chat-events'
+import { GroupChatRoomsContext } from './group-chat-layout'
+import { writeLastRoom } from './last-room'
 
 function formatTime(ts: number): string {
   return new Date(ts).toLocaleTimeString([], {
@@ -42,7 +43,7 @@ function formatTime(ts: number): string {
 
 export function RoomsScreen() {
   const { roomId } = useParams({ from: '/group-chat/$roomId' })
-  const navigate = useNavigate()
+  const sidebarRooms = useContext(GroupChatRoomsContext)
   const [activeRoom, setActiveRoom] = useState<Room | null>(null)
   const [messages, setMessages] = useState<Array<RoomMessage>>([])
   const [participants, setParticipants] = useState<Array<RoomParticipant>>([])
@@ -68,6 +69,7 @@ export function RoomsScreen() {
       setPendingTurns([])
       return
     }
+    writeLastRoom(roomId)
     setLoading(true)
     Promise.all([
       listMessages(roomId),
@@ -188,10 +190,13 @@ export function RoomsScreen() {
     setPendingTurns((prev) => prev.filter((t) => t.id !== turnId))
   }
 
+  const displayTitle =
+    sidebarRooms.find((r) => r.id === roomId)?.title ?? activeRoom?.title
+
   if (!roomId) {
     return (
       <div className="h-full flex items-center justify-center text-muted-foreground">
-        Select a room from the sidebar.
+        No room yet — create one from the sidebar.
       </div>
     )
   }
@@ -201,12 +206,12 @@ export function RoomsScreen() {
       {activeRoom ? (
         <>
           <header
-            className="px-4 py-3 border-b flex items-center justify-between"
+            className="h-16 shrink-0 px-4 border-b flex items-center justify-between"
             style={{ borderColor: 'var(--theme-border)' }}
           >
-            <div className="flex items-center gap-3">
-              <div>
-                <h1 className="font-semibold">{activeRoom.title}</h1>
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="min-w-0">
+                <h1 className="font-semibold truncate">{displayTitle}</h1>
                 <div className="text-xs opacity-70 flex items-center gap-2">
                   {participants.length} members
                   {statusText && (

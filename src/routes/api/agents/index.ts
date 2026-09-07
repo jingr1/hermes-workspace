@@ -6,29 +6,21 @@ import {
   getAgentStatusSnapshot,
   startAgentStatusWatcher,
 } from '../../../server/agent-status-watcher'
+import type { AgentRuntime, AgentWithStatus } from '../../../lib/agent-types'
+import type { AgentProbeResult } from '../../../server/agent-runtime/types'
 import type { AgentDeclaration } from '../../../server/agent-runtime/agents-config'
-import type {
-  AgentRuntime,
-  AgentStatus,
-  AgentWithStatus,
-} from '../../../lib/agent-types'
-
-function deriveStatus(
-  probeAvailable: boolean,
-  snapshot?: ReturnType<typeof getAgentStatusSnapshot>,
-): AgentStatus {
-  if (snapshot?.needsHuman) return 'blocked'
-  if (snapshot?.state === 'running') return 'busy'
-  if (snapshot?.state === 'idle') return 'online'
-  if (snapshot?.state) return snapshot.state as AgentStatus
-  return probeAvailable ? 'online' : 'offline'
-}
+import {
+  loadGroupChatActivity,
+  deriveUnifiedStatusForAgent,
+  toAgentStatus,
+  type UnifiedAgentStatus,
+} from '../../../lib/agent-status'
 
 function buildStatusSnapshot(
   snapshot: NonNullable<ReturnType<typeof getAgentStatusSnapshot>>,
 ): NonNullable<AgentWithStatus['statusSnapshot']> {
   return {
-    state: snapshot.state as AgentStatus,
+    state: toAgentStatus(snapshot.state as UnifiedAgentStatus),
     currentTask: snapshot.currentTask,
     taskId: snapshot.taskId,
     missionId: snapshot.missionId,
@@ -41,16 +33,23 @@ function buildStatusSnapshot(
 
 function buildAgentPayload(
   decl: AgentDeclaration,
-  probe: { available: boolean; version?: string; detail?: string },
+  probe: AgentProbeResult,
+  groupChatMap: Map<string, import('../../../lib/agent-status').GroupChatActivity>,
 ): AgentWithStatus {
   const snapshot =
     decl.runtime === 'hermes' ? getAgentStatusSnapshot(decl.id) : undefined
-  const status = deriveStatus(probe.available, snapshot)
+  const unified = deriveUnifiedStatusForAgent(
+    decl.id,
+    snapshot,
+    Boolean(probe.available),
+    groupChatMap,
+    decl.profile,
+  )
   return {
     agentId: decl.id,
     name: decl.displayName ?? decl.mentionName ?? decl.id,
     runtime: decl.runtime as AgentRuntime,
-    status,
+    status: toAgentStatus(unified),
     execution: decl.execution,
     currentTaskId: snapshot?.taskId ?? undefined,
     currentMissionId: snapshot?.missionId ?? undefined,
@@ -61,7 +60,11 @@ function buildAgentPayload(
       capabilities: decl.capabilities,
       maxConcurrentTasks: decl.maxConcurrentTasks,
     },
-    probe,
+    probe: {
+      available: probe.available,
+      version: probe.version,
+      detail: probe.detail,
+    },
     statusSnapshot: snapshot ? buildStatusSnapshot(snapshot) : undefined,
   }
 }
@@ -77,6 +80,7 @@ export const Route = createFileRoute('/api/agents/')({
         const router = getAgentRuntimeRouter()
         const probes = await router.probeAll()
         const probeById = new Map(probes.map((p) => [p.agentId, p]))
+        const groupChatMap = loadGroupChatActivity()
 
         const agents: Array<AgentWithStatus> = []
         for (const decl of router.registry.agents) {
@@ -84,32 +88,48 @@ export const Route = createFileRoute('/api/agents/')({
             available: false,
             detail: 'probe missing',
           }
-          agents.push(buildAgentPayload(decl, probe))
+          agents.push(buildAgentPayload(decl, probe, groupChatMap))
         }
 
         // Orphan Hermes profiles are still usable as hermes-runtime agents.
-        for (const profile of router.registry.orphanProfiles) {
-          const probe = { available: true, detail: `hermes profile ${profile}` }
-          const snapshot = getAgentStatusSnapshot(profile)
-          const status = deriveStatus(probe.available, snapshot)
-          agents.push({
-            agentId: profile,
-            name: profile,
-            runtime: 'hermes',
-            status,
-            execution: 'local',
-            currentTaskId: snapshot?.taskId ?? undefined,
-            currentMissionId: snapshot?.missionId ?? undefined,
-            runtimeConfig: {
+        const { probeHermesProfileGateway } = await import(
+          '../../../server/agent-runtime/hermes-gateway-probe'
+        )
+        const orphanAgents = await Promise.all(
+          router.registry.orphanProfiles.map(async (profile) => {
+            const probe = await probeHermesProfileGateway(profile)
+            const snapshot = getAgentStatusSnapshot(profile)
+            const unified = deriveUnifiedStatusForAgent(
               profile,
-              capabilities: [],
-            },
-            probe,
-            statusSnapshot: snapshot
-              ? buildStatusSnapshot(snapshot)
-              : undefined,
-          })
-        }
+              snapshot,
+              Boolean(probe.available),
+              groupChatMap,
+              profile,
+            )
+            return {
+              agentId: profile,
+              name: profile,
+              runtime: 'hermes' as const,
+              status: toAgentStatus(unified),
+              execution: 'local' as const,
+              currentTaskId: snapshot?.taskId ?? undefined,
+              currentMissionId: snapshot?.missionId ?? undefined,
+              runtimeConfig: {
+                profile,
+                capabilities: [] as string[],
+              },
+              probe: {
+                available: probe.available,
+                version: probe.version,
+                detail: probe.detail,
+              },
+              statusSnapshot: snapshot
+                ? buildStatusSnapshot(snapshot)
+                : undefined,
+            }
+          }),
+        )
+        agents.push(...orphanAgents)
 
         return json({ agents, checkedAt: Date.now() })
       },

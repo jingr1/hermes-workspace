@@ -38,6 +38,7 @@ type StreamingState = {
   isStreaming: boolean
   streamingMessageId: string | null
   streamingText: string
+  streamingRunId: string | null
   error: string | null
 }
 
@@ -113,6 +114,7 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
     isStreaming: false,
     streamingMessageId: null,
     streamingText: '',
+    streamingRunId: null,
     error: null,
   })
 
@@ -202,6 +204,7 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
         isStreaming: false,
         streamingMessageId: null,
         streamingText: '',
+        streamingRunId: null,
         error: null,
       })
     },
@@ -416,6 +419,7 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
         ...prev,
         isStreaming: false,
         streamingText: finalText,
+        streamingRunId: null,
       }))
 
       const message: ChatMessage = {
@@ -500,6 +504,11 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
           if (runId) {
             activeRunIdRef.current = runId
             registerSendStreamRun(runId)
+            setState((prev) =>
+              prev.streamingRunId === runId
+                ? prev
+                : { ...prev, streamingRunId: runId },
+            )
           }
           markActivity()
           pushActivity({
@@ -859,6 +868,7 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
         isStreaming: true,
         streamingMessageId: messageId,
         streamingText: '',
+        streamingRunId: null,
         error: null,
       })
       useChatStore.getState().setHeartbeatActivity(null)
@@ -1120,6 +1130,7 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
       isStreaming: false,
       streamingMessageId: null,
       streamingText: '',
+      streamingRunId: null,
       error: null,
     })
   }, [cancelStreaming])

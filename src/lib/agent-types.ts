@@ -13,6 +13,11 @@ export type AgentRuntime =
   | 'deepseek-harness'
   | 'opencode'
 
+/**
+ * @deprecated Prefer UnifiedAgentStatus from `agent-status.ts`. This union is
+ * kept for existing call-sites that render dots; new code should use the
+ * canonical 'active' | 'idle' | 'offline' | 'blocked' | 'error' | 'needsSetup'.
+ */
 export type AgentStatus =
   | 'online'
   | 'offline'

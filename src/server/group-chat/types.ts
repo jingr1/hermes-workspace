@@ -112,7 +112,12 @@ export type GroupTurnResult =
   | { kind: 'pass' }
   | { kind: 'failed'; reason: string }
   | { kind: 'blocked'; pendingTurnId: string }
-  | { kind: 'timeout' }
+  /**
+   * Soft deadline elapsed while the gateway turn may still be running.
+   * Carries the pre-submit message baseline so the runner can stranded-harvest
+   * the finished reply later (Bot Mode: late, never lost).
+   */
+  | { kind: 'timeout'; before: number; sessionId: string }
 
 /** Minimal participant shape used by the runner/mention resolver. */
 export type GroupMember = Pick<

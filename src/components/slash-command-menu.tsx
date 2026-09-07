@@ -34,10 +34,30 @@ export const DEFAULT_SLASH_COMMANDS: Array<SlashCommandDefinition> = [
   // Session control
   { command: '/new', description: 'Start new session' },
   { command: '/clear', description: 'Clear screen and start fresh' },
-  { command: '/retry', description: 'Resend the last message' },
-  { command: '/undo', description: 'Remove the last exchange' },
-  { command: '/title', description: 'Name the current session' },
+  { command: '/retry', description: 'Resend the last user message' },
+  { command: '/undo', description: 'Remove the last user turn' },
+  {
+    command: '/queue <text>',
+    description: 'Queue a follow-up for after the current reply',
+  },
+  {
+    command: '/interrupt <text>',
+    description: 'Stop the current reply and send next',
+  },
+  {
+    command: '/steer <text>',
+    description: 'Inject guidance into the current reply',
+  },
   { command: '/compress', description: 'Manually compress context' },
+  {
+    command: '/btw <question>',
+    description: 'Ask a side question (does not change the chat)',
+  },
+  {
+    command: '/bg <prompt>',
+    description: 'Run a prompt in a background session',
+  },
+  { command: '/title', description: 'Name the current session' },
 
   // Persistent goals (Ralph loop)
   { command: '/goal <text>', description: 'Set standing goal across turns' },
@@ -76,9 +96,6 @@ export const DEFAULT_SLASH_COMMANDS: Array<SlashCommandDefinition> = [
   { command: '/history', description: 'Show conversation history' },
   { command: '/agents', description: 'Show active agents and running tasks' },
   { command: '/resume', description: 'Resume a named session' },
-  { command: '/branch', description: 'Branch the current session' },
-  { command: '/fork', description: 'Fork the current session' },
-
   // Info
   { command: '/help', description: 'Show all available commands' },
   { command: '/usage', description: 'View token usage' },

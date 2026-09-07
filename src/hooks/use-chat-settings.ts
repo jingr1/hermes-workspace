@@ -16,6 +16,10 @@ export const DEFAULT_CHAT_DISPLAY_NAME = 'User'
 
 export type EnterBehavior = 'send' | 'newline'
 export type ChatWidth = 'comfortable' | 'wide' | 'full'
+/** Busy composer Enter behavior while a reply is in flight */
+export type BusyMessageMode = 'queue' | 'interrupt' | 'steer'
+/** How tool/thinking activity is shown during a turn */
+export type ChatActivityDisplayMode = 'compact' | 'stream' | 'hidden'
 
 export type ChatSettings = {
   showToolMessages: boolean
@@ -30,6 +34,22 @@ export type ChatSettings = {
    *  - 'newline' — Enter inserts a newline, Cmd+Enter / Ctrl+Enter sends
    */
   enterBehavior: EnterBehavior
+  /**
+   * When the agent is busy and the composer has a draft:
+   *  - 'queue'     — enqueue for after the current turn (default)
+   *  - 'interrupt' — stop current turn, then send the draft
+   *  - 'steer'     — inject into the live turn (falls back to queue if no run id)
+   */
+  busyMessageMode: BusyMessageMode
+  /**
+   * Tool/thinking activity presentation:
+   *  - 'compact' — TUI working card (default)
+   *  - 'stream'  — expanded activity + tool messages
+   *  - 'hidden'  — hide activity cards (final answer focus)
+   */
+  chatActivityDisplayMode: ChatActivityDisplayMode
+  /** Desktop jump list of user questions in the current chat */
+  showConversationOutline: boolean
   /**
    * Max-width of the chat content column (#89).
    *  - 'comfortable' — 900px (default, keeps prior layout)
@@ -69,6 +89,9 @@ function defaultChatSettings(): ChatSettings {
     displayName: DEFAULT_CHAT_DISPLAY_NAME,
     avatarDataUrl: null,
     enterBehavior: 'send',
+    busyMessageMode: 'queue',
+    chatActivityDisplayMode: 'compact',
+    showConversationOutline: false,
     chatWidth: 'comfortable',
     sidebarHoverExpand: false,
     soundOnChatComplete: false,
@@ -138,6 +161,12 @@ export function selectChatProfileAvatarDataUrl(
 
 export function selectEnterBehavior(state: ChatSettingsState): EnterBehavior {
   return state.settings.enterBehavior
+}
+
+export function selectBusyMessageMode(state: ChatSettingsState): BusyMessageMode {
+  const mode = state.settings.busyMessageMode
+  if (mode === 'interrupt' || mode === 'steer' || mode === 'queue') return mode
+  return 'queue'
 }
 
 export function selectChatWidth(state: ChatSettingsState): ChatWidth {

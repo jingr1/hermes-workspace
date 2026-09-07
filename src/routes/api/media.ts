@@ -27,6 +27,8 @@ const MIME_BY_EXT: Record<string, string> = {
   '.mp3': 'audio/mpeg',
   '.wav': 'audio/wav',
   '.ogg': 'audio/ogg',
+  '.excalidraw': 'application/json',
+  '.json': 'application/json',
 }
 
 function hermesHome(): string {
@@ -43,9 +45,11 @@ function allowedPrefixes(): Array<string> {
   return [
     '/tmp',
     resolvePath(home, 'tmp'),
+    resolvePath(home, 'diagrams'),
     resolvePath(stateHome, 'tmp'),
     resolvePath(stateHome, 'cache'),
     resolvePath(stateHome, 'audio_cache'),
+    resolvePath(stateHome, 'workspace'),
     resolvePath(stateHome, 'workspace', 'artifacts'),
     resolvePath(home, 'dispatch'),
     resolvePath(home, 'projects'),

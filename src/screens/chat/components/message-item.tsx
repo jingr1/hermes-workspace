@@ -142,6 +142,8 @@ type MessageItemProps = {
   toolCalls?: Array<StreamToolCall>
   lifecycleEvents?: Array<LifecycleEvent>
   onRetryMessage?: (message: ChatMessage) => void
+  onEditMessage?: (message: ChatMessage) => void
+  onRegenerateMessage?: (message: ChatMessage) => void
   forceActionsVisible?: boolean
   wrapperRef?: React.RefObject<HTMLDivElement | null>
   wrapperClassName?: string
@@ -154,6 +156,8 @@ type MessageItemProps = {
   simulateStreaming?: boolean
   streamingKey?: string | null
   expandAllToolSections?: boolean
+  /** When true, skip the WORKING / tool activity card under the bubble */
+  hideActivityCard?: boolean
   isLastAssistant?: boolean
 }
 
@@ -2097,6 +2101,8 @@ function MessageItemComponent({
   toolCalls: streamToolCalls = [],
   lifecycleEvents = [],
   onRetryMessage,
+  onEditMessage,
+  onRegenerateMessage,
   forceActionsVisible = false,
   wrapperRef,
   wrapperClassName,
@@ -2109,6 +2115,7 @@ function MessageItemComponent({
   simulateStreaming: _simulateStreaming = false,
   streamingKey: _streamingKey,
   expandAllToolSections = false,
+  hideActivityCard = false,
   isLastAssistant = false,
 }: MessageItemProps) {
   const role = message.role || 'assistant'
@@ -2683,7 +2690,16 @@ function MessageItemComponent({
 
       {shouldRenderMessageBubble && !(message as any).__isNarration && (
         <Message
-          className={cn('gap-2 md:gap-3', isUser ? 'flex-row-reverse' : '')}
+          className={cn(
+            'gap-2 md:gap-3',
+            isUser ? 'flex-row-reverse' : '',
+            // Keep live narration visible while the WORKING card grows —
+            // otherwise stick-to-bottom scrolls the bubble under the header.
+            !isUser &&
+              effectiveIsStreaming &&
+              hasText &&
+              'sticky top-0 z-10 bg-[var(--theme-bg,var(--background))] py-1',
+          )}
         >
           {isUser ? (
             <UserAvatar
@@ -2885,6 +2901,7 @@ function MessageItemComponent({
       {/* Streaming: WORKING card under the text bubble. While there is no text
           yet, chat-message-list ThinkingBubble owns the branched card. */}
       {!isUser &&
+      !hideActivityCard &&
       effectiveIsStreaming &&
       finalToolSections.length > 0 &&
       hasText ? (
@@ -2937,6 +2954,25 @@ function MessageItemComponent({
               ? () => onRetryMessage(message)
               : undefined
           }
+          onEdit={
+            !effectiveIsStreaming &&
+            !isQueued &&
+            isUser &&
+            onEditMessage &&
+            typeof (message as { __historyIndex?: unknown }).__historyIndex ===
+              'number'
+              ? () => onEditMessage(message)
+              : undefined
+          }
+          onRegenerate={
+            !effectiveIsStreaming &&
+            !isUser &&
+            onRegenerateMessage &&
+            typeof (message as { __historyIndex?: unknown }).__historyIndex ===
+              'number'
+              ? () => onRegenerateMessage(message)
+              : undefined
+          }
         />
       )}
     </div>
@@ -2952,6 +2988,9 @@ function areMessagesEqual(
   }
   if (prevProps.wrapperClassName !== nextProps.wrapperClassName) return false
   if (prevProps.onRetryMessage !== nextProps.onRetryMessage) return false
+  if (prevProps.onEditMessage !== nextProps.onEditMessage) return false
+  if (prevProps.onRegenerateMessage !== nextProps.onRegenerateMessage)
+    return false
   if (prevProps.toolCalls !== nextProps.toolCalls) return false
   if (prevProps.lifecycleEvents !== nextProps.lifecycleEvents) return false
   if (prevProps.wrapperDataMessageId !== nextProps.wrapperDataMessageId) {
@@ -2979,6 +3018,9 @@ function areMessagesEqual(
     return false
   }
   if (prevProps.expandAllToolSections !== nextProps.expandAllToolSections) {
+    return false
+  }
+  if (prevProps.hideActivityCard !== nextProps.hideActivityCard) {
     return false
   }
   if (

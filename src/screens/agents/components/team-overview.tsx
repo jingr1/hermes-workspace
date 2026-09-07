@@ -5,6 +5,8 @@ export type TeamOverviewFilter =
   | 'all'
   | 'active'
   | 'idle'
+  | 'offline'
+  | 'blocked'
   | 'error'
   | 'needsSetup'
 
@@ -58,6 +60,12 @@ export function TeamOverview({
 }: TeamOverviewProps) {
   const activeCount = agents.filter((agent) => agent.status === 'active').length
   const idleCount = agents.filter((agent) => agent.status === 'idle').length
+  const offlineCount = agents.filter(
+    (agent) => agent.status === 'offline',
+  ).length
+  const blockedCount = agents.filter(
+    (agent) => agent.status === 'blocked',
+  ).length
   const errorCount = agents.filter((agent) => agent.status === 'error').length
   const needsSetupCount = agents.filter((agent) => agent.needsSetup).length
 
@@ -87,6 +95,24 @@ export function TeamOverview({
           colorClass="bg-primary-300"
           active={filter === 'idle'}
           onClick={() => onFilterChange(filter === 'idle' ? 'all' : 'idle')}
+        />
+        <StatCard
+          label="Offline"
+          value={offlineCount}
+          colorClass="bg-neutral-400"
+          active={filter === 'offline'}
+          onClick={() =>
+            onFilterChange(filter === 'offline' ? 'all' : 'offline')
+          }
+        />
+        <StatCard
+          label="Blocked"
+          value={blockedCount}
+          colorClass="bg-rose-500"
+          active={filter === 'blocked'}
+          onClick={() =>
+            onFilterChange(filter === 'blocked' ? 'all' : 'blocked')
+          }
         />
         <StatCard
           label="Error"

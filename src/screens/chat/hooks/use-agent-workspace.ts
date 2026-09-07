@@ -37,7 +37,9 @@ export function useAgentWorkspace() {
         setAgents(data.agents)
         if (!activeAgentId && data.agents.length > 0) {
           const firstOnline =
-            data.agents.find((a) => a.status === 'online') ?? data.agents[0]
+            data.agents.find(
+              (a) => a.status === 'online' || a.status === 'busy',
+            ) ?? data.agents[0]
           setActiveAgentId(firstOnline.agentId)
         }
       })
@@ -82,9 +84,12 @@ export function useAgentWorkspace() {
       const statusSnapshot = payload.status as
         | AgentWithStatus['statusSnapshot']
         | undefined
+      // Do NOT blindly adopt snapshot.state as the agent status. The snapshot
+      // state is raw runtime state (e.g. 'executing', 'idle'); the canonical
+      // status is derived on the server from runtime + sessions + group-chat
+      // activity. Re-fetch the full agent list so the UI stays consistent.
       updateAgent({
         agentId,
-        status: statusSnapshot?.state ?? 'unknown',
         currentTaskId: statusSnapshot?.taskId ?? undefined,
         currentMissionId: statusSnapshot?.missionId ?? undefined,
         statusSnapshot,

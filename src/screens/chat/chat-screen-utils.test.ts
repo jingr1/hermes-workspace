@@ -9,6 +9,7 @@ import {
   shouldCancelStreamOnSessionNav,
   shouldClearWaitingForAssistantMessage,
   shouldHandoffStreamOnProfileNav,
+  shouldSettleWaitingFromActiveRun,
 } from './chat-screen-utils'
 
 describe('advanceStickyStreamingText', () => {
@@ -151,7 +152,20 @@ describe('response wait detection', () => {
   it('treats persisted complete runs as terminal', () => {
     expect(isTerminalActiveRunStatus('complete')).toBe(true)
     expect(isTerminalActiveRunStatus('completed')).toBe(true)
+    expect(isTerminalActiveRunStatus('interrupted')).toBe(true)
     expect(isTerminalActiveRunStatus('active')).toBe(false)
+  })
+
+  it('settles waiting when active-run is missing or terminal', () => {
+    expect(shouldSettleWaitingFromActiveRun(null)).toBe('missing')
+    expect(shouldSettleWaitingFromActiveRun({ status: 'complete' })).toBe(
+      'settle',
+    )
+    expect(shouldSettleWaitingFromActiveRun({ status: 'interrupted' })).toBe(
+      'settle',
+    )
+    expect(shouldSettleWaitingFromActiveRun({ status: 'active' })).toBe('keep')
+    expect(shouldSettleWaitingFromActiveRun({ status: 'handoff' })).toBe('keep')
   })
 
   it('clears waiting when a new assistant message appears after the send snapshot', () => {
@@ -175,6 +189,42 @@ describe('response wait detection', () => {
             role: 'assistant',
             content: [
               { type: 'text', text: 'Remembered: you like cheesecake.' },
+            ],
+            id: 'assistant-1',
+          },
+        ],
+        snapshot,
+      ),
+    ).toBe(true)
+  })
+
+  it('clears waiting when the same assistant row is rewritten with interrupt text', () => {
+    const snapshot = createResponseWaitSnapshot([
+      {
+        role: 'user',
+        content: [{ type: 'text', text: 'long task' }],
+      },
+      {
+        role: 'assistant',
+        content: [{ type: 'text', text: '' }],
+        id: 'assistant-1',
+      },
+    ])
+
+    expect(
+      shouldClearWaitingForAssistantMessage(
+        [
+          {
+            role: 'user',
+            content: [{ type: 'text', text: 'long task' }],
+          },
+          {
+            role: 'assistant',
+            content: [
+              {
+                type: 'text',
+                text: 'Operation interrupted: waiting for model response',
+              },
             ],
             id: 'assistant-1',
           },

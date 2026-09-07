@@ -499,9 +499,10 @@ export function useChatHistory({
     return messages
   }, [persistedPending, rawHistoryMessages])
 
-  const showToolMessages = useChatSettingsStore(
-    (s) => s.settings.showToolMessages,
-  )
+  const showToolMessages = useChatSettingsStore((state) => {
+    if (state.settings.showToolMessages) return true
+    return state.settings.chatActivityDisplayMode === 'stream'
+  })
 
   // Filter messages for display - hide tool calls, system events, etc.
   const displayMessages = useMemo(() => {

@@ -1,3 +1,4 @@
+/** @vitest-environment node */
 /**
  * Tests for agent-session-manager per-profile routing and crash recovery.
  *
@@ -77,6 +78,14 @@ const mockClient = vi.fn((profile: string) => {
 
 vi.mock('../../claude-api-profile', () => ({
   getClaudeApiClient: vi.fn((profile: string) => mockClient(profile)),
+}))
+
+vi.mock('../../gateway-pool', () => ({
+  ensureProfileGateway: vi.fn(async () => ({
+    ok: true,
+    message: 'already running',
+    started: false,
+  })),
 }))
 
 vi.mock('../../claude-api', () => ({

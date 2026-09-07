@@ -15,6 +15,7 @@ import { MessageItem } from './message-item'
 import { TuiActivityCard } from './tui-activity-card'
 import { ScrollToBottomButton } from './scroll-to-bottom-button'
 import { ResearchCard } from './research-card'
+import { ConversationOutline } from './conversation-outline'
 import type { ChatMessage } from '../types'
 import type { UseResearchCardResult } from '@/hooks/use-research-card'
 import {
@@ -27,6 +28,7 @@ import { cn } from '@/lib/utils'
 import { hapticTap } from '@/lib/haptics'
 import { CHAT_OPEN_MESSAGE_SEARCH_EVENT } from '@/screens/chat/chat-events'
 import { useChatStore } from '@/stores/chat-store'
+import { useChatSettingsStore } from '@/hooks/use-chat-settings'
 
 /** Duration (ms) the thinking indicator stays visible after waitingForResponse
  *  clears, giving the first response message time to render before the
@@ -665,6 +667,8 @@ function escapeAttributeSelector(value: string): string {
 type ChatMessageListProps = {
   messages: Array<ChatMessage>
   onRetryMessage?: (message: ChatMessage) => void
+  onEditMessage?: (message: ChatMessage) => void
+  onRegenerateMessage?: (message: ChatMessage) => void
   onRefresh?: () => void | Promise<unknown>
   loading: boolean
   empty: boolean
@@ -703,6 +707,8 @@ type ChatMessageListProps = {
 function ChatMessageListComponent({
   messages,
   onRetryMessage,
+  onEditMessage,
+  onRegenerateMessage,
   onRefresh: _onRefresh,
   loading,
   empty,
@@ -728,6 +734,14 @@ function ChatMessageListComponent({
   isCompacting = false,
   sending = false,
 }: ChatMessageListProps) {
+  const activityDisplayMode = useChatSettingsStore(
+    (s) => s.settings.chatActivityDisplayMode ?? 'compact',
+  )
+  const showConversationOutline = useChatSettingsStore(
+    (s) => s.settings.showConversationOutline === true,
+  )
+  const hideActivityCards = activityDisplayMode === 'hidden'
+  const streamActivityMode = activityDisplayMode === 'stream'
   const anchorRef = useRef<HTMLDivElement | null>(null)
   const lastUserRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
@@ -1356,9 +1370,28 @@ function ChatMessageListComponent({
   }, [thinkingAreaVisible])
 
   const showActivityFeed =
-    thinkingElapsed >= THINKING_ACTIVITY_DELAY_S ||
-    activeToolCalls.length > 0 ||
-    liveToolActivity.length > 0
+    !hideActivityCards &&
+    (thinkingElapsed >= THINKING_ACTIVITY_DELAY_S ||
+      activeToolCalls.length > 0 ||
+      liveToolActivity.length > 0)
+
+  const outlineEntries = useMemo(() => {
+    const next: Array<{ id: string; excerpt: string }> = []
+    messages.forEach((message, index) => {
+      if (message.role !== 'user') return
+      const id = getStableMessageId(message, index)
+      const text = textFromMessage(message).replace(/\s+/g, ' ').trim()
+      next.push({
+        id,
+        excerpt: text
+          ? text.length > 72
+            ? `${text.slice(0, 72)}…`
+            : text
+          : '(empty message)',
+      })
+    })
+    return next
+  }, [messages])
 
   const shouldBottomPin =
     visibleEntries.length > 0 ||
@@ -1518,6 +1551,14 @@ function ChatMessageListComponent({
             message={chatMessage}
             attachedToolMessages={entry.attachedToolMessages}
             onRetryMessage={effectiveOnRetry}
+            onEditMessage={
+              entryIndex === lastUserIndex ? onEditMessage : undefined
+            }
+            onRegenerateMessage={
+              entryIndex === lastAssistantIndex
+                ? onRegenerateMessage
+                : undefined
+            }
             toolResultsByCallId={hasToolCalls ? toolResultsByCallId : undefined}
             forceActionsVisible={forceActionsVisible}
             wrapperClassName={spacingClass}
@@ -1540,7 +1581,10 @@ function ChatMessageListComponent({
             lifecycleEvents={messageIsStreaming ? lifecycleEvents : undefined}
             simulateStreaming={simulateStreaming}
             streamingKey={signature}
-            expandAllToolSections={expandAllToolSections}
+            expandAllToolSections={
+              expandAllToolSections || streamActivityMode
+            }
+            hideActivityCard={hideActivityCards}
           />
         </div>
       )
@@ -1552,6 +1596,12 @@ function ChatMessageListComponent({
         message={chatMessage}
         attachedToolMessages={entry.attachedToolMessages}
         onRetryMessage={effectiveOnRetry}
+        onEditMessage={
+          entryIndex === lastUserIndex ? onEditMessage : undefined
+        }
+        onRegenerateMessage={
+          entryIndex === lastAssistantIndex ? onRegenerateMessage : undefined
+        }
         toolResultsByCallId={hasToolCalls ? toolResultsByCallId : undefined}
         forceActionsVisible={forceActionsVisible}
         wrapperClassName={spacingClass}
@@ -1572,7 +1622,8 @@ function ChatMessageListComponent({
         lifecycleEvents={messageIsStreaming ? lifecycleEvents : undefined}
         simulateStreaming={simulateStreaming}
         streamingKey={signature}
-        expandAllToolSections={expandAllToolSections}
+        expandAllToolSections={expandAllToolSections || streamActivityMode}
+        hideActivityCard={hideActivityCards}
       />
     )
   }
@@ -1798,7 +1849,7 @@ function ChatMessageListComponent({
 
   return (
     // mt-2 is to fix the prompt-input cut off
-    <>
+    <div className="flex h-full min-h-0 flex-1">
       <ChatContainerRoot
         className="h-full flex-1 min-h-0"
         stickToBottom={stickToBottomRef.current}
@@ -2020,6 +2071,16 @@ function ChatMessageListComponent({
                         message={chatMessage}
                         attachedToolMessages={entry.attachedToolMessages}
                         onRetryMessage={onRetryMessage}
+                        onEditMessage={
+                          entryIndex === lastUserIndex
+                            ? onEditMessage
+                            : undefined
+                        }
+                        onRegenerateMessage={
+                          entryIndex === lastAssistantIndex
+                            ? onRegenerateMessage
+                            : undefined
+                        }
                         toolResultsByCallId={
                           hasToolCalls ? toolResultsByCallId : undefined
                         }
@@ -2039,7 +2100,10 @@ function ChatMessageListComponent({
                         }
                         simulateStreaming={simulateStreaming}
                         streamingKey={signature}
-                        expandAllToolSections={expandAllToolSections}
+                        expandAllToolSections={
+                          expandAllToolSections || streamActivityMode
+                        }
+                        hideActivityCard={hideActivityCards}
                         isLastAssistant={forceActionsVisible}
                       />
                     )
@@ -2132,7 +2196,7 @@ function ChatMessageListComponent({
                       {normalizedStreamingToolCalls.length > 0 ? (
                         <TuiActivityCard
                           toolSections={normalizedStreamingToolCalls
-                            .slice(-3)
+                            .slice(streamActivityMode ? -12 : -3)
                             .map((tc) => {
                               const phase = tc.phase
                               const state =
@@ -2166,6 +2230,7 @@ function ChatMessageListComponent({
                             })}
                           thinking={null}
                           isStreaming={true}
+                          expandAll={streamActivityMode}
                           formatLabel={(name) => name.replace(/_/g, ' ')}
                           formatArg={(_name, args) => {
                             if (!args) return null
@@ -2190,7 +2255,13 @@ function ChatMessageListComponent({
           </ChatContainerContent>
         </div>
       </ChatContainerRoot>
-    </>
+      {showConversationOutline ? (
+        <ConversationOutline
+          entries={outlineEntries}
+          onJump={scrollToMessageById}
+        />
+      ) : null}
+    </div>
   )
 }
 
@@ -2299,6 +2370,8 @@ function areChatMessageListEqual(
   return (
     prev.messages === next.messages &&
     prev.onRetryMessage === next.onRetryMessage &&
+    prev.onEditMessage === next.onEditMessage &&
+    prev.onRegenerateMessage === next.onRegenerateMessage &&
     prev.onRefresh === next.onRefresh &&
     prev.loading === next.loading &&
     prev.empty === next.empty &&

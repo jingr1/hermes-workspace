@@ -915,6 +915,62 @@ function ChatDisplaySection() {
           />
         </SettingsRow>
         <SettingsRow
+          label="Busy message mode"
+          description="When the agent is replying and you type a follow-up: queue it, interrupt, or steer the live turn."
+        >
+          <select
+            value={chatSettings.busyMessageMode ?? 'queue'}
+            onChange={(e) =>
+              updateChatSettings({
+                busyMessageMode: e.target.value as
+                  | 'queue'
+                  | 'interrupt'
+                  | 'steer',
+              })
+            }
+            className="h-8 rounded-md border border-primary-200 bg-primary-50 px-2 text-sm text-primary-900 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary-400"
+            aria-label="Busy message mode"
+          >
+            <option value="queue">Queue (after reply)</option>
+            <option value="interrupt">Interrupt and send</option>
+            <option value="steer">Steer live reply</option>
+          </select>
+        </SettingsRow>
+        <SettingsRow
+          label="Activity display"
+          description="How tool calls and thinking appear while the agent works."
+        >
+          <select
+            value={chatSettings.chatActivityDisplayMode ?? 'compact'}
+            onChange={(e) =>
+              updateChatSettings({
+                chatActivityDisplayMode: e.target.value as
+                  | 'compact'
+                  | 'stream'
+                  | 'hidden',
+              })
+            }
+            className="h-8 rounded-md border border-primary-200 bg-primary-50 px-2 text-sm text-primary-900 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary-400"
+            aria-label="Activity display mode"
+          >
+            <option value="compact">Compact worklog</option>
+            <option value="stream">Expanded stream</option>
+            <option value="hidden">Hide activity</option>
+          </select>
+        </SettingsRow>
+        <SettingsRow
+          label="Conversation outline"
+          description="Desktop jump list of user questions in the current chat."
+        >
+          <Switch
+            checked={chatSettings.showConversationOutline === true}
+            onCheckedChange={(checked) =>
+              updateChatSettings({ showConversationOutline: checked })
+            }
+            aria-label="Show conversation outline"
+          />
+        </SettingsRow>
+        <SettingsRow
           label="Chat content width"
           description="Controls the max-width of the message column on wide screens."
         >
