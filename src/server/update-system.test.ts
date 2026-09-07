@@ -36,6 +36,7 @@ describe('update-system helpers', () => {
     expect(updateAvailableFromDivergence({ ahead: 0, behind: 0 }, false)).toBe(
       false,
     )
-    expect(updateAvailableFromDivergence(null, true)).toBe(true)
+    // Unknown divergence must not advertise an update (avoids false positives).
+    expect(updateAvailableFromDivergence(null, true)).toBe(false)
   })
 })

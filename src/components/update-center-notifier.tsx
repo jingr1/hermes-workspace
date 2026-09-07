@@ -213,6 +213,9 @@ export function UpdateCenterNotifier() {
           ...prev,
           [product.id]: result.error || `${product.label} update failed`,
         }))
+        // Refresh status so a stale "available" banner clears when the
+        // backend now reports current/blocked.
+        await queryClient.invalidateQueries({ queryKey: ['update-status-v2'] })
         return
       }
       setPhases((prev) => ({ ...prev, [product.id]: 'done' }))
@@ -359,9 +362,11 @@ function UpdateCard({
             className="text-sm font-semibold"
             style={{ color: 'var(--theme-text)' }}
           >
-            {blocked
-              ? `${product.label} update blocked`
-              : `${product.label} update available`}
+            {phase === 'error'
+              ? `${product.label} update failed`
+              : blocked
+                ? `${product.label} update blocked`
+                : `${product.label} update available`}
           </p>
           {/* Don't truncate when blocked — the full reason is what the
               user needs to act on. See #293. */}

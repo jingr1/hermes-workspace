@@ -181,14 +181,17 @@ export function remoteUrlMatches(
   )
 }
 
-function remoteHead(repoPath: string, remote = 'origin'): string | null {
-  const url = git(['remote', 'get-url', remote], repoPath)
-  if (!url) return null
-  const raw = exec('git', ['ls-remote', url, 'HEAD'], {
-    cwd: repoPath,
-    timeout: 10_000,
-  })
-  return raw?.split(/\s+/)[0] ?? null
+/** Tip of origin/<branch> after fetch — source of truth for update checks. */
+function trackingBranchTip(
+  repoPath: string,
+  branch: string | null,
+): { remoteRef: string; latestHead: string } | null {
+  const name =
+    branch && branch !== 'HEAD' && !branch.startsWith('(') ? branch : 'main'
+  const remoteRef = `origin/${name}`
+  const latestHead = git(['rev-parse', '--verify', remoteRef], repoPath, 10_000)
+  if (!latestHead) return null
+  return { remoteRef, latestHead }
 }
 
 function isDirty(repoPath: string): boolean {
@@ -246,12 +249,17 @@ function branchDivergence(
 
 export function updateAvailableFromDivergence(
   divergence: { ahead: number; behind: number } | null,
-  headsDiffer: boolean,
+  _headsDiffer: boolean,
 ): boolean {
   // A local checkout can legitimately be ahead of origin because it carries
   // hotfixes or unpublished commits. That is not an available upstream update.
-  // Only remote-ahead or diverged histories should surface as updateable.
-  return divergence ? divergence.behind > 0 : headsDiffer
+  // Only a positive behind-count means origin has commits we do not.
+  //
+  // Do NOT fall back to headsDiffer when divergence is unknown: mixing
+  // `git ls-remote HEAD` with an unresolved/stale origin/<branch> ref created
+  // false "update available" banners that then failed apply with
+  // "update is not available".
+  return Boolean(divergence && divergence.behind > 0)
 }
 
 function syncRepoToRemote(repoPath: string, remoteRef: string): string {
@@ -368,10 +376,11 @@ export function readWorkspaceUpdateStatus(
   const currentHead = git(['rev-parse', 'HEAD'], gitRepo)
   const branch = git(['rev-parse', '--abbrev-ref', 'HEAD'], gitRepo)
   const supportedBranch = branch === 'main' || branch === 'master'
-  const latestHead =
-    repoMatches && supportedBranch ? remoteHead(gitRepo, 'origin') : null
+  const tracking =
+    repoMatches && supportedBranch ? trackingBranchTip(gitRepo, branch) : null
+  const latestHead = tracking?.latestHead ?? null
+  const remoteRef = tracking?.remoteRef ?? `origin/${branch || 'main'}`
   const dirty = isDirty(gitRepo)
-  const remoteRef = `origin/${branch || 'main'}`
   const divergence = latestHead ? branchDivergence(gitRepo, remoteRef) : null
   const updateAvailable = Boolean(
     supportedBranch &&
@@ -479,8 +488,9 @@ export function readAgentUpdateStatus(): ProductUpdateStatus {
   if (repoMatches) git(['fetch', 'origin', '--quiet'], repoPath, 30_000)
   const currentHead = git(['rev-parse', 'HEAD'], repoPath)
   const branch = git(['rev-parse', '--abbrev-ref', 'HEAD'], repoPath)
-  const latestHead = repoMatches ? remoteHead(repoPath, 'origin') : null
-  const remoteRef = repoMatches ? `origin/${branch || 'main'}` : null
+  const tracking = repoMatches ? trackingBranchTip(repoPath, branch) : null
+  const latestHead = tracking?.latestHead ?? null
+  const remoteRef = tracking?.remoteRef ?? null
   const dirty = isDirty(repoPath)
   const divergence = remoteRef ? branchDivergence(repoPath, remoteRef) : null
   const updateAvailable = Boolean(
@@ -648,7 +658,11 @@ export async function applyAgentUpdate(): Promise<ApplyUpdateResult> {
       restartRequired: false,
       status: before,
       releaseNotes: [],
-      error: before.reason || 'Hermes Agent update is not available.',
+      error:
+        before.reason ||
+        (!before.updateAvailable
+          ? 'Hermes Agent is already up to date.'
+          : 'Hermes Agent update is not available.'),
     }
   }
 
