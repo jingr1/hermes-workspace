@@ -220,8 +220,7 @@ export function SkillsScreen() {
   })
 
   const profiles = profilesQuery.data?.profiles ?? []
-  // Treat the profile that the workspace is bound to (active_profile file) as
-  // the dashboard's `is_active`. They derive from the same on-disk source.
+  // Workspace selection (selected_profile), exposed as list.active / activeProfile.
   const activeProfileName = useMemo(() => {
     const fromActiveFlag = profiles.find((p) => p.active || p.is_active)
     if (fromActiveFlag) return fromActiveFlag.name
@@ -322,6 +321,7 @@ export function SkillsScreen() {
       params.set('page', String(page))
       params.set('limit', String(PAGE_LIMIT))
       params.set('sort', sort)
+      if (effectiveProfile) params.set('profile', effectiveProfile)
 
       const response = await fetch(`/api/skills?${params.toString()}`)
       const payload = (await response.json()) as SkillsApiResponse & {
@@ -539,6 +539,7 @@ export function SkillsScreen() {
                 identifier: payload.skillId,
                 enabled: payload.enabled,
                 source: payload.source,
+                profile: effectiveProfile || undefined,
               },
         ),
       })

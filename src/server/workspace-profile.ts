@@ -2,7 +2,8 @@
  * Profile-scoped workspace resolution.
  *
  * Workspace APIs accept an explicit ?profile= so the client can load the
- * correct catalog during profile switches without racing ~/.hermes/active_profile.
+ * correct catalog during profile switches without racing the Workspace
+ * selected_profile (or legacy Hermes sticky active_profile).
  */
 import { getActiveProfileName, readProfile } from './profiles-browser'
 import { readRemoteTerminalCwd } from './workspace-remote'

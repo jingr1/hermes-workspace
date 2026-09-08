@@ -851,14 +851,16 @@ async function readResponseError(response: Response): Promise<string> {
 
 async function fetchCurrentModelFromStatus(
   sessionKey?: string,
+  profileName?: string,
 ): Promise<string> {
   const controller = new AbortController()
   const timeout = globalThis.setTimeout(() => controller.abort(), 7000)
 
   try {
-    const query = sessionKey?.trim()
-      ? `?sessionKey=${encodeURIComponent(sessionKey.trim())}`
-      : ''
+    const params = new URLSearchParams()
+    if (sessionKey?.trim()) params.set('sessionKey', sessionKey.trim())
+    if (profileName?.trim()) params.set('profile', profileName.trim())
+    const query = params.toString() ? `?${params.toString()}` : ''
     const response = await fetch(`/api/session-status${query}`, {
       signal: controller.signal,
     })
@@ -1101,9 +1103,20 @@ function ChatComposerComponent({
       )
     },
   })
+  const { activeProfileName, activeProfile, workspaceProfileName } =
+    useProfiles()
   const currentModelQuery = useQuery({
-    queryKey: ['claude', 'session-status-model', sessionKey || 'main'],
-    queryFn: () => fetchCurrentModelFromStatus(sessionKey),
+    queryKey: [
+      'claude',
+      'session-status-model',
+      sessionKey || 'main',
+      workspaceProfileName || activeProfileName || 'default',
+    ],
+    queryFn: () =>
+      fetchCurrentModelFromStatus(
+        sessionKey,
+        workspaceProfileName || activeProfileName,
+      ),
     enabled: gatewayQueriesEnabled,
     refetchInterval: gatewayQueriesEnabled ? 30_000 : false,
     retry: false,
@@ -1155,8 +1168,6 @@ function ChatComposerComponent({
     [modelInfoQuery.data],
   )
 
-  const { activeProfileName, activeProfile, workspaceProfileName } =
-    useProfiles()
   const slashCommandQuery = useMemo(() => readSlashCommandQuery(value), [value])
   // Prefetch after first paint is idle so `/` menus are warm, without competing
   // with sessions/history on chat mount. Slash open still enables immediately.

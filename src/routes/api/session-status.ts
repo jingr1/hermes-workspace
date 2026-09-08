@@ -84,6 +84,10 @@ export const Route = createFileRoute('/api/session-status')({
           }
           const url = new URL(request.url)
           const requestedKey = url.searchParams.get('sessionKey')?.trim() || ''
+          const profileParam =
+            url.searchParams.get('profile')?.trim() ||
+            getActiveProfileName() ||
+            'default'
           let sessionKey = requestedKey || 'main'
 
           if (sessionKey === 'new') {
@@ -109,7 +113,7 @@ export const Route = createFileRoute('/api/session-status')({
 
           if (sessionKey === 'main') {
             try {
-              const profile = getActiveProfileName() || 'default'
+              const profile = profileParam
               const rawSessions = listSessionsForProfile(profile)
               const sessions = rawSessions.map((s) => ({
                 id: s.key,

@@ -34,7 +34,7 @@ export const Route = createFileRoute('/api/profiles/activate')({
         try {
           const body = (await request.json()) as { name?: string }
           const name = (body.name || '').trim() || 'default'
-          setActiveProfile(name)
+          setActiveProfile(name) // Workspace selected_profile only (no Hermes sticky)
 
           const port = resolveProfileGatewayPort(name)
           const url = getProfileGatewayUrl(name)

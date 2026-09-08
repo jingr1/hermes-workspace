@@ -395,7 +395,7 @@ export async function ensureActiveProfileGateway(options?: {
     console.warn(
       `[gateway-pool] ${name} gateway unavailable (${'error' in result ? result.error : 'unhealthy'}); falling back to ${PINNED_GATEWAY_PROFILE}`,
     )
-    // Heal sticky active_profile when the named profile is gone/tombstoned so
+    // Heal Workspace selection when the named profile is gone/tombstoned so
     // the next boot does not keep trying to spawn it.
     if (
       'error' in result &&

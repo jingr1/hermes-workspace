@@ -12,6 +12,8 @@ import {
   updateProfileModelProvider,
   updateAllProfilesModelProvider,
   readModelProviderFromConfig,
+  setActiveProfile,
+  getActiveProfileName,
 } from './profiles-browser'
 
 const nodeRequire = createRequire(import.meta.url)
@@ -24,12 +26,21 @@ describe('listProfiles', () => {
       path.join(os.tmpdir(), 'hermes-workspace-profiles-'),
     )
     vi.spyOn(os, 'homedir').mockReturnValue(tempHome)
-    delete process.env.HERMES_HOME
+    process.env.HERMES_HOME = path.join(tempHome, '.hermes')
+    process.env.HERMES_WORKSPACE_STATE_DIR = path.join(
+      tempHome,
+      '.hermes',
+      'workspace',
+    )
     delete process.env.CLAUDE_HOME
+    delete process.env.HERMES_WORKSPACE_STICKY_PROFILE
   })
 
   afterEach(() => {
     vi.restoreAllMocks()
+    delete process.env.HERMES_HOME
+    delete process.env.HERMES_WORKSPACE_STATE_DIR
+    delete process.env.HERMES_WORKSPACE_STICKY_PROFILE
     fs.rmSync(tempHome, { recursive: true, force: true })
   })
 
@@ -39,8 +50,9 @@ describe('listProfiles', () => {
     const namedProfileRoot = path.join(profilesRoot, 'jarvis')
 
     fs.mkdirSync(namedProfileRoot, { recursive: true })
+    fs.mkdirSync(path.join(hermesRoot, 'workspace'), { recursive: true })
     fs.writeFileSync(
-      path.join(hermesRoot, 'active_profile'),
+      path.join(hermesRoot, 'workspace', 'selected_profile'),
       'jarvis\n',
       'utf-8',
     )
@@ -72,6 +84,40 @@ describe('listProfiles', () => {
     expect(
       profiles.find((profile) => profile.name === 'jarvis')?.description,
     ).toBe('Named operator')
+  })
+
+  it('defaults to default when only Hermes sticky is set', () => {
+    const hermesRoot = path.join(tempHome, '.hermes')
+    const namedProfileRoot = path.join(hermesRoot, 'profiles', 'jarvis')
+    fs.mkdirSync(namedProfileRoot, { recursive: true })
+    fs.writeFileSync(path.join(namedProfileRoot, 'config.yaml'), 'model: x\n')
+    fs.writeFileSync(path.join(hermesRoot, 'active_profile'), 'jarvis\n')
+
+    expect(getActiveProfileName()).toBe('default')
+    expect(listProfiles().find((p) => p.name === 'default')?.active).toBe(true)
+    expect(listProfiles().find((p) => p.name === 'jarvis')?.active).toBe(false)
+  })
+
+  it('activates via selected_profile without rewriting Hermes sticky', () => {
+    const hermesRoot = path.join(tempHome, '.hermes')
+    const namedProfileRoot = path.join(hermesRoot, 'profiles', 'jarvis')
+    fs.mkdirSync(namedProfileRoot, { recursive: true })
+    fs.writeFileSync(path.join(namedProfileRoot, 'config.yaml'), 'model: x\n')
+    fs.writeFileSync(path.join(hermesRoot, 'active_profile'), 'default\n')
+
+    setActiveProfile('jarvis')
+
+    expect(getActiveProfileName()).toBe('jarvis')
+    expect(
+      fs.readFileSync(
+        path.join(hermesRoot, 'workspace', 'selected_profile'),
+        'utf-8',
+      ),
+    ).toBe('jarvis\n')
+    expect(
+      fs.readFileSync(path.join(hermesRoot, 'active_profile'), 'utf-8'),
+    ).toBe('default\n')
+    expect(listProfiles().find((p) => p.name === 'jarvis')?.active).toBe(true)
   })
 
   it('skips profiles/default so only the root-backed default card renders', () => {

@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import YAML from 'yaml'
+import { getStateDir } from './workspace-state-dir'
 
 // createRequire is the canonical ESM→CJS bridge. We need it because
 // better-sqlite3 / node:sqlite are native modules and Vite runs in ESM mode.
@@ -130,13 +131,56 @@ function getActiveProfilePath(): string {
   return path.join(getClaudeRoot(), 'active_profile')
 }
 
+/**
+ * Opt-in only: also mirror Workspace selection into Hermes sticky
+ * `~/.hermes/active_profile` (CLI default). Default is off so 1:1 / pool
+ * switches do not stomp the machine-global sticky pointer.
+ */
 function stickyActiveProfileEnabled(): boolean {
-  return process.env.HERMES_WORKSPACE_STICKY_PROFILE !== '0'
+  return process.env.HERMES_WORKSPACE_STICKY_PROFILE === '1'
 }
 
 function clearStickyActiveProfile(): void {
   const activePath = getActiveProfilePath()
   if (fs.existsSync(activePath)) fs.unlinkSync(activePath)
+}
+
+/** Workspace-owned selection — not Hermes sticky. Lives under getStateDir(). */
+function getSelectedProfilePath(): string {
+  return path.join(getStateDir(), 'selected_profile')
+}
+
+function readSelectedProfileName(): string | null {
+  const selectedPath = getSelectedProfilePath()
+  if (!fs.existsSync(selectedPath)) return null
+  try {
+    const raw = safeReadText(selectedPath).trim()
+    return raw || null
+  } catch {
+    return null
+  }
+}
+
+function writeSelectedProfileName(name: string): void {
+  const selectedPath = getSelectedProfilePath()
+  fs.mkdirSync(path.dirname(selectedPath), { recursive: true })
+  fs.writeFileSync(selectedPath, `${name}\n`, 'utf-8')
+}
+
+function clearSelectedProfileName(): void {
+  const selectedPath = getSelectedProfilePath()
+  if (fs.existsSync(selectedPath)) fs.unlinkSync(selectedPath)
+}
+
+function readStickyActiveProfileName(): string | null {
+  const activePath = getActiveProfilePath()
+  if (!fs.existsSync(activePath)) return null
+  try {
+    const raw = safeReadText(activePath).trim()
+    return raw || null
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -639,28 +683,22 @@ export function getMessagesForProfile(
   }
 }
 
+/**
+ * Workspace "current profile" for UI + control-plane APIs.
+ * Reads `~/.hermes/workspace/selected_profile` only — never Hermes sticky.
+ * Missing / invalid selection → `default`.
+ */
 export function getActiveProfileName(): string {
-  const activePath = getActiveProfilePath()
-  if (!fs.existsSync(activePath)) return 'default'
-  try {
-    const raw = safeReadText(activePath).trim() || 'default'
-    if (raw === 'default') return 'default'
-    // Stale sticky pointers (deleted / tombstoned profiles) must not keep
-    // ensureActiveProfileGateway spawning a dead name — that recreates the dir.
-    if (!isLiveNamedProfile(raw)) {
-      if (stickyActiveProfileEnabled()) {
-        try {
-          clearStickyActiveProfile()
-        } catch {
-          /* ignore */
-        }
-      }
-      return 'default'
+  const selected = readSelectedProfileName()
+  if (selected) {
+    if (selected === 'default' || isLiveNamedProfile(selected)) return selected
+    try {
+      clearSelectedProfileName()
+    } catch {
+      /* ignore */
     }
-    return raw
-  } catch {
-    return 'default'
   }
+  return 'default'
 }
 
 export function readModelProviderFromConfig(config: Record<string, unknown>): {
@@ -953,24 +991,27 @@ export function readProfile(name: string): ProfileDetail {
   }
 }
 
+/**
+ * Select the Workspace UI / control-plane profile.
+ * Always updates workspace `selected_profile`. Hermes sticky is untouched
+ * unless `HERMES_WORKSPACE_STICKY_PROFILE=1`.
+ */
 export function setActiveProfile(name: string): void {
   const trimmed = name.trim()
   if (!trimmed) throw new Error('Profile name is required')
-  // "default" means clear the active_profile file (revert to default)
-  if (trimmed === 'default') {
-    if (stickyActiveProfileEnabled()) {
-      clearStickyActiveProfile()
-    }
-    return
-  }
-  const normalized = validateProfileName(trimmed)
-  if (!isLiveNamedProfile(normalized)) {
+  const normalized =
+    trimmed === 'default' ? 'default' : validateProfileName(trimmed)
+  if (normalized !== 'default' && !isLiveNamedProfile(normalized)) {
     throw new Error(`Profile not found: ${normalized}`)
   }
-  if (stickyActiveProfileEnabled()) {
-    fs.mkdirSync(getClaudeRoot(), { recursive: true })
-    fs.writeFileSync(getActiveProfilePath(), `${normalized}\n`, 'utf-8')
+  writeSelectedProfileName(normalized)
+  if (!stickyActiveProfileEnabled()) return
+  if (normalized === 'default') {
+    clearStickyActiveProfile()
+    return
   }
+  fs.mkdirSync(getClaudeRoot(), { recursive: true })
+  fs.writeFileSync(getActiveProfilePath(), `${normalized}\n`, 'utf-8')
 }
 
 export function createProfile(
@@ -1044,7 +1085,7 @@ export function deleteProfile(name: string): void {
     throw new Error('Profile not found')
   }
 
-  // Active sticky pointer would make the next ensureActiveProfileGateway
+  // Active selection would make the next ensureActiveProfileGateway
   // respawn this profile and recreate the directory — clear it first.
   if (getActiveProfileName() === normalized) {
     setActiveProfile('default')
@@ -1136,7 +1177,10 @@ export function renameProfile(oldName: string, newName: string): ProfileDetail {
   if (!fs.existsSync(fromPath)) throw new Error('Profile not found')
   if (fs.existsSync(toPath)) throw new Error('Target profile already exists')
   fs.renameSync(fromPath, toPath)
-  if (stickyActiveProfileEnabled() && getActiveProfileName() === from) {
+  if (readSelectedProfileName() === from) {
+    writeSelectedProfileName(to)
+  }
+  if (stickyActiveProfileEnabled() && readStickyActiveProfileName() === from) {
     fs.writeFileSync(getActiveProfilePath(), `${to}\n`, 'utf-8')
   }
   return readProfile(to)

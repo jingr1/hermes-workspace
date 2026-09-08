@@ -1191,14 +1191,16 @@ export function ChatScreen({
       'claude',
       'session-status-model',
       resolvedSessionKey || activeFriendlyId || 'main',
+      activeProfileName || 'default',
     ],
     queryFn: async () => {
       try {
         const statusSessionKey =
           resolvedSessionKey || activeFriendlyId || 'main'
-        const query = statusSessionKey
-          ? `?sessionKey=${encodeURIComponent(statusSessionKey)}`
-          : ''
+        const params = new URLSearchParams()
+        if (statusSessionKey) params.set('sessionKey', statusSessionKey)
+        if (activeProfileName) params.set('profile', activeProfileName)
+        const query = params.toString() ? `?${params.toString()}` : ''
         const res = await fetch(`/api/session-status${query}`)
         if (!res.ok) return ''
         const data = await res.json()

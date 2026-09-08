@@ -23,7 +23,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { getStateDir } from './workspace-state-dir'
-import { resolveProfileHermesHome } from './profiles-browser'
+import { resolveProfileHermesHome, getActiveProfileName } from './profiles-browser'
 
 type WorkspaceOverrides = {
   claudeApiUrl?: string
@@ -367,22 +367,7 @@ let dashboardTokenCache = ''
  * Read at call time — Vite SSR can evaluate this module before .env is loaded.
  */
 function readLocalApiServerKey(): string {
-  return readProfileApiServerKey(getActiveProfileNameSafe())
-}
-
-function getActiveProfileNameSafe(): string {
-  try {
-    const activePath = path.join(
-      process.env.HERMES_HOME ||
-        process.env.CLAUDE_HOME ||
-        path.join(os.homedir(), '.hermes'),
-      'active_profile',
-    )
-    const active = fs.readFileSync(activePath, 'utf-8').trim()
-    return active || 'default'
-  } catch {
-    return 'default'
-  }
+  return readProfileApiServerKey(getActiveProfileName() || 'default')
 }
 
 /** Read a profile's own API_SERVER_KEY from its .env file.

@@ -23,6 +23,7 @@ export const Route = createFileRoute('/api/skills/toggle')({
             skillId?: string
             name?: string
             enabled?: boolean
+            profile?: string
           }
           const name = (body.name || body.skillId || '').trim()
           if (!name) {
@@ -38,7 +39,8 @@ export const Route = createFileRoute('/api/skills/toggle')({
             )
           }
 
-          const profile = getActiveProfileName() || 'default'
+          const profile =
+            body.profile?.trim() || getActiveProfileName() || 'default'
           const detail = readProfile(profile)
           const currentDisabled: string[] = Array.isArray(
             (detail.config as any)?.skills?.disabled,

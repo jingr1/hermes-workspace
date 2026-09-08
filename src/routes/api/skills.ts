@@ -17,11 +17,13 @@ import {
 import { requireJsonContentType } from '../../server/rate-limit'
 import { createCapabilityUnavailablePayload } from '@/lib/feature-gates'
 
-function getSkillsDir(): string {
+function getSkillsDir(profileName?: string): string {
   if (process.env.HERMES_SKILLS_DIR) return process.env.HERMES_SKILLS_DIR
   try {
     return path.join(
-      resolveProfileHermesHome(getActiveProfileName() || 'default'),
+      resolveProfileHermesHome(
+        profileName?.trim() || getActiveProfileName() || 'default',
+      ),
       'skills',
     )
   } catch {
@@ -46,8 +48,10 @@ async function readSkillAuthor(skillDir: string): Promise<string> {
   }
 }
 
-async function buildLocalSkillPathMap(): Promise<Map<string, LocalSkillMeta>> {
-  const root = getSkillsDir()
+async function buildLocalSkillPathMap(
+  profileName?: string,
+): Promise<Map<string, LocalSkillMeta>> {
+  const root = getSkillsDir(profileName)
   const map = new Map<string, LocalSkillMeta>()
   let categoryEntries: Array<{ name: string; isDirectory: () => boolean }>
   try {
@@ -94,8 +98,10 @@ async function buildLocalSkillPathMap(): Promise<Map<string, LocalSkillMeta>> {
   return map
 }
 
-async function loadBundledManifest(): Promise<Set<string>> {
-  const manifestPath = path.join(getSkillsDir(), '.bundled_manifest')
+async function loadBundledManifest(
+  profileName?: string,
+): Promise<Set<string>> {
+  const manifestPath = path.join(getSkillsDir(profileName), '.bundled_manifest')
   try {
     const raw = await fs.readFile(manifestPath, 'utf-8')
     return new Set(
@@ -390,8 +396,10 @@ async function readSkillDescription(skillDir: string): Promise<string> {
 }
 
 /** Local profile `skills/` inventory — used when gateway has no /api/skills. */
-async function listLocalInstalledSkills(): Promise<Array<SkillSummary>> {
-  const root = getSkillsDir()
+async function listLocalInstalledSkills(
+  profileName?: string,
+): Promise<Array<SkillSummary>> {
+  const root = getSkillsDir(profileName)
   const results: Array<SkillSummary> = []
   let categoryEntries: Array<{ name: string; isDirectory: () => boolean }>
   try {
@@ -512,6 +520,8 @@ export const Route = createFileRoute('/api/skills')({
 
         try {
           const url = new URL(request.url)
+          const profileParam =
+            url.searchParams.get('profile')?.trim() || undefined
           const tabParam = url.searchParams.get('tab')
           const tab: SkillsTab =
             tabParam === 'installed' ||
@@ -536,8 +546,8 @@ export const Route = createFileRoute('/api/skills')({
           const [sourceItems, localPathMap, bundledManifest] =
             await Promise.all([
               fetchClaudeSkills(),
-              buildLocalSkillPathMap(),
-              loadBundledManifest(),
+              buildLocalSkillPathMap(profileParam),
+              loadBundledManifest(profileParam),
             ])
           for (const skill of sourceItems) {
             if (skill.installed) {
