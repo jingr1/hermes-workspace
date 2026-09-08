@@ -133,10 +133,20 @@ const ROUTER_KEY = '__agent_runtime_router__' as const
 
 export function getAgentRuntimeRouter(): AgentRuntimeRouter {
   const g = globalThis as Record<string, unknown>
+  // HMR: claude-code-adapter / this module call resetAgentRuntimeRouter() on
+  // dispose so the next access rebuilds with fresh adapter code. Do not
+  // reconstruct on every request — that would drop in-flight run lookups and
+  // waste parse work on the hot chat path.
   if (!g[ROUTER_KEY]) {
     g[ROUTER_KEY] = new AgentRuntimeRouter()
   }
   return g[ROUTER_KEY] as AgentRuntimeRouter
+}
+
+/** Drop the cached router (tests + HMR). */
+export function resetAgentRuntimeRouter(): void {
+  const g = globalThis as Record<string, unknown>
+  delete g[ROUTER_KEY]
 }
 
 /** Test hook: replace the singleton. */
@@ -146,4 +156,10 @@ export function setAgentRuntimeRouterForTests(
   const g = globalThis as Record<string, unknown>
   if (router) g[ROUTER_KEY] = router
   else delete g[ROUTER_KEY]
+}
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    resetAgentRuntimeRouter()
+  })
 }

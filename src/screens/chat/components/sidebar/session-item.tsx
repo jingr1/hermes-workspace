@@ -25,6 +25,12 @@ type SessionItemProps = {
   active: boolean
   profileName?: string
   isPinned: boolean
+  /**
+   * When set, clicking the row activates the session in-place (Agent Workspace
+   * / Claude Code) instead of navigating to the Hermes `/chat/$sessionKey`
+   * route.
+   */
+  onActivateSession?: (session: SessionMeta) => void
   onSelect?: () => void
   onTogglePin: (session: SessionMeta) => void
   onRename: (session: SessionMeta, newTitle: string) => void
@@ -103,6 +109,7 @@ function SessionItemComponent({
   active,
   profileName,
   isPinned,
+  onActivateSession,
   onSelect,
   onTogglePin,
   onRename,
@@ -208,16 +215,8 @@ function SessionItemComponent({
     )
   }
 
-  return (
-    <Link
-      to="/chat/$sessionKey"
-      params={{ sessionKey: session.friendlyId }}
-      onClick={() => {
-        writeLastSession(session.friendlyId, profileName)
-        onSelect?.()
-      }}
-      className={rowClassName}
-    >
+  const sessionBody = (
+    <>
       <div className="flex-1 min-w-0 py-1.5">
         <div
           className={cn(
@@ -295,6 +294,35 @@ function SessionItemComponent({
           </MenuItem>
         </MenuContent>
       </MenuRoot>
+    </>
+  )
+
+  if (onActivateSession) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          onActivateSession(session)
+          onSelect?.()
+        }}
+        className={cn(rowClassName, 'w-full text-left')}
+      >
+        {sessionBody}
+      </button>
+    )
+  }
+
+  return (
+    <Link
+      to="/chat/$sessionKey"
+      params={{ sessionKey: session.friendlyId }}
+      onClick={() => {
+        writeLastSession(session.friendlyId, profileName)
+        onSelect?.()
+      }}
+      className={rowClassName}
+    >
+      {sessionBody}
     </Link>
   )
 }
@@ -303,6 +331,7 @@ function areSessionItemsEqual(prev: SessionItemProps, next: SessionItemProps) {
   if (prev.active !== next.active) return false
   if (prev.profileName !== next.profileName) return false
   if (prev.isPinned !== next.isPinned) return false
+  if (prev.onActivateSession !== next.onActivateSession) return false
   if (prev.onSelect !== next.onSelect) return false
   if (prev.onTogglePin !== next.onTogglePin) return false
   if (prev.onRename !== next.onRename) return false

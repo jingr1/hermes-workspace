@@ -67,6 +67,9 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
           )
         }
 
+        const requestedModel =
+          typeof body.model === 'string' ? body.model.trim() : ''
+
         const sessionId =
           typeof body.sessionId === 'string' ? body.sessionId.trim() : ''
         const rawHistory = body.history
@@ -152,6 +155,7 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
             runId,
             agentId,
             task,
+            ...(requestedModel ? { model: requestedModel } : {}),
             mcp: {
               endpoint: getMcpEndpoint(),
               runToken: token,
@@ -216,24 +220,29 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
             )
 
             sendEvent('connected', {
+              type: 'connected',
               runId,
               agentId,
               sessionId: chatSessionId,
             })
 
+            // Keep under common idle proxies (e.g. 15s); first model token
+            // can take longer than that on slower models (Sonnet).
             heartbeatTimer = setInterval(() => {
-              sendEvent('heartbeat', { timestamp: Date.now() })
-            }, 30_000)
+              sendEvent('heartbeat', {
+                type: 'heartbeat',
+                timestamp: Date.now(),
+              })
+            }, 10_000)
 
             try {
               for await (const event of adapter.streamEvents(runId)) {
                 if (streamClosed) break
                 relayEvent(sendEvent, event)
-                if (
-                  event.type === 'run_exited' ||
-                  (event.type === 'error' && !streamClosed)
-                ) {
-                  // Give the client one tick to receive the final event, then close.
+                // Only the terminal exit ends the SSE stream. Non-fatal
+                // adapter `error` events (e.g. stderr diagnostics) must not
+                // abort consumption — text_delta often arrives after them.
+                if (event.type === 'run_exited') {
                   setTimeout(closeStream, 50)
                   break
                 }
@@ -274,6 +283,7 @@ function relayEvent(
   switch (event.type) {
     case 'run_started':
       send('run_started', {
+        type: 'run_started',
         runId: event.runId,
         agentId: event.agentId,
         taskId: event.taskId,
@@ -281,13 +291,22 @@ function relayEvent(
       })
       break
     case 'text_delta':
-      send('text_delta', { runId: event.runId, text: event.text })
+      send('text_delta', {
+        type: 'text_delta',
+        runId: event.runId,
+        text: event.text,
+      })
       break
     case 'thinking':
-      send('thinking', { runId: event.runId, text: event.text })
+      send('thinking', {
+        type: 'thinking',
+        runId: event.runId,
+        text: event.text,
+      })
       break
     case 'tool':
       send('tool', {
+        type: 'tool',
         runId: event.runId,
         phase: event.phase,
         name: event.name,
@@ -296,12 +315,17 @@ function relayEvent(
       break
     case 'run_exited':
       send('run_exited', {
+        type: 'run_exited',
         runId: event.runId,
         exitCode: event.exitCode,
       })
       break
     case 'error':
-      send('error', { runId: event.runId, message: event.message })
+      send('error', {
+        type: 'error',
+        runId: event.runId,
+        message: event.message,
+      })
       break
   }
 }

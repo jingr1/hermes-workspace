@@ -34,6 +34,12 @@ type ChatSessionSidebarProps = {
   onRetrySessions: () => void
   onNewChat: () => void
   onActiveSessionDelete?: () => void
+  /** Managed runtimes: select session without Hermes route navigation. */
+  onActivateSession?: (session: SessionMeta) => void
+  /** Override Hermes rename (e.g. Claude Code localStorage index). */
+  onRenameSession?: (session: SessionMeta, newTitle: string) => void
+  /** Override Hermes delete. */
+  onDeleteSession?: (session: SessionMeta) => void
 }
 
 const SIDEBAR_MIN_WIDTH = 220
@@ -68,6 +74,9 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
   onRetrySessions,
   onNewChat,
   onActiveSessionDelete,
+  onActivateSession,
+  onRenameSession,
+  onDeleteSession,
 }: ChatSessionSidebarProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -88,9 +97,13 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
 
   const handleRename = useCallback(
     (session: SessionMeta, newTitle: string) => {
+      if (onRenameSession) {
+        onRenameSession(session, newTitle)
+        return
+      }
       void renameSession(session.key, session.friendlyId, newTitle)
     },
-    [renameSession],
+    [onRenameSession, renameSession],
   )
 
   const handleOpenDelete = useCallback((session: SessionMeta) => {
@@ -111,7 +124,15 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
       if (isActive) {
         onActiveSessionDelete?.()
       }
-      void deleteSession(deleteSessionKey, deleteFriendlyId, isActive)
+      if (onDeleteSession) {
+        onDeleteSession({
+          key: deleteSessionKey,
+          friendlyId: deleteFriendlyId,
+          title: deleteSessionTitle,
+        })
+      } else {
+        void deleteSession(deleteSessionKey, deleteFriendlyId, isActive)
+      }
     }
     setDeleteDialogOpen(false)
     setDeleteSessionKey(null)
@@ -121,7 +142,9 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
     deleteFriendlyId,
     deleteSession,
     deleteSessionKey,
+    deleteSessionTitle,
     onActiveSessionDelete,
+    onDeleteSession,
   ])
 
   // Keep the agents bar highlight in sync when the user is on a Hermes chat
@@ -364,6 +387,7 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
             activeFriendlyId={activeFriendlyId}
             profileName={activeProfileName}
             defaultOpen
+            onActivateSession={onActivateSession}
             onRename={handleRename}
             onDelete={handleOpenDelete}
             loading={sessionsLoading}

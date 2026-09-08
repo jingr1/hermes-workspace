@@ -49,6 +49,8 @@ export type AgentRunInput = {
   cwd?: string
   roomId?: string | null
   taskId?: string | null
+  /** Per-run model override (e.g. Claude Code picker selection). */
+  model?: string
   /** Extra env merged over process.env. Secrets MUST come via env, not files. */
   env?: Record<string, string>
 }

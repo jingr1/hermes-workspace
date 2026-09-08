@@ -8,6 +8,7 @@ import {
   fetchSessionsForAgent,
   subscribeAgentEvents,
 } from '@/lib/agent-api'
+import { listExternalChatSessions } from '@/lib/external-chat-sessions'
 import { useAgentStore } from '@/stores/agent-store'
 
 export function useAgentWorkspace() {
@@ -16,7 +17,8 @@ export function useAgentWorkspace() {
   // setState to recreate this hook's `store` reference, re-running effects and
   // triggering an infinite render loop (Maximum update depth exceeded).
   const activeAgentId = useAgentStore((state) => state.activeAgentId)
-  const sessionsByAgentId = useAgentStore((state) => state.sessionsByAgentId)
+  const agents = useAgentStore((state) => state.agents)
+  const agentsLoading = useAgentStore((state) => state.agentsLoading)
   const setAgents = useAgentStore((state) => state.setAgents)
   const setAgentsLoading = useAgentStore((state) => state.setAgentsLoading)
   const setAgentsError = useAgentStore((state) => state.setAgentsError)
@@ -55,17 +57,46 @@ export function useAgentWorkspace() {
     setAgentsLoading,
   ])
 
-  // Load sessions whenever active agent changes
+  // Load sessions whenever active agent changes (after agents are known so we
+  // can choose localStorage vs Hermes profile sessions).
   useEffect(() => {
     const agentId = activeAgentId
     if (!agentId) return
-    if (sessionsByAgentId.has(agentId)) return
+    if (agentsLoading && agents.length === 0) return
+
+    const agent = agents.find((entry) => entry.agentId === agentId)
+
+    // Claude Code (etc.): always rehydrate from localStorage so an earlier
+    // empty server response does not leave the sidebar stuck blank.
+    if (agent && agent.runtime !== 'hermes') {
+      setSessions(agentId, listExternalChatSessions(agentId))
+      setSessionsLoading(agentId, false)
+      return
+    }
+
+    if (useAgentStore.getState().sessionsByAgentId.has(agentId)) return
+
+    if (!agent) {
+      const local = listExternalChatSessions(agentId)
+      if (local.length > 0) {
+        setSessions(agentId, local)
+        setSessionsLoading(agentId, false)
+        return
+      }
+    }
+
     setSessionsLoading(agentId, true)
     fetchSessionsForAgent(agentId)
       .then((data) => setSessions(agentId, data.sessions))
       .catch(() => setSessions(agentId, []))
       .finally(() => setSessionsLoading(agentId, false))
-  }, [activeAgentId, sessionsByAgentId, setSessions, setSessionsLoading])
+  }, [
+    activeAgentId,
+    agents,
+    agentsLoading,
+    setSessions,
+    setSessionsLoading,
+  ])
 
   // Persist last selected agent for /chat landing redirect.
   useEffect(() => {

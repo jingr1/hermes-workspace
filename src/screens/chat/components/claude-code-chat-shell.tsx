@@ -8,6 +8,7 @@ import {
   useState,
   Suspense,
 } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { ChatComposer } from './chat-composer'
 import { ChatMessageList } from './chat-message-list'
 import { ChatHeader } from './chat-header'
@@ -18,10 +19,18 @@ import {
   ChatContainerScrollAnchor,
 } from '@/components/prompt-kit/chat-container'
 import { cn } from '@/lib/utils'
+import {
+  externalChatMessageStorageKey,
+  upsertExternalChatSession,
+} from '@/lib/external-chat-sessions'
 import { useAgentStore } from '@/stores/agent-store'
+import {
+  PENDING_SESSION_MODEL_KEY,
+  useSessionModelStore,
+} from '@/stores/session-model-store'
 import { FileExplorerSidebar } from '@/components/file-explorer'
+import { AssistantAvatarProvider } from '@/components/avatars'
 import { useChatMobile } from '../hooks/use-chat-mobile'
-import { useQueryClient } from '@tanstack/react-query'
 import type { ChatMessage, ChatAttachment } from '../types'
 import type { AgentWithStatus } from '@/lib/agent-types'
 
@@ -51,10 +60,8 @@ type ExternalChatEvent =
   | { type: 'heartbeat'; timestamp: number }
   | { type: 'run_started'; runId: string; agentId: string }
 
-const STORAGE_KEY_PREFIX = 'hermes:external-chat:'
-
 function storageKey(agentId: string, sessionId: string): string {
-  return `${STORAGE_KEY_PREFIX}${agentId}:${sessionId}`
+  return externalChatMessageStorageKey(agentId, sessionId)
 }
 
 function loadMessages(agentId: string, sessionId: string): Array<ChatMessage> {
@@ -129,6 +136,7 @@ export function ClaudeCodeChatShell({
   const [stableNewSessionId] = useState(() => `new-${Date.now()}`)
   const activeSessionId = sessionId ?? stableNewSessionId
   const setActiveSessionId = useAgentStore((s) => s.setActiveSessionId)
+  const upsertSession = useAgentStore((s) => s.upsertSession)
   const queryClient = useQueryClient()
   const { isMobile } = useChatMobile(queryClient)
   // Claude Code is a coding agent: keep the workspace file panel open by default.
@@ -148,13 +156,29 @@ export function ClaudeCodeChatShell({
   const abortControllerRef = useRef<AbortController | null>(null)
   const streamingMessageRef = useRef<ChatMessage | null>(null)
 
+  // Must use the exact same key as ChatComposer (sessionKey={activeSessionId}).
+  // Do NOT map `new-*` → PENDING_SESSION_MODEL_KEY — that desyncs the picker
+  // selection from what we send on /chat (user picks Sonnet, run still uses
+  // settings default haiku/Kimi).
+  const selectedModel = useSessionModelStore(
+    (s) => s.models[activeSessionId],
+  )
+  const transferModel = useSessionModelStore((s) => s.transferModel)
+  const getStoredModel = useSessionModelStore((s) => s.getModel)
+
   useEffect(() => {
     setMessages(loadMessages(agent.agentId, activeSessionId))
   }, [agent.agentId, activeSessionId])
 
   useEffect(() => {
     saveMessages(agent.agentId, activeSessionId, messages)
-  }, [agent.agentId, activeSessionId, messages])
+    const session = upsertExternalChatSession({
+      agentId: agent.agentId,
+      sessionId: activeSessionId,
+      messages,
+    })
+    if (session) upsertSession(agent.agentId, session)
+  }, [agent.agentId, activeSessionId, messages, upsertSession])
 
   useEffect(() => {
     if (activeSessionId.startsWith('new-')) return
@@ -181,12 +205,37 @@ export function ClaudeCodeChatShell({
       .slice(-20)
   }, [messages])
 
+  const appendStreamingText = useCallback((chunk: string) => {
+    setMessages((prev) => {
+      if (!streamingMessageRef.current) return prev
+      const idx = prev.indexOf(streamingMessageRef.current)
+      if (idx < 0) return prev
+      const next = [...prev]
+      const current = next[idx]!
+      const existing =
+        current.content?.[0]?.type === 'text'
+          ? (current.content[0].text ?? '')
+          : ''
+      next[idx] = {
+        ...current,
+        content: [{ type: 'text', text: existing + chunk }],
+      }
+      streamingMessageRef.current = next[idx]
+      return next
+    })
+  }, [])
+
+  const finalizeStreamingMessage = useCallback(() => {
+    streamingMessageRef.current = null
+  }, [])
+
   const startExternalChat = useCallback(
     async (
       agentId: string,
       resolvedSessionId: string,
       text: string,
       history: Array<{ role: string; content: string }>,
+      model?: string,
     ) => {
       setIsStreaming(true)
       setError(null)
@@ -208,6 +257,7 @@ export function ClaudeCodeChatShell({
               message: text,
               sessionId: resolvedSessionId,
               history,
+              ...(model ? { model } : {}),
             }),
             signal: controller.signal,
           },
@@ -229,6 +279,7 @@ export function ClaudeCodeChatShell({
 
         const decoder = new TextDecoder()
         let buffer = ''
+        let currentEventName = ''
 
         for (;;) {
           const { done, value } = await reader.read()
@@ -238,8 +289,14 @@ export function ClaudeCodeChatShell({
           buffer = lines.pop() ?? ''
 
           for (const line of lines) {
-            const event = parseSSELine(line)
+            const trimmed = line.trimEnd()
+            if (trimmed.startsWith('event:')) {
+              currentEventName = trimmed.slice(6).trim()
+              continue
+            }
+            const event = parseSSEDataLine(trimmed, currentEventName)
             if (!event) continue
+            currentEventName = ''
             if (event.type === 'text_delta') {
               appendStreamingText(event.text)
             } else if (event.type === 'thinking') {
@@ -247,7 +304,11 @@ export function ClaudeCodeChatShell({
             } else if (event.type === 'tool') {
               appendStreamingText(`\n[tool:${event.name}:${event.phase}]\n`)
             } else if (event.type === 'error') {
-              throw new Error(event.message)
+              // Soft diagnostic — keep the stream open; hard failures still
+              // arrive as run_exited / HTTP errors.
+              if (event.message.trim()) {
+                setError(event.message)
+              }
             } else if (event.type === 'run_exited') {
               finalizeStreamingMessage()
             }
@@ -280,32 +341,8 @@ export function ClaudeCodeChatShell({
         abortControllerRef.current = null
       }
     },
-    [],
+    [appendStreamingText, finalizeStreamingMessage],
   )
-
-  const appendStreamingText = useCallback((text: string) => {
-    setMessages((prev) => {
-      if (!streamingMessageRef.current) return prev
-      const idx = prev.indexOf(streamingMessageRef.current)
-      if (idx < 0) return prev
-      const next = [...prev]
-      const current = next[idx]!
-      const existing =
-        current.content?.[0]?.type === 'text'
-          ? (current.content[0].text ?? '')
-          : ''
-      next[idx] = {
-        ...current,
-        content: [{ type: 'text', text: existing + text }],
-      }
-      streamingMessageRef.current = next[idx]
-      return next
-    })
-  }, [])
-
-  const finalizeStreamingMessage = useCallback(() => {
-    streamingMessageRef.current = null
-  }, [])
 
   const handleSubmit = useCallback(
     async (text: string, attachments: Array<ComposerAttachment>) => {
@@ -316,9 +353,20 @@ export function ClaudeCodeChatShell({
       setMessages((prev) => [...prev, userMessage])
 
       let resolvedSessionId = activeSessionId
+      let modelForRun = selectedModel
       if (activeSessionId.startsWith('new-')) {
         resolvedSessionId = crypto.randomUUID()
         setActiveSessionId(resolvedSessionId)
+        // Move the picker selection from the draft key onto the real session.
+        transferModel(activeSessionId, resolvedSessionId)
+        // Also migrate a PENDING pick if one exists (Hermes-style drafts).
+        if (!getStoredModel(resolvedSessionId)) {
+          transferModel(PENDING_SESSION_MODEL_KEY, resolvedSessionId)
+        }
+        modelForRun =
+          getStoredModel(resolvedSessionId) ||
+          getStoredModel(activeSessionId) ||
+          selectedModel
         const current = loadMessages(agent.agentId, activeSessionId)
         saveMessages(agent.agentId, resolvedSessionId, [
           ...current,
@@ -354,6 +402,7 @@ export function ClaudeCodeChatShell({
           resolvedSessionId,
           text,
           latestHistory,
+          modelForRun,
         )
         return
       }
@@ -363,14 +412,18 @@ export function ClaudeCodeChatShell({
         resolvedSessionId,
         text,
         historyForPrompt,
+        modelForRun || getStoredModel(resolvedSessionId),
       )
     },
     [
       agent.agentId,
       activeSessionId,
+      getStoredModel,
       historyForPrompt,
+      selectedModel,
       setActiveSessionId,
       startExternalChat,
+      transferModel,
     ],
   )
 
@@ -395,99 +448,112 @@ export function ClaudeCodeChatShell({
   }, [])
 
   return (
-    <div
-      className="relative flex h-full min-w-0 flex-col overflow-hidden"
-      style={{ background: 'var(--theme-bg)' }}
+    <AssistantAvatarProvider
+      value={{ src: '/claude-code-mark.svg', alt: 'Claude Code' }}
     >
       <div
-        className={cn(
-          'flex-1 min-h-0 overflow-hidden',
-          isMobile || fileExplorerCollapsed
-            ? 'flex min-h-0 w-full flex-col'
-            : 'grid grid-cols-[minmax(0,1fr)_auto] grid-rows-[minmax(0,1fr)]',
-        )}
+        className="relative flex h-full min-w-0 flex-col overflow-hidden"
+        style={{ background: 'var(--theme-bg)' }}
       >
-        <main className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <ChatHeader
-            activeTitle={activeTitle}
-            onToggleFileExplorer={toggleFileExplorer}
-            fileExplorerCollapsed={fileExplorerCollapsed}
-          />
-          <div className="relative flex min-h-0 flex-1 flex-col">
-            <ChatContainerRoot className="flex-1">
-              <ChatContainerContent
-                className={cn(
-                  'flex flex-col px-4 py-4',
-                  messages.length === 0 && 'h-full',
-                )}
-              >
-                {messages.length === 0 ? (
-                  <ChatEmptyState
-                    compact={isMobile}
-                    onSuggestionClick={(prompt) =>
-                      void handleSubmit(prompt, [])
-                    }
-                  />
-                ) : (
-                  <ChatMessageList
-                    messages={messages}
-                    waitingForResponse={isStreaming}
-                    researchCard={undefined}
-                    loading={false}
-                    empty={false}
-                    pinToTop={false}
-                    pinGroupMinHeight={0}
-                    headerHeight={48}
-                    sessionKey={activeSessionId}
-                  />
-                )}
-                {error && (
-                  <div className="my-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-                    {error}
-                  </div>
-                )}
-                <ChatContainerScrollAnchor />
-              </ChatContainerContent>
-            </ChatContainerRoot>
-            <div className="shrink-0 bg-surface px-4 py-3">
-              <ChatComposer
-                onSubmit={(value, atts, _fastMode) =>
-                  void handleSubmit(value, atts)
-                }
-                isLoading={isStreaming}
-                disabled={isStreaming}
-                onAbort={handleAbort}
-                sessionKey={activeSessionId}
-                embedded
-              />
-            </div>
-          </div>
-        </main>
-
-        {isMobile || fileExplorerCollapsed ? null : (
-          <Suspense fallback={null}>
-            <FileExplorerSidebar
-              collapsed={fileExplorerCollapsed}
-              onToggle={toggleFileExplorer}
-              onInsertReference={handleInsertFileReference}
-              side="right"
-              className="min-w-0"
+        <div
+          className={cn(
+            'flex-1 min-h-0 overflow-hidden',
+            isMobile || fileExplorerCollapsed
+              ? 'flex min-h-0 w-full flex-col'
+              : 'grid grid-cols-[minmax(0,1fr)_auto] grid-rows-[minmax(0,1fr)]',
+          )}
+        >
+          <main className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <ChatHeader
+              activeTitle={activeTitle}
+              onToggleFileExplorer={toggleFileExplorer}
+              fileExplorerCollapsed={fileExplorerCollapsed}
             />
-          </Suspense>
-        )}
+            <div className="relative flex min-h-0 flex-1 flex-col">
+              <ChatContainerRoot className="flex-1">
+                <ChatContainerContent
+                  className={cn(
+                    'flex flex-col px-4 py-4',
+                    messages.length === 0 && 'h-full',
+                  )}
+                >
+                  {messages.length === 0 ? (
+                    <ChatEmptyState
+                      variant="claude-code"
+                      compact={isMobile}
+                      onSuggestionClick={(prompt) =>
+                        void handleSubmit(prompt, [])
+                      }
+                    />
+                  ) : (
+                    <ChatMessageList
+                      messages={messages}
+                      waitingForResponse={isStreaming}
+                      researchCard={undefined}
+                      loading={false}
+                      empty={false}
+                      pinToTop={false}
+                      pinGroupMinHeight={0}
+                      headerHeight={48}
+                      sessionKey={activeSessionId}
+                    />
+                  )}
+                  {error && (
+                    <div className="my-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+                      {error}
+                    </div>
+                  )}
+                  <ChatContainerScrollAnchor />
+                </ChatContainerContent>
+              </ChatContainerRoot>
+              <div className="shrink-0 bg-surface px-4 py-3">
+                <ChatComposer
+                  onSubmit={(value, atts, _fastMode) =>
+                    void handleSubmit(value, atts)
+                  }
+                  isLoading={isStreaming}
+                  disabled={isStreaming}
+                  onAbort={handleAbort}
+                  sessionKey={activeSessionId}
+                  embedded
+                  modelsEndpoint="/api/agents/claude-code/models"
+                  modelKeyMode="bare"
+                  gatewayQueriesEnabled={false}
+                />
+              </div>
+            </div>
+          </main>
+
+          {isMobile || fileExplorerCollapsed ? null : (
+            <Suspense fallback={null}>
+              <FileExplorerSidebar
+                collapsed={fileExplorerCollapsed}
+                onToggle={toggleFileExplorer}
+                onInsertReference={handleInsertFileReference}
+                side="right"
+                className="min-w-0"
+              />
+            </Suspense>
+          )}
+        </div>
       </div>
-    </div>
+    </AssistantAvatarProvider>
   )
 }
 
-function parseSSELine(line: string): ExternalChatEvent | null {
+function parseSSEDataLine(
+  line: string,
+  eventName: string,
+): ExternalChatEvent | null {
   const trimmed = line.trim()
   if (!trimmed || !trimmed.startsWith('data:')) return null
   const json = trimmed.slice(5).trim()
   if (json === '') return null
   try {
     const parsed = JSON.parse(json) as Record<string, unknown>
-    const type = String(parsed.type ?? '')
+    // Prefer type embedded in the payload; fall back to the SSE `event:` name
+    // (older servers only set the latter).
+    const type = String(parsed.type ?? eventName ?? '')
     switch (type) {
       case 'connected':
         return {
@@ -534,6 +600,8 @@ function parseSSELine(line: string): ExternalChatEvent | null {
           type: 'heartbeat',
           timestamp: Number(parsed.timestamp ?? Date.now()),
         }
+      case 'run_started':
+        return null
       default:
         return null
     }

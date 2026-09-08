@@ -2,6 +2,7 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { BrainIcon, CodeIcon, PuzzleIcon } from '@hugeicons/core-free-icons'
 import { motion } from 'motion/react'
 import { useEffect, useState } from 'react'
+import { ClaudeCodeMark } from '@/components/avatars/claude-code-mark'
 
 type ProfileSummary = {
   name: string
@@ -15,7 +16,7 @@ type SuggestionChip = {
   icon: unknown
 }
 
-const SUGGESTIONS: Array<SuggestionChip> = [
+const HERMES_SUGGESTIONS: Array<SuggestionChip> = [
   {
     label: 'Analyze workspace',
     prompt:
@@ -35,31 +36,93 @@ const SUGGESTIONS: Array<SuggestionChip> = [
   },
 ]
 
+const CLAUDE_CODE_SUGGESTIONS: Array<SuggestionChip> = [
+  {
+    label: 'Explain this repo',
+    prompt:
+      'Summarize this repository: what it does, key entry points, and how to run it locally. Keep it concise.',
+    icon: CodeIcon,
+  },
+  {
+    label: 'Find a bug',
+    prompt:
+      'Scan the recent changes and likely hotspots for bugs. List the top 3 risks with file paths.',
+    icon: BrainIcon,
+  },
+  {
+    label: 'Write a test',
+    prompt:
+      'Propose one focused unit test for the riskiest module here, and draft the test file contents.',
+    icon: PuzzleIcon,
+  },
+]
+
+export type ChatEmptyStateVariant = 'hermes' | 'claude-code'
+
 type ChatEmptyStateProps = {
   onSuggestionClick?: (prompt: string) => void
   compact?: boolean
+  /** Branding + copy. Hermes keeps profile/gateway chrome; Claude Code uses CLI settings. */
+  variant?: ChatEmptyStateVariant
 }
 
 export function ChatEmptyState({
   onSuggestionClick,
   compact = false,
+  variant = 'hermes',
 }: ChatEmptyStateProps) {
-  const [activeProfile, setActiveProfile] = useState<ProfileSummary | null>(
-    null,
-  )
+  const isClaudeCode = variant === 'claude-code'
+  const [statusLine, setStatusLine] = useState<string | null>(null)
 
   useEffect(() => {
+    let cancelled = false
+
+    if (isClaudeCode) {
+      fetch('/api/agents/claude-code/models')
+        .then((res) => res.json())
+        .then((data) => {
+          if (cancelled) return
+          const model =
+            typeof data?.currentModel === 'string'
+              ? data.currentModel.trim()
+              : ''
+          const provider =
+            typeof data?.currentProvider === 'string'
+              ? data.currentProvider.trim()
+              : ''
+          if (model && provider) setStatusLine(`${provider} · ${model}`)
+          else if (model) setStatusLine(model)
+          else setStatusLine('Claude Code')
+        })
+        .catch(() => {
+          if (!cancelled) setStatusLine('Claude Code')
+        })
+      return () => {
+        cancelled = true
+      }
+    }
+
     fetch('/api/profiles/list?light=1')
       .then((res) => res.json())
       .then((data) => {
+        if (cancelled) return
         const profiles = data?.profiles as Array<ProfileSummary> | undefined
         const active = profiles?.find((p) => p.active)
-        if (active) setActiveProfile(active)
+        if (!active) return
+        setStatusLine(
+          active.model ? `${active.name} · ${active.model}` : active.name,
+        )
       })
       .catch(() => {
         // silently ignore — profile info is cosmetic
       })
-  }, [])
+
+    return () => {
+      cancelled = true
+    }
+  }, [isClaudeCode])
+
+  const suggestions = isClaudeCode ? CLAUDE_CODE_SUGGESTIONS : HERMES_SUGGESTIONS
 
   return (
     <motion.div
@@ -69,23 +132,36 @@ export function ChatEmptyState({
       className="flex h-full flex-col items-center justify-center px-4 py-8"
     >
       <div className="flex max-w-xl flex-col items-center text-center">
-        {/* Avatar in editorial frame, no glow — architectural restraint */}
+        {/* Avatar / mark — Hermes keeps the agent portrait; Claude Code uses a CLI mark */}
         <div className="relative mb-6">
-          <img
-            src="/claude-avatar.webp"
-            alt="Hermes Agent"
-            className="relative size-20 rounded-md"
-            style={{
-              border: '1px solid var(--theme-border)',
-              padding: '4px',
-              background: 'var(--theme-card)',
-            }}
-          />
+          {isClaudeCode ? (
+            <div
+              className="relative flex size-20 items-center justify-center rounded-md"
+              style={{
+                border: '1px solid var(--theme-border)',
+                padding: '4px',
+                background: 'var(--theme-card)',
+              }}
+            >
+              <ClaudeCodeMark size={72} className="rounded-[10px]" />
+            </div>
+          ) : (
+            <img
+              src="/claude-avatar.webp"
+              alt="Hermes Agent"
+              className="relative size-20 rounded-md"
+              style={{
+                border: '1px solid var(--theme-border)',
+                padding: '4px',
+                background: 'var(--theme-card)',
+              }}
+            />
+          )}
         </div>
 
         {/* Editorial micro-label */}
         <p className="micro-label mb-2" style={{ color: 'var(--theme-muted)' }}>
-          Hermes Workspace
+          {isClaudeCode ? 'Claude Code' : 'Hermes Workspace'}
         </p>
 
         {/* Editorial display title */}
@@ -93,30 +169,29 @@ export function ChatEmptyState({
           className="editorial-display text-3xl"
           style={{ color: 'var(--theme-text)' }}
         >
-          Begin a session
+          {isClaudeCode ? 'Start coding' : 'Begin a session'}
         </h2>
 
-        {activeProfile && (
+        {statusLine && (
           <span
             className="mt-2 text-xs"
             style={{ color: 'var(--theme-accent)' }}
           >
-            {activeProfile.name}
-            {activeProfile.model ? ` · ${activeProfile.model}` : ''}
+            {statusLine}
           </span>
         )}
 
         {!compact && (
-          <>
-            <p className="mt-3 text-sm" style={{ color: 'var(--theme-muted)' }}>
-              Agent chat · live tools · memory · full observability
-            </p>
-          </>
+          <p className="mt-3 text-sm" style={{ color: 'var(--theme-muted)' }}>
+            {isClaudeCode
+              ? 'Local CLI · MCP tools · ~/.claude/settings.json'
+              : 'Agent chat · live tools · memory · full observability'}
+          </p>
         )}
 
         {/* Prompt chips */}
         <div className="mt-6 flex flex-wrap justify-center gap-2">
-          {SUGGESTIONS.map((suggestion) => (
+          {suggestions.map((suggestion) => (
             <button
               key={suggestion.label}
               type="button"

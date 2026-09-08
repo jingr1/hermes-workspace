@@ -27,6 +27,12 @@ export type AgentDeclaration = {
   /** CLI command (non-hermes runtimes). */
   command?: string
   args?: Array<string>
+  /**
+   * Optional model override for CLI-based runtimes.
+   * For claude-code, prefer ~/.claude/settings.json; only set this to force
+   * a one-off model different from the user's Claude Code defaults.
+   */
+  model?: string
   execution: AgentExecution
   capabilities: Array<string>
   maxConcurrentTasks?: number
@@ -207,6 +213,7 @@ export function loadAgentsRegistry(input?: {
       profile: entry.profile ? String(entry.profile) : undefined,
       command: entry.command ? String(entry.command) : undefined,
       args: Array.isArray(entry.args) ? entry.args.map(String) : undefined,
+      model: entry.model ? String(entry.model) : undefined,
       execution,
       capabilities,
       maxConcurrentTasks:

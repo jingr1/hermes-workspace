@@ -18,6 +18,9 @@ interface AgentStore {
   setActiveAgentId: (agentId: string | null) => void
   updateAgent: (agent: Partial<AgentWithStatus> & { agentId: string }) => void
   setSessions: (agentId: string, sessions: Array<AgentSession>) => void
+  upsertSession: (agentId: string, session: AgentSession) => void
+  removeSession: (agentId: string, sessionId: string) => void
+  clearSessions: (agentId: string) => void
   setSessionsLoading: (agentId: string, loading: boolean) => void
   setActiveSessionId: (sessionId: string | null) => void
 }
@@ -48,6 +51,37 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     set((state) => {
       const next = new Map(state.sessionsByAgentId)
       next.set(agentId, sessions)
+      return { sessionsByAgentId: next }
+    }),
+  upsertSession: (agentId, session) =>
+    set((state) => {
+      const next = new Map(state.sessionsByAgentId)
+      const current = next.get(agentId) ?? []
+      const without = current.filter((s) => s.sessionId !== session.sessionId)
+      next.set(
+        agentId,
+        [session, ...without].sort(
+          (a, b) =>
+            new Date(b.lastMessageAt).getTime() -
+            new Date(a.lastMessageAt).getTime(),
+        ),
+      )
+      return { sessionsByAgentId: next }
+    }),
+  removeSession: (agentId, sessionId) =>
+    set((state) => {
+      const next = new Map(state.sessionsByAgentId)
+      const current = next.get(agentId) ?? []
+      next.set(
+        agentId,
+        current.filter((s) => s.sessionId !== sessionId),
+      )
+      return { sessionsByAgentId: next }
+    }),
+  clearSessions: (agentId) =>
+    set((state) => {
+      const next = new Map(state.sessionsByAgentId)
+      next.delete(agentId)
       return { sessionsByAgentId: next }
     }),
   setSessionsLoading: (agentId, loading) =>

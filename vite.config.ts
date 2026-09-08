@@ -717,6 +717,10 @@ const config = defineConfig(({ mode, command }) => {
             const method = req.method?.toUpperCase() ?? 'GET'
             const path = req.url?.split('?')[0] ?? ''
             // SSE and long-running swarm routes need no socket timeout.
+            // Agent chat streams (`/api/agents/:id/chat`) often sit silent
+            // until the first model token; a 15s idle kill shows as
+            // "network error" in the Claude Code shell (Sonnet TTFT can
+            // exceed that).
             const isLongRunning =
               path.startsWith('/api/sse') ||
               path.startsWith('/sse') ||
@@ -727,7 +731,8 @@ const config = defineConfig(({ mode, command }) => {
               path === '/api/swarm-direct-chat' ||
               path === '/api/swarm-dispatch' ||
               path === '/api/swarm-decompose' ||
-              path === '/api/conductor-spawn'
+              path === '/api/conductor-spawn' ||
+              /^\/api\/agents\/[^/]+\/chat$/.test(path)
             const timeout = isLongRunning ? 0 : 15_000
             socket.setTimeout(timeout)
             next()

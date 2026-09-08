@@ -157,6 +157,18 @@ type ChatComposerProps = {
   embedded?: boolean
   hideModelSelector?: boolean
   /**
+   * Override the models catalog URL. Defaults to `/api/models` (Hermes).
+   * Claude Code passes `/api/agents/claude-code/models` so the same picker
+   * lists models from ~/.claude/settings.json.
+   */
+  modelsEndpoint?: string
+  /**
+   * How to persist the selected model key in the session store.
+   * - provider-prefixed (default): `provider/model` — Hermes style
+   * - bare: just the model id — required for Claude Code CLI `--model`
+   */
+  modelKeyMode?: 'provider-prefixed' | 'bare'
+  /**
    * When false, skip gateway-backed catalog/status fetches so the first history
    * payload is not competing with models/session-status/etc. on a cold gateway.
    */
@@ -303,19 +315,19 @@ async function fetchInstalledSkills(): Promise<Array<InstalledSkillSummary>> {
     .filter((entry): entry is InstalledSkillSummary => entry !== null)
 }
 
-async function fetchModels(): Promise<{
+async function fetchModels(endpoint = '/api/models'): Promise<{
   ok?: boolean
   models?: Array<ModelCatalogEntry>
   configuredProviders?: Array<string>
   currentProvider?: string
+  currentModel?: string
   providerLabels?: Record<string, string>
   providers?: Array<ClaudeProviderOption>
 }> {
-  // Use the curated /api/models endpoint which returns only models
-  // actually configured and available (OCPlatform gateway + local providers).
-  // Previously this hit /api/claude-proxy/api/available-models which returned
-  // every upstream provider model — flooding the picker with unusable options.
-  const response = await fetch('/api/models')
+  // Use the curated models endpoint which returns only models actually
+  // configured and available. Hermes defaults to /api/models; Claude Code
+  // passes /api/agents/claude-code/models (from ~/.claude/settings.json).
+  const response = await fetch(endpoint)
   if (!response.ok) {
     throw new Error(`Models request failed (${response.status})`)
   }
@@ -325,6 +337,11 @@ async function fetchModels(): Promise<{
     | {
         data?: Array<Record<string, unknown>>
         models?: Array<Record<string, unknown>>
+        currentProvider?: string
+        currentModel?: string
+        configuredProviders?: Array<string>
+        providerLabels?: Record<string, string>
+        providers?: Array<ClaudeProviderOption>
       }
   const rawModels = Array.isArray(payload)
     ? payload
@@ -362,21 +379,32 @@ async function fetchModels(): Promise<{
     })
     .filter(isClaudeCatalogEntry)
 
-  const configuredProviders = Array.from(
-    new Set(
-      models.flatMap((entry) => {
-        if (typeof entry === 'string') return []
-        return typeof entry.provider === 'string' && entry.provider
-          ? [entry.provider]
-          : []
-      }),
-    ),
+  const configuredProviders = Array.isArray(
+    !Array.isArray(payload) ? payload.configuredProviders : null,
   )
+    ? ((payload as { configuredProviders: Array<string> }).configuredProviders ??
+      [])
+    : Array.from(
+        new Set(
+          models.flatMap((entry) => {
+            if (typeof entry === 'string') return []
+            return typeof entry.provider === 'string' && entry.provider
+              ? [entry.provider]
+              : []
+          }),
+        ),
+      )
+
+  const meta = Array.isArray(payload) ? null : payload
 
   return {
     ok: true,
     models: models as Array<ModelCatalogEntry>,
     configuredProviders,
+    currentProvider: readModelText(meta?.currentProvider) || undefined,
+    currentModel: readModelText(meta?.currentModel) || undefined,
+    providerLabels: meta?.providerLabels,
+    providers: meta?.providers,
   }
 }
 
@@ -919,6 +947,8 @@ function ChatComposerComponent({
   onAbort,
   embedded = false,
   hideModelSelector = false,
+  modelsEndpoint,
+  modelKeyMode = 'provider-prefixed',
   isCompacting = false,
   busyMessageMode = 'queue',
   canSteer = false,
@@ -927,6 +957,12 @@ function ChatComposerComponent({
   queuedCount = 0,
   onClearQueue,
 }: ChatComposerProps) {
+  const resolvedModelsEndpoint = modelsEndpoint?.trim() || '/api/models'
+  const useCustomModelsEndpoint = Boolean(modelsEndpoint?.trim())
+  const modelsQueryEnabled =
+    useCustomModelsEndpoint || gatewayQueriesEnabled
+  // Expanding "other providers" only makes sense for the Hermes catalog.
+  const allowProviderExpansion = !useCustomModelsEndpoint && gatewayQueriesEnabled
   const queryClient = useQueryClient()
   const sessionTruncateCap = useFeatureCapability('sessionTruncate')
   const sessionCompressCap = useFeatureCapability('sessionCompress')
@@ -1008,19 +1044,21 @@ function ChatComposerComponent({
   const { pinned, isPinned, togglePin } = usePinnedModels()
 
   const modelsQuery = useQuery({
-    queryKey: ['claude', 'models'],
-    queryFn: fetchModels,
-    enabled: gatewayQueriesEnabled,
-    refetchInterval: gatewayQueriesEnabled ? 60_000 : false,
+    queryKey: ['composer', 'models', resolvedModelsEndpoint],
+    queryFn: () => fetchModels(resolvedModelsEndpoint),
+    enabled: modelsQueryEnabled,
+    refetchInterval: modelsQueryEnabled ? 60_000 : false,
     retry: false,
   })
   const currentProvider = modelsQuery.data?.currentProvider ?? ''
   const otherProviders = useMemo(
     () =>
-      (modelsQuery.data?.providers ?? []).filter(
-        (provider) => provider.id !== currentProvider,
-      ),
-    [currentProvider, modelsQuery.data?.providers],
+      allowProviderExpansion
+        ? (modelsQuery.data?.providers ?? []).filter(
+            (provider) => provider.id !== currentProvider,
+          )
+        : [],
+    [allowProviderExpansion, currentProvider, modelsQuery.data?.providers],
   )
   const otherProviderModelsQuery = useQuery({
     queryKey: [
@@ -1033,7 +1071,7 @@ function ChatComposerComponent({
         .join('|'),
     ],
     enabled:
-      gatewayQueriesEnabled &&
+      allowProviderExpansion &&
       isProviderSwitcherExpanded &&
       otherProviders.length > 0,
     retry: false,
@@ -1192,6 +1230,34 @@ function ChatComposerComponent({
     (s) => s.models[modelSessionKey],
   )
   const setPersistedSessionModel = useSessionModelStore((s) => s.setModel)
+  const clearPersistedSessionModel = useSessionModelStore((s) => s.clearModel)
+
+  // Custom catalogs (Claude Code): drop stale Hermes picks like
+  // "Claude-Sonnet-3.5" that aren't in ~/.claude/settings.json.
+  useEffect(() => {
+    if (!useCustomModelsEndpoint) return
+    const catalog = modelsQuery.data?.models
+    if (!catalog?.length) return
+    const persisted = persistedSessionModel?.trim()
+    if (!persisted) return
+    const ids = new Set(
+      catalog.map((entry) =>
+        typeof entry === 'string' ? entry : String(entry.id ?? ''),
+      ),
+    )
+    const bare = persisted.includes('/')
+      ? persisted.slice(persisted.lastIndexOf('/') + 1)
+      : persisted
+    if (!ids.has(persisted) && !ids.has(bare)) {
+      clearPersistedSessionModel(modelSessionKey)
+    }
+  }, [
+    clearPersistedSessionModel,
+    modelSessionKey,
+    modelsQuery.data?.models,
+    persistedSessionModel,
+    useCustomModelsEndpoint,
+  ])
 
   // Model switching is now per-session via the persistent store above.
   // Previously this issued a PATCH /api/hermes-proxy/api/config to write to
@@ -1204,6 +1270,7 @@ function ChatComposerComponent({
       const model = nextModel.trim()
       if (!model) return
       if (
+        !useCustomModelsEndpoint &&
         shouldBlockZeroForkModelSwitch(
           gatewayModeQuery.data,
           zeroForkModelInfoFlags,
@@ -1214,7 +1281,10 @@ function ChatComposerComponent({
         return
       }
       setModelNotice(null)
-      const resolved = getResolvedModelKey(model, provider)
+      const resolved =
+        modelKeyMode === 'bare'
+          ? model
+          : getResolvedModelKey(model, provider)
       // Per-session, browser-local persistence. No global config write —
       // picking a model here only affects this chat. The actual model is
       // passed on each request via the chat-completion `model` field.
@@ -1223,8 +1293,10 @@ function ChatComposerComponent({
     },
     [
       gatewayModeQuery.data,
+      modelKeyMode,
       modelSessionKey,
       setPersistedSessionModel,
+      useCustomModelsEndpoint,
       zeroForkModelInfoFlags,
     ],
   )
@@ -1320,8 +1392,13 @@ function ChatComposerComponent({
   }, [modelsQuery.data])
   // Derive the label directly from the store so navigation between sessions
   // updates without a render-window flash from a stale React-state mirror.
+  // Custom catalogs (Claude Code) may also expose currentModel from settings.
   const modelButtonLabel =
-    persistedSessionModel || currentModel || configuredModel || '⚕ Hermes Agent'
+    persistedSessionModel ||
+    currentModel ||
+    modelsQuery.data?.currentModel ||
+    configuredModel ||
+    '⚕ Hermes Agent'
 
   // Measure composer height and set CSS variable for scroll padding
   useLayoutEffect(() => {
@@ -3109,39 +3186,62 @@ function ChatComposerComponent({
 
                 {!hideModelSelector ? (
                   <>
-                    {/* Active profile — read-only; switch via sidebar */}
+                    {/* Runtime identity — Hermes profile, or Claude Code label */}
                     <span
                       className="inline-flex max-w-[8rem] items-center gap-1.5 px-1 text-xs text-primary-500"
                       title={
-                        activeProfile
-                          ? [
-                              activeProfile.name,
-                              activeProfile.model,
-                              activeProfile.provider,
-                            ]
-                              .map((value) =>
-                                typeof value === 'string' ? value.trim() : '',
-                              )
-                              .filter(Boolean)
-                              .join(' · ')
-                          : activeProfileName
+                        useCustomModelsEndpoint
+                          ? 'Claude Code · ~/.claude/settings.json'
+                          : activeProfile
+                            ? [
+                                activeProfile.name,
+                                activeProfile.model,
+                                activeProfile.provider,
+                              ]
+                                .map((value) =>
+                                  typeof value === 'string' ? value.trim() : '',
+                                )
+                                .filter(Boolean)
+                                .join(' · ')
+                            : activeProfileName
                       }
                     >
-                      <svg
-                        width="13"
-                        height="13"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        aria-hidden="true"
-                      >
-                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                        <circle cx="12" cy="7" r="4" />
-                      </svg>
-                      <span className="truncate">{activeProfileName}</span>
+                      {useCustomModelsEndpoint ? (
+                        <svg
+                          width="13"
+                          height="13"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <polyline points="4 17 10 11 4 5" />
+                          <line x1="12" y1="19" x2="20" y2="19" />
+                        </svg>
+                      ) : (
+                        <svg
+                          width="13"
+                          height="13"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                          <circle cx="12" cy="7" r="4" />
+                        </svg>
+                      )}
+                      <span className="truncate">
+                        {useCustomModelsEndpoint
+                          ? 'Claude Code'
+                          : activeProfileName}
+                      </span>
                     </span>
 
                     {/* Workspace folder selector — path input + home-rooted tree */}

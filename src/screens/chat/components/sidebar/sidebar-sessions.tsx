@@ -18,6 +18,8 @@ type SidebarSessionsProps = {
   profileName?: string
   defaultOpen?: boolean
   onSelect?: () => void
+  /** Agent Workspace: activate session without Hermes /chat navigation. */
+  onActivateSession?: (session: SessionMeta) => void
   onRename: (session: SessionMeta, newTitle: string) => void
   onDelete: (session: SessionMeta) => void
   loading: boolean
@@ -32,6 +34,7 @@ export const SidebarSessions = memo(function SidebarSessions({
   profileName,
   defaultOpen = true,
   onSelect,
+  onActivateSession,
   onRename,
   onDelete,
   loading,
@@ -71,6 +74,7 @@ export const SidebarSessions = memo(function SidebarSessions({
               profileName={profileName}
               isPinned
               onSelect={onSelect}
+              onActivateSession={onActivateSession}
               onTogglePin={handleTogglePin}
               onRename={onRename}
               onDelete={onDelete}
@@ -113,6 +117,7 @@ export const SidebarSessions = memo(function SidebarSessions({
                     profileName={profileName}
                     isPinned={false}
                     onSelect={onSelect}
+                    onActivateSession={onActivateSession}
                     onTogglePin={handleTogglePin}
                     onRename={onRename}
                     onDelete={onDelete}
@@ -149,6 +154,7 @@ function areSidebarSessionsEqual(
   if (prev.profileName !== next.profileName) return false
   if (prev.defaultOpen !== next.defaultOpen) return false
   if (prev.onSelect !== next.onSelect) return false
+  if (prev.onActivateSession !== next.onActivateSession) return false
   if (prev.onRename !== next.onRename) return false
   if (prev.onDelete !== next.onDelete) return false
   if (prev.loading !== next.loading) return false

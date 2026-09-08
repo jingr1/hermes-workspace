@@ -8,6 +8,11 @@ import { isAuthenticated } from '../../../server/auth-middleware'
 import { getHermesRoot } from '../../../server/claude-paths'
 import { getAgentRuntimeRouter } from '../../../server/agent-runtime/router'
 import { listProfilesLight } from '../../../server/profiles-browser'
+import {
+  readClaudeCodeSettings,
+  resolveClaudeCodeCurrentModel,
+  resolveClaudeCodeProvider,
+} from '../../../server/claude-code-settings'
 
 export type OperationsAgentConfig = {
   id: string
@@ -23,18 +28,6 @@ export type OperationsAgentConfig = {
   mcpCount?: number
   command?: string
   args?: Array<string>
-}
-
-function safeReadJson(filePath: string): Record<string, unknown> {
-  if (!fs.existsSync(filePath)) return {}
-  try {
-    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as unknown
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {}
-  } catch {
-    return {}
-  }
 }
 
 function safeReadToml(filePath: string): Record<string, unknown> {
@@ -81,21 +74,11 @@ function readGlobalProvider(): string {
 }
 
 function readClaudeCodeConfig(): { model: string; provider: string } {
-  const settingsPath = path.join(os.homedir(), '.claude', 'settings.json')
-  const settings = safeReadJson(settingsPath)
-  const model =
-    typeof settings.model === 'string'
-      ? settings.model
-      : typeof settings.selectedModel === 'string'
-        ? settings.selectedModel
-        : ''
-  const provider =
-    typeof settings.provider === 'string'
-      ? settings.provider
-      : typeof settings.modelProvider === 'string'
-        ? settings.modelProvider
-        : ''
-  return { model, provider }
+  const settings = readClaudeCodeSettings()
+  return {
+    model: resolveClaudeCodeCurrentModel(settings),
+    provider: resolveClaudeCodeProvider(settings),
+  }
 }
 
 function readCodexConfig(): { model: string; provider: string } {

@@ -4,8 +4,11 @@
  * Spawns one managed process per run:
  *   claude -p "<task>" --mcp-config <per-run-config.json>
  *
+ * - Provider + model come from ~/.claude/settings.json (not agents.yaml).
+ *   settings.env is injected into the child because `claude -p` does not
+ *   reliably apply that block for auth the way an interactive session does.
  * - Per-run MCP config is a temp file (never the user's ~/.claude.json);
- *   credentials live only in the process env (HERMES_MCP_TOKEN).
+ *   MCP credentials live only in the process env (HERMES_MCP_TOKEN).
  * - detached:true + own process group so interrupt() can SIGKILL the group
  *   and the process survives server restarts; the pid registry re-attaches.
  * - stdout/stderr are teed to (a) a per-run log file (task_runs.log_path
@@ -33,8 +36,113 @@ import type {
   McpHandshake,
 } from './types'
 import type { AgentDeclaration } from './agents-config'
+import {
+  expandClaudeCodeModelAlias,
+  readClaudeCodeSettings,
+  resolveClaudeCodeCurrentModel,
+  settingsEnvRecord,
+} from '../claude-code-settings'
 
 const execFileAsync = promisify(execFile)
+
+/**
+ * Build the spawn env so Claude Code behaves like an interactive `claude`
+ * started from the user's home directory:
+ *   1. inherit process.env (minus Cursor sandbox / empty Anthropic keys)
+ *   2. overlay ~/.claude/settings.json `env` (BASE_URL, AUTH_TOKEN, models)
+ *   3. mirror AUTH_TOKEN → API_KEY when API_KEY is unset/empty (print mode
+ *      otherwise falls through to a broken keychain path → 401)
+ *   4. keep unknown-model window enforcement off for proxy model names
+ */
+function buildClaudeSpawnEnv(input: {
+  runToken: string
+  extra?: Record<string, string>
+}): Record<string, string> {
+  const parent: Record<string, string> = {}
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value === undefined) continue
+    if (
+      key === 'CURSOR_SANDBOX' ||
+      key.startsWith('CURSOR_SANDBOX_') ||
+      key === '__CURSOR_SANDBOX_ENV_RESTORE'
+    ) {
+      continue
+    }
+    // Empty Anthropic auth vars from the server process must not shadow
+    // settings.json — Claude Code treats "" as "key present but wrong".
+    if (
+      (key === 'ANTHROPIC_API_KEY' ||
+        key === 'ANTHROPIC_AUTH_TOKEN' ||
+        key === 'ANTHROPIC_BASE_URL') &&
+      value.trim() === ''
+    ) {
+      continue
+    }
+    parent[key] = value
+  }
+
+  const fromSettings = settingsEnvRecord(readClaudeCodeSettings())
+
+  const env: Record<string, string> = {
+    ...parent,
+    ...fromSettings,
+    HERMES_MCP_TOKEN: input.runToken,
+    CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT: '1',
+    ...input.extra,
+  }
+
+  const authToken = env.ANTHROPIC_AUTH_TOKEN?.trim()
+  if (authToken && !env.ANTHROPIC_API_KEY?.trim()) {
+    env.ANTHROPIC_API_KEY = authToken
+  }
+
+  return env
+}
+
+/**
+ * Resolve which model Claude Code should use.
+ * Priority: per-run picker override → agents.yaml `model` → settings.json.
+ */
+function resolveEffectiveModel(
+  runModel: string | undefined,
+  declModel: string | undefined,
+): string | undefined {
+  const settings = readClaudeCodeSettings()
+  // Picker / agents.yaml may send aliases (`sonnet`); bare `sonnet` hangs on
+  // some proxies — always expand to ANTHROPIC_DEFAULT_* ids.
+  if (runModel?.trim()) {
+    return expandClaudeCodeModelAlias(runModel, settings) || undefined
+  }
+  if (declModel?.trim()) {
+    return expandClaudeCodeModelAlias(declModel, settings) || undefined
+  }
+  return resolveClaudeCodeCurrentModel(settings) || undefined
+}
+
+/** Claude Code stderr/stdout diagnostics that are not fatal run failures. */
+function isClaudeDiagnostic(message: string): boolean {
+  return (
+    message.includes('[claude-code:unrecognized_model]') ||
+    message.includes('is not a model this version of Claude Code recognizes')
+  )
+}
+
+/**
+ * Remove diagnostic noise from Claude Code stdout so it never lands in the
+ * chat transcript as text_delta.
+ */
+function stripClaudeDiagnostics(text: string): string {
+  if (!isClaudeDiagnostic(text) && !text.includes('[claude-code:')) {
+    return text
+  }
+  return text
+    .split('\n')
+    .filter(
+      (line) => !isClaudeDiagnostic(line) && !line.includes('[claude-code:'),
+    )
+    .join('\n')
+    .replace(/^\n+/, '')
+}
 
 /**
  * Try to locate the claude executable. The workspace server may run under a
@@ -178,22 +286,48 @@ export class ClaudeCodeAdapter implements AgentRuntimeAdapter {
     const logPath = path.join(runRoot, 'run.log')
     const logFd = fs.openSync(logPath, 'a')
 
-    const env: Record<string, string> = {
-      ...(process.env as Record<string, string>),
-      HERMES_MCP_TOKEN: input.mcp.runToken,
-      // Allow users to route Claude Code through non-Anthropic providers/models
-      // without the CLI rejecting the model name at startup.
-      CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT: '1',
-      ...input.env,
-    }
+    // Provider + defaults come from ~/.claude/settings.json. Per-run model
+    // can be overridden by the chat picker (input.model).
+    const effectiveModel = resolveEffectiveModel(input.model, this.decl.model)
+    const env = buildClaudeSpawnEnv({
+      runToken: input.mcp.runToken,
+      extra: input.env,
+    })
 
     const args = [
       '--mcp-config',
       mcpConfigPath,
+      ...(effectiveModel ? ['--model', effectiveModel] : []),
       ...(this.decl.args ?? ['-p']),
       '--',
       input.task,
     ]
+
+    // Record the resolved model + argv next to the log for debugging
+    // UI/CLI drift (and to prove the live adapter code is the current one).
+    try {
+      fs.writeFileSync(
+        path.join(runRoot, 'model.txt'),
+        `${effectiveModel ?? '(settings-default)'}\n`,
+        'utf-8',
+      )
+      fs.writeFileSync(
+        path.join(runRoot, 'argv.txt'),
+        JSON.stringify(
+          {
+            command,
+            args,
+            inputModel: input.model ?? null,
+            declModel: this.decl.model ?? null,
+          },
+          null,
+          2,
+        ),
+        'utf-8',
+      )
+    } catch {
+      // non-fatal
+    }
 
     const child = spawn(command, args, {
       cwd: input.cwd ?? process.cwd(),
@@ -228,15 +362,21 @@ export class ClaudeCodeAdapter implements AgentRuntimeAdapter {
 
     child.stdout.on('data', (data: Buffer) => {
       fs.writeSync(logFd, data)
+      const text = stripClaudeDiagnostics(data.toString())
+      if (!text) return
       push(run, {
         type: 'text_delta',
         runId: input.runId,
-        text: data.toString(),
+        text,
       })
     })
     child.stderr.on('data', (data: Buffer) => {
       fs.writeSync(logFd, data)
-      push(run, { type: 'error', runId: input.runId, message: data.toString() })
+      const message = data.toString()
+      // Proxy model names (e.g. Kimi-K2.7-Code) emit this diagnostic; the
+      // request still succeeds. Don't surface it as a run error in the UI.
+      if (isClaudeDiagnostic(message)) return
+      push(run, { type: 'error', runId: input.runId, message })
     })
     child.on('exit', (exitCode) => {
       if (run.done) return // interrupt() already emitted the terminal event
@@ -301,4 +441,12 @@ export class ClaudeCodeAdapter implements AgentRuntimeAdapter {
       push(run, { type: 'run_exited', runId, exitCode: null })
     }
   }
+}
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    void import('./router').then((mod) => {
+      mod.resetAgentRuntimeRouter()
+    })
+  })
 }
