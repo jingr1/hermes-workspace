@@ -6,6 +6,10 @@ import {
   getRoom,
   updateRoom,
 } from '../../../server/group-chat/room-store'
+import {
+  deriveMissionWorkspacePath,
+  validateWorkspacePathInput,
+} from '../../../server/group-chat/resolve-room-cwd'
 import { getSwarmMission } from '../../../server/swarm-missions'
 
 export const Route = createFileRoute('/api/rooms/$roomId')({
@@ -25,16 +29,32 @@ export const Route = createFileRoute('/api/rooms/$roomId')({
         if (!isAuthenticated(request)) {
           return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
         }
+        const existing = getRoom(params.roomId)
+        if (!existing) {
+          return json({ ok: false, error: 'Not found' }, { status: 404 })
+        }
         let body: Record<string, unknown>
         try {
           body = (await request.json()) as Record<string, unknown>
         } catch {
           return json({ ok: false, error: 'Invalid JSON' }, { status: 400 })
         }
-        const patch: Record<string, unknown> = {}
+        const patch: Record<string, unknown> = {
+          updatedAt: Date.now(),
+        }
         if (typeof body.title === 'string') patch.title = body.title
         if (typeof body.state === 'string') patch.state = body.state
-        if (body.missionId !== undefined) patch.missionId = body.missionId
+
+        if (body.missionId !== undefined) {
+          patch.missionId = body.missionId
+          if (body.missionId === null) {
+            // Unbind — keep current workspacePath so the room becomes ad-hoc.
+          } else if (typeof body.missionId === 'string') {
+            const derived = deriveMissionWorkspacePath(body.missionId)
+            if (derived) patch.workspacePath = derived
+          }
+        }
+
         if (body.taskId !== undefined) {
           const taskId = body.taskId
           if (taskId === null) {
@@ -44,10 +64,46 @@ export const Route = createFileRoute('/api/rooms/$roomId')({
             const existingMission = getSwarmMission(taskId)
             if (existingMission) {
               patch.missionId = taskId
+              const derived = deriveMissionWorkspacePath(taskId)
+              if (derived) patch.workspacePath = derived
             }
             patch.taskId = taskId
           }
         }
+
+        if (body.workspacePath !== undefined) {
+          const nextMissionId =
+            patch.missionId !== undefined
+              ? (patch.missionId as string | null)
+              : existing.missionId
+          if (nextMissionId) {
+            return json(
+              {
+                ok: false,
+                error:
+                  'Cannot set workspacePath on a mission-bound room; unbind missionId first or use POST /api/rooms/from-mission to refresh',
+              },
+              { status: 409 },
+            )
+          }
+          try {
+            patch.workspacePath = validateWorkspacePathInput(
+              body.workspacePath as string | null,
+            )
+          } catch (error) {
+            return json(
+              {
+                ok: false,
+                error:
+                  error instanceof Error
+                    ? error.message
+                    : 'Invalid workspacePath',
+              },
+              { status: 400 },
+            )
+          }
+        }
+
         const room = updateRoom(params.roomId, patch)
         if (!room) {
           return json({ ok: false, error: 'Not found' }, { status: 404 })

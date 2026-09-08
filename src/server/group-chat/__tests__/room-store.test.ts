@@ -10,6 +10,7 @@ import {
   updateRoom,
   deleteRoom,
   removeParticipant,
+  findRoomByMissionId,
   resetCollabDbForTests,
 } from '../room-store'
 
@@ -27,6 +28,31 @@ describe('room-store', () => {
 
     const fetched = getRoom(room.id, { dbPath })
     expect(fetched?.title).toBe('Test Room')
+  })
+
+  it('persists workspacePath and finds rooms by missionId', () => {
+    const room = createRoom({
+      title: 'WS',
+      workspacePath: '/tmp/ws',
+      dbPath,
+    })
+    expect(room.workspacePath).toBe('/tmp/ws')
+    const missionRoom = createRoom({
+      title: 'Mission room',
+      missionId: 'mission-abc',
+      workspacePath: '/tmp/mission-ws',
+      dbPath,
+    })
+    expect(findRoomByMissionId('mission-abc', { dbPath })?.id).toBe(
+      missionRoom.id,
+    )
+    expect(findRoomByMissionId('missing', { dbPath })).toBeNull()
+    const updated = updateRoom(
+      room.id,
+      { workspacePath: '/tmp/ws2' },
+      { dbPath },
+    )
+    expect(updated?.workspacePath).toBe('/tmp/ws2')
   })
 
   it('lists rooms ordered by updated_at', () => {

@@ -32,6 +32,8 @@ export type TurnExecutorOptions = {
   member: GroupMember
   prompt: string
   model?: string
+  /** Room working directory — passed to managed adapters as cwd. */
+  cwd?: string | null
   dbPath?: string
   onEvent?: (event: string, data: Record<string, unknown>) => void
 }
@@ -71,6 +73,7 @@ async function executeManagedMemberTurn(
     task: opts.prompt,
     model: opts.model,
     roomId: opts.roomId,
+    cwd: opts.cwd,
     onEvent: (event) => {
       if (event.type === 'text_delta') {
         opts.onEvent?.('assistant.delta', { delta: event.text })

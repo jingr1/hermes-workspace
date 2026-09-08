@@ -1,3 +1,4 @@
+/** @vitest-environment node */
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
@@ -227,5 +228,74 @@ describe('PATCH /api/rooms/$roomId taskId -> missionId backfill', () => {
     expect(patched.ok).toBe(true)
     expect(patched.room.taskId).toBeNull()
     expect(patched.room.missionId).toBeNull()
+  })
+})
+
+describe('POST/PATCH workspacePath', () => {
+  it('creates an ad-hoc room with workspacePath', async () => {
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'rooms-ws-'))
+    try {
+      const handlers = await makePostHandlers()
+      const res = await handlers.POST({
+        request: new Request('http://localhost/api/rooms', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            title: 'With workspace',
+            workspacePath: ws,
+          }),
+        }),
+      })
+      const body = await res.json()
+      expect(res.status).toBe(200)
+      expect(body.room.workspacePath).toBe(path.resolve(ws))
+    } finally {
+      fs.rmSync(ws, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects workspacePath changes on mission-bound rooms', async () => {
+    writeSwarmMissions([
+      {
+        id: 'mission-lock',
+        title: 'Locked',
+        state: 'executing',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        assignments: [],
+        events: [],
+      },
+    ])
+    const postHandlers = await makePostHandlers()
+    const createRes = await postHandlers.POST({
+      request: new Request('http://localhost/api/rooms', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          title: 'Mission room',
+          missionId: 'mission-lock',
+        }),
+      }),
+    })
+    const { room } = await createRes.json()
+    expect(room.missionId).toBe('mission-lock')
+
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'rooms-ws-lock-'))
+    try {
+      const patchHandlers = await makeRoomIdHandlers()
+      const patchRes = await patchHandlers.PATCH({
+        request: new Request(`http://localhost/api/rooms/${room.id}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ workspacePath: ws }),
+        }),
+        params: { roomId: room.id },
+      })
+      const body = await patchRes.json()
+      expect(patchRes.status).toBe(409)
+      expect(body.ok).toBe(false)
+    } finally {
+      fs.rmSync(ws, { recursive: true, force: true })
+    }
   })
 })

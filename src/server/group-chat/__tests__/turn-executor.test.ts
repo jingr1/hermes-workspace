@@ -216,6 +216,39 @@ describe('executeMemberTurn timeout / stranded', () => {
     expect(streamChat).not.toHaveBeenCalled()
   })
 
+  it('passes cwd through to runManagedTurn for managed members', async () => {
+    runManagedTurn.mockResolvedValue({
+      kind: 'completed',
+      runId: 'run_cc',
+      text: 'ok',
+      exitCode: 0,
+      events: [],
+    })
+    const { executeMemberTurn } = await import('../turn-executor')
+    await executeMemberTurn({
+      roomId: 'room1',
+      roomTitle: 'test',
+      member: {
+        id: 'row',
+        kind: 'agent',
+        participantId: 'cc-impl',
+        displayName: 'Claude Code',
+        name: 'Claude Code',
+        mentionName: 'claude',
+        runtime: 'claude-code',
+        isBot: true,
+        profile: null,
+      },
+      prompt: 'group prompt',
+      cwd: '/tmp/room-ws',
+    })
+    expect(runManagedTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cwd: '/tmp/room-ws',
+      }),
+    )
+  })
+
   it('maps managed (pass) replies', async () => {
     runManagedTurn.mockResolvedValue({
       kind: 'completed',

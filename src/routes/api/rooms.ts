@@ -2,6 +2,10 @@ import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../server/auth-middleware'
 import { createRoom, listRooms } from '../../server/group-chat/room-store'
+import {
+  deriveMissionWorkspacePath,
+  validateWorkspacePathInput,
+} from '../../server/group-chat/resolve-room-cwd'
 import { getSwarmMission } from '../../server/swarm-missions'
 
 export const Route = createFileRoute('/api/rooms')({
@@ -21,6 +25,7 @@ export const Route = createFileRoute('/api/rooms')({
           title?: string
           missionId?: string | null
           taskId?: string | null
+          workspacePath?: string | null
         }
         try {
           body = (await request.json()) as typeof body
@@ -33,10 +38,36 @@ export const Route = createFileRoute('/api/rooms')({
         }
         const taskId = body.taskId ?? null
         const existingMission = taskId ? getSwarmMission(taskId) : null
+        const missionId = existingMission
+          ? taskId
+          : (body.missionId ?? null)
+
+        let workspacePath: string | null = null
+        try {
+          if (missionId) {
+            // Mission-bound rooms derive path; ignore client workspacePath.
+            workspacePath = deriveMissionWorkspacePath(missionId)
+          } else if (body.workspacePath !== undefined) {
+            workspacePath = validateWorkspacePathInput(body.workspacePath)
+          }
+        } catch (error) {
+          return json(
+            {
+              ok: false,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : 'Invalid workspacePath',
+            },
+            { status: 400 },
+          )
+        }
+
         const room = createRoom({
           title,
-          missionId: existingMission ? taskId : (body.missionId ?? null),
+          missionId,
           taskId,
+          workspacePath,
         })
         return json({ ok: true, room })
       },

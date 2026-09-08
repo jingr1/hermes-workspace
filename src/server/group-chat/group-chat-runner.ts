@@ -40,6 +40,7 @@ import {
 } from './room-store'
 import { executeMemberTurn } from './turn-executor'
 import { buildTurnContext } from './prompt-builder'
+import { resolveRoomCwd } from './resolve-room-cwd'
 import {
   expandMentionTargets,
   groupMemberKey,
@@ -303,13 +304,15 @@ async function driveRoom(roomId: string): Promise<void> {
 
   // Drive one conversation epoch.
   const startEpoch = bumpRoomEpoch(roomId)
-  await runGroupChatRounds(room, members, startEpoch)
+  const cwd = resolveRoomCwd(room)
+  await runGroupChatRounds(room, members, startEpoch, cwd)
 }
 
 async function runGroupChatRounds(
   room: Room,
   members: Array<GroupMember>,
   startEpoch: number,
+  cwd: string | null,
 ): Promise<void> {
   const messages = getLatestMessages(room.id, { limit: 200 })
   let posted = 0
@@ -352,7 +355,7 @@ async function runGroupChatRounds(
       const delta = roomLog.slice(watermark).slice(-GROUP_CHAT_HISTORY_LIMIT)
       if (delta.length === 0) continue
 
-      const turnResult = await runMemberTurn(room, member, delta, members)
+      const turnResult = await runMemberTurn(room, member, delta, members, cwd)
 
       if (turnResult.kind === 'blocked') {
         // Human gate was raised; stop the drive.
@@ -458,7 +461,7 @@ async function runGroupChatRounds(
             .slice(watermark)
             .slice(-GROUP_CHAT_HISTORY_LIMIT)
           if (delta.length === 0) continue
-          const turnResult = await runMemberTurn(room, member, delta, members)
+          const turnResult = await runMemberTurn(room, member, delta, members, cwd)
           if (turnResult.kind === 'reply') {
             const newMessage = insertMessage({
               roomId: room.id,
@@ -521,11 +524,19 @@ async function runMemberTurn(
   member: GroupMember,
   delta: Array<RoomMessage>,
   members: Array<GroupMember>,
+  cwd: string | null,
 ): Promise<GroupTurnResult> {
   const { summary } = await import('./summaries').then((m) =>
     m.getContextForMember(room.id),
   )
-  const prompt = buildTurnContext(room.title, members, member, delta, summary)
+  const prompt = buildTurnContext(
+    room.title,
+    members,
+    member,
+    delta,
+    summary,
+    cwd,
+  )
 
   publishChatEvent('group_chat_turn_started', {
     roomId: room.id,
@@ -540,6 +551,7 @@ async function runMemberTurn(
       roomTitle: room.title,
       member,
       prompt,
+      cwd,
     })
     return result
   } finally {

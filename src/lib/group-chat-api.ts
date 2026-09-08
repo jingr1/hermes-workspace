@@ -13,6 +13,7 @@ export type CreateRoomRequest = {
   title: string
   missionId?: string | null
   taskId?: string | null
+  workspacePath?: string | null
 }
 
 export type AddParticipantRequest = {
@@ -58,6 +59,15 @@ export function createRoom(
   return apiFetch('/api/rooms', {
     method: 'POST',
     body: JSON.stringify(req),
+  })
+}
+
+export function createRoomFromMission(
+  missionId: string,
+): Promise<{ ok: boolean; room: Room; created: boolean }> {
+  return apiFetch('/api/rooms/from-mission', {
+    method: 'POST',
+    body: JSON.stringify({ missionId }),
   })
 }
 

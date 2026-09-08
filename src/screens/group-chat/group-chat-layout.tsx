@@ -31,6 +31,10 @@ import {
 } from '@/lib/group-chat-api'
 import type { Room } from '@/lib/group-chat-types'
 import { clearLastRoom, resolveRoomToOpen } from './last-room'
+import {
+  RoomWorkspaceField,
+  shortPathLabel,
+} from './components/room-workspace-field'
 
 /** Shared header height so the sidebar/main divider lines align. */
 const ROOM_HEADER_CLASS =
@@ -49,7 +53,9 @@ export function GroupChatLayout() {
       : undefined
   const [rooms, setRooms] = useState<Array<Room>>([])
   const [createTitle, setCreateTitle] = useState('')
+  const [createWorkspacePath, setCreateWorkspacePath] = useState('')
   const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Room | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [renameTarget, setRenameTarget] = useState<Room | null>(null)
@@ -68,11 +74,20 @@ export function GroupChatLayout() {
   async function handleCreateRoom() {
     const title = createTitle.trim()
     if (!title) return
-    const res = await createRoom({ title })
-    setCreateTitle('')
-    setIsCreateOpen(false)
-    await loadRooms()
-    navigate({ to: '/group-chat/$roomId', params: { roomId: res.room.id } })
+    setCreateError(null)
+    try {
+      const workspacePath = createWorkspacePath.trim() || null
+      const res = await createRoom({ title, workspacePath })
+      setCreateTitle('')
+      setCreateWorkspacePath('')
+      setIsCreateOpen(false)
+      await loadRooms()
+      navigate({ to: '/group-chat/$roomId', params: { roomId: res.room.id } })
+    } catch (error) {
+      setCreateError(
+        error instanceof Error ? error.message : 'Failed to create room',
+      )
+    }
   }
 
   async function handleConfirmDelete() {
@@ -134,23 +149,47 @@ export function GroupChatLayout() {
           style={{ borderColor: 'var(--theme-border)' }}
         >
           <h2 className="font-semibold">Group Chat</h2>
-          <DialogRoot open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+          <DialogRoot
+            open={isCreateOpen}
+            onOpenChange={(open) => {
+              setIsCreateOpen(open)
+              if (!open) {
+                setCreateError(null)
+                setCreateWorkspacePath('')
+              }
+            }}
+          >
             <DialogTrigger type="button" className="inline-flex">
               <Button size="sm" variant="ghost">
                 + New
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-md">
               <DialogTitle>New Room</DialogTitle>
-              <DialogDescription>Start a multi-agent room.</DialogDescription>
-              <div className="flex gap-2 mt-4">
+              <DialogDescription>
+                Start a multi-agent room. Optionally bind a sticky workspace.
+              </DialogDescription>
+              <div className="flex flex-col gap-3 mt-4">
                 <Input
                   placeholder="Room title"
                   value={createTitle}
                   onChange={(e) => setCreateTitle(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleCreateRoom()}
                 />
-                <Button onClick={handleCreateRoom}>Create</Button>
+                <RoomWorkspaceField
+                  value={createWorkspacePath}
+                  onChange={setCreateWorkspacePath}
+                  compact
+                />
+                {createError ? (
+                  <div className="text-xs text-red-400">{createError}</div>
+                ) : null}
+                <div className="flex justify-end gap-2">
+                  <DialogClose type="button" className="inline-flex">
+                    <Button variant="ghost">Cancel</Button>
+                  </DialogClose>
+                  <Button onClick={handleCreateRoom}>Create</Button>
+                </div>
               </div>
             </DialogContent>
           </DialogRoot>
@@ -177,6 +216,12 @@ export function GroupChatLayout() {
                 <div className="font-medium truncate">{room.title}</div>
                 <div className="flex items-center gap-2 text-xs opacity-70">
                   <span>{room.state}</span>
+                  {room.missionId ? <span>mission</span> : null}
+                  {room.workspacePath ? (
+                    <span className="truncate" title={room.workspacePath}>
+                      {shortPathLabel(room.workspacePath)}
+                    </span>
+                  ) : null}
                 </div>
               </button>
               <div className="shrink-0">

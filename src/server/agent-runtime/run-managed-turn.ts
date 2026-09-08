@@ -28,6 +28,8 @@ export type RunManagedTurnInput = {
   /** Claude Code `--effort`; ignored by other runtimes. */
   effort?: string
   roomId?: string | null
+  /** Working directory for the managed process (room workspace / mission worktree). */
+  cwd?: string | null
   /** Bound into the MCP run token (1:1 chat uses session id). */
   taskId?: string | null
   toolAllowlist?: Array<string>
@@ -116,6 +118,7 @@ export async function runManagedTurn(
       task: input.task,
       ...(input.model ? { model: input.model } : {}),
       ...(input.effort ? { effort: input.effort } : {}),
+      ...(input.cwd ? { cwd: input.cwd } : {}),
       roomId: input.roomId ?? null,
       mcp: {
         endpoint: getMcpEndpoint(),
@@ -314,6 +317,7 @@ export async function startManagedChatRun(input: {
       task: input.task,
       ...(input.model ? { model: input.model } : {}),
       ...(input.effort ? { effort: input.effort } : {}),
+      ...(input.cwd ? { cwd: input.cwd } : {}),
       roomId: input.roomId ?? null,
       mcp: {
         endpoint: getMcpEndpoint(),

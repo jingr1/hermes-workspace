@@ -89,6 +89,7 @@ export function createRoom(input: {
   ownerParticipantId?: string | null
   missionId?: string | null
   taskId?: string | null
+  workspacePath?: string | null
   dbPath?: string
 }): Room {
   ensureDb(input)
@@ -100,7 +101,7 @@ export function createRoom(input: {
     state: 'active',
     taskId: input.taskId ?? null,
     missionId: input.missionId ?? null,
-    workspacePath: null,
+    workspacePath: input.workspacePath ?? null,
     ownerParticipantId: input.ownerParticipantId ?? null,
     createdAt: ts,
     updatedAt: ts,
@@ -159,6 +160,27 @@ export function listRooms(input?: { dbPath?: string }): Array<Room> {
       )
       .all()
     return rows.map((r) => rowToRoom(r))
+  } finally {
+    d.close()
+  }
+}
+
+/** Most recently updated room bound to this mission, if any. */
+export function findRoomByMissionId(
+  missionId: string,
+  input?: { dbPath?: string },
+): Room | null {
+  ensureDb(input)
+  const d = openSqliteDatabase(dbPath(input), true)
+  try {
+    const rows = d
+      .prepare(
+        `SELECT id, title, state, task_id, mission_id, workspace_path, owner_participant_id, created_at, updated_at
+         FROM rooms WHERE mission_id = ? ORDER BY updated_at DESC LIMIT 1`,
+      )
+      .all(missionId)
+    if (rows.length === 0) return null
+    return rowToRoom(rows[0])
   } finally {
     d.close()
   }

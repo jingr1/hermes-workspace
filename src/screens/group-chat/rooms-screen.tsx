@@ -29,10 +29,22 @@ import {
   listMessages,
   listParticipants,
   listPendingTurns,
+  updateRoom,
 } from '@/lib/group-chat-api'
 import { useGroupChatEvents } from '@/lib/use-group-chat-events'
 import { GroupChatRoomsContext } from './group-chat-layout'
 import { writeLastRoom } from './last-room'
+import {
+  RoomWorkspaceField,
+  shortPathLabel,
+} from './components/room-workspace-field'
+import {
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogRoot,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 function formatTime(ts: number): string {
   return new Date(ts).toLocaleTimeString([], {
@@ -60,6 +72,10 @@ export function RoomsScreen() {
   >([])
   const [loading, setLoading] = useState(false)
   const [statusText, setStatusText] = useState<string | null>(null)
+  const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false)
+  const [workspaceDraft, setWorkspaceDraft] = useState('')
+  const [workspaceSaving, setWorkspaceSaving] = useState(false)
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const { events } = useGroupChatEvents(roomId)
 
@@ -215,8 +231,35 @@ export function RoomsScreen() {
     setPendingTurns((prev) => prev.filter((t) => t.id !== turnId))
   }
 
+  async function handleSaveWorkspace() {
+    if (!roomId || !activeRoom || activeRoom.missionId) return
+    setWorkspaceSaving(true)
+    setWorkspaceError(null)
+    try {
+      const res = await updateRoom(roomId, {
+        workspacePath: workspaceDraft.trim() || null,
+      })
+      setActiveRoom(res.room)
+      setWorkspaceDialogOpen(false)
+    } catch (error) {
+      setWorkspaceError(
+        error instanceof Error ? error.message : 'Failed to update workspace',
+      )
+    } finally {
+      setWorkspaceSaving(false)
+    }
+  }
+
   const displayTitle =
     sidebarRooms.find((r) => r.id === roomId)?.title ?? activeRoom?.title
+  const displayWorkspace =
+    activeRoom?.workspacePath ??
+    sidebarRooms.find((r) => r.id === roomId)?.workspacePath ??
+    null
+  const displayMissionId =
+    activeRoom?.missionId ??
+    sidebarRooms.find((r) => r.id === roomId)?.missionId ??
+    null
 
   if (!roomId) {
     return (
@@ -237,8 +280,45 @@ export function RoomsScreen() {
             <div className="flex items-center gap-3 min-w-0">
               <div className="min-w-0">
                 <h1 className="font-semibold truncate">{displayTitle}</h1>
-                <div className="text-xs opacity-70 flex items-center gap-2">
-                  {participants.length} members
+                <div className="text-xs opacity-70 flex items-center gap-2 min-w-0">
+                  <span>{participants.length} members</span>
+                  {displayMissionId ? (
+                    <span
+                      className="shrink-0 rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide"
+                      style={{ background: 'rgba(59,130,246,0.15)' }}
+                      title={displayMissionId}
+                    >
+                      Mission
+                    </span>
+                  ) : null}
+                  {displayWorkspace ? (
+                    <button
+                      type="button"
+                      className="truncate text-left hover:underline disabled:no-underline disabled:cursor-default"
+                      title={displayWorkspace}
+                      disabled={Boolean(displayMissionId)}
+                      onClick={() => {
+                        if (displayMissionId) return
+                        setWorkspaceDraft(displayWorkspace)
+                        setWorkspaceError(null)
+                        setWorkspaceDialogOpen(true)
+                      }}
+                    >
+                      {shortPathLabel(displayWorkspace)}
+                    </button>
+                  ) : !displayMissionId ? (
+                    <button
+                      type="button"
+                      className="hover:underline"
+                      onClick={() => {
+                        setWorkspaceDraft('')
+                        setWorkspaceError(null)
+                        setWorkspaceDialogOpen(true)
+                      }}
+                    >
+                      Set workspace
+                    </button>
+                  ) : null}
                   {statusText && (
                     <span className="text-amber-400">{statusText}</span>
                   )}
@@ -333,6 +413,39 @@ export function RoomsScreen() {
           {loading ? 'Loading...' : 'Room not found.'}
         </div>
       )}
+
+      <DialogRoot
+        open={workspaceDialogOpen}
+        onOpenChange={setWorkspaceDialogOpen}
+      >
+        <DialogContent className="max-w-md">
+          <DialogTitle>Room workspace</DialogTitle>
+          <DialogDescription>
+            Sticky path for this room. Managed agents spawn here; Hermes is
+            reminded via the turn prompt.
+          </DialogDescription>
+          <div className="mt-4 space-y-3">
+            <RoomWorkspaceField
+              value={workspaceDraft}
+              onChange={setWorkspaceDraft}
+              compact
+            />
+            {workspaceError ? (
+              <div className="text-xs text-red-400">{workspaceError}</div>
+            ) : null}
+            <div className="flex justify-end gap-2">
+              <DialogClose type="button" className="inline-flex">
+                <Button variant="ghost" disabled={workspaceSaving}>
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button onClick={handleSaveWorkspace} disabled={workspaceSaving}>
+                {workspaceSaving ? 'Saving…' : 'Save'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </DialogRoot>
     </div>
   )
 }

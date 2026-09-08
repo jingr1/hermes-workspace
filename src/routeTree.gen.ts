@@ -155,6 +155,7 @@ import { Route as ApiSessionsSendRouteImport } from './routes/api/sessions/send'
 import { Route as ApiSessionsSearchRouteImport } from './routes/api/sessions/search'
 import { Route as ApiRunsDetachRouteImport } from './routes/api/runs/detach'
 import { Route as ApiRunsActiveRouteImport } from './routes/api/runs/active'
+import { Route as ApiRoomsFromMissionRouteImport } from './routes/api/rooms/from-mission'
 import { Route as ApiRoomsRoomIdRouteImport } from './routes/api/rooms/$roomId'
 import { Route as ApiProfilesUpdateAllModelProviderRouteImport } from './routes/api/profiles/update-all-model-provider'
 import { Route as ApiProfilesUpdateRouteImport } from './routes/api/profiles/update'
@@ -959,6 +960,11 @@ const ApiRunsActiveRoute = ApiRunsActiveRouteImport.update({
   path: '/api/runs/active',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiRoomsFromMissionRoute = ApiRoomsFromMissionRouteImport.update({
+  id: '/from-mission',
+  path: '/from-mission',
+  getParentRoute: () => ApiRoomsRoute,
+} as any)
 const ApiRoomsRoomIdRoute = ApiRoomsRoomIdRouteImport.update({
   id: '/$roomId',
   path: '/$roomId',
@@ -1497,6 +1503,7 @@ export interface FileRoutesByFullPath {
   '/api/profiles/update': typeof ApiProfilesUpdateRoute
   '/api/profiles/update-all-model-provider': typeof ApiProfilesUpdateAllModelProviderRoute
   '/api/rooms/$roomId': typeof ApiRoomsRoomIdRouteWithChildren
+  '/api/rooms/from-mission': typeof ApiRoomsFromMissionRoute
   '/api/runs/active': typeof ApiRunsActiveRoute
   '/api/runs/detach': typeof ApiRunsDetachRoute
   '/api/sessions/search': typeof ApiSessionsSearchRoute
@@ -1712,6 +1719,7 @@ export interface FileRoutesByTo {
   '/api/profiles/update': typeof ApiProfilesUpdateRoute
   '/api/profiles/update-all-model-provider': typeof ApiProfilesUpdateAllModelProviderRoute
   '/api/rooms/$roomId': typeof ApiRoomsRoomIdRouteWithChildren
+  '/api/rooms/from-mission': typeof ApiRoomsFromMissionRoute
   '/api/runs/active': typeof ApiRunsActiveRoute
   '/api/runs/detach': typeof ApiRunsDetachRoute
   '/api/sessions/search': typeof ApiSessionsSearchRoute
@@ -1929,6 +1937,7 @@ export interface FileRoutesById {
   '/api/profiles/update': typeof ApiProfilesUpdateRoute
   '/api/profiles/update-all-model-provider': typeof ApiProfilesUpdateAllModelProviderRoute
   '/api/rooms/$roomId': typeof ApiRoomsRoomIdRouteWithChildren
+  '/api/rooms/from-mission': typeof ApiRoomsFromMissionRoute
   '/api/runs/active': typeof ApiRunsActiveRoute
   '/api/runs/detach': typeof ApiRunsDetachRoute
   '/api/sessions/search': typeof ApiSessionsSearchRoute
@@ -2148,6 +2157,7 @@ export interface FileRouteTypes {
     | '/api/profiles/update'
     | '/api/profiles/update-all-model-provider'
     | '/api/rooms/$roomId'
+    | '/api/rooms/from-mission'
     | '/api/runs/active'
     | '/api/runs/detach'
     | '/api/sessions/search'
@@ -2363,6 +2373,7 @@ export interface FileRouteTypes {
     | '/api/profiles/update'
     | '/api/profiles/update-all-model-provider'
     | '/api/rooms/$roomId'
+    | '/api/rooms/from-mission'
     | '/api/runs/active'
     | '/api/runs/detach'
     | '/api/sessions/search'
@@ -2579,6 +2590,7 @@ export interface FileRouteTypes {
     | '/api/profiles/update'
     | '/api/profiles/update-all-model-provider'
     | '/api/rooms/$roomId'
+    | '/api/rooms/from-mission'
     | '/api/runs/active'
     | '/api/runs/detach'
     | '/api/sessions/search'
@@ -3819,6 +3831,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiRunsActiveRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/rooms/from-mission': {
+      id: '/api/rooms/from-mission'
+      path: '/from-mission'
+      fullPath: '/api/rooms/from-mission'
+      preLoaderRoute: typeof ApiRoomsFromMissionRouteImport
+      parentRoute: typeof ApiRoomsRoute
+    }
     '/api/rooms/$roomId': {
       id: '/api/rooms/$roomId'
       path: '/$roomId'
@@ -4522,10 +4541,12 @@ const ApiRoomsRoomIdRouteWithChildren = ApiRoomsRoomIdRoute._addFileChildren(
 
 interface ApiRoomsRouteChildren {
   ApiRoomsRoomIdRoute: typeof ApiRoomsRoomIdRouteWithChildren
+  ApiRoomsFromMissionRoute: typeof ApiRoomsFromMissionRoute
 }
 
 const ApiRoomsRouteChildren: ApiRoomsRouteChildren = {
   ApiRoomsRoomIdRoute: ApiRoomsRoomIdRouteWithChildren,
+  ApiRoomsFromMissionRoute: ApiRoomsFromMissionRoute,
 }
 
 const ApiRoomsRouteWithChildren = ApiRoomsRoute._addFileChildren(

@@ -12,6 +12,8 @@ export type BuildPromptInput = {
   members: Array<GroupMember>
   viewer: GroupMember
   deltaLines: Array<string>
+  /** Sticky room working directory (ad-hoc path or mission worktree). */
+  workspacePath?: string | null
 }
 
 export function buildGroupChatTurnPrompt(input: BuildPromptInput): string {
@@ -24,6 +26,10 @@ export function buildGroupChatTurnPrompt(input: BuildPromptInput): string {
     })
     .join(', ')
 
+  const workspaceRule = input.workspacePath
+    ? `- Room workspace: ${input.workspacePath}. Prefer reading and writing files under this directory.`
+    : null
+
   return [
     `[Group chat: "${input.groupName}"] You are @${input.viewer.mentionName || input.viewer.displayName}, one participant in a group chat with ${peerNames || 'no one else yet'} and the user.`,
     '',
@@ -35,6 +41,7 @@ export function buildGroupChatTurnPrompt(input: BuildPromptInput): string {
     '- If you have nothing new to add, reply with exactly "(pass)". Passing is good — it lets the conversation settle.',
     '- Mention a teammate as @name to pull them in; mention @user only for a judgment call or a result the user needs. Do not repeat points already made.',
     '- Never reveal content from your private 1:1 chats. Your reply text goes to the room verbatim — no preamble, no meta-commentary.',
+    ...(workspaceRule ? [workspaceRule] : []),
   ].join('\n')
 }
 
@@ -59,6 +66,7 @@ export function buildTurnContext(
   viewer: GroupMember,
   messages: Array<RoomMessage>,
   summary?: string | null,
+  workspacePath?: string | null,
 ): string {
   const deltaLines = messages.map((m) => formatGroupChatLine(m, viewer.name))
   const prompt = buildGroupChatTurnPrompt({
@@ -66,6 +74,7 @@ export function buildTurnContext(
     members,
     viewer,
     deltaLines,
+    workspacePath,
   })
   if (summary) {
     return `[Earlier conversation summary]\n${summary}\n\n${prompt}`
