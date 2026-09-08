@@ -2,26 +2,24 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { resetCollabDbForTests } from '../room-store'
 
-vi.mock('../../agent-runtime/router', () => ({
-  getAgentRuntimeRouter: () => ({
-    registry: {
-      agents: [
-        {
-          id: 'cc-impl',
-          runtime: 'claude-code',
-          profile: undefined,
-          displayName: 'Claude Code',
-          mentionName: 'claude',
-        },
-        {
-          id: 'developer',
-          runtime: 'hermes',
-          profile: 'developer',
-          displayName: 'developer',
-          mentionName: 'developer',
-        },
-      ],
-    },
+vi.mock('../../agent-runtime/agents-config', () => ({
+  loadAgentsRegistry: () => ({
+    agents: [
+      {
+        id: 'cc-impl',
+        runtime: 'claude-code',
+        profile: undefined,
+        displayName: 'Claude Code',
+        mentionName: 'claude',
+      },
+      {
+        id: 'developer',
+        runtime: 'hermes',
+        profile: 'developer',
+        displayName: 'developer',
+        mentionName: 'developer',
+      },
+    ],
   }),
 }))
 

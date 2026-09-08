@@ -36,6 +36,12 @@ export const GROUP_DUPLICATE_APPEND_WINDOW_MS = 10 * 60_000
 /** Threshold of messages before a rolling LLM summary is generated. */
 export const GROUP_SUMMARY_THRESHOLD = 8
 
+/**
+ * Max messages included in a single summary LLM call. Larger backlogs are
+ * summarized oldest-first across ticks so one prompt cannot blow the gateway.
+ */
+export const GROUP_SUMMARY_WINDOW_MAX = 40
+
 /** Max age of a pending human turn before it expires (30 minutes). */
 export const PENDING_TURN_EXPIRY_MS = 30 * 60_000
 

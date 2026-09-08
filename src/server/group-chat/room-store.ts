@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
 import { ensureCollabDb, getCollabDbPath, createCollabId } from '../collab-db'
 import { openSqliteDatabase } from '../sqlite-helper'
-import { getAgentRuntimeRouter } from '../agent-runtime/router'
+import { loadAgentsRegistry } from '../agent-runtime/agents-config'
 import type {
   GroupMember,
   MentionTarget,
@@ -479,9 +479,9 @@ export function healParticipantFromRegistry(
   input?: { dbPath?: string },
 ): RoomParticipant {
   if (p.kind !== 'agent') return p
-  const decl = getAgentRuntimeRouter().registry.agents.find(
-    (a) => a.id === p.participantId,
-  )
+  // Read agents.yaml directly — avoid AgentRuntimeRouter (heavy adapters) and
+  // Vite-SSR createRequire pitfalls that previously broke the group runner.
+  const decl = loadAgentsRegistry().agents.find((a) => a.id === p.participantId)
   if (!decl) return p
 
   const runtime = (
