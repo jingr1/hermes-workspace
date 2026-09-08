@@ -35,7 +35,6 @@ import type {
   SlashCommandMenuHandle,
 } from '@/components/slash-command-menu'
 import {
-  DEFAULT_SLASH_COMMANDS,
   SlashCommandMenu,
   mergeSlashCommands,
 } from '@/components/slash-command-menu'
@@ -90,8 +89,11 @@ import { useProfiles } from '@/screens/chat/hooks/use-profiles'
 import {
   getComposerPrimaryAction,
   composerPrimaryActionLabel,
+  resolveComposerBusyUi,
   type BusyMessageMode,
 } from '@/screens/chat/lib/composer-primary-action'
+import type { SlashCommandRuntime } from '@/screens/chat/slash-commands/types'
+import { HERMES_SLASH_COMMANDS } from '@/screens/chat/slash-commands/hermes'
 
 type ChatComposerAttachment = {
   id: string
@@ -176,6 +178,12 @@ type ChatComposerProps = {
   /** Number of follow-ups waiting to send after the current turn */
   queuedCount?: number
   onClearQueue?: () => void
+  /**
+   * Runtime-matched slash catalog + executor.
+   * When omitted, Hermes defaults (HERMES_SLASH_COMMANDS + gateway + skills)
+   * are used and execute is left to the parent onSubmit path.
+   */
+  slashRuntime?: SlashCommandRuntime
 }
 
 type ChatComposerHelpers = {
@@ -956,6 +964,7 @@ function ChatComposerComponent({
   gatewayQueriesEnabled = true,
   queuedCount = 0,
   onClearQueue,
+  slashRuntime,
 }: ChatComposerProps) {
   const resolvedModelsEndpoint = modelsEndpoint?.trim() || '/api/models'
   const useCustomModelsEndpoint = Boolean(modelsEndpoint?.trim())
@@ -1805,8 +1814,47 @@ function ChatComposerComponent({
       setAttachments: setComposerAttachments,
     }
     let clearComposerDraft = true
+
+    const finishSubmit = () => {
+      setTimeout(() => {
+        submittingRef.current = false
+      }, 300)
+      if (clearComposerDraft) clearDraft()
+      shouldRefocusAfterSendRef.current = true
+      setFocusAfterSubmitTick((prev) => prev + 1)
+      focusPrompt()
+    }
+
     try {
+      // Runtime slash executor — return true = local-only, skip transport.
+      if (
+        slashRuntime &&
+        attachmentPayload.length === 0 &&
+        body.startsWith('/')
+      ) {
+        const result = slashRuntime.execute(body)
+        if (result === true) {
+          finishSubmit()
+          return
+        }
+        if (result && typeof (result as Promise<boolean>).then === 'function') {
+          void (result as Promise<boolean>).then((handled) => {
+            if (!handled) {
+              const effectiveFastMode =
+                fastMode && thinkingLevel === 'off' ? true : false
+              onSubmit(body, attachmentPayload, effectiveFastMode, helpers)
+            }
+          })
+          finishSubmit()
+          return
+        }
+        // false → fall through to normal chat submit
+      }
+
       const busy = isLoading || isCompacting
+      const hasBusyFollowUpActions = Boolean(
+        onQueue || onSteer || onInterruptSend,
+      )
       if (busy) {
         const action = getComposerPrimaryAction({
           disabled: false,
@@ -1815,8 +1863,13 @@ function ChatComposerComponent({
           isCompacting,
           busyMessageMode,
           canSteer,
+          hasBusyFollowUpActions,
         })
-        if (action === 'steer' && onSteer) {
+        if (action === 'stop') {
+          // Managed runtimes (and empty Hermes stop): abort, keep draft.
+          clearComposerDraft = false
+          onAbort?.()
+        } else if (action === 'steer' && onSteer) {
           // Keep draft until steer is accepted (handler resets on success).
           clearComposerDraft = false
           void onSteer(body, attachmentPayload, helpers)
@@ -1860,9 +1913,11 @@ function ChatComposerComponent({
     onQueue,
     onSteer,
     onSubmit,
+    onAbort,
     reset,
     setComposerAttachments,
     setComposerValue,
+    slashRuntime,
     thinkingLevel,
     value,
   ])
@@ -1894,27 +1949,20 @@ function ChatComposerComponent({
   }, [])
 
   const hasDraft = value.trim().length > 0 || attachments.length > 0
-  const promptPlaceholder =
-    (isLoading || isCompacting) && !hasDraft
-      ? isMobileViewport
-        ? busyMessageMode === 'steer'
-          ? 'Enter = steer · empty = stop'
-          : busyMessageMode === 'interrupt'
-            ? 'Enter = interrupt · empty = stop'
-            : 'Enter = queue · empty = stop'
-        : busyMessageMode === 'steer'
-          ? 'Enter steers the live reply · empty Stop · /queue /interrupt'
-          : busyMessageMode === 'interrupt'
-            ? 'Enter interrupts and sends · empty Stop · /queue /steer'
-            : 'Enter queues a follow-up · empty Stop · /interrupt /steer'
-      : isMobileViewport
-        ? 'Message...'
-        : 'Ask anything...'
   const [serverCommands, setServerCommands] = useState<
     Array<SlashCommandDefinition>
   >([])
 
+  const slashCatalog = slashRuntime?.catalog ?? HERMES_SLASH_COMMANDS
+  const loadGatewayCommands =
+    slashRuntime?.sources?.gatewayCommands ?? !slashRuntime
+  const loadSkills = slashRuntime?.sources?.skills ?? !slashRuntime
+
   useEffect(() => {
+    if (!loadGatewayCommands) {
+      setServerCommands([])
+      return
+    }
     fetch('/api/commands')
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -1928,20 +1976,26 @@ function ChatComposerComponent({
         },
       )
       .catch(() => {
-        // fall back to DEFAULT_SLASH_COMMANDS only
+        // fall back to catalog only
       })
-  }, [])
+  }, [loadGatewayCommands])
 
   const slashCommands = useMemo(() => {
-    const merged = mergeSlashCommands(
-      mergeSlashCommands(DEFAULT_SLASH_COMMANDS, serverCommands),
-      (installedSkillsQuery.data ?? [])
-        .filter((skill) => skill.installed && skill.enabled)
-        .map((skill) => ({
-          command: `/${skill.id}`,
-          description: skill.description || `Run ${skill.name}`,
-        })),
-    )
+    let merged = slashCatalog
+    if (loadGatewayCommands) {
+      merged = mergeSlashCommands(merged, serverCommands)
+    }
+    if (loadSkills) {
+      merged = mergeSlashCommands(
+        merged,
+        (installedSkillsQuery.data ?? [])
+          .filter((skill) => skill.installed && skill.enabled)
+          .map((skill) => ({
+            command: `/${skill.id}`,
+            description: skill.description || `Run ${skill.name}`,
+          })),
+      )
+    }
     return merged.filter((cmd) => {
       const name = cmd.command.split(/\s+/)[0] ?? cmd.command
       if (
@@ -1959,6 +2013,9 @@ function ChatComposerComponent({
       return true
     })
   }, [
+    slashCatalog,
+    loadGatewayCommands,
+    loadSkills,
     serverCommands,
     installedSkillsQuery.data,
     sessionTruncateCap.available,
@@ -2261,19 +2318,27 @@ function ChatComposerComponent({
     attachments.length > 0 ||
     attachmentProcessingCount > 0
 
-  const primaryAction = getComposerPrimaryAction({
+  const {
+    hardDisabled,
+    primaryAction,
+    allowMicInsteadOfPrimary,
+    placeholder: promptPlaceholder,
+  } = resolveComposerBusyUi({
     disabled,
-    isBusy: isLoading,
-    hasContent: hasComposerContent,
+    isLoading,
     isCompacting,
+    hasContent: hasComposerContent,
+    hasDraft,
     busyMessageMode,
     canSteer,
+    hasBusyFollowUpActions: Boolean(onQueue || onSteer || onInterruptSend),
+    isMobile: isMobileViewport,
   })
 
-  // Only show mic when the primary button would otherwise be disabled (empty
-  // draft, idle). Never replace stop/send/queue with the mic button.
+  // Only show mic when shared busy rules allow it and capture is available.
   const showMicButton =
-    primaryAction === 'disabled' && (micCaptureAvailable || micBrowserSupported)
+    allowMicInsteadOfPrimary &&
+    (micCaptureAvailable || micBrowserSupported)
 
   const micTooltip = micBlockedByInsecureContext
     ? 'Voice input needs HTTPS or localhost on this device'
@@ -2595,7 +2660,7 @@ function ChatComposerComponent({
         onValueChange={handleValueChange}
         onSubmit={handlePromptSubmit}
         isLoading={isLoading}
-        disabled={disabled}
+        disabled={hardDisabled}
         maxHeight={isMobileViewport ? 120 : 240}
         className={cn(
           'relative z-50 transition-all duration-300',

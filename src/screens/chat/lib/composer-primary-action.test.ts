@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   composerPrimaryActionLabel,
   getComposerPrimaryAction,
+  resolveComposerBusyUi,
 } from './composer-primary-action'
 
 describe('getComposerPrimaryAction', () => {
@@ -90,6 +91,27 @@ describe('getComposerPrimaryAction', () => {
       }),
     ).toBe('queue')
   })
+  it('returns stop when busy with draft but no follow-up actions', () => {
+    expect(
+      getComposerPrimaryAction({
+        disabled: false,
+        isBusy: true,
+        hasContent: true,
+        hasBusyFollowUpActions: false,
+      }),
+    ).toBe('stop')
+  })
+
+  it('returns queue when busy with draft and follow-up actions enabled', () => {
+    expect(
+      getComposerPrimaryAction({
+        disabled: false,
+        isBusy: true,
+        hasContent: true,
+        hasBusyFollowUpActions: true,
+      }),
+    ).toBe('queue')
+  })
 })
 
 describe('composerPrimaryActionLabel', () => {
@@ -99,5 +121,67 @@ describe('composerPrimaryActionLabel', () => {
     expect(composerPrimaryActionLabel('interrupt')).toBe('Interrupt and send')
     expect(composerPrimaryActionLabel('steer')).toBe('Steer current response')
     expect(composerPrimaryActionLabel('send')).toBe('Send message')
+  })
+})
+
+describe('resolveComposerBusyUi', () => {
+  it('keeps Stop usable when caller passes disabled during streaming', () => {
+    const ui = resolveComposerBusyUi({
+      disabled: true,
+      isLoading: true,
+      hasContent: false,
+      hasDraft: false,
+    })
+    expect(ui.hardDisabled).toBe(false)
+    expect(ui.primaryAction).toBe('stop')
+    expect(ui.allowMicInsteadOfPrimary).toBe(false)
+    expect(ui.placeholder).toContain('Stop')
+  })
+
+  it('allows mic only when idle and empty', () => {
+    const ui = resolveComposerBusyUi({
+      disabled: false,
+      isLoading: false,
+      hasContent: false,
+      hasDraft: false,
+    })
+    expect(ui.primaryAction).toBe('disabled')
+    expect(ui.allowMicInsteadOfPrimary).toBe(true)
+    expect(ui.placeholder).toBe('Ask anything...')
+  })
+
+  it('uses Hermes busy copy when follow-up actions are wired', () => {
+    const ui = resolveComposerBusyUi({
+      disabled: false,
+      isLoading: true,
+      hasContent: false,
+      hasDraft: false,
+      hasBusyFollowUpActions: true,
+      busyMessageMode: 'queue',
+    })
+    expect(ui.placeholder).toContain('/interrupt')
+  })
+
+  it('uses simple Stop copy for managed runtimes', () => {
+    const ui = resolveComposerBusyUi({
+      disabled: false,
+      isLoading: true,
+      hasContent: false,
+      hasDraft: false,
+      hasBusyFollowUpActions: false,
+    })
+    expect(ui.placeholder).toBe('Generating… click Stop to abort')
+  })
+
+  it('keeps Stop (not Queue) when managed user types while streaming', () => {
+    const ui = resolveComposerBusyUi({
+      disabled: false,
+      isLoading: true,
+      hasContent: true,
+      hasDraft: true,
+      hasBusyFollowUpActions: false,
+    })
+    expect(ui.primaryAction).toBe('stop')
+    expect(ui.hardDisabled).toBe(false)
   })
 })

@@ -194,46 +194,35 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
 
       if (agent.runtime === 'hermes') {
         const targetProfile = agent.runtimeConfig.profile ?? agent.agentId
-        if (targetProfile === activeProfileName) {
-          // Already on the right profile; just make sure we land on a chat session.
-          navigate({ to: '/chat/$sessionKey', params: { sessionKey: 'new' } })
-          return
-        }
-
         void (async () => {
           await requestStreamHandoffIfActive()
 
-          writeLastSession(activeFriendlyId, activeProfileName)
-          setActiveProfileOptimistic(queryClient, targetProfile)
-          preloadWorkspaceFolders(targetProfile)
-          activateProfile(targetProfile)
+          if (targetProfile !== activeProfileName) {
+            writeLastSession(activeFriendlyId, activeProfileName)
+            setActiveProfileOptimistic(queryClient, targetProfile)
+            preloadWorkspaceFolders(targetProfile)
+            activateProfile(targetProfile)
 
-          let profileSessions = queryClient.getQueryData<Array<SessionMeta>>(
-            chatQueryKeys.sessionsForProfile(targetProfile),
-          )
-          let sessionsLoaded = Boolean(profileSessions)
-          if (!profileSessions) {
+            // Warm the sessions cache so HermesChatShell / ChatScreen do not
+            // cold-fetch after the agent workspace remounts.
             try {
-              profileSessions = await queryClient.fetchQuery({
+              await queryClient.fetchQuery({
                 queryKey: chatQueryKeys.sessionsForProfile(targetProfile),
                 queryFn: () => fetchSessions(targetProfile),
                 staleTime: 60_000,
               })
-              sessionsLoaded = true
             } catch {
-              profileSessions = []
-              sessionsLoaded = true
+              // Ignore — ChatScreen will retry via useChatSessions.
             }
           }
-          const targetSession = resolveSessionForProfile(
-            profileSessions,
-            targetProfile,
-            { sessionsLoaded },
-          )
-          prefetchSessionHistory(queryClient, targetProfile, targetSession)
+
+          // Stay on the unified agent workspace (same shell as Claude Code).
+          // Do NOT bounce to /chat/$sessionKey — that leaves AgentWorkspace and
+          // races URL seeding so the first switch can render an empty agent.
           navigate({
-            to: '/chat/$sessionKey',
-            params: { sessionKey: targetSession },
+            to: '/chat/agent/$agentId',
+            params: { agentId: agent.agentId },
+            search: {},
           })
         })()
         return
@@ -243,6 +232,7 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
       navigate({
         to: '/chat/agent/$agentId',
         params: { agentId: agent.agentId },
+        search: {},
       })
     },
     [

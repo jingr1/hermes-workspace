@@ -56,22 +56,22 @@ function ChatAgentRoute() {
   const setActiveSessionId = useAgentStore((s) => s.setActiveSessionId)
   const [seeded, setSeeded] = useState(false)
 
-  // Seed the agent store if it is empty, then set the active agent/session.
-  // Wait for seeding to finish before rendering AgentWorkspace so that
-  // useAgentWorkspace does not race with this route and pick a different
-  // default agent (e.g. orchestrator) from the URL target agent.
+  // Seed agents once, then keep activeAgentId in sync with the URL agent param.
+  // Do NOT re-run this when only ?session= changes — clearing the session on
+  // agent switch used to re-apply the *old* URL agentId and wipe the click.
   useEffect(() => {
+    let cancelled = false
+
     const applyAgent = () => {
+      if (cancelled) return
       setActiveAgentId(agentId || null)
-      if (search.session) {
-        setActiveSessionId(search.session)
-      }
       setSeeded(true)
     }
 
     if (useAgentStore.getState().agents.length === 0) {
       fetchAgents()
         .then((data) => {
+          if (cancelled) return
           useAgentStore.getState().setAgents(data.agents)
           applyAgent()
         })
@@ -79,7 +79,19 @@ function ChatAgentRoute() {
     } else {
       applyAgent()
     }
-  }, [agentId, search.session, setActiveAgentId, setActiveSessionId])
+
+    return () => {
+      cancelled = true
+    }
+  }, [agentId, setActiveAgentId])
+
+  // Apply session from the URL when present. Agent switches clear the store
+  // session (and then this route clears ?session= via the subscriber below).
+  useEffect(() => {
+    if (search.session) {
+      setActiveSessionId(search.session)
+    }
+  }, [search.session, setActiveSessionId])
 
   // Keep the URL in sync with the active session selection.
   useEffect(() => {

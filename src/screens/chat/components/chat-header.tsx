@@ -571,31 +571,37 @@ function ChatHeaderComponent({
             </TooltipRoot>
           </TooltipProvider>
         )}
-        <TooltipProvider>
-          <TooltipRoot>
-            <TooltipTrigger
-              onClick={onToggleFileExplorer}
-              render={
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  className={cn(
-                    'hover:bg-primary-100 dark:hover:bg-primary-800',
-                    !fileExplorerCollapsed && 'text-accent-500',
-                  )}
-                  aria-label={
-                    fileExplorerCollapsed ? 'Show workspace panel' : 'Hide workspace panel'
-                  }
-                >
-                  <HugeiconsIcon icon={Folder01Icon} size={18} />
-                </Button>
-              }
-            />
-            <TooltipContent side="bottom">
-              {fileExplorerCollapsed ? 'Show workspace panel' : 'Hide workspace panel'}
-            </TooltipContent>
-          </TooltipRoot>
-        </TooltipProvider>
+        {onToggleFileExplorer ? (
+          <TooltipProvider>
+            <TooltipRoot>
+              <TooltipTrigger
+                onClick={onToggleFileExplorer}
+                render={
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    className={cn(
+                      'hover:bg-primary-100 dark:hover:bg-primary-800',
+                      !fileExplorerCollapsed && 'text-accent-500',
+                    )}
+                    aria-label={
+                      fileExplorerCollapsed
+                        ? 'Show workspace panel'
+                        : 'Hide workspace panel'
+                    }
+                  >
+                    <HugeiconsIcon icon={Folder01Icon} size={18} />
+                  </Button>
+                }
+              />
+              <TooltipContent side="bottom">
+                {fileExplorerCollapsed
+                  ? 'Show workspace panel'
+                  : 'Hide workspace panel'}
+              </TooltipContent>
+            </TooltipRoot>
+          </TooltipProvider>
+        ) : null}
       </div>
     </div>
   )
