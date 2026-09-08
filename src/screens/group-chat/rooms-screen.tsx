@@ -50,7 +50,13 @@ export function RoomsScreen() {
   const [pendingTurns, setPendingTurns] = useState<Array<PendingTurn>>([])
   const [input, setInput] = useState('')
   const [availableAgents, setAvailableAgents] = useState<
-    Array<{ id: string; displayName: string; profile?: string | null }>
+    Array<{
+      id: string
+      displayName: string
+      mentionName?: string
+      runtime?: string
+      profile?: string | null
+    }>
   >([])
   const [loading, setLoading] = useState(false)
   const [statusText, setStatusText] = useState<string | null>(null)
@@ -148,12 +154,26 @@ export function RoomsScreen() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  async function handleAddAgent(agentId: string, profile?: string | null) {
+  async function handleAddAgent(agent: {
+    id: string
+    displayName: string
+    mentionName?: string
+    runtime?: string
+    profile?: string | null
+  }) {
     if (!roomId) return
+    const runtime = agent.runtime || 'hermes'
+    const isManaged =
+      runtime === 'claude-code' ||
+      runtime === 'codex' ||
+      runtime === 'deepseek-harness'
     await apiAddParticipant(roomId, {
-      participantId: agentId,
+      participantId: agent.id,
       kind: 'agent',
-      profile,
+      displayName: agent.displayName,
+      mentionName: agent.mentionName,
+      runtime,
+      profile: isManaged ? null : (agent.profile ?? null),
     })
     const res = await listParticipants(roomId)
     setParticipants(res.participants)
@@ -240,9 +260,14 @@ export function RoomsScreen() {
                   {availableAgents.map((agent) => (
                     <MenuItem
                       key={agent.id}
-                      onClick={() => handleAddAgent(agent.id, agent.profile)}
+                      onClick={() => handleAddAgent(agent)}
                     >
                       {agent.displayName}
+                      {agent.runtime && agent.runtime !== 'hermes' ? (
+                        <span className="ml-2 opacity-50 text-xs">
+                          {agent.runtime}
+                        </span>
+                      ) : null}
                     </MenuItem>
                   ))}
                 </MenuContent>

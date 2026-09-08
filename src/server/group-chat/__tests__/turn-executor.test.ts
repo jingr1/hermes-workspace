@@ -6,6 +6,7 @@ const getMessages = vi.fn()
 const getOrCreateSession = vi.fn()
 const forgetSession = vi.fn()
 const ensureProfileGateway = vi.fn(async () => undefined)
+const runManagedTurn = vi.fn()
 
 vi.mock('../../claude-api-profile', () => ({
   getClaudeApiClient: () => ({
@@ -30,6 +31,10 @@ vi.mock('../agent-session-manager', () => ({
   forgetSession,
 }))
 
+vi.mock('../../agent-runtime/run-managed-turn', () => ({
+  runManagedTurn,
+}))
+
 vi.mock('../constants', async () => {
   const actual =
     await vi.importActual<typeof import('../constants')>('../constants')
@@ -49,6 +54,7 @@ describe('executeMemberTurn timeout / stranded', () => {
     getOrCreateSession.mockReset()
     forgetSession.mockReset()
     ensureProfileGateway.mockClear()
+    runManagedTurn.mockReset()
   })
 
   it('returns timeout without treating early ack as reply when soft deadline elapses', async () => {
@@ -165,5 +171,76 @@ describe('executeMemberTurn timeout / stranded', () => {
     })
 
     expect(result).toEqual({ kind: 'reply', text: 'final conclusion' })
+  })
+
+  it('routes claude-code members through runManagedTurn without Hermes session', async () => {
+    runManagedTurn.mockResolvedValue({
+      kind: 'completed',
+      runId: 'run_cc',
+      text: 'claude reply',
+      exitCode: 0,
+      events: [],
+    })
+
+    const { executeMemberTurn } = await import('../turn-executor')
+    const result = await executeMemberTurn({
+      roomId: 'room1',
+      roomTitle: 'test',
+      member: {
+        id: 'row',
+        kind: 'agent',
+        participantId: 'cc-impl',
+        displayName: 'Claude Code',
+        name: 'Claude Code',
+        mentionName: 'claude',
+        runtime: 'claude-code',
+        isBot: true,
+        profile: null,
+      },
+      prompt: 'group prompt',
+    })
+
+    expect(result).toEqual({
+      kind: 'reply',
+      text: 'claude reply',
+      runId: 'run_cc',
+    })
+    expect(runManagedTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: 'cc-impl',
+        task: 'group prompt',
+        roomId: 'room1',
+      }),
+    )
+    expect(getOrCreateSession).not.toHaveBeenCalled()
+    expect(streamChat).not.toHaveBeenCalled()
+  })
+
+  it('maps managed (pass) replies', async () => {
+    runManagedTurn.mockResolvedValue({
+      kind: 'completed',
+      runId: 'run_cc',
+      text: '(pass)',
+      exitCode: 0,
+      events: [],
+    })
+    const { executeMemberTurn } = await import('../turn-executor')
+    const result = await executeMemberTurn({
+      roomId: 'room1',
+      roomTitle: 'test',
+      member: {
+        id: 'row',
+        kind: 'agent',
+        participantId: 'cc-impl',
+        displayName: 'Claude Code',
+        name: 'Claude Code',
+        mentionName: 'claude',
+        runtime: 'claude-code',
+        isBot: true,
+        profile: null,
+      },
+      prompt: 'nothing for me',
+    })
+    expect(result).toEqual({ kind: 'pass' })
   })
 })

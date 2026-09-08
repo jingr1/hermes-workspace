@@ -1,14 +1,47 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../../server/auth-middleware'
+import { getAgentRuntimeRouter } from '../../../../server/agent-runtime/router'
 import {
   addParticipant,
-  getParticipant,
   getRoom,
   listParticipants,
-  removeParticipant,
 } from '../../../../server/group-chat/room-store'
 import { GROUP_CHAT_MAX_MEMBERS } from '../../../../server/group-chat/constants'
+import type { RoomRuntime } from '../../../../server/group-chat/types'
+
+const MANAGED_RUNTIMES = new Set<RoomRuntime>([
+  'claude-code',
+  'codex',
+  'deepseek-harness',
+])
+
+function resolveParticipantRuntime(
+  participantId: string,
+  bodyRuntime: string | undefined,
+): RoomRuntime {
+  if (
+    bodyRuntime === 'claude-code' ||
+    bodyRuntime === 'codex' ||
+    bodyRuntime === 'deepseek-harness' ||
+    bodyRuntime === 'hermes'
+  ) {
+    return bodyRuntime
+  }
+  const decl = getAgentRuntimeRouter().registry.agents.find(
+    (a) => a.id === participantId,
+  )
+  if (
+    decl &&
+    (decl.runtime === 'claude-code' ||
+      decl.runtime === 'codex' ||
+      decl.runtime === 'deepseek-harness' ||
+      decl.runtime === 'hermes')
+  ) {
+    return decl.runtime
+  }
+  return 'hermes'
+}
 
 export const Route = createFileRoute('/api/rooms/$roomId/participants')({
   server: {
@@ -63,22 +96,22 @@ export const Route = createFileRoute('/api/rooms/$roomId/participants')({
           )
         }
         const kind = body.kind === 'human' ? 'human' : 'agent'
-        const runtime =
-          body.runtime === 'claude-code' ||
-          body.runtime === 'codex' ||
-          body.runtime === 'deepseek-harness'
-            ? (body.runtime as 'claude-code' | 'codex' | 'deepseek-harness')
-            : 'hermes'
-        const profile =
-          body.profile === null
+        const runtime = resolveParticipantRuntime(participantId, body.runtime)
+        const decl = getAgentRuntimeRouter().registry.agents.find(
+          (a) => a.id === participantId,
+        )
+        // Managed agents never carry a Hermes profile (agent id is not a gateway).
+        const profile = MANAGED_RUNTIMES.has(runtime)
+          ? null
+          : body.profile === null
             ? null
-            : String(body.profile ?? '').trim() || null
+            : String(body.profile ?? decl?.profile ?? '').trim() || null
         const participant = addParticipant({
           roomId: params.roomId,
           kind,
           participantId,
-          displayName: body.displayName,
-          mentionName: body.mentionName,
+          displayName: body.displayName ?? decl?.displayName,
+          mentionName: body.mentionName ?? decl?.mentionName,
           profile,
           runtime,
         })

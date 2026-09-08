@@ -4,14 +4,19 @@
  * Bot Mode semantics (Desktop hermes-bots/group-turns.ts):
  * - Soft deadline (3 min) that EXTENDS while the stream is still producing
  *   events, capped by GROUP_TURN_HARD_CAP_MS (20 min).
- * - On true timeout: do NOT post partial early-ack text. Return `timeout`
- *   with the pre-submit message baseline so the runner can stranded-harvest
- *   the finished reply later. Leave the gateway stream running (no abort).
+ * - On true timeout (Hermes): do NOT post partial early-ack text. Return
+ *   `timeout` with the pre-submit message baseline so the runner can
+ *   stranded-harvest the finished reply later. Leave the gateway stream
+ *   running (no abort).
+ * - Managed runtimes (claude-code): one-shot adapter.run; on hard timeout
+ *   interrupt and return accumulated text or failed (no stranded harvest).
  * - On success: prefer pickGroupTurnReply over the session transcript so the
  *   newest substantive (non-pass) assistant message wins — not the first ack.
- * - Self-heals once when a poisoned session yields "No LLM provider configured".
+ * - Self-heals once when a poisoned Hermes session yields
+ *   "No LLM provider configured".
  */
 import { getClaudeApiClient } from '../claude-api-profile'
+import { runManagedTurn } from '../agent-runtime/run-managed-turn'
 import {
   GROUP_TURN_HARD_CAP_MS,
   GROUP_TURN_POLL_MS,
@@ -49,6 +54,54 @@ function extendDeadline(startedAt: number, deadline: number): number {
     startedAt + GROUP_TURN_HARD_CAP_MS,
     Math.max(deadline, Date.now() + GROUP_TURN_TIMEOUT_MS),
   )
+}
+
+function isHermesMember(member: GroupMember): boolean {
+  return member.runtime === 'hermes'
+}
+
+async function executeManagedMemberTurn(
+  opts: TurnExecutorOptions,
+): Promise<GroupTurnResult> {
+  console.log(
+    `[turn-executor] managed member=${opts.member.displayName} runtime=${opts.member.runtime} agent=${opts.member.participantId}`,
+  )
+  const result = await runManagedTurn({
+    agentId: opts.member.participantId,
+    task: opts.prompt,
+    model: opts.model,
+    roomId: opts.roomId,
+    onEvent: (event) => {
+      if (event.type === 'text_delta') {
+        opts.onEvent?.('assistant.delta', { delta: event.text })
+      } else if (event.type === 'error') {
+        opts.onEvent?.('error', { message: event.message })
+      } else if (event.type === 'run_exited') {
+        opts.onEvent?.('assistant.completed', {})
+      }
+    },
+  })
+
+  if (result.kind === 'completed' || result.kind === 'timed_out') {
+    const text = result.text.trim()
+    if (!text) {
+      return {
+        kind: 'failed',
+        reason:
+          result.kind === 'timed_out'
+            ? 'managed turn timed out with empty reply'
+            : 'empty reply',
+      }
+    }
+    if (isGroupPassText(text)) return { kind: 'pass' }
+    return {
+      kind: 'reply',
+      text,
+      runId: result.runId,
+    }
+  }
+
+  return { kind: 'failed', reason: result.reason }
 }
 
 async function streamOnce(
@@ -250,7 +303,7 @@ async function toTurnResult(
   }
 }
 
-export async function executeMemberTurn(
+async function executeHermesMemberTurn(
   opts: TurnExecutorOptions,
 ): Promise<GroupTurnResult> {
   // getOrCreateSession ensures the profile gateway before verifying/creating
@@ -332,4 +385,13 @@ export async function executeMemberTurn(
         (error instanceof Error ? error.message : String(error)),
     }
   }
+}
+
+export async function executeMemberTurn(
+  opts: TurnExecutorOptions,
+): Promise<GroupTurnResult> {
+  if (!isHermesMember(opts.member)) {
+    return executeManagedMemberTurn(opts)
+  }
+  return executeHermesMemberTurn(opts)
 }

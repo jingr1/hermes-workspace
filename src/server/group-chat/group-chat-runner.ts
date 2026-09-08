@@ -36,6 +36,7 @@ import {
   listRooms,
   setWatermark,
   toGroupMember,
+  toHealedGroupMember,
 } from './room-store'
 import { executeMemberTurn } from './turn-executor'
 import { buildTurnContext } from './prompt-builder'
@@ -76,6 +77,21 @@ import {
 import { getMemberSessionMessages } from './agent-session-manager'
 import { maybeSummarizeRoom } from './summaries'
 import type { GroupMember, GroupTurnResult, Room, RoomMessage } from './types'
+
+/** Prefer an explicit Hermes profile; never pass managed agent ids as gateway profiles. */
+function pickSummaryProfile(
+  members: Array<GroupMember>,
+  preferred?: string | null,
+): string | undefined {
+  const hermesProfiles = members
+    .filter((m) => m.runtime === 'hermes')
+    .map((m) => m.profile?.trim())
+    .filter((p): p is string => Boolean(p))
+  if (preferred?.trim() && hermesProfiles.includes(preferred.trim())) {
+    return preferred.trim()
+  }
+  return hermesProfiles[0]
+}
 
 type RunnerControl = {
   timer: ReturnType<typeof setInterval> | null
@@ -255,11 +271,13 @@ async function driveRoom(roomId: string): Promise<void> {
   )
   if (participants.length === 0) return
 
-  const members = participants.map(toGroupMember)
+  const members = participants.map(toHealedGroupMember)
   const allMessages = getLatestMessages(roomId, { limit: 200 })
 
-  // Summarize if needed.
-  await maybeSummarizeRoom(roomId)
+  // Summarize if needed (Hermes throwaway session — never a managed agent id).
+  await maybeSummarizeRoom(roomId, {
+    profile: pickSummaryProfile(members),
+  })
 
   // Stranded reply harvest: check any timed-out member for a finished reply.
   for (const member of members) {
@@ -372,7 +390,7 @@ async function runGroupChatRounds(
             text: turnResult.text,
           })
           await maybeSummarizeRoom(room.id, {
-            profile: member.profile ?? undefined,
+            profile: pickSummaryProfile(members, member.profile),
           })
           continue
         }
@@ -464,7 +482,7 @@ async function runGroupChatRounds(
               text: turnResult.text,
             })
             await maybeSummarizeRoom(room.id, {
-              profile: member.profile ?? undefined,
+              profile: pickSummaryProfile(members, member.profile),
             })
           } else if (turnResult.kind === 'timeout') {
             setWatermark(room.id, member.participantId, roomLog2.length)
@@ -542,6 +560,13 @@ async function harvestStrandedReply(
   room: Room,
   member: GroupMember,
 ): Promise<boolean> {
+  // Managed runtimes have no Hermes session transcript to harvest.
+  if (member.runtime !== 'hermes') {
+    const marker = getStranded(room.id, member)
+    if (marker) clearStranded(room.id, member)
+    return false
+  }
+
   const marker = getStranded(room.id, member)
   if (!marker) {
     // Expire very old in-flight markers (hard cap) even without stranded.

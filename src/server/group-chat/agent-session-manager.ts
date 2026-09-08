@@ -85,16 +85,20 @@ export function groupSessionTitle(
 }
 
 /** Resolve the profile that owns a member's runtime session.
- *  - For explicit profile metadata on the member, use it.
- *  - For runtime !== 'hermes', there is no Hermes profile gateway; return null.
- *  - Fallback to participantId when legacy rows have no profile but runtime
- *    is hermes. This keeps old rooms working while new rooms store explicit
- *    profile names.
+ *  - Non-Hermes runtimes never use a Hermes profile gateway (ignore any
+ *    stale `profile` column — e.g. claude-code rows that stored agent id).
+ *  - Hermes: prefer explicit profile metadata, else participantId.
  */
 function resolveMemberProfile(member: GroupMember): string | null {
-  if (member.profile) return member.profile
   if (member.runtime !== 'hermes') return null
+  const explicit = member.profile?.trim()
+  if (explicit) return explicit
   return member.participantId
+}
+
+/** Runtimes that must not open Hermes gateway sessions. */
+function isHermesGatewayRuntime(runtime: GroupMember['runtime']): boolean {
+  return runtime === 'hermes'
 }
 
 /** Pick the client surface for a member: per-profile when possible, global
@@ -270,6 +274,13 @@ export async function getOrCreateSession(
   member: GroupMember,
   input?: { dbPath?: string; title?: string },
 ): Promise<{ sessionId: string; existed: boolean; profile: string | null }> {
+  // Managed adapters (claude-code / codex / …) never open Hermes gateway sessions.
+  if (!isHermesGatewayRuntime(member.runtime)) {
+    throw new Error(
+      `Group chat Hermes sessions do not support runtime=${member.runtime} (member=${member.displayName}). Remove this participant or use a Hermes agent.`,
+    )
+  }
+
   const cacheKey = sessionCacheKey(roomId, member.participantId)
   const title = input?.title ?? groupSessionTitle(roomId, member.participantId)
   const profile = resolveMemberProfile(member)
@@ -300,13 +311,17 @@ export async function getOrCreateSession(
           'SELECT session_id, profile FROM group_chat_sessions WHERE room_id = ? AND participant_id = ?',
         )
         .all(roomId, member.participantId)
-      if (rows.length > 0) {
+        if (rows.length > 0) {
         cached = String(rows[0].session_id)
         const storedProfile = rows[0].profile ? String(rows[0].profile) : null
-        if (storedProfile && !member.profile) {
-          // Hydrate profile from DB into member so subsequent operations hit
-          // the same gateway. GroupMember is a mutable runtime shape here.
-          ;(member as Record<string, unknown>).profile = storedProfile
+        // Only hydrate Hermes profile onto hermes members — never promote a
+        // stale profile string onto claude-code / codex participants.
+        if (
+          storedProfile &&
+          !member.profile &&
+          member.runtime === 'hermes'
+        ) {
+          ;(member as { profile: string | null }).profile = storedProfile
         }
       }
     } finally {

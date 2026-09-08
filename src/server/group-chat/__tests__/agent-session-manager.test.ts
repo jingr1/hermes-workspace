@@ -164,17 +164,38 @@ describe('agent-session-manager', () => {
     expect(second.existed).toBe(true)
   })
 
-  it('falls back to global claude-api for non-Hermes runtime', async () => {
+  it('refuses codex Hermes session create (no global fallback)', async () => {
     const mod = await import('../agent-session-manager')
     const member = makeMember(null)
     member.runtime = 'codex'
-    const { sessionId, profile } = await mod.getOrCreateSession(
-      'room1',
-      member,
-      { dbPath },
-    )
-    expect(profile).toBeNull()
-    expect(sessionId.startsWith('global-')).toBe(true)
+    await expect(
+      mod.getOrCreateSession('room1', member, { dbPath }),
+    ).rejects.toThrow(/do not support runtime=codex/)
+  })
+
+  it('ignores stale profile on claude-code and refuses Hermes session create', async () => {
+    const mod = await import('../agent-session-manager')
+    const member = makeMember(null)
+    member.runtime = 'claude-code'
+    member.participantId = 'cc-impl'
+    member.displayName = 'cc-impl'
+    member.profile = 'cc-impl' // wrongly stored agent id as Hermes profile
+    await expect(
+      mod.getOrCreateSession('room1', member, { dbPath }),
+    ).rejects.toThrow(/do not support runtime=claude-code/)
+    // Must not have contacted a per-profile Hermes client for cc-impl.
+    expect(mockClient).not.toHaveBeenCalledWith('cc-impl')
+  })
+
+  it('refuses codex even when a stale profile string is present', async () => {
+    const mod = await import('../agent-session-manager')
+    const member = makeMember(null)
+    member.runtime = 'codex'
+    member.profile = 'cc-impl'
+    await expect(
+      mod.getOrCreateSession('room1', member, { dbPath }),
+    ).rejects.toThrow(/do not support runtime=codex/)
+    expect(mockClient).not.toHaveBeenCalledWith('cc-impl')
   })
 
   it('recovers session from database after cache miss', async () => {

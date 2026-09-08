@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
 import { ensureCollabDb, getCollabDbPath, createCollabId } from '../collab-db'
 import { openSqliteDatabase } from '../sqlite-helper'
+import { getAgentRuntimeRouter } from '../agent-runtime/router'
 import type {
   GroupMember,
   MentionTarget,
@@ -473,6 +474,48 @@ export function setParticipantOnline(
   }
 }
 
+export function healParticipantFromRegistry(
+  p: RoomParticipant,
+  input?: { dbPath?: string },
+): RoomParticipant {
+  if (p.kind !== 'agent') return p
+  const decl = getAgentRuntimeRouter().registry.agents.find(
+    (a) => a.id === p.participantId,
+  )
+  if (!decl) return p
+
+  const runtime = (
+    decl.runtime === 'claude-code' ||
+    decl.runtime === 'codex' ||
+    decl.runtime === 'deepseek-harness' ||
+    decl.runtime === 'hermes'
+      ? decl.runtime
+      : p.runtime
+  ) as RoomRuntime
+  const profile =
+    runtime === 'hermes'
+      ? (decl.profile?.trim() || p.profile || null)
+      : null
+
+  if (runtime === p.runtime && profile === (p.profile ?? null)) {
+    return p
+  }
+
+  ensureDb(input)
+  const d = openSqliteDatabase(dbPath(input), false)
+  try {
+    d.prepare(
+      `UPDATE room_participants SET runtime = ?, profile = ? WHERE id = ?`,
+    ).run(runtime, profile, p.id)
+  } finally {
+    d.close()
+  }
+  console.log(
+    `[room-store] healed participant ${p.participantId}: runtime ${p.runtime}→${runtime} profile ${p.profile ?? 'null'}→${profile ?? 'null'}`,
+  )
+  return { ...p, runtime, profile }
+}
+
 export function toGroupMember(p: RoomParticipant): GroupMember {
   return {
     id: p.id,
@@ -485,6 +528,14 @@ export function toGroupMember(p: RoomParticipant): GroupMember {
     isBot: p.kind === 'agent',
     profile: p.profile ?? null,
   }
+}
+
+/** Heal from agents.yaml then project to GroupMember (runner entry). */
+export function toHealedGroupMember(
+  p: RoomParticipant,
+  input?: { dbPath?: string },
+): GroupMember {
+  return toGroupMember(healParticipantFromRegistry(p, input))
 }
 
 function rowToParticipant(r: Record<string, unknown>): RoomParticipant {

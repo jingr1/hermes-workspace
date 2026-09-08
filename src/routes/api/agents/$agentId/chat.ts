@@ -1,10 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { isAuthenticated } from '../../../../server/auth-middleware'
-import { getAgentRuntimeRouter } from '../../../../server/agent-runtime/router'
-import { getMcpEndpoint } from '../../../../server/agent-runtime/dispatch'
-import { issueRunToken } from '../../../../server/mcp/run-tokens'
-import { createCollabId } from '../../../../server/collab-db'
 import { publishChatEvent } from '../../../../server/chat-event-bus'
+import { startManagedChatRun } from '../../../../server/agent-runtime/run-managed-turn'
 import type { AgentStreamEvent } from '../../../../server/agent-runtime/types'
 
 /**
@@ -92,41 +89,6 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
           }
         }
 
-        const router = getAgentRuntimeRouter()
-        const adapter = router.getAdapter(agentId)
-        if (!adapter) {
-          return new Response(
-            JSON.stringify({ ok: false, error: `agent not found: ${agentId}` }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
-        }
-        if (adapter.kind === 'hermes') {
-          return new Response(
-            JSON.stringify({
-              ok: false,
-              error: 'hermes agents use /api/send-stream, not this endpoint',
-            }),
-            { status: 400, headers: { 'Content-Type': 'application/json' } },
-          )
-        }
-
-        const probe = await adapter.probe()
-        if (!probe.available) {
-          return new Response(
-            JSON.stringify({
-              ok: false,
-              error: probe.detail || `agent ${agentId} is not available`,
-            }),
-            {
-              status: 503,
-              headers: { 'Content-Type': 'application/json' },
-            },
-          )
-        }
-
-        const runId = createCollabId('run')
-        const chatSessionId = sessionId || `cc-${Date.now()}`
-
         const promptParts: Array<string> = []
         if (historyLines.length > 0) {
           promptParts.push('Here is the conversation history:')
@@ -139,36 +101,24 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
         )
         const task = promptParts.join('\n')
 
-        // Issue a read/write token so the agent can call Hermes MCP tools.
-        const { token } = issueRunToken({
-          kind: 'run_write',
-          runId,
-          participantId: agentId,
-          assignmentId: null,
-          taskId: chatSessionId,
-          roomId: null,
-          toolAllowlist: ['task_start', 'task_complete'],
+        const started = await startManagedChatRun({
+          agentId,
+          task,
+          ...(requestedModel ? { model: requestedModel } : {}),
+          sessionId: sessionId || null,
+          probe: true,
         })
-
-        try {
-          await adapter.startRun({
-            runId,
-            agentId,
-            task,
-            ...(requestedModel ? { model: requestedModel } : {}),
-            mcp: {
-              endpoint: getMcpEndpoint(),
-              runToken: token,
-              toolAllowlist: ['task_start', 'task_complete'],
-            },
-          })
-        } catch (error) {
-          const detail = error instanceof Error ? error.message : String(error)
+        if (!started.ok) {
           return new Response(
-            JSON.stringify({ ok: false, error: `spawn failed: ${detail}` }),
-            { status: 500, headers: { 'Content-Type': 'application/json' } },
+            JSON.stringify({ ok: false, error: started.error }),
+            {
+              status: started.status,
+              headers: { 'Content-Type': 'application/json' },
+            },
           )
         }
+
+        const { runId, adapter, sessionId: chatSessionId } = started
 
         publishChatEvent('agent_chat_started', {
           runId,
@@ -226,8 +176,6 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
               sessionId: chatSessionId,
             })
 
-            // Keep under common idle proxies (e.g. 15s); first model token
-            // can take longer than that on slower models (Sonnet).
             heartbeatTimer = setInterval(() => {
               sendEvent('heartbeat', {
                 type: 'heartbeat',
@@ -239,9 +187,6 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
               for await (const event of adapter.streamEvents(runId)) {
                 if (streamClosed) break
                 relayEvent(sendEvent, event)
-                // Only the terminal exit ends the SSE stream. Non-fatal
-                // adapter `error` events (e.g. stderr diagnostics) must not
-                // abort consumption — text_delta often arrives after them.
                 if (event.type === 'run_exited') {
                   setTimeout(closeStream, 50)
                   break
@@ -257,7 +202,6 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
                 clearInterval(heartbeatTimer)
                 heartbeatTimer = null
               }
-              // Ensure final close if the iterator ended without run_exited.
               setTimeout(closeStream, 100)
             }
           },
