@@ -50,7 +50,10 @@ describe('mention-routing', () => {
   describe('parseMentions', () => {
     it('resolves @agent by participant id', () => {
       const members = [makeAgent('architect'), makeHuman('alice')]
-      const parsed = parseMentions('Hey @architect, what do you think?', members)
+      const parsed = parseMentions(
+        'Hey @architect, what do you think?',
+        members,
+      )
       expect(parsed.mentioned).toContain(groupMemberKey(members[0]))
       expect(parsed.mentioned).not.toContain(groupMemberKey(members[1]))
     })
@@ -85,9 +88,9 @@ describe('mention-routing', () => {
 
     it('ignores @human / @user / @me / @owner in parse phase', () => {
       const members = [makeAgent('a'), makeHuman('u')]
-      expect(parseMentions('@human @user @me @owner', members).mentioned).toEqual(
-        [],
-      )
+      expect(
+        parseMentions('@human @user @me @owner', members).mentioned,
+      ).toEqual([])
       expect(parseMentions('@human @user @me @owner', members).everyone).toBe(
         false,
       )
@@ -109,8 +112,18 @@ describe('mention-routing', () => {
 
     it('expands @agent and @human targets', () => {
       const room = createRoom({ title: 'test', dbPath })
-      addParticipant({ roomId: room.id, kind: 'agent', participantId: 'dev', dbPath })
-      addParticipant({ roomId: room.id, kind: 'human', participantId: 'alice', dbPath })
+      addParticipant({
+        roomId: room.id,
+        kind: 'agent',
+        participantId: 'dev',
+        dbPath,
+      })
+      addParticipant({
+        roomId: room.id,
+        kind: 'human',
+        participantId: 'alice',
+        dbPath,
+      })
       const members = [makeAgent('dev'), makeHuman('alice')]
       const targets = expandMentionTargets(
         { everyone: false, mentioned: members.map(groupMemberKey) },
@@ -127,7 +140,12 @@ describe('mention-routing', () => {
   describe('resolveHumanMentions', () => {
     it('returns human participants from db', () => {
       const room = createRoom({ title: 'test', dbPath })
-      addParticipant({ roomId: room.id, kind: 'agent', participantId: 'dev', dbPath })
+      addParticipant({
+        roomId: room.id,
+        kind: 'agent',
+        participantId: 'dev',
+        dbPath,
+      })
       addParticipant({
         roomId: room.id,
         kind: 'human',

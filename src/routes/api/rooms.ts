@@ -1,10 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../server/auth-middleware'
-import {
-  createRoom,
-  listRooms,
-} from '../../server/group-chat/room-store'
+import { createRoom, listRooms } from '../../server/group-chat/room-store'
 import { getSwarmMission } from '../../server/swarm-missions'
 
 export const Route = createFileRoute('/api/rooms')({
@@ -20,7 +17,11 @@ export const Route = createFileRoute('/api/rooms')({
         if (!isAuthenticated(request)) {
           return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
         }
-        let body: { title?: string; missionId?: string | null; taskId?: string | null }
+        let body: {
+          title?: string
+          missionId?: string | null
+          taskId?: string | null
+        }
         try {
           body = (await request.json()) as typeof body
         } catch {

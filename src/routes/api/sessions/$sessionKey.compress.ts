@@ -8,6 +8,10 @@ import {
   oneshotCompletion,
 } from '../../../server/claude-api'
 import { ensureActiveProfileGateway } from '../../../server/gateway-pool'
+import {
+  ensureGatewayProbed,
+  getCapabilities,
+} from '../../../server/gateway-capabilities'
 
 function messageText(msg: Record<string, unknown>): string {
   const content = msg.content
@@ -90,6 +94,18 @@ export const Route = createFileRoute('/api/sessions/$sessionKey/compress')({
 
         try {
           await ensureActiveProfileGateway()
+          await ensureGatewayProbed()
+          if (!getCapabilities().sessionCompress) {
+            return json(
+              {
+                ok: false,
+                error:
+                  'Session compress is not available on this Hermes build. /compress needs upstream session_compress support — do not patch local hermes.',
+                code: 'session_compress_unavailable',
+              },
+              { status: 501 },
+            )
+          }
           const messages = (await getMessages(sessionKey)) as Array<
             Record<string, unknown>
           >

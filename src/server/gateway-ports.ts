@@ -5,7 +5,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import YAML from 'yaml'
-import { listProfiles, resolveProfileHermesHome } from './profiles-browser'
+import {
+  listProfiles,
+  resolveProfileHermesHome,
+  isLiveNamedProfile,
+} from './profiles-browser'
 import { ensureSwarmProfileConfig } from './swarm-profile-config'
 import { getStateDir } from './workspace-state-dir'
 
@@ -259,6 +263,11 @@ export function ensureProfileApiServerEnv(
   const assigned = parsePort(port)
   if (!assigned) return {}
   const home = resolveProfileHermesHome(name)
+  // Never mkdir a missing/tombstoned named profile — that is how deleted
+  // test profiles like swarmtest1 get resurrected after `rm -rf`.
+  if (name !== 'default' && !isLiveNamedProfile(name)) {
+    throw new Error(`profile "${name}" does not exist`)
+  }
   const root = hermesRootFromHome(home, name)
   const envPath = path.join(home, '.env')
   if (envIsSharedWithRoot(home, root)) {

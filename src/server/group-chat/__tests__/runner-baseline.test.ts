@@ -40,7 +40,10 @@ vi.mock('../turn-executor', () => ({
 // Mock summaries so threshold compression is deterministic.
 const SUMMARY_TEXT = '[SUMMARY] key decisions retained'
 const maybeSummarizeRoom = vi.fn()
-const getContextForMember = vi.fn(() => ({ summary: null as string | null, messages: [] }))
+const getContextForMember = vi.fn(() => ({
+  summary: null as string | null,
+  messages: [],
+}))
 vi.mock('../summaries', () => ({
   maybeSummarizeRoom,
   getContextForMember,
@@ -131,7 +134,12 @@ describe('group-chat clean baseline', () => {
       }
 
       const roomLog = getLatestMessages(room.id, { dbPath, limit: 200 })
-      const allDeltas: Array<{ key: string; count: number; first: string; last: string }> = []
+      const allDeltas: Array<{
+        key: string
+        count: number
+        first: string
+        last: string
+      }> = []
 
       executeMemberTurn.mockImplementation(async () => {
         const roomLog2 = getLatestMessages(room.id, { dbPath, limit: 200 })
@@ -141,7 +149,9 @@ describe('group-chat clean baseline', () => {
 
       // Manually replicate runner delta slicing for each member.
       for (const member of [memberA, memberB, memberC]) {
-        const watermark = getWatermark(room.id, member.participantId, { dbPath })
+        const watermark = getWatermark(room.id, member.participantId, {
+          dbPath,
+        })
         const delta = roomLog.slice(watermark).slice(-24)
         allDeltas.push({
           key: member.participantId,
@@ -154,8 +164,16 @@ describe('group-chat clean baseline', () => {
       // All three members should see the same 7 messages because no watermarks
       // have advanced yet.
       expect(allDeltas.map((d) => d.count)).toEqual([7, 7, 7])
-      expect(allDeltas.map((d) => d.first)).toEqual(['message-0', 'message-0', 'message-0'])
-      expect(allDeltas.map((d) => d.last)).toEqual(['message-6', 'message-6', 'message-6'])
+      expect(allDeltas.map((d) => d.first)).toEqual([
+        'message-0',
+        'message-0',
+        'message-0',
+      ])
+      expect(allDeltas.map((d) => d.last)).toEqual([
+        'message-6',
+        'message-6',
+        'message-6',
+      ])
     })
 
     it('advancing one member watermark does not corrupt other members deltas', async () => {
@@ -174,8 +192,12 @@ describe('group-chat clean baseline', () => {
       setWatermark(room.id, 'architect', 3, { dbPath })
 
       const roomLog = getLatestMessages(room.id, { dbPath, limit: 200 })
-      const architectDelta = roomLog.slice(getWatermark(room.id, 'architect', { dbPath })).slice(-24)
-      const devDelta = roomLog.slice(getWatermark(room.id, 'developer', { dbPath })).slice(-24)
+      const architectDelta = roomLog
+        .slice(getWatermark(room.id, 'architect', { dbPath }))
+        .slice(-24)
+      const devDelta = roomLog
+        .slice(getWatermark(room.id, 'developer', { dbPath }))
+        .slice(-24)
 
       expect(architectDelta.length).toBe(2)
       expect(devDelta.length).toBe(5)
@@ -269,11 +291,21 @@ describe('group-chat clean baseline', () => {
       const secondWatermarks = getAllWatermarks(room.id, { dbPath })
 
       // State should be reproducible up to epoch bump (epoch resets per process).
-      expect(secondMessages.map((m) => ({ sender: m.senderName, text: m.content }))).toEqual(
+      expect(
+        secondMessages.map((m) => ({ sender: m.senderName, text: m.content })),
+      ).toEqual(
         firstMessages.map((m) => ({ sender: m.senderName, text: m.content })),
       )
-      expect(secondWatermarks.map((w) => ({ participantId: w.participantId, count: w.messageCount }))).toEqual(
-        firstWatermarks.map((w) => ({ participantId: w.participantId, count: w.messageCount })),
+      expect(
+        secondWatermarks.map((w) => ({
+          participantId: w.participantId,
+          count: w.messageCount,
+        })),
+      ).toEqual(
+        firstWatermarks.map((w) => ({
+          participantId: w.participantId,
+          count: w.messageCount,
+        })),
       )
 
       // Because there were no new human messages, the second drive should not
@@ -301,13 +333,19 @@ describe('group-chat clean baseline', () => {
       await runRoom({ ...room, dbPath } as any)
 
       const afterFirst = getAllWatermarks(room.id, { dbPath })
-      const messagesAfterFirst = getLatestMessages(room.id, { dbPath, limit: 200 }).length
+      const messagesAfterFirst = getLatestMessages(room.id, {
+        dbPath,
+        limit: 200,
+      }).length
 
       clearAllRunnerState()
       await runRoom({ ...room, dbPath } as any)
 
       const afterSecond = getAllWatermarks(room.id, { dbPath })
-      const messagesAfterSecond = getLatestMessages(room.id, { dbPath, limit: 200 }).length
+      const messagesAfterSecond = getLatestMessages(room.id, {
+        dbPath,
+        limit: 200,
+      }).length
 
       expect(afterSecond).toEqual(afterFirst)
       expect(messagesAfterSecond).toBe(messagesAfterFirst)

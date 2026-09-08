@@ -247,6 +247,19 @@ export type EnhancedCapabilities = {
    * file-backed swarm-kanban store. See v2.3.0 plan.
    */
   kanban: boolean
+  /**
+   * True when Hermes advertises `session_truncate` on `/v1/capabilities`.
+   * Vanilla hermes-agent does not expose this REST endpoint; Workspace Edit /
+   * Regenerate / `/undo` / `/retry` require it. Do not patch local hermes —
+   * gate UI until upstream ships the API.
+   */
+  sessionTruncate: boolean
+  /**
+   * True when Hermes advertises `session_compress` on `/v1/capabilities`.
+   * Vanilla hermes-agent has messaging-platform `/compress` slash only, not
+   * this REST rewrite API. Workspace `/compress` requires it.
+   */
+  sessionCompress: boolean
 }
 
 export type DashboardCapabilities = {
@@ -292,6 +305,8 @@ let capabilities: GatewayCapabilities = {
   mcpFallback: false,
   conductor: false,
   kanban: false,
+  sessionTruncate: false,
+  sessionCompress: false,
   dashboard: {
     available: false,
     url: CLAUDE_DASHBOARD_URL,
@@ -663,6 +678,32 @@ async function probe(probePath: string): Promise<boolean> {
  * status code on GET, so we POST a tiny no-op body and look for a
  * structured error shape that only the fork emits.
  */
+/** Read session mutation feature flags from GET /v1/capabilities. */
+async function probeSessionMutationFeatures(): Promise<{
+  sessionTruncate: boolean
+  sessionCompress: boolean
+}> {
+  try {
+    const res = await fetch(`${CLAUDE_API}/v1/capabilities`, {
+      headers: authHeaders(),
+      signal: AbortSignal.timeout(probeTimeoutMs()),
+    })
+    if (!res.ok) {
+      return { sessionTruncate: false, sessionCompress: false }
+    }
+    const body = (await res.json()) as {
+      features?: Record<string, unknown>
+    }
+    const features = body.features ?? {}
+    return {
+      sessionTruncate: features.session_truncate === true,
+      sessionCompress: features.session_compress === true,
+    }
+  } catch {
+    return { sessionTruncate: false, sessionCompress: false }
+  }
+}
+
 async function probeEnhancedChatStream(): Promise<boolean> {
   try {
     const res = await fetch(
@@ -925,6 +966,8 @@ const OPTIONAL_APIS = new Set([
   'enhancedChat',
   'mcp',
   'mcpFallback',
+  'sessionTruncate',
+  'sessionCompress',
 ])
 
 const DASHBOARD_BACKED_APIS = new Set([
@@ -1154,6 +1197,7 @@ export async function probeGateway(options?: {
         legacyConfig,
         legacyJobs,
         dashboard,
+        sessionMutation,
       ] = await Promise.all([
         probeBooleanWithRetry(() => probe('/health')),
         probeBooleanWithRetry(() => probeChatCompletions()),
@@ -1169,6 +1213,7 @@ export async function probeGateway(options?: {
               url: CLAUDE_DASHBOARD_URL,
             })
           : probeDashboard(),
+        probeSessionMutationFeatures(),
       ])
 
       let legacySessions = sessionsFirst
@@ -1202,6 +1247,8 @@ export async function probeGateway(options?: {
           mcpFallback: false,
           conductor: false,
           kanban: false,
+          sessionTruncate: sessionMutation.sessionTruncate,
+          sessionCompress: sessionMutation.sessionCompress,
           dashboard,
         },
         localControlPlane,
@@ -1332,6 +1379,8 @@ export function getEnhancedCapabilities(): EnhancedCapabilities {
     mcpFallback: capabilities.mcpFallback,
     conductor: capabilities.conductor,
     kanban: capabilities.kanban,
+    sessionTruncate: capabilities.sessionTruncate,
+    sessionCompress: capabilities.sessionCompress,
   }
 }
 

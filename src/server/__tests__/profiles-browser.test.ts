@@ -193,6 +193,49 @@ describe('profiles-browser', () => {
         path.join('/home/testuser', '.hermes', 'profiles', 'writer'),
       )
     })
+    it('heals sticky active_profile when the named profile is missing', async () => {
+      existsSync.mockImplementation((p: string) => {
+        if (p === path.join('/home/testuser', '.hermes', 'active_profile'))
+          return true
+        return false
+      })
+      readFileSync.mockImplementation((p: string) => {
+        if (p === path.join('/home/testuser', '.hermes', 'active_profile'))
+          return 'swarmtest1\n'
+        return ''
+      })
+
+      const mod = await loadMod()
+      expect(mod.getActiveProfileName()).toBe('default')
+      expect(unlinkSync).toHaveBeenCalledWith(
+        path.join('/home/testuser', '.hermes', 'active_profile'),
+      )
+    })
+
+    it('treats tombstoned profiles as not live', async () => {
+      existsSync.mockImplementation((p: string) => {
+        if (
+          p ===
+          path.join(
+            '/home/testuser',
+            '.hermes',
+            'profiles',
+            '.deleted',
+            'swarmtest1',
+          )
+        )
+          return true
+        if (
+          p === path.join('/home/testuser', '.hermes', 'profiles', 'swarmtest1')
+        )
+          return true
+        return false
+      })
+
+      const mod = await loadMod()
+      expect(mod.isNamedProfileDeleted('swarmtest1')).toBe(true)
+      expect(mod.isLiveNamedProfile('swarmtest1')).toBe(false)
+    })
   })
 
   describe('renameProfile', () => {

@@ -14,13 +14,9 @@ export type BuildPromptInput = {
   deltaLines: Array<string>
 }
 
-export function buildGroupChatTurnPrompt(
-  input: BuildPromptInput,
-): string {
+export function buildGroupChatTurnPrompt(input: BuildPromptInput): string {
   const viewerKey = groupMemberKey(input.viewer)
-  const peers = input.members.filter(
-    (m) => groupMemberKey(m) !== viewerKey,
-  )
+  const peers = input.members.filter((m) => groupMemberKey(m) !== viewerKey)
   const peerNames = peers
     .map((m) => {
       const handle = `@${m.mentionName || m.displayName}`

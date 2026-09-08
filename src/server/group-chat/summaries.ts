@@ -27,7 +27,10 @@ export async function maybeSummarizeRoom(
   input?: { dbPath?: string; model?: string; profile?: string },
 ): Promise<RoomSummary | null> {
   const latest = getLatestSummary(roomId, input)
-  const messages = getLatestMessages(roomId, { dbPath: input?.dbPath, limit: 200 })
+  const messages = getLatestMessages(roomId, {
+    dbPath: input?.dbPath,
+    limit: 200,
+  })
 
   // Find first message after the last summary.
   let startIndex = 0
@@ -97,13 +100,7 @@ export async function maybeSummarizeRoom(
       })
   const text = extractText(result)
   const lastMessage = unsummarized[unsummarized.length - 1]
-  return saveSummary(
-    roomId,
-    text,
-    lastMessage.id,
-    unsummarized.length,
-    input,
-  )
+  return saveSummary(roomId, text, lastMessage.id, unsummarized.length, input)
 }
 
 function extractText(result: Record<string, unknown>): string {
@@ -126,7 +123,10 @@ function extractText(result: Record<string, unknown>): string {
 export function getContextForMember(
   roomId: string,
   input?: { dbPath?: string },
-): { summary: string | null; messages: Array<{ senderName: string; content: string; createdAt: number }> } {
+): {
+  summary: string | null
+  messages: Array<{ senderName: string; content: string; createdAt: number }>
+} {
   const summary = getLatestSummary(roomId, input)
   const all = getLatestMessages(roomId, { dbPath: input?.dbPath, limit: 200 })
   if (!summary?.throughMessageId) {

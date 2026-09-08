@@ -130,7 +130,7 @@ export function startGroupChatRunner(): void {
     const dbPath = getCollabDbPath()
     const db = openSqliteDatabase(dbPath, true)
     const cols = db
-      .prepare("PRAGMA table_info(room_participants)")
+      .prepare('PRAGMA table_info(room_participants)')
       .all()
       .map((r: any) => r.name)
     db.close()
@@ -194,7 +194,7 @@ export function triggerRoomRun(roomId: string): void {
     } catch (error) {
       if (handleRunnerFatalError(error, `trigger ${roomId}`)) return
       const message =
-        error instanceof Error ? error.stack ?? error.message : String(error)
+        error instanceof Error ? (error.stack ?? error.message) : String(error)
       if (isTransientGatewayError(message)) {
         setRoomErrorCooldown(roomId, GROUP_RUNNER_ERROR_COOLDOWN_MS)
       }
@@ -216,8 +216,7 @@ export async function tickAllRooms(): Promise<void> {
       await runRoomInternal(room.id)
     } catch (error) {
       if (handleRunnerFatalError(error, `room ${room.id}`)) return
-      const message =
-        error instanceof Error ? error.message : String(error)
+      const message = error instanceof Error ? error.message : String(error)
       if (isTransientGatewayError(message)) {
         setRoomErrorCooldown(room.id, GROUP_RUNNER_ERROR_COOLDOWN_MS)
       }
@@ -317,8 +316,7 @@ async function runGroupChatRounds(
       resolveGroupResponders(roomLog, members),
       round,
     ).filter(
-      (m) =>
-        !inFlight.includes(groupMemberKey(m)) && !hasStranded(room.id, m),
+      (m) => !inFlight.includes(groupMemberKey(m)) && !hasStranded(room.id, m),
     )
 
     let spokeThisRound = 0
@@ -373,7 +371,9 @@ async function runGroupChatRounds(
             member: member.displayName,
             text: turnResult.text,
           })
-          await maybeSummarizeRoom(room.id, { profile: member.profile ?? undefined })
+          await maybeSummarizeRoom(room.id, {
+            profile: member.profile ?? undefined,
+          })
           continue
         }
       }
@@ -436,7 +436,9 @@ async function runGroupChatRounds(
           }
           const roomLog2 = getLatestMessages(room.id, { limit: 200 })
           const watermark = getWatermark(room.id, member.participantId)
-          const delta = roomLog2.slice(watermark).slice(-GROUP_CHAT_HISTORY_LIMIT)
+          const delta = roomLog2
+            .slice(watermark)
+            .slice(-GROUP_CHAT_HISTORY_LIMIT)
           if (delta.length === 0) continue
           const turnResult = await runMemberTurn(room, member, delta, members)
           if (turnResult.kind === 'reply') {
@@ -461,7 +463,9 @@ async function runGroupChatRounds(
               member: member.displayName,
               text: turnResult.text,
             })
-            await maybeSummarizeRoom(room.id, { profile: member.profile ?? undefined })
+            await maybeSummarizeRoom(room.id, {
+              profile: member.profile ?? undefined,
+            })
           } else if (turnResult.kind === 'timeout') {
             setWatermark(room.id, member.participantId, roomLog2.length)
             setStranded(room.id, member, {
@@ -622,7 +626,9 @@ async function harvestStrandedUntilSettled(
   members: Array<GroupMember>,
 ): Promise<void> {
   for (let attempt = 0; attempt < GROUP_HARVEST_MAX_TRIES; attempt++) {
-    await new Promise((resolve) => setTimeout(resolve, GROUP_HARVEST_INTERVAL_MS))
+    await new Promise((resolve) =>
+      setTimeout(resolve, GROUP_HARVEST_INTERVAL_MS),
+    )
     if (isRoomRunning(roomId)) return
     const room = getRoom(roomId)
     if (!room || room.state !== 'active') return
@@ -659,9 +665,12 @@ function finishDrive(
   members: Array<GroupMember>,
   kind: 'settled' | 'capped',
 ): void {
-  publishChatEvent(kind === 'settled' ? 'group_chat_settled' : 'group_chat_capped', {
-    roomId: room.id,
-  })
+  publishChatEvent(
+    kind === 'settled' ? 'group_chat_settled' : 'group_chat_capped',
+    {
+      roomId: room.id,
+    },
+  )
   // Poll for late replies that outlived the turn loop.
   if (listStrandedMembers(room.id).length > 0) {
     void harvestStrandedUntilSettled(room.id, members)

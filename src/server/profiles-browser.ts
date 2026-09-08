@@ -89,12 +89,54 @@ export function resolveProfileHermesHome(name: string): string {
   return path.join(getProfilesRoot(), trimmed)
 }
 
+/**
+ * Hermes tombstone path (`profiles/.deleted/<name>`). Lives beside the profile
+ * dir so a stale gateway mkdir cannot erase it after delete.
+ */
+export function profileTombstonePath(name: string): string {
+  return path.join(getProfilesRoot(), '.deleted', name.trim())
+}
+
+/** True when `hermes profile delete` (or workspace delete) tombstoned this name. */
+export function isNamedProfileDeleted(name: string): boolean {
+  const trimmed = (name || '').trim()
+  if (!trimmed || trimmed === 'default') return false
+  return fs.existsSync(profileTombstonePath(trimmed))
+}
+
+export function markNamedProfileDeleted(name: string): void {
+  const trimmed = validateProfileName(name)
+  const marker = profileTombstonePath(trimmed)
+  fs.mkdirSync(path.dirname(marker), { recursive: true, mode: 0o700 })
+  fs.writeFileSync(marker, 'deleted\n', 'utf-8')
+}
+
+export function clearNamedProfileDeleted(name: string): void {
+  const trimmed = (name || '').trim()
+  if (!trimmed || trimmed === 'default') return
+  const marker = profileTombstonePath(trimmed)
+  if (fs.existsSync(marker)) fs.unlinkSync(marker)
+}
+
+/** Live named profile = on-disk directory and not tombstoned. */
+export function isLiveNamedProfile(name: string): boolean {
+  const trimmed = (name || '').trim()
+  if (!trimmed || trimmed === 'default') return true
+  if (isNamedProfileDeleted(trimmed)) return false
+  return fs.existsSync(resolveProfileHermesHome(trimmed))
+}
+
 function getActiveProfilePath(): string {
   return path.join(getClaudeRoot(), 'active_profile')
 }
 
 function stickyActiveProfileEnabled(): boolean {
   return process.env.HERMES_WORKSPACE_STICKY_PROFILE !== '0'
+}
+
+function clearStickyActiveProfile(): void {
+  const activePath = getActiveProfilePath()
+  if (fs.existsSync(activePath)) fs.unlinkSync(activePath)
 }
 
 /**
@@ -601,8 +643,21 @@ export function getActiveProfileName(): string {
   const activePath = getActiveProfilePath()
   if (!fs.existsSync(activePath)) return 'default'
   try {
-    const raw = safeReadText(activePath).trim()
-    return raw || 'default'
+    const raw = safeReadText(activePath).trim() || 'default'
+    if (raw === 'default') return 'default'
+    // Stale sticky pointers (deleted / tombstoned profiles) must not keep
+    // ensureActiveProfileGateway spawning a dead name — that recreates the dir.
+    if (!isLiveNamedProfile(raw)) {
+      if (stickyActiveProfileEnabled()) {
+        try {
+          clearStickyActiveProfile()
+        } catch {
+          /* ignore */
+        }
+      }
+      return 'default'
+    }
+    return raw
   } catch {
     return 'default'
   }
@@ -720,7 +775,8 @@ export function listProfilesLight(): Array<ProfileSummary> {
 
     for (const entry of entries) {
       const name = entry.name
-      if (name === 'default') continue
+      if (name === 'default' || name.startsWith('.')) continue
+      if (isNamedProfileDeleted(name)) continue
       const profilePath = path.join(profilesRoot, name)
       if (!entry.isDirectory()) {
         if (!entry.isSymbolicLink()) continue
@@ -788,7 +844,8 @@ export function listProfiles(): Array<ProfileSummary> {
 
     for (const entry of entries) {
       const name = entry.name
-      if (name === 'default') continue
+      if (name === 'default' || name.startsWith('.')) continue
+      if (isNamedProfileDeleted(name)) continue
       const profilePath = path.join(profilesRoot, name)
       if (!entry.isDirectory()) {
         if (!entry.isSymbolicLink()) continue
@@ -902,14 +959,14 @@ export function setActiveProfile(name: string): void {
   // "default" means clear the active_profile file (revert to default)
   if (trimmed === 'default') {
     if (stickyActiveProfileEnabled()) {
-      const activePath = getActiveProfilePath()
-      if (fs.existsSync(activePath)) fs.unlinkSync(activePath)
+      clearStickyActiveProfile()
     }
     return
   }
   const normalized = validateProfileName(trimmed)
-  const profilePath = path.join(getProfilesRoot(), normalized)
-  if (!fs.existsSync(profilePath)) throw new Error('Profile not found')
+  if (!isLiveNamedProfile(normalized)) {
+    throw new Error(`Profile not found: ${normalized}`)
+  }
   if (stickyActiveProfileEnabled()) {
     fs.mkdirSync(getClaudeRoot(), { recursive: true })
     fs.writeFileSync(getActiveProfilePath(), `${normalized}\n`, 'utf-8')
@@ -922,7 +979,19 @@ export function createProfile(
 ): ProfileDetail {
   const normalized = validateProfileName(name)
   const profilePath = path.join(getProfilesRoot(), normalized)
-  if (fs.existsSync(profilePath)) throw new Error('Profile already exists')
+  // Allow replacing an empty shell left after delete when a tombstone exists
+  // (Hermes create_profile does the same). Refuse a live profile.
+  if (fs.existsSync(profilePath) && !isNamedProfileDeleted(normalized)) {
+    throw new Error('Profile already exists')
+  }
+  if (isNamedProfileDeleted(normalized) && fs.existsSync(profilePath)) {
+    const hasIdentity =
+      fs.existsSync(path.join(profilePath, 'config.yaml')) ||
+      fs.existsSync(path.join(profilePath, '.env'))
+    if (hasIdentity) throw new Error('Profile already exists')
+    fs.rmSync(profilePath, { recursive: true, force: true })
+  }
+  clearNamedProfileDeleted(normalized)
   fs.mkdirSync(profilePath, { recursive: true })
 
   const configPath = path.join(profilePath, 'config.yaml')
@@ -970,14 +1039,42 @@ export function createProfile(
 
 export function deleteProfile(name: string): void {
   const normalized = validateProfileName(name)
-  if (normalized === getActiveProfileName())
-    throw new Error('Cannot delete the active profile')
   const profilePath = path.join(getProfilesRoot(), normalized)
-  if (!fs.existsSync(profilePath)) throw new Error('Profile not found')
-  const trashDir = path.join(getClaudeRoot(), 'trash')
-  fs.mkdirSync(trashDir, { recursive: true })
-  const trashName = `${normalized}-${Date.now()}`
-  fs.renameSync(profilePath, path.join(trashDir, trashName))
+  if (!fs.existsSync(profilePath) && !isNamedProfileDeleted(normalized)) {
+    throw new Error('Profile not found')
+  }
+
+  // Active sticky pointer would make the next ensureActiveProfileGateway
+  // respawn this profile and recreate the directory — clear it first.
+  if (getActiveProfileName() === normalized) {
+    setActiveProfile('default')
+  }
+
+  // Stop the live gateway before rmtree; a dying process writing
+  // .clean_shutdown / logs will otherwise resurrect an empty shell.
+  try {
+    // Lazy require avoids a circular dependency with claude-agent → profiles-browser.
+    const { stopProfileGateway } = nodeRequire(
+      './claude-agent',
+    ) as typeof import('./claude-agent')
+    stopProfileGateway(normalized)
+  } catch {
+    /* best-effort */
+  }
+
+  // Tombstone before remove so concurrent mkdir/list cannot relist this name.
+  markNamedProfileDeleted(normalized)
+
+  if (fs.existsSync(profilePath)) {
+    const trashDir = path.join(getClaudeRoot(), 'trash')
+    fs.mkdirSync(trashDir, { recursive: true })
+    const trashName = `${normalized}-${Date.now()}`
+    try {
+      fs.renameSync(profilePath, path.join(trashDir, trashName))
+    } catch {
+      fs.rmSync(profilePath, { recursive: true, force: true })
+    }
+  }
 }
 
 export function updateProfileConfig(

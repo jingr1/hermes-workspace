@@ -1,11 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
 import { ChatScreen } from '../chat-screen'
 import { useProfiles } from '../hooks/use-profiles'
 import { ChatRouteLoading } from '../chat-route-loading'
 import { ManagedRuntimePanel } from './managed-runtime-panel'
+import { ClaudeCodeChatShell } from './claude-code-chat-shell'
 import { useAgentStore } from '@/stores/agent-store'
 
 export function ChatWorkspace() {
@@ -25,6 +27,20 @@ export function ChatWorkspace() {
   if (agent.runtime === 'hermes') {
     return (
       <HermesChatShell agentId={agent.agentId} sessionId={sessionId ?? null} />
+    )
+  }
+
+  if (agent.runtime === 'claude-code') {
+    return (
+      <ClaudeCodeChatShell
+        agent={agent}
+        sessionId={sessionId ?? null}
+        onSessionResolved={(payload) => {
+          // The route handler updates the URL; no-op here to keep the workspace
+          // shell stable.
+          void payload
+        }}
+      />
     )
   }
 

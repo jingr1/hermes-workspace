@@ -107,9 +107,8 @@ export const Route = createFileRoute('/api/agents/status')({
         // Orphan Hermes profiles are still usable agents but are not declared
         // in agents.yaml, so probeAll() does not include them. Surface them
         // here with the same shape so the UI can render them safely.
-        const { probeHermesProfileGateway } = await import(
-          '../../../server/agent-runtime/hermes-gateway-probe'
-        )
+        const { probeHermesProfileGateway } =
+          await import('../../../server/agent-runtime/hermes-gateway-probe')
         const orphanEntries = await Promise.all(
           router.registry.orphanProfiles.map(async (profile) => {
             const probe = await probeHermesProfileGateway(profile)

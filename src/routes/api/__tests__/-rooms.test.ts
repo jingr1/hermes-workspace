@@ -64,7 +64,10 @@ describe('POST /api/rooms taskId -> missionId backfill', () => {
       request: new Request('http://localhost/api/rooms', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ title: 'Room for mission', taskId: 'mission-123' }),
+        body: JSON.stringify({
+          title: 'Room for mission',
+          taskId: 'mission-123',
+        }),
       }),
     })
     const body = await res.json()

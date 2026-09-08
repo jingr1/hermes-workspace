@@ -90,6 +90,8 @@ describe('gateway-capabilities', () => {
             mcpFallback: false,
             conductor: false,
             kanban: false,
+            sessionTruncate: false,
+            sessionCompress: false,
             dashboard: {
               available: false,
               url: 'http://127.0.0.1:9119',
@@ -122,6 +124,8 @@ describe('gateway-capabilities', () => {
             mcpFallback: false,
             conductor: false,
             kanban: false,
+            sessionTruncate: false,
+            sessionCompress: false,
             dashboard: {
               available: false,
               url: 'http://127.0.0.1:9119',

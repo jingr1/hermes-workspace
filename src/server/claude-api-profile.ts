@@ -15,10 +15,7 @@
  *   - updateSession
  *   - deleteSession
  */
-import {
-  getProfileGatewayUrl,
-  isGatewayPoolEnabled,
-} from './gateway-ports'
+import { getProfileGatewayUrl, isGatewayPoolEnabled } from './gateway-ports'
 import { readProfileApiServerKey } from './gateway-capabilities'
 import {
   readModelProviderFromConfig,
@@ -175,18 +172,15 @@ async function profileStreamChat(
   },
   opts: StreamChatOptions,
 ): Promise<void> {
-  const res = await fetch(
-    `${baseUrl}/api/sessions/${sessionId}/chat/stream`,
-    {
-      method: 'POST',
-      headers: {
-        ...authHeaders(profileName),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-      signal: opts.signal,
+  const res = await fetch(`${baseUrl}/api/sessions/${sessionId}/chat/stream`, {
+    method: 'POST',
+    headers: {
+      ...authHeaders(profileName),
+      'Content-Type': 'application/json',
     },
-  )
+    body: JSON.stringify(body),
+    signal: opts.signal,
+  })
 
   if (!res.ok) {
     const text = await res.text().catch(() => '')
@@ -263,13 +257,11 @@ function buildClient(profileName: string, baseUrl: string): ClaudeApiClient {
     defaultProvider,
 
     createSession: (opts) =>
-      profileFetch<{ session?: ClaudeSession; data?: ClaudeSession; id?: string }>(
-        profileName,
-        url,
-        'POST',
-        '/api/sessions',
-        opts || {},
-      ).then((resp) => {
+      profileFetch<{
+        session?: ClaudeSession
+        data?: ClaudeSession
+        id?: string
+      }>(profileName, url, 'POST', '/api/sessions', opts || {}).then((resp) => {
         const session = resp.session ?? resp.data ?? (resp as ClaudeSession)
         if (!session?.id) {
           if (opts?.id) {

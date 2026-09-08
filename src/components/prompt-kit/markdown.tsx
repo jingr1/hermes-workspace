@@ -211,7 +211,11 @@ const INITIAL_COMPONENTS: Partial<Components> = {
       (props as { 'data-title'?: string; dataTitle?: string })['data-title'] ??
       (props as { dataTitle?: string }).dataTitle
 
-    if (classes.includes('hermes-excalidraw') && typeof src === 'string' && src) {
+    if (
+      classes.includes('hermes-excalidraw') &&
+      typeof src === 'string' &&
+      src
+    ) {
       return (
         <ExcalidrawFromUrl
           src={src}

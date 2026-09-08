@@ -56,10 +56,7 @@ function buildOptions(
 }
 
 /** Scroll `el` into view inside its overflow parent — never touch page scroll. */
-function scrollChildIntoParent(
-  parent: HTMLElement,
-  child: HTMLElement,
-): void {
+function scrollChildIntoParent(parent: HTMLElement, child: HTMLElement): void {
   const pTop = parent.getBoundingClientRect().top
   const pBottom = parent.getBoundingClientRect().bottom
   const cTop = child.getBoundingClientRect().top
@@ -143,8 +140,7 @@ export function MentionPicker({
         event.preventDefault()
         suppressPointerRef.current = true
         setSelected((cur) => {
-          const next =
-            (Math.min(cur, options.length - 1) + 1) % options.length
+          const next = (Math.min(cur, options.length - 1) + 1) % options.length
           selectedRef.current = next
           return next
         })

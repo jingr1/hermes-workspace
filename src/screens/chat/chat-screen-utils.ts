@@ -97,9 +97,11 @@ export function shouldClearWaitingForAssistantMessage(
  * `missing` means the server has no active run — callers should apply a short
  * grace period so registration lag right after send does not flicker the UI.
  */
-export function shouldSettleWaitingFromActiveRun(run: {
-  status?: unknown
-} | null): 'keep' | 'settle' | 'missing' {
+export function shouldSettleWaitingFromActiveRun(
+  run: {
+    status?: unknown
+  } | null,
+): 'keep' | 'settle' | 'missing' {
   if (!run) return 'missing'
   if (isTerminalActiveRunStatus(run.status)) return 'settle'
   return 'keep'

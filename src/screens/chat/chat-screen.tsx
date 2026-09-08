@@ -10,6 +10,7 @@ import React, {
 } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useFeatureCapability } from '@/hooks/use-feature-capability'
 
 import {
   deriveFriendlyIdFromKey,
@@ -637,6 +638,14 @@ export function ChatScreen({
   )
   const { renameSession, renaming: renamingSessionTitle } = useRenameSession()
   const sseConnectionState = useChatStore((s) => s.connectionState)
+  const sessionTruncateCap = useFeatureCapability('sessionTruncate')
+  const sessionCompressCap = useFeatureCapability('sessionCompress')
+  const canTruncateSession = sessionTruncateCap.available
+  const canCompressSession = sessionCompressCap.available
+  const UNAVAILABLE_TRUNCATE_MSG =
+    'Not available on this Hermes build (needs upstream session_truncate)'
+  const UNAVAILABLE_COMPRESS_MSG =
+    'Not available on this Hermes build (needs upstream session_compress)'
 
   const {
     activeProfileName,
@@ -2659,6 +2668,10 @@ export function ChatScreen({
 
   const handleEditMessage = useCallback(
     (message: ChatMessage) => {
+      if (!canTruncateSession) {
+        toast(UNAVAILABLE_TRUNCATE_MSG, { type: 'error' })
+        return
+      }
       if (waitingForResponse || activeIsRealtimeStreaming) {
         toast('Wait for the current reply to finish', { type: 'error' })
         return
@@ -2686,11 +2699,20 @@ export function ChatScreen({
         }
       })()
     },
-    [activeIsRealtimeStreaming, truncateCurrentSession, waitingForResponse],
+    [
+      activeIsRealtimeStreaming,
+      canTruncateSession,
+      truncateCurrentSession,
+      waitingForResponse,
+    ],
   )
 
   const handleRegenerateMessage = useCallback(
     (message: ChatMessage) => {
+      if (!canTruncateSession) {
+        toast(UNAVAILABLE_TRUNCATE_MSG, { type: 'error' })
+        return
+      }
       if (waitingForResponse || activeIsRealtimeStreaming) {
         toast('Wait for the current reply to finish', { type: 'error' })
         return
@@ -2732,6 +2754,7 @@ export function ChatScreen({
       activeFriendlyId,
       activeIsRealtimeStreaming,
       activeSessionKey,
+      canTruncateSession,
       finalDisplayMessages,
       forcedSessionKey,
       resolvedSessionKey,
@@ -2794,6 +2817,10 @@ export function ChatScreen({
       }
 
       if (trimmedCommand === '/retry') {
+        if (!canTruncateSession) {
+          toast(UNAVAILABLE_TRUNCATE_MSG, { type: 'error' })
+          return true
+        }
         if (waitingForResponse || activeIsRealtimeStreaming) {
           toast('Wait for the current reply to finish', { type: 'error' })
           return true
@@ -2830,6 +2857,10 @@ export function ChatScreen({
       }
 
       if (trimmedCommand === '/undo') {
+        if (!canTruncateSession) {
+          toast(UNAVAILABLE_TRUNCATE_MSG, { type: 'error' })
+          return true
+        }
         if (waitingForResponse || activeIsRealtimeStreaming) {
           toast('Wait for the current reply to finish', { type: 'error' })
           return true
@@ -2858,10 +2889,7 @@ export function ChatScreen({
         return true
       }
 
-      if (
-        trimmedCommand === '/queue' ||
-        trimmedCommand.startsWith('/queue ')
-      ) {
+      if (trimmedCommand === '/queue' || trimmedCommand.startsWith('/queue ')) {
         const rest = trimmedCommand.slice('/queue'.length).trim()
         const sessionKey =
           forcedSessionKey ||
@@ -2887,10 +2915,15 @@ export function ChatScreen({
           toast('Open a session first', { type: 'error' })
           return true
         }
-        const busy =
-          waitingForResponse || activeIsRealtimeStreaming || sending
+        const busy = waitingForResponse || activeIsRealtimeStreaming || sending
         if (!busy) {
-          sendMessage(sessionKey, activeFriendlyId || sessionKey, rest, [], false)
+          sendMessage(
+            sessionKey,
+            activeFriendlyId || sessionKey,
+            rest,
+            [],
+            false,
+          )
           return true
         }
         const entry = enqueueSessionMessage(sessionKey, { text: rest })
@@ -2916,8 +2949,7 @@ export function ChatScreen({
           resolvedSessionKey ||
           activeSessionKey ||
           activeFriendlyId
-        const busy =
-          waitingForResponse || activeIsRealtimeStreaming || sending
+        const busy = waitingForResponse || activeIsRealtimeStreaming || sending
         if (!busy) {
           if (!rest) {
             toast('Nothing to interrupt', { type: 'info' })
@@ -2927,7 +2959,13 @@ export function ChatScreen({
             toast('Open a session first', { type: 'error' })
             return true
           }
-          sendMessage(sessionKey, activeFriendlyId || sessionKey, rest, [], false)
+          sendMessage(
+            sessionKey,
+            activeFriendlyId || sessionKey,
+            rest,
+            [],
+            false,
+          )
           return true
         }
         if (rest) {
@@ -2949,10 +2987,7 @@ export function ChatScreen({
         return true
       }
 
-      if (
-        trimmedCommand === '/steer' ||
-        trimmedCommand.startsWith('/steer ')
-      ) {
+      if (trimmedCommand === '/steer' || trimmedCommand.startsWith('/steer ')) {
         const rest = trimmedCommand.slice('/steer'.length).trim()
         if (!rest) {
           toast('Usage: /steer <text>', { type: 'info' })
@@ -2964,8 +2999,7 @@ export function ChatScreen({
           activeSessionKey ||
           activeFriendlyId
         const runId = localStreamingRunId || streamingRunId || null
-        const busy =
-          waitingForResponse || activeIsRealtimeStreaming || sending
+        const busy = waitingForResponse || activeIsRealtimeStreaming || sending
         if (!busy || !runId) {
           if (!sessionKey || sessionKey === 'new') {
             toast('Open a session first', { type: 'error' })
@@ -3030,6 +3064,10 @@ export function ChatScreen({
         trimmedCommand.startsWith('/compress ') ||
         trimmedCommand.startsWith('/compact ')
       ) {
+        if (!canCompressSession) {
+          toast(UNAVAILABLE_COMPRESS_MSG, { type: 'error' })
+          return true
+        }
         const focusTopic = trimmedCommand
           .replace(/^\/(?:compress|compact)\s*/i, '')
           .trim()
@@ -3087,10 +3125,7 @@ export function ChatScreen({
         return true
       }
 
-      if (
-        trimmedCommand === '/btw' ||
-        trimmedCommand.startsWith('/btw ')
-      ) {
+      if (trimmedCommand === '/btw' || trimmedCommand.startsWith('/btw ')) {
         const question = trimmedCommand.slice('/btw'.length).trim()
         if (!question) {
           toast('Usage: /btw <question>', { type: 'info' })
@@ -3205,6 +3240,8 @@ export function ChatScreen({
       activeFriendlyId,
       activeIsRealtimeStreaming,
       activeSessionKey,
+      canCompressSession,
+      canTruncateSession,
       finalDisplayMessages,
       forcedSessionKey,
       localStreamingRunId,
@@ -3633,10 +3670,7 @@ export function ChatScreen({
   // Drain one queued follow-up when the current turn becomes idle.
   useEffect(() => {
     const busy =
-      sending ||
-      waitingForResponse ||
-      activeIsRealtimeStreaming ||
-      isCompacting
+      sending || waitingForResponse || activeIsRealtimeStreaming || isCompacting
     if (busy) {
       wasBusyForQueueRef.current = true
       return
@@ -3644,8 +3678,7 @@ export function ChatScreen({
     if (!queueSessionKey || queueSessionKey === 'new') return
 
     const shouldDrain =
-      wasBusyForQueueRef.current ||
-      mountDrainKeyRef.current !== queueSessionKey
+      wasBusyForQueueRef.current || mountDrainKeyRef.current !== queueSessionKey
     mountDrainKeyRef.current = queueSessionKey
     wasBusyForQueueRef.current = false
     if (!shouldDrain) return
@@ -3985,8 +4018,12 @@ export function ChatScreen({
                 <ChatMessageList
                   messages={visibleMessages}
                   onRetryMessage={handleRetryMessage}
-                  onEditMessage={handleEditMessage}
-                  onRegenerateMessage={handleRegenerateMessage}
+                  onEditMessage={
+                    canTruncateSession ? handleEditMessage : undefined
+                  }
+                  onRegenerateMessage={
+                    canTruncateSession ? handleRegenerateMessage : undefined
+                  }
                   onRefresh={handleRefreshHistory}
                   loading={historyLoading}
                   empty={historyEmpty}
@@ -4056,36 +4093,36 @@ export function ChatScreen({
                     </div>
                   ) : null}
                   <ChatComposer
-                  onSubmit={send}
-                  onQueue={handleQueueFromComposer}
-                  onInterruptSend={handleInterruptSendFromComposer}
-                  onSteer={handleSteerFromComposer}
-                  onAbort={handleAbortStreaming}
-                  isLoading={headerStatusMode !== 'idle'}
-                  disabled={hideUi}
-                  isCompacting={isCompacting}
-                  busyMessageMode={busyMessageMode}
-                  canSteer={canSteer}
-                  queuedCount={queuedCount}
-                  onClearQueue={handleClearQueue}
-                  contextRefreshToken={`${resolvedSessionKey || activeSessionKey || 'new'}:${lastCompletedRunAt}:${sending ? 1 : 0}:${waitingForResponse ? 1 : 0}`}
-                  sessionKey={
-                    isNewChat
-                      ? undefined
-                      : forcedSessionKey ||
-                        resolvedSessionKey ||
-                        activeCanonicalKey ||
-                        activeSessionKey
-                  }
-                  wrapperRef={composerRef}
-                  composerRef={composerHandleRef}
-                  embedded={embedded}
-                  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime safety
-                  focusKey={`${isNewChat ? 'new' : activeFriendlyId}:${activeCanonicalKey ?? ''}`}
-                  thinkingLevel={thinkingLevel}
-                  onThinkingLevelChange={handleThinkingLevelChange}
-                  gatewayQueriesEnabled={!historyLoading}
-                />
+                    onSubmit={send}
+                    onQueue={handleQueueFromComposer}
+                    onInterruptSend={handleInterruptSendFromComposer}
+                    onSteer={handleSteerFromComposer}
+                    onAbort={handleAbortStreaming}
+                    isLoading={headerStatusMode !== 'idle'}
+                    disabled={hideUi}
+                    isCompacting={isCompacting}
+                    busyMessageMode={busyMessageMode}
+                    canSteer={canSteer}
+                    queuedCount={queuedCount}
+                    onClearQueue={handleClearQueue}
+                    contextRefreshToken={`${resolvedSessionKey || activeSessionKey || 'new'}:${lastCompletedRunAt}:${sending ? 1 : 0}:${waitingForResponse ? 1 : 0}`}
+                    sessionKey={
+                      isNewChat
+                        ? undefined
+                        : forcedSessionKey ||
+                          resolvedSessionKey ||
+                          activeCanonicalKey ||
+                          activeSessionKey
+                    }
+                    wrapperRef={composerRef}
+                    composerRef={composerHandleRef}
+                    embedded={embedded}
+                    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime safety
+                    focusKey={`${isNewChat ? 'new' : activeFriendlyId}:${activeCanonicalKey ?? ''}`}
+                    thinkingLevel={thinkingLevel}
+                    onThinkingLevelChange={handleThinkingLevelChange}
+                    gatewayQueriesEnabled={!historyLoading}
+                  />
                 </>
               ) : null}
             </>

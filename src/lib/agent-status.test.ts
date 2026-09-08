@@ -1,9 +1,6 @@
 /** @vitest-environment node */
 import { describe, expect, it } from 'vitest'
-import {
-  ACTIVITY_STALE_MS,
-  deriveUnifiedStatus,
-} from './agent-status'
+import { ACTIVITY_STALE_MS, deriveUnifiedStatus } from './agent-status'
 
 describe('deriveUnifiedStatus', () => {
   const now = 1_000_000_000_000

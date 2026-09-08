@@ -45,7 +45,12 @@ describe('room-store', () => {
 
   it('deletes a room and cascades', () => {
     const room = createRoom({ title: 'Test', dbPath })
-    addParticipant({ roomId: room.id, kind: 'agent', participantId: 'dev', dbPath })
+    addParticipant({
+      roomId: room.id,
+      kind: 'agent',
+      participantId: 'dev',
+      dbPath,
+    })
     deleteRoom(room.id, { dbPath })
     expect(getRoom(room.id, { dbPath })).toBeNull()
     expect(listParticipants(room.id, { dbPath })).toEqual([])
@@ -53,7 +58,12 @@ describe('room-store', () => {
 
   it('adds participants and excludes removed ones', () => {
     const room = createRoom({ title: 'Test', dbPath })
-    addParticipant({ roomId: room.id, kind: 'agent', participantId: 'dev', dbPath })
+    addParticipant({
+      roomId: room.id,
+      kind: 'agent',
+      participantId: 'dev',
+      dbPath,
+    })
     addParticipant({
       roomId: room.id,
       kind: 'human',
@@ -73,9 +83,9 @@ describe('room-store', () => {
     })
     const removed = removeParticipant(room.id, 'architect', { dbPath })
     expect(removed?.participantId).toBe('architect')
-    expect(listParticipants(room.id, { dbPath }).map((p) => p.participantId)).toEqual(
-      [],
-    )
+    expect(
+      listParticipants(room.id, { dbPath }).map((p) => p.participantId),
+    ).toEqual([])
     // Re-add must revive instead of UNIQUE-failing on mention_name.
     const revived = addParticipant({
       roomId: room.id,
@@ -84,14 +94,19 @@ describe('room-store', () => {
       dbPath,
     })
     expect(revived.removedAt).toBeNull()
-    expect(listParticipants(room.id, { dbPath }).map((p) => p.participantId)).toEqual([
-      'architect',
-    ])
+    expect(
+      listParticipants(room.id, { dbPath }).map((p) => p.participantId),
+    ).toEqual(['architect'])
   })
 
   it('inserts and retrieves messages', () => {
     const room = createRoom({ title: 'Test', dbPath })
-    addParticipant({ roomId: room.id, kind: 'agent', participantId: 'dev', dbPath })
+    addParticipant({
+      roomId: room.id,
+      kind: 'agent',
+      participantId: 'dev',
+      dbPath,
+    })
 
     const msg = insertMessage({
       roomId: room.id,

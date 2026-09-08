@@ -77,7 +77,12 @@ export function parseMentions(
       continue
     }
 
-    if (handle === 'user' || handle === 'human' || handle === 'me' || handle === 'owner') {
+    if (
+      handle === 'user' ||
+      handle === 'human' ||
+      handle === 'me' ||
+      handle === 'owner'
+    ) {
       // @user / @human resolves to the human participant(s) at dispatch time.
       continue
     }
@@ -151,10 +156,7 @@ export function expandMentionTargets(
  * Check whether a message contains a mention that resolves to a specific
  * participant key.
  */
-export function isMentioned(
-  message: RoomMessage,
-  memberKey: string,
-): boolean {
+export function isMentioned(message: RoomMessage, memberKey: string): boolean {
   if (message.mentions.some((m) => m.type === 'all')) return true
   const [kind, participantId] = memberKey.split(':')
   return message.mentions.some(

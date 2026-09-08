@@ -8,7 +8,9 @@ describe('parseExcalidrawScene', () => {
       JSON.stringify({
         type: 'excalidraw',
         version: 2,
-        elements: [{ type: 'rectangle', id: 'r1', x: 0, y: 0, width: 10, height: 10 }],
+        elements: [
+          { type: 'rectangle', id: 'r1', x: 0, y: 0, width: 10, height: 10 },
+        ],
         appState: { viewBackgroundColor: '#ffffff' },
       }),
     )

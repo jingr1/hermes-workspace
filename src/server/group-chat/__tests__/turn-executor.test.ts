@@ -31,7 +31,8 @@ vi.mock('../agent-session-manager', () => ({
 }))
 
 vi.mock('../constants', async () => {
-  const actual = await vi.importActual<typeof import('../constants')>('../constants')
+  const actual =
+    await vi.importActual<typeof import('../constants')>('../constants')
   return {
     ...actual,
     GROUP_TURN_TIMEOUT_MS: 50,
@@ -70,7 +71,9 @@ describe('executeMemberTurn timeout / stranded', () => {
       async (
         _sid: string,
         _body: unknown,
-        opts: { onEvent: (p: { event: string; data: Record<string, unknown> }) => void },
+        opts: {
+          onEvent: (p: { event: string; data: Record<string, unknown> }) => void
+        },
       ) => {
         opts.onEvent({
           event: 'assistant.delta',
@@ -114,9 +117,7 @@ describe('executeMemberTurn timeout / stranded', () => {
       profile: 'developer',
     })
     getMessages
-      .mockResolvedValueOnce([
-        { role: 'user', content: 'prior' },
-      ])
+      .mockResolvedValueOnce([{ role: 'user', content: 'prior' }])
       .mockResolvedValueOnce([
         { role: 'user', content: 'prior' },
         { role: 'user', content: 'prompt' },
@@ -130,7 +131,9 @@ describe('executeMemberTurn timeout / stranded', () => {
       async (
         _sid: string,
         _body: unknown,
-        opts: { onEvent: (p: { event: string; data: Record<string, unknown> }) => void },
+        opts: {
+          onEvent: (p: { event: string; data: Record<string, unknown> }) => void
+        },
       ) => {
         opts.onEvent({
           event: 'assistant.delta',

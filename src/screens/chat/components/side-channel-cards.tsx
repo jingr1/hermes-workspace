@@ -98,7 +98,9 @@ export function BackgroundTasksBadge({
               </p>
             ) : null}
             {task.status === 'error' && task.error ? (
-              <p className="mt-1 text-red-600 dark:text-red-300">{task.error}</p>
+              <p className="mt-1 text-red-600 dark:text-red-300">
+                {task.error}
+              </p>
             ) : null}
             {onOpenSession && task.sessionId ? (
               <button

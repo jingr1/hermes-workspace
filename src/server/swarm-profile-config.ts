@@ -105,6 +105,25 @@ export function ensureSwarmProfileConfig(
     mcpTokensLinked: 0,
   }
   try {
+    // Never materialize a tombstoned named profile via bootstrap mkdir.
+    const base = profilePath.replace(/\/+$/, '')
+    const marker = base.match(/^(.*)\/profiles\/([^/]+)$/)
+    if (marker) {
+      const [, hermesRootGuess, profileName] = marker
+      const tombstone = join(
+        hermesRootGuess,
+        'profiles',
+        '.deleted',
+        profileName,
+      )
+      if (existsSync(tombstone)) {
+        return {
+          ...result,
+          ok: false,
+          error: `profile "${profileName}" was deleted`,
+        }
+      }
+    }
     mkdirSync(profilePath, { recursive: true })
     const hermesRoot = options.hermesRoot ?? join(homedir(), '.hermes')
 

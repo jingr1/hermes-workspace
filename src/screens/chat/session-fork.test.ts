@@ -17,7 +17,11 @@ describe('edit / regenerate keep counts', () => {
 
 describe('findLastUserMessage', () => {
   const messages: Array<ChatMessage> = [
-    { role: 'user', content: [{ type: 'text', text: 'hi' }], __historyIndex: 0 },
+    {
+      role: 'user',
+      content: [{ type: 'text', text: 'hi' }],
+      __historyIndex: 0,
+    },
     {
       role: 'assistant',
       content: [{ type: 'text', text: 'hello' }],

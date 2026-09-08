@@ -58,7 +58,7 @@ function ensureSessionTable(databasePath: string): void {
     `)
     // Migrate older tables that were created before the profile column existed.
     const columns = db
-      .prepare("PRAGMA table_info(group_chat_sessions)")
+      .prepare('PRAGMA table_info(group_chat_sessions)')
       .all() as Array<{ name: string }>
     const hasProfile = columns.some((c) => c.name === 'profile')
     if (!hasProfile) {
@@ -77,7 +77,10 @@ function dbPath(input?: { dbPath?: string }): string {
  *  Mirrors Desktop's `Group: ${roomId}` but scopes uniqueness per participant
  *  because workspace runs all agents on the same gateway, which rejects
  *  duplicate titles globally. */
-export function groupSessionTitle(roomId: string, participantId: string): string {
+export function groupSessionTitle(
+  roomId: string,
+  participantId: string,
+): string {
   return `Group: ${roomId}:${participantId}`
 }
 
@@ -218,10 +221,17 @@ async function checkStoredSession(
       return { kind: 'ok', sessionId }
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
-      if (/\b404\b|Not found|not found|invalid session|session not found/i.test(msg)) {
+      if (
+        /\b404\b|Not found|not found|invalid session|session not found/i.test(
+          msg,
+        )
+      ) {
         return { kind: 'missing' }
       }
-      return { kind: 'error', error: error instanceof Error ? error : new Error(String(error)) }
+      return {
+        kind: 'error',
+        error: error instanceof Error ? error : new Error(String(error)),
+      }
     }
   }
 
@@ -243,10 +253,15 @@ async function checkStoredSession(
     return { kind: 'ok', sessionId }
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error)
-    if (/\b404\b|Not found|not found|invalid session|session not found/i.test(msg)) {
+    if (
+      /\b404\b|Not found|not found|invalid session|session not found/i.test(msg)
+    ) {
       return { kind: 'missing' }
     }
-    return { kind: 'error', error: error instanceof Error ? error : new Error(String(error)) }
+    return {
+      kind: 'error',
+      error: error instanceof Error ? error : new Error(String(error)),
+    }
   }
 }
 
@@ -321,7 +336,9 @@ export async function getOrCreateSession(
   //    nonce on that specific error.
   const client = clientForMember(member)
   try {
-    console.log(`[agent-session-manager] createSession member=${member.displayName} profile=${profile ?? 'n/a'} client=${client ? client.baseUrl : 'global'} model=(profile default)`)
+    console.log(
+      `[agent-session-manager] createSession member=${member.displayName} profile=${profile ?? 'n/a'} client=${client ? client.baseUrl : 'global'} model=(profile default)`,
+    )
     // Do NOT pass model/provider here. Persisting a session model causes Hermes
     // api_server to prefer session_row_model on later turns and skip global
     // provider resolution — which currently mis-routes to DeepSeek when a
@@ -330,7 +347,9 @@ export async function getOrCreateSession(
     const session = client
       ? await client.createSession({ title })
       : await globalCreateSession({ title })
-    console.log(`[agent-session-manager] created sessionId=${session.id} model=${session.model ?? 'n/a'} for member=${member.displayName} profile=${profile ?? 'n/a'}`)
+    console.log(
+      `[agent-session-manager] created sessionId=${session.id} model=${session.model ?? 'n/a'} for member=${member.displayName} profile=${profile ?? 'n/a'}`,
+    )
     const sessionId = session.id
     rememberSession(roomId, member.participantId, sessionId, member, input)
     return { sessionId, existed: false, profile }
@@ -353,8 +372,17 @@ export async function submitPrompt(
   roomId: string,
   member: GroupMember,
   prompt: string,
-  input?: { dbPath?: string; title?: string; model?: string; provider?: string },
-): Promise<{ sessionId: string; message?: ClaudeMessage; profile: string | null }> {
+  input?: {
+    dbPath?: string
+    title?: string
+    model?: string
+    provider?: string
+  },
+): Promise<{
+  sessionId: string
+  message?: ClaudeMessage
+  profile: string | null
+}> {
   const { sessionId, profile } = await getOrCreateSession(roomId, member, input)
   const client = clientForMember(member)
   // Only forward an explicit caller override. Otherwise omit model/provider so

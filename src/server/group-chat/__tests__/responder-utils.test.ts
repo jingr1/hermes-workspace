@@ -162,12 +162,12 @@ describe('responder-utils', () => {
 
   describe('rotateGroupSpeakers', () => {
     it('rotates round-robin', () => {
-      expect(rotateGroupSpeakers(members, 0).map((m) => m.participantId)).toEqual(
-        ['a', 'b', 'h'],
-      )
-      expect(rotateGroupSpeakers(members, 1).map((m) => m.participantId)).toEqual(
-        ['b', 'h', 'a'],
-      )
+      expect(
+        rotateGroupSpeakers(members, 0).map((m) => m.participantId),
+      ).toEqual(['a', 'b', 'h'])
+      expect(
+        rotateGroupSpeakers(members, 1).map((m) => m.participantId),
+      ).toEqual(['b', 'h', 'a'])
     })
   })
 
@@ -205,9 +205,7 @@ describe('responder-utils', () => {
         ]),
         makeMsg('agent', 'a', 'I can help', []),
       ]
-      expect(unaddressedGroupMentions(messages, members)).toEqual([
-        'agent:b',
-      ])
+      expect(unaddressedGroupMentions(messages, members)).toEqual(['agent:b'])
     })
 
     it('returns empty once everyone replied', () => {

@@ -62,9 +62,7 @@ export function clearLastRoom(roomId?: string): void {
 }
 
 /** Pick a room to reopen: last remembered if still present, else newest. */
-export function resolveRoomToOpen(
-  rooms: Array<{ id: string }>,
-): string | null {
+export function resolveRoomToOpen(rooms: Array<{ id: string }>): string | null {
   if (rooms.length === 0) return null
   const last = readLastRoom()
   if (last && rooms.some((room) => room.id === last)) return last

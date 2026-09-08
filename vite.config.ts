@@ -791,14 +791,19 @@ const config = defineConfig(({ mode, command }) => {
           })()
         },
       },
-      // Client-only: replace process.env references in client bundles
-      // Server bundles must keep real process.env for Docker runtime env vars
+      // Client-only: replace process.env references in client bundles.
+      // Server bundles must keep real process.env for Docker runtime env vars.
+      // Exclusion rule: server-side code & tests are not browser bundles —
+      // they need runtime process.env access (e.g. Docker secrets, CI env).
       {
         name: 'client-process-env',
         enforce: 'pre',
-        transform(code, _id) {
+        transform(code, id) {
           const envName = this.environment?.name
           if (envName !== 'client') return null
+          // Skip server/runtime or test files; they must retain real
+          // process.env access instead of the client-side env stub.
+          if (id.includes('/src/server/') || id.includes('.test.')) return null
           if (
             !code.includes('process.env') &&
             !code.includes('process.platform')

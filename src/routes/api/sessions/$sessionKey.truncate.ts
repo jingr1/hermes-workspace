@@ -3,6 +3,10 @@ import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../server/auth-middleware'
 import { requireJsonContentType } from '../../../server/rate-limit'
 import { truncateSession } from '../../../server/claude-api'
+import {
+  ensureGatewayProbed,
+  getCapabilities,
+} from '../../../server/gateway-capabilities'
 import { ensureActiveProfileGateway } from '../../../server/gateway-pool'
 
 export const Route = createFileRoute('/api/sessions/$sessionKey/truncate')({
@@ -38,6 +42,18 @@ export const Route = createFileRoute('/api/sessions/$sessionKey/truncate')({
 
         try {
           await ensureActiveProfileGateway()
+          await ensureGatewayProbed()
+          if (!getCapabilities().sessionTruncate) {
+            return json(
+              {
+                ok: false,
+                error:
+                  'Session truncate is not available on this Hermes build. Edit / Regenerate /undo /retry need upstream session_truncate support — do not patch local hermes.',
+                code: 'session_truncate_unavailable',
+              },
+              { status: 501 },
+            )
+          }
           const result = await truncateSession(sessionKey, keepCount)
           return json({
             ok: true,

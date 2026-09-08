@@ -73,7 +73,11 @@ export function isGroupPassText(text: string | null | undefined): boolean {
  * case where a model emits an answer followed by a synthetic "(pass)".
  */
 export function pickGroupTurnReply(
-  messages: Array<{ role: string; content?: string | null; tool_calls?: unknown }>,
+  messages: Array<{
+    role: string
+    content?: string | null
+    tool_calls?: unknown
+  }>,
   before: number,
 ): string | null {
   let passText: string | null = null

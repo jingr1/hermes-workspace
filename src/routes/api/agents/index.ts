@@ -34,7 +34,10 @@ function buildStatusSnapshot(
 function buildAgentPayload(
   decl: AgentDeclaration,
   probe: AgentProbeResult,
-  groupChatMap: Map<string, import('../../../lib/agent-status').GroupChatActivity>,
+  groupChatMap: Map<
+    string,
+    import('../../../lib/agent-status').GroupChatActivity
+  >,
 ): AgentWithStatus {
   const snapshot =
     decl.runtime === 'hermes' ? getAgentStatusSnapshot(decl.id) : undefined
@@ -92,9 +95,8 @@ export const Route = createFileRoute('/api/agents/')({
         }
 
         // Orphan Hermes profiles are still usable as hermes-runtime agents.
-        const { probeHermesProfileGateway } = await import(
-          '../../../server/agent-runtime/hermes-gateway-probe'
-        )
+        const { probeHermesProfileGateway } =
+          await import('../../../server/agent-runtime/hermes-gateway-probe')
         const orphanAgents = await Promise.all(
           router.registry.orphanProfiles.map(async (profile) => {
             const probe = await probeHermesProfileGateway(profile)

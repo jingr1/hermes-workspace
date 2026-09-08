@@ -61,9 +61,7 @@ export const Route = createFileRoute('/api/btw')({
           string,
           unknown
         >
-        const sessionId = String(
-          body.sessionId || body.session_id || '',
-        ).trim()
+        const sessionId = String(body.sessionId || body.session_id || '').trim()
         const question = String(body.question || body.text || '').trim()
         if (!sessionId || sessionId === 'new') {
           return json(

@@ -3,7 +3,6 @@
  * LRU eviction when more than N profiles stay warm (see gateway-lifecycle.ts).
  * `default` is pinned resident; background starts never steal CLAUDE_API.
  */
-import { existsSync } from 'node:fs'
 import path from 'node:path'
 import {
   getActiveProfileName,
@@ -68,10 +67,7 @@ export type PooledGateway = {
   state: GatewayPoolState
 }
 
-export type EnsureGatewayResult = Omit<
-  StartClaudeAgentResult,
-  'ok' | 'error'
-> &
+export type EnsureGatewayResult = Omit<StartClaudeAgentResult, 'ok' | 'error'> &
   StartClaudeAgentResult & {
     port?: number
     url?: string
@@ -204,15 +200,18 @@ async function ensureProfileGatewayLocked(
 ): Promise<EnsureGatewayResult> {
   const name = (profileName || 'default').trim() || 'default'
   const hermesHome = resolveProfileHermesHome(name)
-  if (name !== PINNED_GATEWAY_PROFILE && !existsSync(hermesHome)) {
-    return {
-      ok: false,
-      error: `profile "${name}" does not exist`,
-      profile: name,
-      hermesHome,
-      port: resolveProfileGatewayPort(name),
-      url: gatewayUrlForPort(resolveProfileGatewayPort(name)),
-      started: false,
+  if (name !== PINNED_GATEWAY_PROFILE) {
+    const { isLiveNamedProfile } = await import('./profiles-browser')
+    if (!isLiveNamedProfile(name)) {
+      return {
+        ok: false,
+        error: `profile "${name}" does not exist`,
+        profile: name,
+        hermesHome,
+        port: resolveProfileGatewayPort(name),
+        url: gatewayUrlForPort(resolveProfileGatewayPort(name)),
+        started: false,
+      }
     }
   }
   const port = resolveProfileGatewayPort(name)
@@ -396,6 +395,20 @@ export async function ensureActiveProfileGateway(options?: {
     console.warn(
       `[gateway-pool] ${name} gateway unavailable (${'error' in result ? result.error : 'unhealthy'}); falling back to ${PINNED_GATEWAY_PROFILE}`,
     )
+    // Heal sticky active_profile when the named profile is gone/tombstoned so
+    // the next boot does not keep trying to spawn it.
+    if (
+      'error' in result &&
+      typeof result.error === 'string' &&
+      result.error.includes('does not exist')
+    ) {
+      try {
+        const { setActiveProfile } = await import('./profiles-browser')
+        setActiveProfile(PINNED_GATEWAY_PROFILE)
+      } catch {
+        /* ignore */
+      }
+    }
     const fallback = await ensureProfileGateway(PINNED_GATEWAY_PROFILE, options)
     if (fallback.ok && (await probeProfileGateway(PINNED_GATEWAY_PROFILE))) {
       await applyRoute(getProfileGatewayUrl(PINNED_GATEWAY_PROFILE))

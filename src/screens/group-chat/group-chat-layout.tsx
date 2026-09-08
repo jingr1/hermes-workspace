@@ -1,9 +1,5 @@
 import { createContext, useEffect, useState } from 'react'
-import {
-  Outlet,
-  useNavigate,
-  useRouterState,
-} from '@tanstack/react-router'
+import { Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,9 +17,7 @@ import {
   MenuRoot,
   MenuTrigger,
 } from '@/components/ui/menu'
-import {
-  HugeiconsIcon,
-} from '@hugeicons/react'
+import { HugeiconsIcon } from '@hugeicons/react'
 import {
   MoreVerticalCircle01Icon,
   Delete01Icon,
@@ -49,7 +43,8 @@ export function GroupChatLayout() {
   const routerState = useRouterState()
   const pathname = routerState.location?.pathname ?? ''
   const roomId =
-    pathname.startsWith('/group-chat/') && pathname.length > '/group-chat/'.length
+    pathname.startsWith('/group-chat/') &&
+    pathname.length > '/group-chat/'.length
       ? pathname.slice('/group-chat/'.length).split(/[/?#]/)[0]
       : undefined
   const [rooms, setRooms] = useState<Array<Room>>([])
@@ -117,9 +112,7 @@ export function GroupChatLayout() {
     setRenaming(true)
     try {
       const res = await updateRoom(renameTarget.id, { title })
-      setRooms((prev) =>
-        prev.map((r) => (r.id === res.room.id ? res.room : r)),
-      )
+      setRooms((prev) => prev.map((r) => (r.id === res.room.id ? res.room : r)))
       setRenameTarget(null)
       setRenameTitle('')
     } finally {
@@ -149,9 +142,7 @@ export function GroupChatLayout() {
             </DialogTrigger>
             <DialogContent>
               <DialogTitle>New Room</DialogTitle>
-              <DialogDescription>
-                Start a multi-agent room.
-              </DialogDescription>
+              <DialogDescription>Start a multi-agent room.</DialogDescription>
               <div className="flex gap-2 mt-4">
                 <Input
                   placeholder="Room title"
@@ -280,9 +271,8 @@ export function GroupChatLayout() {
         <DialogContent>
           <DialogTitle>Delete room?</DialogTitle>
           <DialogDescription>
-            This will permanently remove{' '}
-            <strong>{deleteTarget?.title}</strong> and all its messages,
-            participants, and pending turns.
+            This will permanently remove <strong>{deleteTarget?.title}</strong>{' '}
+            and all its messages, participants, and pending turns.
           </DialogDescription>
           <div className="mt-5 flex justify-end gap-2">
             <DialogClose disabled={deleting}>Cancel</DialogClose>

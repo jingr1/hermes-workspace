@@ -104,7 +104,10 @@ export function RoomsScreen() {
     let nextStatus: string | null | undefined
 
     for (const ev of pending) {
-      if (ev.event === 'group_chat_reply' || ev.event === 'group_chat_message') {
+      if (
+        ev.event === 'group_chat_reply' ||
+        ev.event === 'group_chat_message'
+      ) {
         refreshMessages = true
       }
       if (
@@ -132,7 +135,9 @@ export function RoomsScreen() {
       })
     }
     if (refreshPending) {
-      void listPendingTurns(roomId).then((res) => setPendingTurns(res.pendingTurns))
+      void listPendingTurns(roomId).then((res) =>
+        setPendingTurns(res.pendingTurns),
+      )
     }
     if (nextStatus !== undefined) {
       setStatusText(nextStatus)
@@ -316,9 +321,7 @@ function MessageBubble({
 }) {
   const sender = useMemo(
     () =>
-      participants.find(
-        (p) => p.participantId === message.senderParticipantId,
-      ),
+      participants.find((p) => p.participantId === message.senderParticipantId),
     [participants, message.senderParticipantId],
   )
   const color = sender

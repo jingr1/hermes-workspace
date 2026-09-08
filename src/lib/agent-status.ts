@@ -135,13 +135,13 @@ export function deriveUnifiedStatus(
   // Configuration health wins everything: an unconfigured agent is unusable.
   if (input.hasModel === false) return 'needsSetup'
 
-  // Hard connectivity: a failed gateway/runtime probe wins over sticky
-  // group-chat "online" bits and zombie runtime.json states.
-  if (input.probeAvailable === false) return 'offline'
-
   // Explicit human gate / blocked.
   if (input.runtimeNeedsHuman) return 'blocked'
-  if (state === 'blocked' || state === 'needs_human' || state === 'needs_human_approval') {
+  if (
+    state === 'blocked' ||
+    state === 'needs_human' ||
+    state === 'needs_human_approval'
+  ) {
     return 'blocked'
   }
 
@@ -160,7 +160,8 @@ export function deriveUnifiedStatus(
   const sessionUpdated = input.latestSession?.updatedAt ?? 0
   const chatUpdated = input.groupChatLastMessageAt ?? 0
   const lastActivity = Math.max(runtimeLastOutput, sessionUpdated, chatUpdated)
-  const recentlyActive = lastActivity > 0 && nowMs - lastActivity < ACTIVITY_STALE_MS
+  const recentlyActive =
+    lastActivity > 0 && nowMs - lastActivity < ACTIVITY_STALE_MS
 
   const busyStates = new Set([
     'executing',
@@ -194,7 +195,10 @@ export function deriveUnifiedStatus(
 
 export function deriveUnifiedStatusForAgent(
   agentId: string,
-  snapshot: { state?: string | null; updatedAt?: number | null; needsHuman?: boolean } | null | undefined,
+  snapshot:
+    | { state?: string | null; updatedAt?: number | null; needsHuman?: boolean }
+    | null
+    | undefined,
   probeAvailable: boolean,
   groupChatMap: Map<string, GroupChatActivity>,
   profileName?: string,
@@ -216,7 +220,11 @@ export function deriveUnifiedStatusForAgent(
 }
 
 export function readProfileModel(profileName: string): string | undefined {
-  const profileConfigPath = path.join(getProfilesDir(), profileName, 'config.yaml')
+  const profileConfigPath = path.join(
+    getProfilesDir(),
+    profileName,
+    'config.yaml',
+  )
 
   // 1. Prefer profile-specific config when the profile directory exists.
   if (fs.existsSync(profileConfigPath)) {

@@ -46,6 +46,7 @@ import {
   PromptInputTextarea,
 } from '@/components/prompt-kit/prompt-input'
 import { useSettings } from '@/hooks/use-settings'
+import { useFeatureCapability } from '@/hooks/use-feature-capability'
 import { MOBILE_TAB_BAR_OFFSET } from '@/components/mobile-tab-bar'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import {
@@ -927,6 +928,8 @@ function ChatComposerComponent({
   onClearQueue,
 }: ChatComposerProps) {
   const queryClient = useQueryClient()
+  const sessionTruncateCap = useFeatureCapability('sessionTruncate')
+  const sessionCompressCap = useFeatureCapability('sessionCompress')
   const mobileKeyboardInset = useWorkspaceStore((s) => s.mobileKeyboardInset)
   const mobileComposerFocused = useWorkspaceStore(
     (s) => s.mobileComposerFocused,
@@ -1852,19 +1855,38 @@ function ChatComposerComponent({
       })
   }, [])
 
-  const slashCommands = useMemo(
-    () =>
-      mergeSlashCommands(
-        mergeSlashCommands(DEFAULT_SLASH_COMMANDS, serverCommands),
-        (installedSkillsQuery.data ?? [])
-          .filter((skill) => skill.installed && skill.enabled)
-          .map((skill) => ({
-            command: `/${skill.id}`,
-            description: skill.description || `Run ${skill.name}`,
-          })),
-      ),
-    [serverCommands, installedSkillsQuery.data],
-  )
+  const slashCommands = useMemo(() => {
+    const merged = mergeSlashCommands(
+      mergeSlashCommands(DEFAULT_SLASH_COMMANDS, serverCommands),
+      (installedSkillsQuery.data ?? [])
+        .filter((skill) => skill.installed && skill.enabled)
+        .map((skill) => ({
+          command: `/${skill.id}`,
+          description: skill.description || `Run ${skill.name}`,
+        })),
+    )
+    return merged.filter((cmd) => {
+      const name = cmd.command.split(/\s+/)[0] ?? cmd.command
+      if (
+        !sessionTruncateCap.available &&
+        (name === '/retry' || name === '/undo')
+      ) {
+        return false
+      }
+      if (
+        !sessionCompressCap.available &&
+        (name === '/compress' || name === '/compact')
+      ) {
+        return false
+      }
+      return true
+    })
+  }, [
+    serverCommands,
+    installedSkillsQuery.data,
+    sessionTruncateCap.available,
+    sessionCompressCap.available,
+  ])
   const isSlashMenuOpen =
     slashCommandQuery !== null && !disabled && !isSlashMenuDismissed
 

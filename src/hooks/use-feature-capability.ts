@@ -20,6 +20,8 @@ export type FeatureKey =
   | 'dashboard'
   | 'enhancedChat'
   | 'kanban'
+  | 'sessionTruncate'
+  | 'sessionCompress'
 
 export type CapabilityState = {
   /** True when the capability is available right now. */

@@ -85,7 +85,12 @@ type DialogCloseProps = React.ComponentProps<typeof Dialog.Close> & {
   render?: React.ReactElement
 }
 
-function DialogClose({ className, render, children, ...props }: DialogCloseProps) {
+function DialogClose({
+  className,
+  render,
+  children,
+  ...props
+}: DialogCloseProps) {
   return (
     <Dialog.Close
       render={

@@ -79,9 +79,7 @@ function SelectItem({ className, children, ...props }: SelectItemProps) {
       }}
       {...props}
     >
-      <Select.ItemIndicator className="w-4 text-center">
-        ✓
-      </Select.ItemIndicator>
+      <Select.ItemIndicator className="w-4 text-center">✓</Select.ItemIndicator>
       <Select.ItemText>{children}</Select.ItemText>
     </Select.Item>
   )

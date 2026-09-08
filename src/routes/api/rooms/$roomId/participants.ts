@@ -70,7 +70,9 @@ export const Route = createFileRoute('/api/rooms/$roomId/participants')({
             ? (body.runtime as 'claude-code' | 'codex' | 'deepseek-harness')
             : 'hermes'
         const profile =
-          body.profile === null ? null : String(body.profile ?? '').trim() || null
+          body.profile === null
+            ? null
+            : String(body.profile ?? '').trim() || null
         const participant = addParticipant({
           roomId: params.roomId,
           kind,

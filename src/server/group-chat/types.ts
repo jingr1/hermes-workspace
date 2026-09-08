@@ -8,7 +8,12 @@
 
 export type ParticipantKind = 'human' | 'agent' | 'system'
 
-export type RoomRuntime = 'hermes' | 'claude-code' | 'codex' | 'deepseek-harness' | 'human'
+export type RoomRuntime =
+  | 'hermes'
+  | 'claude-code'
+  | 'codex'
+  | 'deepseek-harness'
+  | 'human'
 
 export type RoomState =
   | 'active'
@@ -122,7 +127,13 @@ export type GroupTurnResult =
 /** Minimal participant shape used by the runner/mention resolver. */
 export type GroupMember = Pick<
   RoomParticipant,
-  'id' | 'participantId' | 'displayName' | 'mentionName' | 'runtime' | 'kind' | 'profile'
+  | 'id'
+  | 'participantId'
+  | 'displayName'
+  | 'mentionName'
+  | 'runtime'
+  | 'kind'
+  | 'profile'
 > & {
   /** Alias for displayName to match upstream naming. */
   name: string
@@ -139,7 +150,12 @@ export type GroupMember = Pick<
 /** Room activity event published on chat-event-bus. */
 export type GroupActivityEvent =
   | { kind: 'turn_started'; member: string; roomId: string }
-  | { kind: 'turn_ended'; member: string; roomId: string; result: GroupTurnResult['kind'] }
+  | {
+      kind: 'turn_ended'
+      member: string
+      roomId: string
+      result: GroupTurnResult['kind']
+    }
   | { kind: 'reply'; member: string; roomId: string; text: string }
   | { kind: 'failed'; member: string; roomId: string; reason?: string }
   | { kind: 'held'; member: string; roomId: string }

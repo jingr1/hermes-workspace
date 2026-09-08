@@ -1581,9 +1581,7 @@ function ChatMessageListComponent({
             lifecycleEvents={messageIsStreaming ? lifecycleEvents : undefined}
             simulateStreaming={simulateStreaming}
             streamingKey={signature}
-            expandAllToolSections={
-              expandAllToolSections || streamActivityMode
-            }
+            expandAllToolSections={expandAllToolSections || streamActivityMode}
             hideActivityCard={hideActivityCards}
           />
         </div>
@@ -1596,9 +1594,7 @@ function ChatMessageListComponent({
         message={chatMessage}
         attachedToolMessages={entry.attachedToolMessages}
         onRetryMessage={effectiveOnRetry}
-        onEditMessage={
-          entryIndex === lastUserIndex ? onEditMessage : undefined
-        }
+        onEditMessage={entryIndex === lastUserIndex ? onEditMessage : undefined}
         onRegenerateMessage={
           entryIndex === lastAssistantIndex ? onRegenerateMessage : undefined
         }

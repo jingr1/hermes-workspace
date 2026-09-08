@@ -85,11 +85,13 @@ export class AgentRuntimeRouter {
   }
 
   async probeAll(): Promise<
-    Array<{
-      agentId: string
-      runtime: string
-      execution: string
-    } & AgentProbeResult>
+    Array<
+      {
+        agentId: string
+        runtime: string
+        execution: string
+      } & AgentProbeResult
+    >
   > {
     // Probe in parallel — sequential health checks stall /api/agents/status
     // when several profile gateways are down (each waits the fetch timeout).

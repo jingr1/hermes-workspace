@@ -1,9 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../../../../server/auth-middleware'
-import {
-  getRoom,
-} from '../../../../../../server/group-chat/room-store'
+import { getRoom } from '../../../../../../server/group-chat/room-store'
 import { answerPendingTurnWithMessage } from '../../../../../../server/group-chat/pending-turn-service'
 
 export const Route = createFileRoute(

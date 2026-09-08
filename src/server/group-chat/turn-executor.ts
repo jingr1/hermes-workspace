@@ -17,10 +17,7 @@ import {
   GROUP_TURN_POLL_MS,
   GROUP_TURN_TIMEOUT_MS,
 } from './constants'
-import {
-  forgetSession,
-  getOrCreateSession,
-} from './agent-session-manager'
+import { forgetSession, getOrCreateSession } from './agent-session-manager'
 import { isGroupPassText, pickGroupTurnReply } from './responder-utils'
 import type { GroupMember, GroupTurnResult } from './types'
 
@@ -115,7 +112,8 @@ async function streamOnce(
             ...(effectiveModel ? { model: effectiveModel } : {}),
           },
           {
-            onEvent: (payload) => handleStreamEvent(payload.event, payload.data),
+            onEvent: (payload) =>
+              handleStreamEvent(payload.event, payload.data),
           },
         )
       : import('../claude-api').then((m) =>
@@ -163,7 +161,12 @@ async function streamOnce(
     ])
   }
 
-  if (streamRejected && !(streamRejected instanceof Error && /timeout/i.test(streamRejected.message))) {
+  if (
+    streamRejected &&
+    !(
+      streamRejected instanceof Error && /timeout/i.test(streamRejected.message)
+    )
+  ) {
     // Real stream failure (not our soft timeout).
     if (streamRejected instanceof Error) throw streamRejected
     throw new Error(String(streamRejected))
@@ -253,12 +256,16 @@ export async function executeMemberTurn(
   // getOrCreateSession ensures the profile gateway before verifying/creating
   // the session — do not call ensureProfileGateway again here (avoids a second
   // health probe on every turn).
-  let { sessionId, profile } = await getOrCreateSession(opts.roomId, opts.member, {
-    dbPath: opts.dbPath,
-    // Do NOT override title here — let agent-session-manager use its own
-    // deterministic groupSessionTitle(roomId, participantId) so each member
-    // gets a unique session and they never conflict.
-  })
+  let { sessionId, profile } = await getOrCreateSession(
+    opts.roomId,
+    opts.member,
+    {
+      dbPath: opts.dbPath,
+      // Do NOT override title here — let agent-session-manager use its own
+      // deterministic groupSessionTitle(roomId, participantId) so each member
+      // gets a unique session and they never conflict.
+    },
+  )
 
   console.log(
     `[turn-executor] member=${opts.member.displayName} profile=${profile ?? 'n/a'} session=${sessionId}`,

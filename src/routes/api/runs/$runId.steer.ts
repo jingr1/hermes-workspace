@@ -27,10 +27,7 @@ export const Route = createFileRoute('/api/runs/$runId/steer')({
         const textRaw = body.text ?? body.input ?? body.message
         const text = typeof textRaw === 'string' ? textRaw.trim() : ''
         if (!text) {
-          return json(
-            { ok: false, error: 'text required' },
-            { status: 400 },
-          )
+          return json({ ok: false, error: 'text required' }, { status: 400 })
         }
 
         try {
@@ -48,7 +45,11 @@ export const Route = createFileRoute('/api/runs/$runId/steer')({
             message.includes('run_not_accepting_steer') ||
             message.includes('steer_not_accepted')
           return json(
-            { ok: false, error: message, fallback: isConflict ? 'queue' : undefined },
+            {
+              ok: false,
+              error: message,
+              fallback: isConflict ? 'queue' : undefined,
+            },
             { status: isConflict ? 409 : 500 },
           )
         }

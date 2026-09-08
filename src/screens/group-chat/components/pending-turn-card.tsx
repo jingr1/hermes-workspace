@@ -19,7 +19,9 @@ export function PendingTurnCard({
   onDismiss,
 }: PendingTurnCardProps) {
   const [answer, setAnswer] = useState('')
-  const requester = participants.find((p) => p.participantId === turn.requestedBy)
+  const requester = participants.find(
+    (p) => p.participantId === turn.requestedBy,
+  )
 
   return (
     <div
@@ -85,7 +87,11 @@ export function PendingTurnCard({
             >
               Answer
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => onDismiss(turn.id)}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => onDismiss(turn.id)}
+            >
               Dismiss
             </Button>
           </div>

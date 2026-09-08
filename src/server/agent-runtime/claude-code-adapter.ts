@@ -14,6 +14,7 @@
  */
 import { execFile, spawn } from 'node:child_process'
 import * as fs from 'node:fs'
+import * as os from 'node:os'
 import * as path from 'node:path'
 import { promisify } from 'node:util'
 import { getClaudeRoot } from '../claude-paths'
@@ -34,6 +35,65 @@ import type {
 import type { AgentDeclaration } from './agents-config'
 
 const execFileAsync = promisify(execFile)
+
+/**
+ * Try to locate the claude executable. The workspace server may run under a
+ * different Node/npm version than the one where @anthropic-ai/claude-code was
+ * installed globally, so PATH alone is not reliable.
+ */
+async function resolveClaudeCommand(
+  requested?: string,
+): Promise<string | undefined> {
+  if (requested && requested !== 'claude') {
+    // If agents.yaml gives an explicit absolute path, use it as-is.
+    if (path.isAbsolute(requested)) return requested
+    // Otherwise treat it as a command and see if PATH can resolve it.
+    try {
+      await execFileAsync(requested, ['--version'], { timeout: 2_000 })
+      return requested
+    } catch {
+      // fall through to common install locations
+    }
+  }
+
+  const candidates: Array<string> = []
+
+  // 1. Current PATH resolution (works when server env matches install env).
+  candidates.push('claude')
+
+  // 2. Common npm global locations, including nvm version directories.
+  const home = os.homedir()
+  const nvmDir = process.env.NVM_DIR || path.join(home, '.nvm')
+  try {
+    if (fs.existsSync(nvmDir)) {
+      const versions = fs.readdirSync(path.join(nvmDir, 'versions', 'node'))
+      for (const v of versions) {
+        candidates.push(
+          path.join(nvmDir, 'versions', 'node', v, 'bin', 'claude'),
+        )
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // 3. Corepack / npm global prefix outside nvm.
+  candidates.push(path.join(home, '.local', 'bin', 'claude'))
+
+  // 4. macOS / Linux homebrew-style paths.
+  candidates.push('/usr/local/bin/claude', '/opt/homebrew/bin/claude')
+
+  for (const cmd of candidates) {
+    try {
+      await execFileAsync(cmd, ['--version'], { timeout: 2_000 })
+      return cmd
+    } catch {
+      // try next
+    }
+  }
+
+  return undefined
+}
 
 type ManagedRun = {
   runId: string
@@ -59,8 +119,18 @@ export class ClaudeCodeAdapter implements AgentRuntimeAdapter {
 
   constructor(private readonly decl: AgentDeclaration) {}
 
+  private async resolveCommand(): Promise<string | undefined> {
+    return resolveClaudeCommand(this.decl.command)
+  }
+
   async probe(): Promise<AgentProbeResult> {
-    const command = this.decl.command ?? 'claude'
+    const command = await this.resolveCommand()
+    if (!command) {
+      return {
+        available: false,
+        detail: `claude executable not found (checked PATH, nvm versions, ~/.local/bin, and common prefixes)`,
+      }
+    }
     try {
       const { stdout } = await execFileAsync(command, ['--version'], {
         timeout: 5_000,
@@ -77,7 +147,12 @@ export class ClaudeCodeAdapter implements AgentRuntimeAdapter {
   async startRun(
     input: AgentRunInput & { mcp: McpHandshake },
   ): Promise<{ runId: string }> {
-    const command = this.decl.command ?? 'claude'
+    const command = await this.resolveCommand()
+    if (!command) {
+      throw new Error(
+        'claude executable not found; install @anthropic-ai/claude-code globally',
+      )
+    }
     const runRoot = path.join(getClaudeRoot(), 'agent-runs', input.runId)
     fs.mkdirSync(runRoot, { recursive: true })
 
@@ -106,13 +181,17 @@ export class ClaudeCodeAdapter implements AgentRuntimeAdapter {
     const env: Record<string, string> = {
       ...(process.env as Record<string, string>),
       HERMES_MCP_TOKEN: input.mcp.runToken,
+      // Allow users to route Claude Code through non-Anthropic providers/models
+      // without the CLI rejecting the model name at startup.
+      CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT: '1',
       ...input.env,
     }
 
     const args = [
-      ...(this.decl.args ?? ['-p']),
       '--mcp-config',
       mcpConfigPath,
+      ...(this.decl.args ?? ['-p']),
+      '--',
       input.task,
     ]
 

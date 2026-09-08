@@ -69,9 +69,7 @@ export function MermaidEmbed({ code, className }: MermaidEmbedProps) {
   }, [code, isDark])
 
   if (failed || (!svg && !pending)) {
-    return (
-      <CodeBlock content={code} language="mermaid" className={className} />
-    )
+    return <CodeBlock content={code} language="mermaid" className={className} />
   }
 
   if (!svg) {

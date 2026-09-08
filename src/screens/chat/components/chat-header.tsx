@@ -8,6 +8,8 @@ import {
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { openHamburgerMenu } from '@/components/mobile-hamburger-menu'
+import { HugeiconsIcon } from '@hugeicons/react'
+import { Folder01Icon } from '@hugeicons/core-free-icons'
 
 function toTitleCase(value: string): string {
   return value
@@ -99,6 +101,8 @@ type ChatHeaderProps = {
   onToggleFocusMode?: () => void
   onUndo?: () => void
   onClear?: () => void
+  onToggleFileExplorer?: () => void
+  fileExplorerCollapsed?: boolean
 }
 
 function ChatHeaderComponent({
@@ -123,6 +127,8 @@ function ChatHeaderComponent({
   onToggleFocusMode,
   onUndo,
   onClear,
+  onToggleFileExplorer,
+  fileExplorerCollapsed = true,
 }: ChatHeaderProps) {
   const [clearConfirm, setClearConfirm] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -565,6 +571,31 @@ function ChatHeaderComponent({
             </TooltipRoot>
           </TooltipProvider>
         )}
+        <TooltipProvider>
+          <TooltipRoot>
+            <TooltipTrigger
+              onClick={onToggleFileExplorer}
+              render={
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  className={cn(
+                    'hover:bg-primary-100 dark:hover:bg-primary-800',
+                    !fileExplorerCollapsed && 'text-accent-500',
+                  )}
+                  aria-label={
+                    fileExplorerCollapsed ? 'Show workspace panel' : 'Hide workspace panel'
+                  }
+                >
+                  <HugeiconsIcon icon={Folder01Icon} size={18} />
+                </Button>
+              }
+            />
+            <TooltipContent side="bottom">
+              {fileExplorerCollapsed ? 'Show workspace panel' : 'Hide workspace panel'}
+            </TooltipContent>
+          </TooltipRoot>
+        </TooltipProvider>
       </div>
     </div>
   )

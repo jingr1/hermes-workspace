@@ -184,9 +184,7 @@ export function ExcalidrawEmbed({
       />
     )
   }
-  return (
-    <ExcalidrawCanvas scene={scene} className={className} title={title} />
-  )
+  return <ExcalidrawCanvas scene={scene} className={className} title={title} />
 }
 
 type ExcalidrawFromUrlProps = {

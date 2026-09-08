@@ -15,7 +15,10 @@ const backend = new Map<string, boolean>()
 const clients = new Map<string, ReturnType<typeof makeMockClient>>()
 
 function makeMockClient(profile: string) {
-  const sessions = new Map<string, { model?: string | null; has_model_config?: boolean }>()
+  const sessions = new Map<
+    string,
+    { model?: string | null; has_model_config?: boolean }
+  >()
   return {
     baseUrl: `http://127.0.0.1:8643`,
     profileName: profile,
@@ -146,7 +149,9 @@ describe('agent-session-manager', () => {
     )
     expect(existed).toBe(false)
     expect(profile).toBe('researcher')
-    expect(sessionId).toBe(`researcher:${mod.groupSessionTitle('room1', 'dev')}`)
+    expect(sessionId).toBe(
+      `researcher:${mod.groupSessionTitle('room1', 'dev')}`,
+    )
     expect(mod.groupSessionTitle('room1', 'dev')).toBe('Group: room1:dev')
   })
 

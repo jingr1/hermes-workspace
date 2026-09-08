@@ -66,7 +66,10 @@ export function getRoomRunnerState(roomId: string): RoomRunnerState {
   return rs
 }
 
-export function isRoomInErrorCooldown(roomId: string, now = Date.now()): boolean {
+export function isRoomInErrorCooldown(
+  roomId: string,
+  now = Date.now(),
+): boolean {
   return getRoomRunnerState(roomId).errorCooldownUntil > now
 }
 
@@ -138,18 +141,12 @@ export function setTurnInFlight(
   })
 }
 
-export function clearTurnInFlight(
-  roomId: string,
-  member: GroupMember,
-): void {
+export function clearTurnInFlight(roomId: string, member: GroupMember): void {
   const rs = getRoomRunnerState(roomId)
   rs.inFlight.delete(groupMemberKey(member))
 }
 
-export function isTurnInFlight(
-  roomId: string,
-  member: GroupMember,
-): boolean {
+export function isTurnInFlight(roomId: string, member: GroupMember): boolean {
   const rs = getRoomRunnerState(roomId)
   return rs.inFlight.has(groupMemberKey(member))
 }

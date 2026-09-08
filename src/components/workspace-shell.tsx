@@ -231,6 +231,11 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
 
   const isNewChat = activeFriendlyId === 'new'
 
+  // The reconnect banner checks Hermes gateway health. External runtimes
+  // (claude-code, codex, deepseek-harness, opencode) talk to their own
+  // adapters and should not show this banner.
+  const isOnExternalAgentRoute = pathname.startsWith('/chat/agent/')
+
   // Sessions state — shared semantic source for sidebar and chat header
   const {
     sessions,
@@ -345,7 +350,9 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
         className="workspace-shell relative overflow-hidden theme-bg theme-text"
         style={shellStyle}
       >
-        <ClaudeReconnectBanner enabled={authState.checked} />
+        <ClaudeReconnectBanner
+          enabled={authState.checked && !isOnExternalAgentRoute}
+        />
         {/* Electron: native-style title bar (absolute over the padding) */}
         {isElectron && (
           <div

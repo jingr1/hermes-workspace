@@ -100,10 +100,27 @@ export function detectExecutionFromProfile(
 
 function listHermesProfiles(): Array<string> {
   const dir = path.join(homedir(), '.hermes', 'profiles')
+  const deletedDir = path.join(dir, '.deleted')
+  let tombstoned = new Set<string>()
+  try {
+    tombstoned = new Set(
+      fs
+        .readdirSync(deletedDir, { withFileTypes: true })
+        .filter((entry) => entry.isFile())
+        .map((entry) => entry.name),
+    )
+  } catch {
+    tombstoned = new Set()
+  }
   try {
     return fs
       .readdirSync(dir, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
+      .filter(
+        (entry) =>
+          entry.isDirectory() &&
+          !entry.name.startsWith('.') &&
+          !tombstoned.has(entry.name),
+      )
       .map((entry) => entry.name)
   } catch {
     return []

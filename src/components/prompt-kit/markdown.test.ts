@@ -50,9 +50,7 @@ describe('rewriteLocalMediaSources', () => {
   })
 
   it('expands bare MEDIA .excalidraw tokens into host nodes', () => {
-    const result = rewriteLocalMediaSources(
-      'MEDIA:/tmp/arch.excalidraw',
-    )
+    const result = rewriteLocalMediaSources('MEDIA:/tmp/arch.excalidraw')
     expect(result).toContain('class="hermes-excalidraw"')
     expect(result).toContain('/api/media?path=%2Ftmp%2Farch.excalidraw')
     expect(result).toContain('data-title="arch.excalidraw"')

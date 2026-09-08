@@ -76,10 +76,17 @@ export const Route = createFileRoute('/api/chat-events')({
               })
 
               // Subscribe to the deduplicated event stream
-              unsubscribe = subscribeToChatEvents((evt) => {
-                if (streamClosed) return
-                sendEvent(evt.event, evt.data)
-              }, { sessionKey: sessionKeyParam, roomId: roomIdParam, scope: scopeParam })
+              unsubscribe = subscribeToChatEvents(
+                (evt) => {
+                  if (streamClosed) return
+                  sendEvent(evt.event, evt.data)
+                },
+                {
+                  sessionKey: sessionKeyParam,
+                  roomId: roomIdParam,
+                  scope: scopeParam,
+                },
+              )
 
               // Heartbeat to keep SSE alive
               heartbeatTimer = setInterval(() => {

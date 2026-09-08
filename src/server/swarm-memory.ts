@@ -192,6 +192,14 @@ export function ensureWorkerMemoryScaffold(input: {
   const { workerId } = input
   if (!validateSwarmId(workerId))
     throw new Error(`Invalid workerId: ${workerId}`)
+  // Respect Hermes profile tombstones — scaffolding must not recreate a
+  // deleted named profile under ~/.hermes/profiles/<id>.
+  const tombstone = join(homedir(), '.hermes', 'profiles', '.deleted', workerId)
+  if (existsSync(tombstone)) {
+    throw new Error(
+      `Worker profile "${workerId}" was deleted (tombstone at ${tombstone}); recreate it explicitly before scaffolding memory`,
+    )
+  }
   const root = swarmWorkerMemoryRoot(workerId)
   ensureDir(root)
   ensureDir(join(root, 'missions'))

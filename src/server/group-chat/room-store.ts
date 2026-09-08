@@ -7,11 +7,7 @@
  */
 import { tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
-import {
-  ensureCollabDb,
-  getCollabDbPath,
-  createCollabId,
-} from '../collab-db'
+import { ensureCollabDb, getCollabDbPath, createCollabId } from '../collab-db'
 import { openSqliteDatabase } from '../sqlite-helper'
 import type {
   GroupMember,
@@ -259,8 +255,7 @@ export function addParticipant(input: {
   ensureDb(input)
   const displayName = input.displayName ?? input.participantId
   const mentionName =
-    input.mentionName ??
-    displayName.toLowerCase().replace(/[^a-z0-9_-]+/g, '')
+    input.mentionName ?? displayName.toLowerCase().replace(/[^a-z0-9_-]+/g, '')
   const profile = input.profile ?? null
 
   // Revive a soft-removed row instead of inserting — UNIQUE(room_id, mention_name)
@@ -279,7 +274,7 @@ export function addParticipant(input: {
              description = ?, profile = ?, runtime = ?, is_owner = ?, joined_at = ?
          WHERE id = ?`,
       ).run(
-        input.online ?? true ? 1 : 0,
+        (input.online ?? true) ? 1 : 0,
         displayName,
         mentionName,
         input.description ?? prior.description,
@@ -746,7 +741,9 @@ export function getLatestSummary(
     return {
       roomId: String(r.room_id),
       content: String(r.summary ?? ''),
-      throughMessageId: r.through_message_id ? String(r.through_message_id) : null,
+      throughMessageId: r.through_message_id
+        ? String(r.through_message_id)
+        : null,
       throughAt: Number(r.through_at),
       turnCount: Number(r.turn_count),
       version: Number(r.version),

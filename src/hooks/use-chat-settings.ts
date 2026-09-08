@@ -163,7 +163,9 @@ export function selectEnterBehavior(state: ChatSettingsState): EnterBehavior {
   return state.settings.enterBehavior
 }
 
-export function selectBusyMessageMode(state: ChatSettingsState): BusyMessageMode {
+export function selectBusyMessageMode(
+  state: ChatSettingsState,
+): BusyMessageMode {
   const mode = state.settings.busyMessageMode
   if (mode === 'interrupt' || mode === 'steer' || mode === 'queue') return mode
   return 'queue'
