@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from '@/components/ui/toast'
 import { ChatScreen } from '../chat-screen'
 import { AgentChatFrame } from './agent-chat-frame'
@@ -19,6 +19,31 @@ import type {
   ChatComposerAttachment,
   ChatComposerHelpers,
 } from './chat-composer'
+
+type ThinkingLevel = 'off' | 'low' | 'medium' | 'high' | 'adaptive'
+
+function thinkingStorageKey(sessionId: string | null): string {
+  return `claude-code-thinking-${sessionId && !sessionId.startsWith('new-') ? sessionId : 'new'}`
+}
+
+function readStoredThinking(sessionId: string | null): ThinkingLevel {
+  if (typeof window === 'undefined') return 'medium'
+  try {
+    const stored = window.sessionStorage.getItem(thinkingStorageKey(sessionId))
+    if (
+      stored === 'off' ||
+      stored === 'low' ||
+      stored === 'medium' ||
+      stored === 'high' ||
+      stored === 'adaptive'
+    ) {
+      return stored
+    }
+  } catch {
+    /* ignore */
+  }
+  return 'medium'
+}
 
 /**
  * Claude Code (and future managed runtimes) — same ChatScreen shell
@@ -39,6 +64,25 @@ export function ManagedAgentChatView({
   const queryClient = useQueryClient()
   const { isMobile } = useChatMobile(queryClient)
   const openModelPickerRef = useRef<(() => void) | null>(null)
+  const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>(() =>
+    readStoredThinking(sessionId),
+  )
+
+  useEffect(() => {
+    setThinkingLevel(readStoredThinking(sessionId))
+  }, [sessionId])
+
+  const handleThinkingLevelChange = useCallback(
+    (level: ThinkingLevel) => {
+      setThinkingLevel(level)
+      try {
+        window.sessionStorage.setItem(thinkingStorageKey(sessionId), level)
+      } catch {
+        /* ignore */
+      }
+    },
+    [sessionId],
+  )
 
   const slashRuntime = useMemo(
     () =>
@@ -73,9 +117,9 @@ export function ManagedAgentChatView({
       _fastMode: boolean,
       _helpers: ChatComposerHelpers,
     ) => {
-      void chat.submit(value, attachments)
+      void chat.submit(value, attachments, { effort: thinkingLevel })
     },
-    [chat],
+    [chat, thinkingLevel],
   )
 
   const activeFriendlyId = sessionController.activeFriendlyId
@@ -115,6 +159,8 @@ export function ManagedAgentChatView({
               modelKeyMode: 'bare',
               gatewayQueriesEnabled: false,
               slashRuntime,
+              thinkingLevel,
+              onThinkingLevelChange: handleThinkingLevelChange,
             }}
             topNotices={
               chat.error ? (
@@ -132,7 +178,9 @@ export function ManagedAgentChatView({
                 <ChatEmptyState
                   brand={CLAUDE_CODE_CHAT_BRAND}
                   compact={isMobile}
-                  onSuggestionClick={(prompt) => void chat.submit(prompt, [])}
+                  onSuggestionClick={(prompt) =>
+                    void chat.submit(prompt, [], { effort: thinkingLevel })
+                  }
                 />
               }
             />

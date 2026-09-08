@@ -15,7 +15,10 @@ interface AgentStore {
   setAgents: (agents: Array<AgentWithStatus>) => void
   setAgentsLoading: (loading: boolean) => void
   setAgentsError: (error: string | null) => void
-  setActiveAgentId: (agentId: string | null) => void
+  setActiveAgentId: (
+    agentId: string | null,
+    options?: { sessionId?: string | null },
+  ) => void
   updateAgent: (agent: Partial<AgentWithStatus> & { agentId: string }) => void
   setSessions: (agentId: string, sessions: Array<AgentSession>) => void
   upsertSession: (agentId: string, session: AgentSession) => void
@@ -37,9 +40,22 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   setAgents: (agents) => set({ agents }),
   setAgentsLoading: (agentsLoading) => set({ agentsLoading }),
   setAgentsError: (agentsError) => set({ agentsError }),
-  setActiveAgentId: (activeAgentId) => {
-    if (activeAgentId === get().activeAgentId) return
-    set({ activeAgentId, activeSessionId: null })
+  setActiveAgentId: (activeAgentId, options) => {
+    if (activeAgentId === get().activeAgentId) {
+      if (
+        options &&
+        'sessionId' in options &&
+        options.sessionId !== get().activeSessionId
+      ) {
+        set({ activeSessionId: options.sessionId ?? null })
+      }
+      return
+    }
+    set({
+      activeAgentId,
+      activeSessionId:
+        options && 'sessionId' in options ? (options.sessionId ?? null) : null,
+    })
   },
   updateAgent: (update) =>
     set((state) => ({

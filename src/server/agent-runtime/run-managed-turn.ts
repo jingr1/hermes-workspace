@@ -25,6 +25,8 @@ export type RunManagedTurnInput = {
   agentId: string
   task: string
   model?: string
+  /** Claude Code `--effort`; ignored by other runtimes. */
+  effort?: string
   roomId?: string | null
   /** Bound into the MCP run token (1:1 chat uses session id). */
   taskId?: string | null
@@ -113,6 +115,7 @@ export async function runManagedTurn(
       agentId: input.agentId,
       task: input.task,
       ...(input.model ? { model: input.model } : {}),
+      ...(input.effort ? { effort: input.effort } : {}),
       roomId: input.roomId ?? null,
       mcp: {
         endpoint: getMcpEndpoint(),
@@ -254,6 +257,7 @@ export async function startManagedChatRun(input: {
   agentId: string
   task: string
   model?: string
+  effort?: string
   sessionId?: string | null
   roomId?: string | null
   probe?: boolean
@@ -309,6 +313,7 @@ export async function startManagedChatRun(input: {
       agentId: input.agentId,
       task: input.task,
       ...(input.model ? { model: input.model } : {}),
+      ...(input.effort ? { effort: input.effort } : {}),
       roomId: input.roomId ?? null,
       mcp: {
         endpoint: getMcpEndpoint(),

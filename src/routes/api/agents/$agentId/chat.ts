@@ -14,6 +14,8 @@ import type { AgentStreamEvent } from '../../../../server/agent-runtime/types'
  * Body: {
  *   message: string,
  *   sessionId?: string,
+ *   model?: string,
+ *   effort?: string,
  *   history?: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
  * }
  *
@@ -66,6 +68,8 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
 
         const requestedModel =
           typeof body.model === 'string' ? body.model.trim() : ''
+        const requestedEffort =
+          typeof body.effort === 'string' ? body.effort.trim() : ''
 
         const sessionId =
           typeof body.sessionId === 'string' ? body.sessionId.trim() : ''
@@ -105,6 +109,7 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
           agentId,
           task,
           ...(requestedModel ? { model: requestedModel } : {}),
+          ...(requestedEffort ? { effort: requestedEffort } : {}),
           sessionId: sessionId || null,
           probe: true,
         })

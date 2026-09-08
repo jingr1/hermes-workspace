@@ -51,6 +51,11 @@ export type AgentRunInput = {
   taskId?: string | null
   /** Per-run model override (e.g. Claude Code picker selection). */
   model?: string
+  /**
+   * Claude Code `--effort` (low|medium|high|…). Omit / `off` skips the flag.
+   * Hermes adapters ignore this.
+   */
+  effort?: string
   /** Extra env merged over process.env. Secrets MUST come via env, not files. */
   env?: Record<string, string>
 }

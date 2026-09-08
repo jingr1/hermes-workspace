@@ -5,6 +5,10 @@ import { ChatRouteLoading } from '../../../screens/chat/chat-route-loading'
 import { useAgentStore } from '../../../stores/agent-store'
 import { fetchAgents } from '../../../lib/agent-api'
 import { ErrorBoundary } from '@/components/error-boundary'
+import { resolveSessionForProfile } from '../../../screens/chat/last-session'
+import { chatQueryKeys } from '../../../screens/chat/chat-queries'
+import type { SessionMeta } from '../../../screens/chat/types'
+import { useQueryClient } from '@tanstack/react-query'
 
 const loadAgentWorkspace = () =>
   import('../../../screens/chat/agent-workspace').then((module) => ({
@@ -51,6 +55,7 @@ function ChatAgentRoute() {
   const params = Route.useParams()
   const search = useSearch({ from: Route.id })
   const navigate = useNavigate({ from: Route.id })
+  const queryClient = useQueryClient()
   const agentId = typeof params.agentId === 'string' ? params.agentId : ''
   const setActiveAgentId = useAgentStore((s) => s.setActiveAgentId)
   const setActiveSessionId = useAgentStore((s) => s.setActiveSessionId)
@@ -62,9 +67,29 @@ function ChatAgentRoute() {
   useEffect(() => {
     let cancelled = false
 
+    const resolveSessionForAgent = (id: string): string | null => {
+      const fromUrl = search.session?.trim()
+      if (fromUrl && fromUrl !== 'new') return fromUrl
+
+      const agent = useAgentStore
+        .getState()
+        .agents.find((entry) => entry.agentId === id)
+      if (!agent || agent.runtime !== 'hermes') return null
+
+      const profile = agent.runtimeConfig.profile ?? agent.agentId
+      const cached = queryClient.getQueryData<Array<SessionMeta>>(
+        chatQueryKeys.sessionsForProfile(profile),
+      )
+      const resolved = resolveSessionForProfile(cached, profile, {
+        sessionsLoaded: cached !== undefined,
+      })
+      return resolved === 'new' ? null : resolved
+    }
+
     const applyAgent = () => {
       if (cancelled) return
-      setActiveAgentId(agentId || null)
+      const sessionId = resolveSessionForAgent(agentId)
+      setActiveAgentId(agentId || null, { sessionId })
       setSeeded(true)
     }
 
@@ -83,10 +108,13 @@ function ChatAgentRoute() {
     return () => {
       cancelled = true
     }
-  }, [agentId, setActiveAgentId])
+    // Only re-run on agentId. Session-only URL changes use the effect below;
+    // putting search.session here would restore "last session" and undo New Chat.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
+  }, [agentId, queryClient, setActiveAgentId])
 
-  // Apply session from the URL when present. Agent switches clear the store
-  // session (and then this route clears ?session= via the subscriber below).
+  // Apply session from the URL when present (e.g. picking a session in-sidebar
+  // without changing agent). Agent switches set session atomically above.
   useEffect(() => {
     if (search.session) {
       setActiveSessionId(search.session)

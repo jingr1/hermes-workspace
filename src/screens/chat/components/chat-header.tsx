@@ -122,7 +122,7 @@ function ChatHeaderComponent({
   pullOffset = 0,
   statusMode = 'idle',
   activeToolName,
-  thinkingLevel = 'low',
+  thinkingLevel = 'medium',
   isFocusMode = false,
   onToggleFocusMode,
   onUndo,

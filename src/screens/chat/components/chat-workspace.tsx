@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ChatScreen } from '../chat-screen'
 import { useProfiles } from '../hooks/use-profiles'
@@ -98,37 +98,29 @@ function HermesChatShell({
   const agent = useAgentStore((state) =>
     state.agents.find((a) => a.agentId === agentId),
   )
-  const { activateProfile, isActivating, activeProfileName } = useProfiles()
+  const { activateProfile, activeProfileName } = useProfiles()
   const queryClient = useQueryClient()
-  const [activating, setActivating] = useState(false)
-
   const targetProfile = agent?.runtimeConfig.profile ?? agentId
+  const pendingSwitchRef = useRef(false)
 
+  // Activate in the background — never unmount ChatScreen for this, or the
+  // chat pane flashes empty (reads as a black screen in dark theme).
   useEffect(() => {
-    if (activeProfileName === targetProfile) return
-    setActivating(true)
+    if (!agent || activeProfileName === targetProfile) return
+    pendingSwitchRef.current = true
     activateProfile(targetProfile)
-  }, [activateProfile, activeProfileName, targetProfile])
+  }, [activateProfile, activeProfileName, targetProfile, agent])
 
   useEffect(() => {
-    if (!isActivating && activeProfileName === targetProfile) {
-      setActivating(false)
-      void queryClient.invalidateQueries({ queryKey: ['chat', 'sessions'] })
-    }
-  }, [isActivating, activeProfileName, targetProfile, queryClient])
+    if (!pendingSwitchRef.current || activeProfileName !== targetProfile) return
+    pendingSwitchRef.current = false
+    void queryClient.invalidateQueries({ queryKey: ['chat', 'sessions'] })
+  }, [activeProfileName, targetProfile, queryClient])
 
-  if (
-    activating ||
-    isActivating ||
-    activeProfileName !== targetProfile ||
-    !agent
-  ) {
+  if (!agent) {
     return (
       <div className="flex h-full flex-col items-center justify-center">
         <ChatRouteLoading />
-        <p className="mt-2 text-sm text-primary-500 dark:text-primary-400">
-          Activating {agent?.name ?? 'agent'}
-        </p>
       </div>
     )
   }

@@ -202,27 +202,36 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
             setActiveProfileOptimistic(queryClient, targetProfile)
             preloadWorkspaceFolders(targetProfile)
             activateProfile(targetProfile)
+          } else if (activeFriendlyId && activeFriendlyId !== 'new') {
+            writeLastSession(activeFriendlyId, activeProfileName)
+          }
 
-            // Warm the sessions cache so HermesChatShell / ChatScreen do not
-            // cold-fetch after the agent workspace remounts.
-            try {
-              await queryClient.fetchQuery({
-                queryKey: chatQueryKeys.sessionsForProfile(targetProfile),
-                queryFn: () => fetchSessions(targetProfile),
-                staleTime: 60_000,
-              })
-            } catch {
-              // Ignore — ChatScreen will retry via useChatSessions.
-            }
+          let resolvedSession = resolveSessionForProfile(
+            undefined,
+            targetProfile,
+          )
+          try {
+            const sessions = await queryClient.fetchQuery({
+              queryKey: chatQueryKeys.sessionsForProfile(targetProfile),
+              queryFn: () => fetchSessions(targetProfile),
+              staleTime: 60_000,
+            })
+            resolvedSession = resolveSessionForProfile(
+              sessions,
+              targetProfile,
+              { sessionsLoaded: true },
+            )
+          } catch {
+            // Keep localStorage-resolved session; ChatScreen can refresh later.
           }
 
           // Stay on the unified agent workspace (same shell as Claude Code).
-          // Do NOT bounce to /chat/$sessionKey — that leaves AgentWorkspace and
-          // races URL seeding so the first switch can render an empty agent.
+          // Pass last session so the agent route does not land on a blank "new".
           navigate({
             to: '/chat/agent/$agentId',
             params: { agentId: agent.agentId },
-            search: {},
+            search:
+              resolvedSession !== 'new' ? { session: resolvedSession } : {},
           })
         })()
         return

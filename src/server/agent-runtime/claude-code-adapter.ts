@@ -99,6 +99,25 @@ function buildClaudeSpawnEnv(input: {
   return env
 }
 
+function resolveClaudeEffortFlag(
+  effort: string | undefined,
+): string | undefined {
+  const raw = (effort || '').trim().toLowerCase()
+  if (!raw || raw === 'off' || raw === 'none') return undefined
+  // Composer "adaptive" → medium for Claude Code CLI.
+  if (raw === 'adaptive') return 'medium'
+  if (
+    raw === 'low' ||
+    raw === 'medium' ||
+    raw === 'high' ||
+    raw === 'xhigh' ||
+    raw === 'max'
+  ) {
+    return raw
+  }
+  return undefined
+}
+
 /**
  * Resolve which model Claude Code should use.
  * Priority: per-run picker override → agents.yaml `model` → settings.json.
@@ -289,6 +308,7 @@ export class ClaudeCodeAdapter implements AgentRuntimeAdapter {
     // Provider + defaults come from ~/.claude/settings.json. Per-run model
     // can be overridden by the chat picker (input.model).
     const effectiveModel = resolveEffectiveModel(input.model, this.decl.model)
+    const effortFlag = resolveClaudeEffortFlag(input.effort)
     const env = buildClaudeSpawnEnv({
       runToken: input.mcp.runToken,
       extra: input.env,
@@ -298,6 +318,7 @@ export class ClaudeCodeAdapter implements AgentRuntimeAdapter {
       '--mcp-config',
       mcpConfigPath,
       ...(effectiveModel ? ['--model', effectiveModel] : []),
+      ...(effortFlag ? ['--effort', effortFlag] : []),
       ...(this.decl.args ?? ['-p']),
       '--',
       input.task,
@@ -319,6 +340,7 @@ export class ClaudeCodeAdapter implements AgentRuntimeAdapter {
             args,
             inputModel: input.model ?? null,
             declModel: this.decl.model ?? null,
+            effort: effortFlag ?? null,
           },
           null,
           2,

@@ -181,7 +181,11 @@ export type ManagedAgentChat = {
   isStreaming: boolean
   error: string | null
   activeTitle: string
-  submit: (text: string, attachments: Array<ComposerAttachment>) => Promise<void>
+  submit: (
+    text: string,
+    attachments: Array<ComposerAttachment>,
+    options?: { effort?: string },
+  ) => Promise<void>
   abort: () => void
   clearMessages: () => void
   startNewSession: () => void
@@ -317,6 +321,7 @@ export function useManagedAgentChat({
       text: string,
       history: Array<{ role: string; content: string }>,
       model?: string,
+      effort?: string,
     ) => {
       setIsStreaming(true)
       setError(null)
@@ -339,6 +344,7 @@ export function useManagedAgentChat({
               sessionId: resolvedSessionId,
               history,
               ...(model ? { model } : {}),
+              ...(effort ? { effort } : {}),
             }),
             signal: controller.signal,
           },
@@ -424,12 +430,17 @@ export function useManagedAgentChat({
   )
 
   const submit = useCallback(
-    async (text: string, attachments: Array<ComposerAttachment>) => {
+    async (
+      text: string,
+      attachments: Array<ComposerAttachment>,
+      options?: { effort?: string },
+    ) => {
       if (!text.trim() && attachments.length === 0) return
       setError(null)
 
       const userMessage = makeUserMessage(text, attachments)
       setMessages((prev) => [...prev, userMessage])
+      const effortForRun = options?.effort?.trim() || undefined
 
       let resolvedSessionId = activeSessionId
       let modelForRun = selectedModel
@@ -476,6 +487,7 @@ export function useManagedAgentChat({
           text,
           latestHistory,
           modelForRun,
+          effortForRun,
         )
         return
       }
@@ -486,6 +498,7 @@ export function useManagedAgentChat({
         text,
         historyForPrompt,
         modelForRun || getStoredModel(resolvedSessionId),
+        effortForRun,
       )
     },
     [

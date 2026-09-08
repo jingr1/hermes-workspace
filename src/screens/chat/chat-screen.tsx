@@ -589,7 +589,7 @@ export function ChatScreen({
   const [researchResetKey, setResearchResetKey] = useState(0)
   // Per-session thinking level — stored in sessionStorage keyed by session
   const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>(() => {
-    if (typeof window === 'undefined') return 'low'
+    if (typeof window === 'undefined') return 'medium'
     const key = `claude-thinking-${activeFriendlyId || 'new'}`
     const stored = window.sessionStorage.getItem(key)
     if (
@@ -600,7 +600,7 @@ export function ChatScreen({
       stored === 'adaptive'
     )
       return stored
-    return 'low'
+    return 'medium'
   })
   // Tracks whether the user has explicitly picked a thinking level for this session.
   // A missing/absent sessionStorage key means we should fall back to the Hermes config default.
@@ -1223,13 +1223,13 @@ export function ChatScreen({
   })
 
   // Fetch the configured reasoning effort so the Chat Controls default matches
-  // what Hermes actually uses instead of hardcoding 'low'.
+  // what Hermes actually uses instead of hardcoding 'medium'.
   const reasoningEffortQuery = useQuery({
     queryKey: ['hermes-config', 'reasoning-effort'],
     queryFn: async () => {
       try {
         const res = await fetch('/api/hermes-config')
-        if (!res.ok) return 'low'
+        if (!res.ok) return 'medium'
         const data = (await res.json()) as { config?: Record<string, unknown> }
         const agentSection = data?.config?.agent
         if (
@@ -1247,9 +1247,9 @@ export function ChatScreen({
           )
             return effort
         }
-        return 'low'
+        return 'medium'
       } catch {
-        return 'low'
+        return 'medium'
       }
     },
     enabled: !historyLoading,

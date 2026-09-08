@@ -1025,7 +1025,7 @@ function ChatComposerComponent({
   // Per-session thinking level — controlled externally (chat-screen owns the state)
   // Falls back to internal state if no external controller provided
   const [internalThinkingLevel, setInternalThinkingLevel] =
-    useState<ThinkingLevel>('low')
+    useState<ThinkingLevel>('medium')
   const thinkingLevel = externalThinkingLevel ?? internalThinkingLevel
   // Thinking toggle removed for Claude (not supported) — keeping state for type compat
   const _handleThinkingToggle = useCallback(() => {
