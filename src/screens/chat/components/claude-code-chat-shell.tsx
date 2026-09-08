@@ -155,6 +155,10 @@ export function ClaudeCodeChatShell({
   const [error, setError] = useState<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const streamingMessageRef = useRef<ChatMessage | null>(null)
+  // When promoting `new-*` → real uuid, keep in-memory messages; a reload from
+  // localStorage would drop the streaming assistant bubble and silently eat
+  // every text_delta (CLI finishes, UI stays empty).
+  const skipNextSessionLoadRef = useRef(false)
 
   // Must use the exact same key as ChatComposer (sessionKey={activeSessionId}).
   // Do NOT map `new-*` → PENDING_SESSION_MODEL_KEY — that desyncs the picker
@@ -167,6 +171,16 @@ export function ClaudeCodeChatShell({
   const getStoredModel = useSessionModelStore((s) => s.getModel)
 
   useEffect(() => {
+    if (skipNextSessionLoadRef.current) {
+      skipNextSessionLoadRef.current = false
+      return
+    }
+    // Abort any in-flight stream when switching sessions from the sidebar.
+    abortControllerRef.current?.abort()
+    abortControllerRef.current = null
+    streamingMessageRef.current = null
+    setIsStreaming(false)
+    setError(null)
     setMessages(loadMessages(agent.agentId, activeSessionId))
   }, [agent.agentId, activeSessionId])
 
@@ -207,9 +221,24 @@ export function ClaudeCodeChatShell({
 
   const appendStreamingText = useCallback((chunk: string) => {
     setMessages((prev) => {
-      if (!streamingMessageRef.current) return prev
-      const idx = prev.indexOf(streamingMessageRef.current)
-      if (idx < 0) return prev
+      let idx = streamingMessageRef.current
+        ? prev.indexOf(streamingMessageRef.current)
+        : -1
+      // Session-id promotion / HMR can replace the message object identity;
+      // fall back to the last assistant bubble so deltas are not dropped.
+      if (idx < 0) {
+        for (let i = prev.length - 1; i >= 0; i -= 1) {
+          if (prev[i]?.role === 'assistant') {
+            idx = i
+            break
+          }
+        }
+      }
+      if (idx < 0) {
+        const created = makeAssistantMessage(chunk)
+        streamingMessageRef.current = created
+        return [...prev, created]
+      }
       const next = [...prev]
       const current = next[idx]!
       const existing =
@@ -356,6 +385,9 @@ export function ClaudeCodeChatShell({
       let modelForRun = selectedModel
       if (activeSessionId.startsWith('new-')) {
         resolvedSessionId = crypto.randomUUID()
+        // Keep React state; only persist under the new key. Reloading from
+        // storage here races the streaming assistant message.
+        skipNextSessionLoadRef.current = true
         setActiveSessionId(resolvedSessionId)
         // Move the picker selection from the draft key onto the real session.
         transferModel(activeSessionId, resolvedSessionId)
@@ -367,14 +399,15 @@ export function ClaudeCodeChatShell({
           getStoredModel(resolvedSessionId) ||
           getStoredModel(activeSessionId) ||
           selectedModel
-        const current = loadMessages(agent.agentId, activeSessionId)
+        // Prefer live state for prior turns. Do NOT include `userMessage` —
+        // the chat API appends `User: ${message}` itself (including it here
+        // duplicates the prompt and confuses the model).
+        const prior = messages
         saveMessages(agent.agentId, resolvedSessionId, [
-          ...current,
+          ...prior,
           userMessage,
         ])
-        // historyForPrompt is stale in this closure because it was computed
-        // before the new user message. Use the latest messages for the prompt.
-        const latestHistory = [...current, userMessage]
+        const latestHistory = prior
           .filter(
             (
               m,
@@ -420,6 +453,7 @@ export function ClaudeCodeChatShell({
       activeSessionId,
       getStoredModel,
       historyForPrompt,
+      messages,
       selectedModel,
       setActiveSessionId,
       startExternalChat,
