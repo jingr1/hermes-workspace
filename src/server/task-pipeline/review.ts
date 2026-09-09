@@ -225,9 +225,20 @@ if (typeof setOnCheckpointReviewHook === 'function') {
       if (source === 'mcp') return
       if (!checkpoint.reviewOutcome) return
       const mission = getSwarmMission(missionId)
-      const template = mission?.pipelineId
-        ? getPipelineTemplate(mission.pipelineId)
-        : null
+      let template: PipelineTemplate | null = null
+      if (mission?.pipelineId) {
+        try {
+          template = getPipelineTemplate(mission.pipelineId)
+        } catch (err) {
+          // Pipeline metadata is optional for rework routing. If the template
+          // cannot be loaded (e.g. config drift in tests), fall back to the
+          // dependsOn-based default so the checkpoint itself still succeeds.
+          console.warn(
+            `[review] could not load pipeline template ${mission.pipelineId}:`,
+            err instanceof Error ? err.message : String(err),
+          )
+        }
+      }
       const result = applyReviewVerdict({
         missionId,
         reviewAssignmentId: assignmentId,

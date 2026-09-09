@@ -271,7 +271,7 @@ describe('dispatch-ready', () => {
       dependsOnByAssignmentId: Object.fromEntries(
         mission.assignments.map((a) => [a.id, a.dependsOn]),
       ),
-      pipelineId: 'default-build',
+      pipelineId: 'rad',
       taskId: 'card-lane',
     })
 
@@ -296,7 +296,7 @@ describe('dispatch-ready', () => {
     const created = await createTask({
       title: 'Auto dispatch test',
       spec: 'spec',
-      pipelineId: 'default-build',
+      pipelineId: 'rad',
       acceptanceCriteria: [],
       autoDispatch: true,
     })
@@ -317,7 +317,7 @@ describe('dispatch-ready', () => {
     const created = await createTask({
       title: 'No auto dispatch test',
       spec: 'spec',
-      pipelineId: 'default-build',
+      pipelineId: 'rad',
       acceptanceCriteria: [],
       autoDispatch: false,
     })
@@ -354,7 +354,7 @@ describe('dispatch-ready', () => {
       dependsOnByAssignmentId: Object.fromEntries(
         mission.assignments.map((a) => [a.id, a.dependsOn]),
       ),
-      pipelineId: 'default-build',
+      pipelineId: 'rad',
       taskId: 'card-1',
     })
 
