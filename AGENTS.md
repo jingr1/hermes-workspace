@@ -14,14 +14,14 @@ LangGraph workflow（默认 `radw.yaml`，以及 `rdi.yaml`、`research_only.yam
 
 **模型真相源：** 每个 worker 的 `model` 只写在 [`swarm.yaml`](swarm.yaml)（`provider/model-id`）。**不要**在本文硬编码模型名——改模型用 Swarm UI 或编辑 `swarm.yaml`，然后执行 `node scripts/sync-swarm-profiles.mjs`。
 
-| Worker | Wrapper | Modes | Tools | Skills | MCP | Plugins |
-| --- | --- | --- | --- | --- | --- | --- |
-| `orchestrator` | `orchestrator:plan` | plan, autoresearch, autoresearch-dispatch | todo, kanban, delegation, terminal, file, session_search, cronjob, skills, clarify, web | orchestrator-core, mission-memory-layout, gstack-for-hermes, llm-wiki, kanban-orchestrator, writing-plans, autoresearch, autoresearch-plan, autoresearch-orchestrate | 无 | 无 |
-| `researcher` | `researcher:quick` | quick | web, browser, terminal, file, vision, session_search, skills, todo | researcher-core, mission-memory-layout, llm-wiki, browser-harness, gstack-for-hermes, researcher-quick, arxiv, youtube-content, polymarket | 无 | 无 |
-| `architect` | `architect:design` | design, autoresearch | terminal, file, web, session_search, skills, todo | architect-core, harden-gate, mission-memory-layout, gstack-for-hermes, llm-wiki, writing-plans, requesting-code-review, codebase-inspection, architecture-diagram, brainstorming, autoresearch, autoresearch-execute | 无 | 无 |
-| `developer` | `developer:implement` | implement, autoresearch | terminal, file, browser, web, session_search, skills, todo | gstack-for-hermes, mission-memory-layout, llm-wiki, test-driven-development, systematic-debugging, codebase-inspection, github-pr-workflow, requesting-code-review, receiving-code-review, executing-plans, autoresearch, autoresearch-execute | 无 | 无 |
-| `writer` | `writer:author` | author, autoresearch | terminal, file, web, browser, session_search, skills, todo, vision | gstack-for-hermes, mission-memory-layout, llm-wiki, powerpoint, docx, pdf, popular-web-designs, excalidraw, architecture-diagram, claude-design, songwriting-and-ai-music, media, writing-plans, autoresearch, autoresearch-execute | 无 | 无 |
-| `learning` | `learning` | — | file, session_search, skills, todo, web | gstack-for-hermes, llm-wiki, obsidian, writing-plans, mission-memory-layout, learning-wiki-ingest | 无 | 无 |
+| Worker         | Wrapper               | Modes                                     | Tools                                                                                   | Skills                                                                                                                                                                                                                                         | MCP | Plugins |
+| -------------- | --------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- | ------- |
+| `orchestrator` | `orchestrator:plan`   | plan, autoresearch, autoresearch-dispatch | todo, kanban, delegation, terminal, file, session_search, cronjob, skills, clarify, web | orchestrator-core, mission-memory-layout, gstack-for-hermes, llm-wiki, kanban-orchestrator, writing-plans, autoresearch, autoresearch-plan, autoresearch-orchestrate                                                                           | 无  | 无      |
+| `researcher`   | `researcher:quick`    | quick                                     | web, browser, terminal, file, vision, session_search, skills, todo                      | researcher-core, mission-memory-layout, llm-wiki, browser-harness, gstack-for-hermes, researcher-quick, arxiv, youtube-content, polymarket                                                                                                     | 无  | 无      |
+| `architect`    | `architect:design`    | design, autoresearch                      | terminal, file, web, session_search, skills, todo                                       | architect-core, harden-gate, mission-memory-layout, gstack-for-hermes, llm-wiki, writing-plans, requesting-code-review, codebase-inspection, architecture-diagram, brainstorming, autoresearch, autoresearch-execute                           | 无  | 无      |
+| `developer`    | `developer:implement` | implement, autoresearch                   | terminal, file, browser, web, session_search, skills, todo                              | gstack-for-hermes, mission-memory-layout, llm-wiki, test-driven-development, systematic-debugging, codebase-inspection, github-pr-workflow, requesting-code-review, receiving-code-review, executing-plans, autoresearch, autoresearch-execute | 无  | 无      |
+| `writer`       | `writer:author`       | author, autoresearch                      | terminal, file, web, browser, session_search, skills, todo, vision                      | gstack-for-hermes, mission-memory-layout, llm-wiki, powerpoint, docx, pdf, popular-web-designs, excalidraw, architecture-diagram, claude-design, songwriting-and-ai-music, media, writing-plans, autoresearch, autoresearch-execute            | 无  | 无      |
+| `learning`     | `learning`            | —                                         | file, session_search, skills, todo, web                                                 | gstack-for-hermes, llm-wiki, obsidian, writing-plans, mission-memory-layout, learning-wiki-ingest                                                                                                                                              | 无  | 无      |
 
 > Swarm2「Add Worker」UI 的历史 role presets（Builder / Reviewer 等）见 [`docs/swarm/ROLES.md`](docs/swarm/ROLES.md)。**那些 preset 名不是** LangGraph workflow 里的 worker id。
 
@@ -33,14 +33,14 @@ orchestrator → researcher → architect → (developer | writer) → architect
 
 规范合同：[`docs/swarm/HANDOFF-PROTOCOL.md`](docs/swarm/HANDOFF-PROTOCOL.md) · [`docs/swarm/ESCALATION-GUIDE.md`](docs/swarm/ESCALATION-GUIDE.md)。
 
-| 阶段 | Worker | 职责 |
-| --- | --- | --- |
-| 路由 / 放行 / autoresearch 分发 | `orchestrator` | 拆解任务、起草 autoresearch 合同、分发执行者、强制人工放行门 |
-| 调研 | `researcher` | 只建立事实（竞品、数据校验、溯源）；不做策略/建议；回应 architect 的质疑时只给证据 |
-| 方向 + 设计 / 选道 / 评审 | `architect` | wedge/bets/kill criteria + 规格/内容 brief；**只选一个**构建执行者（`developer` 或 `writer`）；评审该执行者产出。不做主事实搜集，也不写代码/成文 |
-| 构建（开发道） | `developer` | 按规格写代码、测试、构建验证——仅当 architect 设 `executor: developer` |
-| 构建（写作道） | `writer` | 文档/幻灯/叙事/视觉交付——仅当 architect 设 `executor: writer` |
-| 复盘 | `learning` | 任务文档、经验沉淀，经 `learning-wiki-ingest` 写入长期知识 |
+| 阶段                            | Worker         | 职责                                                                                                                                             |
+| ------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 路由 / 放行 / autoresearch 分发 | `orchestrator` | 拆解任务、起草 autoresearch 合同、分发执行者、强制人工放行门                                                                                     |
+| 调研                            | `researcher`   | 只建立事实（竞品、数据校验、溯源）；不做策略/建议；回应 architect 的质疑时只给证据                                                               |
+| 方向 + 设计 / 选道 / 评审       | `architect`    | wedge/bets/kill criteria + 规格/内容 brief；**只选一个**构建执行者（`developer` 或 `writer`）；评审该执行者产出。不做主事实搜集，也不写代码/成文 |
+| 构建（开发道）                  | `developer`    | 按规格写代码、测试、构建验证——仅当 architect 设 `executor: developer`                                                                            |
+| 构建（写作道）                  | `writer`       | 文档/幻灯/叙事/视觉交付——仅当 architect 设 `executor: writer`                                                                                    |
+| 复盘                            | `learning`     | 任务文档、经验沉淀，经 `learning-wiki-ingest` 写入长期知识                                                                                       |
 
 **执行者选道规则：** Architect 拥有 `executor: developer | writer`。同一 mission 步骤两道互斥，禁止并行分发。若既要代码又要内容，按序执行（通常 developer → writer），并重新做一次 architect 决策。
 
@@ -54,13 +54,13 @@ orchestrator → researcher → architect → (developer | writer) → architect
 
 [`agents.yaml`](agents.yaml) 只声明启动方式；与 swarm 流水线 roster 正交。
 
-| id | runtime | 说明 |
-| --- | --- | --- |
-| `orchestrator` … `learning` | `hermes` | 与 swarm roster 一一对应；`profile` 同 id |
-| `gpuserver` | `hermes` | `execution: ssh`；capabilities：gpu / cuda / benchmark / training；mention：`gpu` |
-| `cc-impl` | `claude-code` | 展示名 Claude Code；`command: claude`，`args: ['-p']`；mention：`claude` |
-| `codex-impl` | `codex` | `command: codex`；mention：`codex`（adapter 可能尚未完整落地） |
-| `ds-harness` | `deepseek-harness` | `command: deepseek-harness`；mention：`deepseek`（adapter 可能尚未完整落地） |
+| id                          | runtime            | 说明                                                                              |
+| --------------------------- | ------------------ | --------------------------------------------------------------------------------- |
+| `orchestrator` … `learning` | `hermes`           | 与 swarm roster 一一对应；`profile` 同 id                                         |
+| `gpuserver`                 | `hermes`           | `execution: ssh`；capabilities：gpu / cuda / benchmark / training；mention：`gpu` |
+| `cc-impl`                   | `claude-code`      | 展示名 Claude Code；`command: claude`，`args: ['-p']`；mention：`claude`          |
+| `codex-impl`                | `codex`            | `command: codex`；mention：`codex`（adapter 可能尚未完整落地）                    |
+| `ds-harness`                | `deepseek-harness` | `command: deepseek-harness`；mention：`deepseek`（adapter 可能尚未完整落地）      |
 
 加载规则（见 `src/server/agent-runtime/agents-config.ts`）：
 
@@ -75,9 +75,9 @@ orchestrator → researcher → architect → (developer | writer) → architect
 
 群聊支持两种路径模型（实现：`src/server/group-chat/`）：
 
-| 模式 | 行为 |
-| --- | --- |
-| **Ad-hoc** | 建房 / 改房可设 `workspacePath`；路径 sticky 在房间上，不是 composer 每条消息切换 |
+| 模式       | 行为                                                                                                                                                                           |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Ad-hoc** | 建房 / 改房可设 `workspacePath`；路径 sticky 在房间上，不是 composer 每条消息切换                                                                                              |
 | **任务型** | 房间绑定 `missionId` 后，`workspacePath` 由 mission 派生（只读）；有 `projectId` 且 `workspaceMode=worktree` 时用 mission worktree，否则用 `projects.yaml` 里的 `project.repo` |
 
 **Turn cwd（性能关键）：** drive 开始时对房间算一次 `resolveRoomCwd(room)`：
@@ -179,15 +179,15 @@ set -g exit-unattached off
 
 ## 八、给 Agent 的仓库导航（简图）
 
-| 区域 | 路径 |
-| --- | --- |
-| Swarm 合同 / roster | `swarm.yaml`、`AGENTS.md`、`docs/swarm/` |
-| 运行时声明 | `agents.yaml`、`src/server/agent-runtime/` |
-| LangGraph | `hermes_langgraph_orchestrator/` |
-| 群聊 | `src/server/group-chat/`、`src/screens/group-chat/`、`src/routes/api/rooms*` |
-| 1:1 Chat / managed companion | `src/screens/chat/`、`src/routes/api/agents/` |
-| Swarm UI | `src/screens/swarm2/`、`src/routes/swarm2.tsx` |
-| Profile 同步 | `scripts/sync-swarm-profiles.mjs` |
-| 项目 / worktree | `projects.yaml`、`src/server/git-ops.ts`、`src/server/task-pipeline/` |
+| 区域                         | 路径                                                                         |
+| ---------------------------- | ---------------------------------------------------------------------------- |
+| Swarm 合同 / roster          | `swarm.yaml`、`AGENTS.md`、`docs/swarm/`                                     |
+| 运行时声明                   | `agents.yaml`、`src/server/agent-runtime/`                                   |
+| LangGraph                    | `hermes_langgraph_orchestrator/`                                             |
+| 群聊                         | `src/server/group-chat/`、`src/screens/group-chat/`、`src/routes/api/rooms*` |
+| 1:1 Chat / managed companion | `src/screens/chat/`、`src/routes/api/agents/`                                |
+| Swarm UI                     | `src/screens/swarm2/`、`src/routes/swarm2.tsx`                               |
+| Profile 同步                 | `scripts/sync-swarm-profiles.mjs`                                            |
+| 项目 / worktree              | `projects.yaml`、`src/server/git-ops.ts`、`src/server/task-pipeline/`        |
 
 改 roster / skills / 门控时：先改 `swarm.yaml`（及必要时 workflow yaml），再 sync profiles，并同步更新本文，避免合同漂移。

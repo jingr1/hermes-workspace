@@ -471,16 +471,35 @@ export type RecordCheckpointResult =
 
 type CheckpointTerminalHook = (input: {
   missionId: string
+  assignmentId: string
+  workerId: string
   checkpoint: ParsedSwarmCheckpoint
+  source?: string | null
+}) => void | Promise<void>
+
+type CheckpointReviewHook = (input: {
+  missionId: string
+  assignmentId: string
+  workerId: string
+  checkpoint: ParsedSwarmCheckpoint
+  source?: string | null
 }) => void | Promise<void>
 
 let onCheckpointTerminal: CheckpointTerminalHook | null = null
+let onCheckpointReview: CheckpointReviewHook | null = null
 
 /** Register a hook fired after a terminal DONE/HANDOFF checkpoint is recorded. */
 export function setOnCheckpointTerminalHook(
   hook: CheckpointTerminalHook | null,
 ): void {
   onCheckpointTerminal = hook
+}
+
+/** Register a hook fired when a checkpoint contains a REVIEW_OUTCOME verdict. */
+export function setOnCheckpointReviewHook(
+  hook: CheckpointReviewHook | null,
+): void {
+  onCheckpointReview = hook
 }
 
 export function recordMissionCheckpoint(input: {
@@ -530,7 +549,9 @@ export function recordMissionCheckpoint(input: {
         ? 'needs_input'
         : checkpoint.stateLabel === 'IN_PROGRESS'
           ? 'dispatched'
-          : 'checkpointed'
+          : checkpoint.reviewOutcome === 'changes_requested'
+            ? 'reviewing'
+            : 'checkpointed'
   const report = reportFromCheckpoint({
     missionId: mission.id,
     assignmentId: assignment.id,
@@ -554,13 +575,43 @@ export function recordMissionCheckpoint(input: {
   mission.state = deriveMissionState(mission.assignments)
   const completed = mission.state === 'complete' && previousState !== 'complete'
   writeStore(store)
-  if (
-    onCheckpointTerminal &&
-    (checkpoint.stateLabel === 'DONE' || checkpoint.stateLabel === 'HANDOFF')
-  ) {
-    // Fire-and-forget: do not block checkpoint harvest on downstream dispatch.
-    void onCheckpointTerminal({ missionId: mission.id, checkpoint })
+
+  // Swarm-path orchestration hooks. MCP callers (source === 'mcp') handle
+  // review verdict and next-stage dispatch in advance.ts; firing these hooks
+  // for them would double-process the checkpoint.
+  if (checkpoint.reviewOutcome && onCheckpointReview) {
+    Promise.resolve(
+      onCheckpointReview({
+        missionId: mission.id,
+        assignmentId: assignment.id,
+        workerId: input.workerId,
+        checkpoint,
+        source: input.source,
+      }),
+    ).catch((error) => {
+      console.error(
+        '[swarm-missions] review hook failed:',
+        error instanceof Error ? error.message : String(error),
+      )
+    })
   }
+  if (isTerminalAssignment(assignment) && onCheckpointTerminal) {
+    Promise.resolve(
+      onCheckpointTerminal({
+        missionId: mission.id,
+        assignmentId: assignment.id,
+        workerId: input.workerId,
+        checkpoint,
+        source: input.source,
+      }),
+    ).catch((error) => {
+      console.error(
+        '[swarm-missions] terminal hook failed:',
+        error instanceof Error ? error.message : String(error),
+      )
+    })
+  }
+
   return Object.assign(mission, { _completed: completed })
 }
 
@@ -717,6 +768,54 @@ export function requeueMissionAssignment(input: {
       assignmentId: assignment.id,
       data: { reason: input.reason },
     }),
+  )
+  mission.updatedAt = now()
+  mission.state = deriveMissionState(mission.assignments)
+  writeStore(store)
+  return mission
+}
+
+/**
+ * Requeue a terminal assignment for rework. Unlike requeueMissionAssignment,
+ * this works on checkpointed/done/reviewing assignments and clears their
+ * checkpoint so the next dispatch starts fresh.
+ */
+export function requeueAssignmentForRework(input: {
+  missionId: string
+  assignmentId: string
+  reason: string
+}): SwarmMission | null {
+  const store = readStore()
+  const mission = store.missions.find((item) => item.id === input.missionId)
+  if (!mission) return null
+  const assignment = mission.assignments.find(
+    (item) => item.id === input.assignmentId,
+  )
+  if (!assignment) return null
+  if (
+    ![
+      'dispatched',
+      'checkpointed',
+      'done',
+      'reviewing',
+      'blocked',
+      'needs_input',
+    ].includes(assignment.state)
+  )
+    return mission
+  assignment.state = 'queued'
+  assignment.dispatchedAt = null
+  assignment.completedAt = null
+  assignment.checkpoint = null
+  mission.events.push(
+    event(
+      'continuation',
+      `Requeued ${assignment.id} for rework: ${input.reason}`,
+      {
+        assignmentId: assignment.id,
+        data: { reason: input.reason },
+      },
+    ),
   )
   mission.updatedAt = now()
   mission.state = deriveMissionState(mission.assignments)

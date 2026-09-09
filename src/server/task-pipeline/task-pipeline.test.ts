@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -86,6 +86,13 @@ async function loadModules() {
     detectExecutionFromProfile: () => 'local',
     getProfileSshHost: () => null,
   }))
+  vi.doMock('../../server/swarm-missions', async () => {
+    const actual = await vi.importActual('../../server/swarm-missions')
+    return {
+      ...actual,
+      setOnCheckpointReviewHook: () => {},
+    }
+  })
   const templates =
     await import('../../server/task-pipeline/pipeline-templates')
   const taskService = await import('../../server/task-pipeline/task-service')
@@ -262,6 +269,216 @@ describe('review.ts', () => {
     expect(cr?.outcome).toBe('changes_requested')
     expect(cr?.feedback).toContain('x.ts')
     expect(review.parseReviewOutcome('no verdict here')).toBeNull()
+  })
+
+  it('reworks up to maxRework=2 then escalates to human', async () => {
+    const { templates, taskService, missions, review } = await loadModules()
+    const template = templates.loadPipelineTemplates({
+      rawYaml: VALID_PIPELINE,
+      agentIds: new Set(AGENTS),
+    }).pipelines[0]
+
+    expect(template.stages.find((s) => s.key === 'review')?.maxRework).toBe(2)
+
+    const mission = taskService.instantiatePipeline({
+      template,
+      title: 'Build',
+      spec: 'spec',
+      acceptanceCriteria: ['works'],
+      cardId: 'card-1',
+    })
+
+    const buildAssignment = mission.assignments.find(
+      (a) => a.stageKey === 'build',
+    )!
+    const reviewAssignment = mission.assignments.find(
+      (a) => a.stageKey === 'review',
+    )!
+
+    function recordDone(assignmentId: string, workerId: string) {
+      missions.recordMissionCheckpoint({
+        missionId: mission.id,
+        assignmentId,
+        workerId,
+        checkpoint: {
+          stateLabel: 'DONE',
+          runtimeState: 'idle',
+          checkpointStatus: 'done',
+          filesChanged: 'none',
+          commandsRun: 'none',
+          result: 'done',
+          blocker: 'none',
+          nextAction: 'none',
+          reviewOutcome: null,
+          raw: 'STATE: DONE\nFILES_CHANGED: none\nCOMMANDS_RUN: none\nRESULT: done\nBLOCKER: none\nNEXT_ACTION: none',
+        },
+      })
+    }
+
+    function requestChanges(attempt: number) {
+      const raw =
+        `STATE: DONE\n` +
+        `FILES_CHANGED: none\n` +
+        `COMMANDS_RUN: none\n` +
+        `RESULT: review\n` +
+        `BLOCKER: none\n` +
+        `NEXT_ACTION: rework\n` +
+        `REVIEW_OUTCOME: changes_requested\n` +
+        `fix attempt ${attempt}`
+      missions.recordMissionCheckpoint({
+        missionId: mission.id,
+        assignmentId: reviewAssignment.id,
+        workerId: 'architect',
+        source: 'mcp',
+        checkpoint: {
+          stateLabel: 'DONE',
+          runtimeState: 'idle',
+          checkpointStatus: 'done',
+          filesChanged: 'none',
+          commandsRun: 'none',
+          result: 'review',
+          blocker: 'none',
+          nextAction: 'rework',
+          reviewOutcome: 'changes_requested',
+          raw,
+        },
+      })
+      return review.applyReviewVerdict({
+        missionId: mission.id,
+        reviewAssignmentId: reviewAssignment.id,
+        rawCheckpoint: raw,
+        reviewerId: 'architect',
+        template,
+      })
+    }
+
+    const retroAssignment = mission.assignments.find(
+      (a) => a.stageKey === 'retro',
+    )!
+
+    // First cycle: build done → review changes → rework #1
+    recordDone(buildAssignment.id, 'developer')
+    const r1 = requestChanges(1)
+    expect(r1.ok && r1.action === 'rework').toBe(true)
+    if (r1.ok && r1.action === 'rework') expect(r1.attempt).toBe(1)
+
+    // After changes_requested both build and review should be requeued,
+    // and downstream retro must NOT be ready yet.
+    const afterR1 = missions.getSwarmMission(mission.id)!
+    expect(
+      afterR1.assignments.find((a) => a.id === buildAssignment.id)!.state,
+    ).toBe('queued')
+    expect(
+      afterR1.assignments.find((a) => a.id === reviewAssignment.id)!.state,
+    ).toBe('queued')
+    expect(
+      missions
+        .readyQueuedAssignments(mission.id)
+        .some((a) => a.id === retroAssignment.id),
+    ).toBe(false)
+
+    // Second cycle: rebuild → review changes → rework #2
+    recordDone(buildAssignment.id, 'developer')
+    const r2 = requestChanges(2)
+    expect(r2.ok && r2.action === 'rework').toBe(true)
+    if (r2.ok && r2.action === 'rework') expect(r2.attempt).toBe(2)
+
+    // Third cycle: maxRework reached → needs human
+    recordDone(buildAssignment.id, 'developer')
+    const r3 = requestChanges(3)
+    expect(r3.ok && r3.action === 'needs_human').toBe(true)
+  })
+
+  it('swarm checkpoint hook triggers rework for non-mcp sources', async () => {
+    const { templates, taskService, missions } = await loadModules()
+    // Write a pipelines.yaml so the swarm-path hook can resolve the template.
+    writeFileSync(join(tempRoot, 'pipelines.yaml'), VALID_PIPELINE)
+
+    const template = templates.loadPipelineTemplates({
+      repoRoot: tempRoot,
+      agentIds: new Set(AGENTS),
+    }).pipelines[0]
+
+    const mission = taskService.instantiatePipeline({
+      template,
+      title: 'Build',
+      spec: 'spec',
+      acceptanceCriteria: ['works'],
+      cardId: 'card-1',
+    })
+
+    const buildAssignment = mission.assignments.find(
+      (a) => a.stageKey === 'build',
+    )!
+    const reviewAssignment = mission.assignments.find(
+      (a) => a.stageKey === 'review',
+    )!
+
+    // Build completes.
+    missions.recordMissionCheckpoint({
+      missionId: mission.id,
+      assignmentId: buildAssignment.id,
+      workerId: 'developer',
+      checkpoint: {
+        stateLabel: 'DONE',
+        runtimeState: 'idle',
+        checkpointStatus: 'done',
+        filesChanged: 'none',
+        commandsRun: 'none',
+        result: 'build done',
+        blocker: 'none',
+        nextAction: 'review',
+        reviewOutcome: null,
+        raw: 'STATE: DONE\nFILES_CHANGED: none\nCOMMANDS_RUN: none\nRESULT: build done\nBLOCKER: none\nNEXT_ACTION: review',
+      },
+    })
+
+    // Review returns changes_requested via swarm checkpoint (source !== 'mcp').
+    const raw =
+      `STATE: DONE\n` +
+      `FILES_CHANGED: none\n` +
+      `COMMANDS_RUN: none\n` +
+      `RESULT: review\n` +
+      `BLOCKER: none\n` +
+      `NEXT_ACTION: rework\n` +
+      `REVIEW_OUTCOME: changes_requested\n` +
+      `fix it`
+    missions.recordMissionCheckpoint({
+      missionId: mission.id,
+      assignmentId: reviewAssignment.id,
+      workerId: 'architect',
+      source: 'swarm-dispatch',
+      checkpoint: {
+        stateLabel: 'DONE',
+        runtimeState: 'idle',
+        checkpointStatus: 'done',
+        filesChanged: 'none',
+        commandsRun: 'none',
+        result: 'review',
+        blocker: 'none',
+        nextAction: 'rework',
+        reviewOutcome: 'changes_requested',
+        raw,
+      },
+    })
+
+    // Wait for the async review hook to finish.
+    await new Promise((r) => setTimeout(r, 100))
+
+    const after = missions.getSwarmMission(mission.id)!
+    console.log('after states:', after.assignments.map((a) => ({ stageKey: a.stageKey, state: a.state, workerId: a.workerId })))
+    console.log('after events:', after.events.map((e) => ({ type: e.type, message: e.message, data: e.data })))
+    expect(after.assignments.find((a) => a.id === buildAssignment.id)!.state).toBe(
+      'queued',
+    )
+    expect(
+      after.assignments.find((a) => a.id === reviewAssignment.id)!.state,
+    ).toBe('queued')
+    expect(
+      after.events.some(
+        (e) => e.type === 'continuation' && e.message.includes('for rework'),
+      ),
+    ).toBe(true)
   })
 })
 

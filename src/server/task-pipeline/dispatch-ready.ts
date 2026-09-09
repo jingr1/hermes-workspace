@@ -20,7 +20,10 @@ import {
 } from '../swarm-missions'
 import { updateKanbanCard } from '../kanban-backend'
 import { syncLaneFromMission } from './lane-sync'
-import type { SwarmMissionAssignment } from '../swarm-missions'
+// Side-effect: register the swarm-path review verdict hook. review.ts is not
+// naturally imported by the hermes/swarm checkpoint path; pulling it in here
+// (dispatch-ready is imported by swarm-dispatch/task-service) wires it up.
+import './review'
 
 export type DispatchedAssignmentSummary = {
   assignmentId: string
@@ -160,11 +163,12 @@ export async function dispatchReadyAssignments(
  * harvest/mission-sync callers are not blocked.
  *
  * An in-flight Set prevents duplicate concurrent continuations for the same
- * mission.
+ * mission. MCP callers skip this path — advance.ts already dispatches next.
  */
 const continuationInFlight = new Set<string>()
 
-setOnCheckpointTerminalHook(({ missionId, checkpoint }) => {
+setOnCheckpointTerminalHook(({ missionId, checkpoint, source }) => {
+  if (source === 'mcp') return
   if (checkpoint.stateLabel !== 'DONE' && checkpoint.stateLabel !== 'HANDOFF') {
     return
   }

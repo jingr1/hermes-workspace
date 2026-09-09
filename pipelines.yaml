@@ -4,24 +4,91 @@ version: 1
 # review placement. Content is generated per-task by stage-brief.ts.
 # P2a: only workspaceMode: canonical is supported (worktree lands in P2b).
 pipelines:
-  - id: default-build
-    name: 需求到交付
+  - id: rad
+    name: Research → Architect → Developer
     workspaceMode: canonical
     stages:
       - key: research
         agent: researcher
         dependsOn: []
-      - key: spec
+      - key: design
         agent: architect
         dependsOn: [research]
       - key: build
         agent: developer
-        dependsOn: [spec]
+        dependsOn: [design]
       - key: review
         agent: architect
         kind: review
         reworkTarget: build
+        maxRework: 2
         dependsOn: [build]
-      - key: retro
-        agent: learning
+      - key: harden
+        agent: architect
+        kind: review
+        reworkTarget: build
+        maxRework: 2
+        dependsOn: [review]
+
+  - id: raw
+    name: Research → Architect → Writer
+    workspaceMode: canonical
+    stages:
+      - key: research
+        agent: researcher
+        dependsOn: []
+      - key: design
+        agent: architect
+        dependsOn: [research]
+      - key: draft
+        agent: writer
+        dependsOn: [design]
+      - key: review
+        agent: architect
+        kind: review
+        reworkTarget: draft
+        maxRework: 2
+        dependsOn: [draft]
+      - key: harden
+        agent: architect
+        kind: review
+        reworkTarget: draft
+        maxRework: 2
+        dependsOn: [review]
+
+  - id: research-adversarial
+    name: Research → Architect Review
+    workspaceMode: canonical
+    stages:
+      - key: research
+        agent: researcher
+        dependsOn: []
+      - key: review
+        agent: architect
+        kind: review
+        reworkTarget: research
+        maxRework: 2
+        dependsOn: [research]
+
+  - id: design-implement
+    name: Architect → Developer
+    workspaceMode: canonical
+    stages:
+      - key: design
+        agent: architect
+        dependsOn: []
+      - key: build
+        agent: developer
+        dependsOn: [design]
+      - key: review
+        agent: architect
+        kind: review
+        reworkTarget: build
+        maxRework: 2
+        dependsOn: [build]
+      - key: harden
+        agent: architect
+        kind: review
+        reworkTarget: build
+        maxRework: 2
         dependsOn: [review]

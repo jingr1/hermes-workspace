@@ -4,7 +4,7 @@
  * A review stage parses REVIEW_OUTCOME from its checkpoint and either
  * releases the downstream (approved) or sends work back (changes_requested)
  * with the four-step rework semantics: re-dispatch reworkTarget, downstream
- * edges inherited, retry ≤3, then Human Gate.
+ * edges inherited, retry ≤ maxRework, then Human Gate.
  *
  * P2a scope: the verdict parsing + rework dispatch + retry counter. The
  * reviewer itself is a pipeline stage agent (architect) driven by the normal
@@ -14,8 +14,13 @@ import {
   appendSwarmMissionOrchestratorEvent,
   getSwarmMission,
   markMissionAssignmentReviewed,
-  requeueMissionAssignment,
+  requeueAssignmentForRework,
+  setOnCheckpointReviewHook,
 } from '../swarm-missions'
+import {
+  getPipelineTemplate,
+} from './pipeline-templates'
+import type { PipelineTemplate } from './pipeline-templates'
 import type { SwarmMission, SwarmMissionAssignment } from '../swarm-missions'
 
 export type ReviewOutcome = 'approved' | 'changes_requested'
@@ -25,7 +30,7 @@ export type ReviewDecision = {
   feedback: string | null
 }
 
-const MAX_REWORK = 3
+const DEFAULT_MAX_REWORK = 2
 
 /** Parse REVIEW_OUTCOME from a review stage's checkpoint raw text. */
 export function parseReviewOutcome(
@@ -42,16 +47,61 @@ export function parseReviewOutcome(
   return { outcome, feedback }
 }
 
+function findStage(
+  template: PipelineTemplate,
+  stageKey: string | null | undefined,
+) {
+  return template.stages.find((s) => s.key === stageKey)
+}
+
+function findReworkTarget(
+  mission: SwarmMission,
+  reviewAssignment: SwarmMissionAssignment,
+  template?: PipelineTemplate,
+): SwarmMissionAssignment | null {
+  let targetKey: string | null = null
+  if (reviewAssignment.stageKey && template) {
+    const stage = findStage(template, reviewAssignment.stageKey)
+    targetKey = stage?.reworkTarget ?? null
+  }
+  if (!targetKey) {
+    // Fallback for missions without a template or stageKey: the upstream
+    // assignment this review directly depends on.
+    const upstreamIds = reviewAssignment.dependsOn
+    if (upstreamIds.length === 0) return null
+    return (
+      mission.assignments.find(
+        (a) =>
+          a.id === upstreamIds[upstreamIds.length - 1] &&
+          a.state !== 'cancelled',
+      ) ?? null
+    )
+  }
+  // Prefer the most recent completed target assignment reachable from this
+  // review. Falls back to any queued/dispatched target assignment if none
+  // has checkpointed yet.
+  const targetStageAssignments = mission.assignments
+    .filter((a) => a.stageKey === targetKey)
+    .sort((a, b) => (b.completedAt ?? 0) - (a.completedAt ?? 0))
+  return (
+    targetStageAssignments.find(
+      (a) => a.checkpoint && a.state !== 'cancelled',
+    ) ??
+    targetStageAssignments.find((a) => a.state !== 'cancelled') ??
+    null
+  )
+}
+
 function reworkCount(
   mission: SwarmMission,
-  stageKey: string | null | undefined,
+  reviewStageKey: string | null | undefined,
 ): number {
-  if (!stageKey) return 0
+  if (!reviewStageKey) return 0
   return mission.events.filter(
     (e) =>
       e.type === 'continuation' &&
       typeof e.data?.reworkOf === 'string' &&
-      e.data.reworkOf === stageKey,
+      e.data.reworkOf === reviewStageKey,
   ).length
 }
 
@@ -68,13 +118,15 @@ export type ReviewApplyResult =
  * approved → mark the BUILD stage's assignment reviewed (done); downstream
  *            (stages depending on the review stage) become dispatchable.
  * changes_requested → requeue the reworkTarget stage with feedback,
- *            blocking downstream. Retry > MAX_REWORK → needs_human.
+ *            blocking downstream. Retry > maxRework → needs_human.
  */
 export function applyReviewVerdict(input: {
   missionId: string
   reviewAssignmentId: string
   rawCheckpoint: string
   reviewerId: string
+  /** Optional pipeline template; when absent the engine falls back to defaults. */
+  template?: PipelineTemplate
 }): ReviewApplyResult {
   const mission = getSwarmMission(input.missionId)
   if (!mission)
@@ -91,10 +143,16 @@ export function applyReviewVerdict(input: {
   const decision = parseReviewOutcome(input.rawCheckpoint)
   if (!decision) return { ok: false, error: 'No REVIEW_OUTCOME in checkpoint' }
 
-  // The build assignment is the one the review stage depends on (reworkTarget).
-  const buildAssignment = mission.assignments.find(
-    (a) =>
-      a.id !== reviewAssignment.id && reviewAssignment.dependsOn.includes(a.id),
+  const stage = input.template
+    ? findStage(input.template, reviewAssignment.stageKey)
+    : null
+  const maxRework = stage?.maxRework ?? DEFAULT_MAX_REWORK
+
+  // The build assignment is the one the review stage's reworkTarget points to.
+  const buildAssignment = findReworkTarget(
+    mission,
+    reviewAssignment,
+    input.template,
   )
 
   if (decision.outcome === 'approved') {
@@ -109,43 +167,77 @@ export function applyReviewVerdict(input: {
   }
 
   // changes_requested
-  const target = buildAssignment
-  if (!target)
+  if (!buildAssignment) {
     return {
       ok: false,
-      error: 'No rework target (review stage has no upstream build dependency)',
+      error: `No rework target for review stage ${reviewAssignment.stageKey ?? input.reviewAssignmentId}`,
     }
+  }
 
-  const attempts = reworkCount(mission, target.stageKey)
-  if (attempts >= MAX_REWORK) {
+  const reviewStageKey = reviewAssignment.stageKey ?? input.reviewAssignmentId
+  const attempts = reworkCount(mission, reviewStageKey)
+  if (attempts >= maxRework) {
     appendSwarmMissionOrchestratorEvent({
       missionId: mission.id,
-      message: `Review rework limit (${MAX_REWORK}) reached for stage ${target.stageKey}; needs human`,
-      data: { reworkOf: target.stageKey ?? target.id, needsHuman: true },
+      message: `Review rework limit (${maxRework}) reached for stage ${reviewStageKey}; needs human`,
+      data: { reworkOf: reviewStageKey, needsHuman: true },
     })
     return {
       ok: true,
       action: 'needs_human',
-      reason: `rework limit ${MAX_REWORK} reached`,
+      reason: `rework limit ${maxRework} reached`,
     }
   }
 
-  // Rework: requeue the build stage. Its downstream (review) becomes queued
-  // again via deriveMissionState once the build re-checkpoints.
-  requeueMissionAssignment({
+  // Rework: requeue both the target stage and the review stage itself.
+  // Requeueing the review stage keeps downstream (e.g. harden) blocked
+  // because the review assignment is no longer terminal.
+  requeueAssignmentForRework({
     missionId: mission.id,
-    assignmentId: target.id,
+    assignmentId: buildAssignment.id,
     reason: `changes_requested by ${input.reviewerId}: ${decision.feedback ?? '(no feedback)'}`,
+  })
+  requeueAssignmentForRework({
+    missionId: mission.id,
+    assignmentId: reviewAssignment.id,
+    reason: `re-review after changes requested by ${input.reviewerId}`,
   })
   appendSwarmMissionOrchestratorEvent({
     missionId: mission.id,
-    message: `Rework #${attempts + 1} for stage ${target.stageKey ?? target.id}`,
-    data: { reworkOf: target.stageKey ?? target.id },
+    message: `Rework #${attempts + 1} for stage ${reviewStageKey}`,
+    data: { reworkOf: reviewStageKey },
   })
   return {
     ok: true,
     action: 'rework',
-    targetAssignmentId: target.id,
+    targetAssignmentId: buildAssignment.id,
     attempt: attempts + 1,
   }
+}
+
+// Wire the review verdict into the swarm checkpoint path (hermes / harvester).
+// The MCP path already calls applyReviewVerdict explicitly in advance.ts;
+// skipping 'mcp' source avoids double-processing. The guard allows tests that
+// mock the mission store without stubbing every hook to import this module.
+if (typeof setOnCheckpointReviewHook === 'function') {
+  setOnCheckpointReviewHook(
+    ({ missionId, assignmentId, workerId, checkpoint, source }) => {
+      if (source === 'mcp') return
+      if (!checkpoint.reviewOutcome) return
+      const mission = getSwarmMission(missionId)
+      const template = mission?.pipelineId
+        ? getPipelineTemplate(mission.pipelineId)
+        : null
+      const result = applyReviewVerdict({
+        missionId,
+        reviewAssignmentId: assignmentId,
+        rawCheckpoint: checkpoint.raw,
+        reviewerId: workerId,
+        template: template ?? undefined,
+      })
+      if (!result.ok) {
+        console.error('[review] swarm-path review verdict failed:', result.error)
+      }
+    },
+  )
 }

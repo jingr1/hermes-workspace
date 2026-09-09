@@ -30,6 +30,7 @@ export type PipelineStage = {
   kind: 'work' | 'review'
   dependsOn: Array<string>
   reworkTarget: string | null
+  maxRework: number // review stage retry limit; defaults to 2
   requires: Array<string> // capability routing (P2b)
 }
 
@@ -130,14 +131,21 @@ export function validatePipelineTemplate(
           `pipeline ${template.id} stage ${stage.key}: unknown dependsOn "${dep}"`,
         )
     }
-    if (
-      stage.kind === 'review' &&
-      stage.reworkTarget &&
-      !keys.has(stage.reworkTarget)
-    ) {
-      errors.push(
-        `pipeline ${template.id} stage ${stage.key}: unknown reworkTarget "${stage.reworkTarget}"`,
-      )
+    if (stage.kind === 'review') {
+      if (stage.reworkTarget && !keys.has(stage.reworkTarget)) {
+        errors.push(
+          `pipeline ${template.id} stage ${stage.key}: unknown reworkTarget "${stage.reworkTarget}"`,
+        )
+      }
+      if (
+        !Number.isFinite(stage.maxRework) ||
+        stage.maxRework < 0 ||
+        Math.floor(stage.maxRework) !== stage.maxRework
+      ) {
+        errors.push(
+          `pipeline ${template.id} stage ${stage.key}: maxRework must be a non-negative integer`,
+        )
+      }
     }
   }
   try {
@@ -177,14 +185,25 @@ export function loadPipelineTemplates(input?: {
         : 'canonical') as WorkspaceMode,
       stages: (
         (p.stages as Array<Record<string, unknown>> | undefined) ?? []
-      ).map((s) => ({
-        key: String(s.key ?? ''),
-        agent: String(s.agent ?? ''),
-        kind: s.kind === 'review' ? 'review' : 'work',
-        dependsOn: Array.isArray(s.dependsOn) ? s.dependsOn.map(String) : [],
-        reworkTarget: s.reworkTarget ? String(s.reworkTarget) : null,
-        requires: Array.isArray(s.requires) ? s.requires.map(String) : [],
-      })),
+      ).map((s) => {
+        const rawMaxRework = s.maxRework
+        let maxRework = 2
+        if (rawMaxRework !== undefined && rawMaxRework !== null) {
+          const parsed = Number(rawMaxRework)
+          if (Number.isFinite(parsed) && parsed >= 0) {
+            maxRework = Math.floor(parsed)
+          }
+        }
+        return {
+          key: String(s.key ?? ''),
+          agent: String(s.agent ?? ''),
+          kind: s.kind === 'review' ? 'review' : 'work',
+          dependsOn: Array.isArray(s.dependsOn) ? s.dependsOn.map(String) : [],
+          reworkTarget: s.reworkTarget ? String(s.reworkTarget) : null,
+          maxRework,
+          requires: Array.isArray(s.requires) ? s.requires.map(String) : [],
+        }
+      }),
     }),
   )
 

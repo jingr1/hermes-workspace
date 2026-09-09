@@ -61,6 +61,7 @@ import { getProject } from '../task-pipeline/projects'
 import { publishChatEvent } from '../chat-event-bus'
 import { getAgentRuntimeRouter } from '../agent-runtime/router'
 import { applyReviewVerdict } from '../task-pipeline/review'
+import { getPipelineTemplate } from '../task-pipeline/pipeline-templates'
 import { getProfileSshHost } from './agents-config'
 import type { RunTerminalEvent } from '../mcp/mcp-handler'
 
@@ -202,11 +203,15 @@ async function handleRunTerminal(
     )
     const rawCheckpoint = assignment?.checkpoint?.raw ?? event.summary ?? ''
     if (rawCheckpoint.includes('REVIEW_OUTCOME')) {
+      const template = missionAfterCheckpoint.pipelineId
+        ? getPipelineTemplate(missionAfterCheckpoint.pipelineId)
+        : null
       const reviewResult = applyReviewVerdict({
         missionId: event.missionId,
         reviewAssignmentId: event.assignmentId,
         rawCheckpoint,
         reviewerId: event.agentId,
+        template: template ?? undefined,
       })
       if (!reviewResult.ok) {
         console.error('[advance] review verdict failed', reviewResult.error)
