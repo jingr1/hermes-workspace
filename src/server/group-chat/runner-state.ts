@@ -1,10 +1,12 @@
 /**
  * Runner state tracking for group chat.
  *
- * Tracks in-flight turns, room epochs, and stranded replies so the runner can
- * avoid double-dispatching a member and can harvest late replies safely.
+ * Tracks in-flight turns, room epochs, stranded replies, and #93129 member
+ * holds so the runner can avoid double-dispatching a member and can harvest
+ * late replies safely.
  */
 import { groupMemberKey } from './mention-routing'
+import type { GroupHoldStamp } from './member-holds'
 import type { GroupMember } from './types'
 
 type MemberTurnState = {
@@ -31,6 +33,8 @@ type RoomRunnerState = {
   /** Last error message we rate-limited for this room. */
   lastErrorMessage: string | null
   lastErrorLoggedAt: number
+  /** #93129 sticky per-member stop holds (room-scoped). */
+  holds: Record<string, GroupHoldStamp>
 }
 
 const STATE_KEY = '__group_chat_runner_state__'
@@ -55,15 +59,46 @@ export function getRoomRunnerState(roomId: string): RoomRunnerState {
       errorCooldownUntil: 0,
       lastErrorMessage: null,
       lastErrorLoggedAt: 0,
+      holds: {},
     })
   }
   const rs = state.get(roomId)!
-  // HMR / older process state may lack stranded — hydrate in place.
+  // HMR / older process state may lack fields — hydrate in place.
   if (!rs.stranded) rs.stranded = new Map()
   if (typeof rs.errorCooldownUntil !== 'number') rs.errorCooldownUntil = 0
   if (rs.lastErrorMessage === undefined) rs.lastErrorMessage = null
   if (typeof rs.lastErrorLoggedAt !== 'number') rs.lastErrorLoggedAt = 0
+  if (!rs.holds || typeof rs.holds !== 'object') rs.holds = {}
   return rs
+}
+
+export function getRoomHolds(roomId: string): Record<string, GroupHoldStamp> {
+  return getRoomRunnerState(roomId).holds
+}
+
+export function setRoomHolds(
+  roomId: string,
+  holds: Record<string, GroupHoldStamp>,
+): void {
+  getRoomRunnerState(roomId).holds = holds
+}
+
+export function clearRoomHolds(roomId: string): void {
+  getRoomRunnerState(roomId).holds = {}
+}
+
+export function isMemberHeld(roomId: string, member: GroupMember): boolean {
+  return Boolean(getRoomHolds(roomId)[groupMemberKey(member)])
+}
+
+export function markHoldNoted(roomId: string, memberKey: string): void {
+  const holds = getRoomHolds(roomId)
+  const entry = holds[memberKey]
+  if (!entry || entry.noted) return
+  setRoomHolds(roomId, {
+    ...holds,
+    [memberKey]: { ...entry, noted: true },
+  })
 }
 
 export function isRoomInErrorCooldown(

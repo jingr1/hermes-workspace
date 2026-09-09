@@ -1,15 +1,13 @@
 /**
  * Group chat round-robin runner.
  *
- * Drives Bot Mode-style conversations:
- *   - Tick-based (5s) per active room.
- *   - Round-robin member turns with watermark deltas.
- *   - Bounded rounds (3), messages (10), continuations (2).
- *   - Stranded-reply harvest so long turns are late, never lost.
+ * Aligned with Hermes Desktop Bot Mode:
+ *   - A USER send (triggerRoomRun) ignites at most one bounded drive.
+ *   - The 5s tick only harvests stranded replies / expires stale turns —
+ *     it never re-drives on agent watermark lag (that was the infinite loop).
+ *   - Caps: 3 rounds, 10 messages, 2 continuations per user-send budget.
+ *   - #93129 sticky holds: "stop @member" / "@all stop"; room pause holds all.
  *   - Publishes room events on chat-event-bus.
- *
- * This is a translation of upstream runGroupChatRounds adapted for workspace
- * storage and claude-api sessions.
  */
 import { publishChatEvent } from '../chat-event-bus'
 import { ensureCollabDb, getCollabDbPath } from '../collab-db'
@@ -27,6 +25,11 @@ import {
   GROUP_TURN_HARD_CAP_MS,
 } from './constants'
 import {
+  applyGroupHoldDirective,
+  heldMemberWatermarkAdvance,
+  holdAllMemberKeys,
+} from './member-holds'
+import {
   expirePendingTurns,
   getLatestMessages,
   getRoom,
@@ -37,6 +40,7 @@ import {
   setWatermark,
   toGroupMember,
   toHealedGroupMember,
+  updateRoom,
 } from './room-store'
 import { executeMemberTurn } from './turn-executor'
 import { buildTurnContext } from './prompt-builder'
@@ -57,19 +61,24 @@ import {
 import {
   bumpRoomEpoch,
   clearRoomErrorCooldown,
+  clearRoomHolds,
   clearStranded,
   clearTurnInFlight,
   expireStaleInFlight,
   getInFlightMembers,
   getRoomEpoch,
+  getRoomHolds,
   getRoomRunnerState,
   getStranded,
   hasStranded,
+  isMemberHeld,
   isRoomInErrorCooldown,
   isRoomRunning,
   listStrandedMembers,
+  markHoldNoted,
   setLastRunAt,
   setRoomErrorCooldown,
+  setRoomHolds,
   setRoomRunning,
   setStranded,
   setTurnInFlight,
@@ -220,17 +229,86 @@ export function triggerRoomRun(roomId: string): void {
   })()
 }
 
+/**
+ * Apply #93129 hold/release from a human message. Call before triggerRoomRun.
+ */
+export function applyUserHoldDirective(input: {
+  roomId: string
+  content: string
+  messageId: string
+  members: Array<GroupMember>
+}): void {
+  const keys = input.members.map(groupMemberKey)
+  const parsed = parseMentions(input.content, input.members)
+  const next = applyGroupHoldDirective(
+    getRoomHolds(input.roomId),
+    { everyone: parsed.everyone, mentioned: parsed.mentioned },
+    input.content,
+    { at: Date.now(), byMessageId: input.messageId },
+    keys,
+  )
+  setRoomHolds(input.roomId, next)
+}
+
+/**
+ * Pause a room: bump epoch (abort in-flight drive at next boundary), hold
+ * every agent, set state=paused. Tick may still harvest stranded replies.
+ */
+export function pauseRoom(roomId: string): ReturnType<typeof getRoom> {
+  const room = getRoom(roomId)
+  if (!room) return null
+  const members = listParticipants(roomId)
+    .filter((p) => p.kind === 'agent' && !p.removedAt)
+    .map((p) => toHealedGroupMember(p))
+  bumpRoomEpoch(roomId)
+  setRoomRunning(roomId, false)
+  setRoomHolds(
+    roomId,
+    holdAllMemberKeys(getRoomHolds(roomId), members.map(groupMemberKey), {
+      at: Date.now(),
+      byMessageId: null,
+    }),
+  )
+  const updated = updateRoom(roomId, {
+    state: 'paused',
+    updatedAt: Date.now(),
+  })
+  publishChatEvent('group_chat_cancelled', { roomId })
+  console.log(`[group-chat-runner] room ${roomId} paused`)
+  return updated
+}
+
+/**
+ * Resume a paused room. Clears sticky holds by default (UI Resume button).
+ * Does not auto-drive — wait for the next human message / triggerRoomRun.
+ */
+export function resumeRoom(
+  roomId: string,
+  opts?: { clearHolds?: boolean },
+): ReturnType<typeof getRoom> {
+  const room = getRoom(roomId)
+  if (!room) return null
+  if (opts?.clearHolds !== false) clearRoomHolds(roomId)
+  const updated = updateRoom(roomId, {
+    state: 'active',
+    updatedAt: Date.now(),
+  })
+  console.log(`[group-chat-runner] room ${roomId} resumed`)
+  return updated
+}
+
+/**
+ * Background tick: Bot Mode alignment — harvest stranded replies only.
+ * Never starts a new drive from agent watermark lag.
+ */
 export async function tickAllRooms(): Promise<void> {
-  // Ensure the default collab.db is migrated before each tick. This lets a
-  // long-running server process pick up schema changes deployed by a code
-  // update without requiring a manual restart.
   ensureCollabDb()
   const rooms = listRooms()
   for (const room of rooms) {
-    if (room.state !== 'active') continue
+    if (room.state === 'disbanded' || room.state === 'complete') continue
     if (isRoomInErrorCooldown(room.id)) continue
     try {
-      await runRoomInternal(room.id)
+      await maintainRoom(room.id)
     } catch (error) {
       if (handleRunnerFatalError(error, `room ${room.id}`)) return
       const message = error instanceof Error ? error.message : String(error)
@@ -249,6 +327,9 @@ export async function runRoom(room: Room): Promise<void> {
 async function runRoomInternal(roomId: string): Promise<void> {
   if (isRoomRunning(roomId)) return
   if (isRoomInErrorCooldown(roomId)) return
+  const room = getRoom(roomId)
+  // Paused / needs_human / complete rooms do not start new drives.
+  if (!room || room.state !== 'active') return
   setRoomRunning(roomId, true)
 
   try {
@@ -256,6 +337,30 @@ async function runRoomInternal(roomId: string): Promise<void> {
     clearRoomErrorCooldown(roomId)
   } finally {
     setRoomRunning(roomId, false)
+  }
+}
+
+/** Tick maintenance: stranded harvest + expiry. No round-robin drive. */
+async function maintainRoom(roomId: string): Promise<void> {
+  if (isRoomRunning(roomId)) return
+  expireStaleInFlight(roomId, GROUP_TURN_HARD_CAP_MS)
+  expirePendingTurns(Date.now() - 30 * 60 * 1000)
+
+  const room = getRoom(roomId)
+  if (!room || room.state === 'disbanded' || room.state === 'complete') return
+
+  const participants = listParticipants(roomId).filter(
+    (p) => p.kind === 'agent' && !p.removedAt,
+  )
+  if (participants.length === 0) return
+  const members = participants.map((p) => toHealedGroupMember(p))
+
+  for (const member of members) {
+    await harvestStrandedReply(room, member)
+  }
+
+  if (listStrandedMembers(roomId).length > 0) {
+    void harvestStrandedUntilSettled(roomId, members)
   }
 }
 
@@ -272,7 +377,7 @@ async function driveRoom(roomId: string): Promise<void> {
   )
   if (participants.length === 0) return
 
-  const members = participants.map(toHealedGroupMember)
+  const members = participants.map((p) => toHealedGroupMember(p))
   const allMessages = getLatestMessages(roomId, { limit: 200 })
 
   // Summarize if needed (Hermes throwaway session — never a managed agent id).
@@ -351,6 +456,24 @@ async function runGroupChatRounds(
 
       const watermark = getWatermark(room.id, member.participantId)
       if (roomLog.length <= watermark) continue
+
+      // #93129: held member — consume delta once, never take a turn.
+      if (isMemberHeld(room.id, member)) {
+        const advance = heldMemberWatermarkAdvance(watermark, roomLog.length)
+        if (advance !== null) {
+          setWatermark(room.id, member.participantId, advance)
+        }
+        const key = groupMemberKey(member)
+        const entry = getRoomHolds(room.id)[key]
+        if (entry && !entry.noted) {
+          markHoldNoted(room.id, key)
+          publishChatEvent('group_chat_held', {
+            roomId: room.id,
+            member: member.displayName,
+          })
+        }
+        continue
+      }
 
       const delta = roomLog.slice(watermark).slice(-GROUP_CHAT_HISTORY_LIMIT)
       if (delta.length === 0) continue
@@ -444,7 +567,8 @@ async function runGroupChatRounds(
         const continuationResponders = citedMembers.filter(
           (m) =>
             !stillInFlight.includes(groupMemberKey(m)) &&
-            !hasStranded(room.id, m),
+            !hasStranded(room.id, m) &&
+            !isMemberHeld(room.id, m),
         )
         for (const member of continuationResponders) {
           if (
@@ -628,7 +752,7 @@ async function harvestStrandedReply(
 
   const participants = listParticipants(room.id)
     .filter((p) => !p.removedAt)
-    .map(toGroupMember)
+    .map((p) => toGroupMember(p))
   const newMessage = insertMessage({
     roomId: room.id,
     senderKind: 'agent',

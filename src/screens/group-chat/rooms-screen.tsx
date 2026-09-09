@@ -282,6 +282,11 @@ export function RoomsScreen() {
                 <h1 className="font-semibold truncate">{displayTitle}</h1>
                 <div className="text-xs opacity-70 flex items-center gap-2 min-w-0">
                   <span>{participants.length} members</span>
+                  {activeRoom?.state === 'paused' ? (
+                    <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-300 bg-amber-400/15">
+                      Paused
+                    </span>
+                  ) : null}
                   {displayMissionId ? (
                     <span
                       className="shrink-0 rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide"
@@ -326,6 +331,31 @@ export function RoomsScreen() {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              {activeRoom?.state === 'paused' ? (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    void updateRoom(roomId, { state: 'active' }).then((res) => {
+                      setActiveRoom(res.room)
+                    })
+                  }}
+                >
+                  Resume
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    void updateRoom(roomId, { state: 'paused' }).then((res) => {
+                      setActiveRoom(res.room)
+                    })
+                  }}
+                >
+                  Pause
+                </Button>
+              )}
               <MemberRoster
                 participants={participants}
                 onRemove={handleRemoveParticipant}

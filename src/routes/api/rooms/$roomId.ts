@@ -11,6 +11,10 @@ import {
   validateWorkspacePathInput,
 } from '../../../server/group-chat/resolve-room-cwd'
 import { getSwarmMission } from '../../../server/swarm-missions'
+import {
+  pauseRoom,
+  resumeRoom,
+} from '../../../server/group-chat/group-chat-runner'
 
 export const Route = createFileRoute('/api/rooms/$roomId')({
   server: {
@@ -39,11 +43,24 @@ export const Route = createFileRoute('/api/rooms/$roomId')({
         } catch {
           return json({ ok: false, error: 'Invalid JSON' }, { status: 400 })
         }
+
+        // Pause / resume go through dedicated helpers (epoch bump + holds).
+        if (body.state === 'paused' && existing.state !== 'paused') {
+          const room = pauseRoom(params.roomId)
+          return json({ ok: true, room })
+        }
+        if (body.state === 'active' && existing.state === 'paused') {
+          const room = resumeRoom(params.roomId)
+          return json({ ok: true, room })
+        }
+
         const patch: Record<string, unknown> = {
           updatedAt: Date.now(),
         }
         if (typeof body.title === 'string') patch.title = body.title
-        if (typeof body.state === 'string') patch.state = body.state
+        if (typeof body.state === 'string' && body.state !== existing.state) {
+          patch.state = body.state
+        }
 
         if (body.missionId !== undefined) {
           patch.missionId = body.missionId

@@ -7,6 +7,7 @@ import {
   listMessages,
   listParticipants,
   toGroupMember,
+  updateRoom,
 } from '../../../../server/group-chat/room-store'
 import {
   expandMentionTargets,
@@ -14,7 +15,10 @@ import {
 } from '../../../../server/group-chat/mention-routing'
 import { bumpRoomEpoch } from '../../../../server/group-chat/runner-state'
 import { publishChatEvent } from '../../../../server/chat-event-bus'
-import { triggerRoomRun } from '../../../../server/group-chat/group-chat-runner'
+import {
+  applyUserHoldDirective,
+  triggerRoomRun,
+} from '../../../../server/group-chat/group-chat-runner'
 
 export const Route = createFileRoute('/api/rooms/$roomId/messages')({
   server: {
@@ -37,9 +41,15 @@ export const Route = createFileRoute('/api/rooms/$roomId/messages')({
         if (!isAuthenticated(request)) {
           return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
         }
-        const room = getRoom(params.roomId)
+        let room = getRoom(params.roomId)
         if (!room) {
           return json({ ok: false, error: 'Not found' }, { status: 404 })
+        }
+        if (room.state === 'disbanded' || room.state === 'complete') {
+          return json(
+            { ok: false, error: `Room is ${room.state}` },
+            { status: 409 },
+          )
         }
         let body: { content?: string; mentions?: Array<unknown> }
         try {
@@ -58,6 +68,15 @@ export const Route = createFileRoute('/api/rooms/$roomId/messages')({
           ? (body.mentions as ReturnType<typeof expandMentionTargets>)
           : expandMentionTargets(parsed, params.roomId, members)
 
+        // User speaking resumes a paused room (Bot Mode: send ignites drive).
+        if (room.state === 'paused') {
+          room =
+            updateRoom(params.roomId, {
+              state: 'active',
+              updatedAt: Date.now(),
+            }) ?? room
+        }
+
         const message = insertMessage({
           roomId: params.roomId,
           senderKind: 'human',
@@ -67,17 +86,24 @@ export const Route = createFileRoute('/api/rooms/$roomId/messages')({
           mentions,
         })
 
+        // #93129: only user text changes holds (stop @x / @all resume / …).
+        applyUserHoldDirective({
+          roomId: params.roomId,
+          content,
+          messageId: message.id,
+          members: members.filter((m) => m.kind === 'agent' || m.isBot),
+        })
+
         bumpRoomEpoch(params.roomId)
         publishChatEvent('group_chat_message', {
           roomId: params.roomId,
           messageId: message.id,
         })
 
-        // Fire-and-forget: start the round driver immediately after the human
-        // message lands. The HTTP request does not await agent turns.
+        // Fire-and-forget: one bounded drive for this user send.
         void triggerRoomRun(params.roomId)
 
-        return json({ ok: true, room, message })
+        return json({ ok: true, room: getRoom(params.roomId) ?? room, message })
       },
     },
   },

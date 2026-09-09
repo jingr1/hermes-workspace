@@ -253,6 +253,27 @@ export function GroupChatLayout() {
                       />
                       Rename
                     </MenuItem>
+                    {room.state === 'paused' ? (
+                      <MenuItem
+                        onClick={() => {
+                          void updateRoom(room.id, { state: 'active' }).then(
+                            () => loadRooms(),
+                          )
+                        }}
+                      >
+                        Resume room
+                      </MenuItem>
+                    ) : room.state === 'active' ? (
+                      <MenuItem
+                        onClick={() => {
+                          void updateRoom(room.id, { state: 'paused' }).then(
+                            () => loadRooms(),
+                          )
+                        }}
+                      >
+                        Pause room
+                      </MenuItem>
+                    ) : null}
                     <MenuItem
                       className="text-red-400 focus:text-red-400"
                       onClick={() => setDeleteTarget(room)}
