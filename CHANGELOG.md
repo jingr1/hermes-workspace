@@ -5,6 +5,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.5.0] — 2026-09-09
+
+### Added
+
+- **Multi-Agent Workspace** — Mission Control, pipelines API, `agents.yaml` runtime declarations, and task-pipeline dispatch split (Hermes vs managed runtimes)
+- **Group chat rooms** — room workspace dual-mode (ad-hoc sticky path + mission-derived worktree/repo path), `ensureRoomForMission`, turn cwd wiring
+- **Claude Code managed chat** — print-mode adapter with MCP handshake, model/effort picker, localStorage sessions, stream-json partial output
+- **Managed companion tooling** — skip-permissions for non-interactive runs; ThinkingBubble live tool activity without transcript spam
+- **Excalidraw + Mermaid** embeds in markdown rendering
+
+### Changed
+
+- Claude Code chat prompt defaults user-facing narration to 简体中文
+- Agent switch restores last Claude Code / managed session (parity with Hermes profile last-session)
+- Composer clears draft after managed send (matches Hermes `helpers.reset()`)
+
+### Fixed
+
+- Claude Code landing on blank “New Chat” when switching agents (AgentList/session URL race)
+- Managed composer retaining text after Enter
+- Tool-call progress flooding the assistant bubble instead of status chrome
+
 ## [2.4.0] — 2026-08-23
 
 ### Added
