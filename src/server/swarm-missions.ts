@@ -554,6 +554,13 @@ export function recordMissionCheckpoint(input: {
   mission.state = deriveMissionState(mission.assignments)
   const completed = mission.state === 'complete' && previousState !== 'complete'
   writeStore(store)
+  if (
+    onCheckpointTerminal &&
+    (checkpoint.stateLabel === 'DONE' || checkpoint.stateLabel === 'HANDOFF')
+  ) {
+    // Fire-and-forget: do not block checkpoint harvest on downstream dispatch.
+    void onCheckpointTerminal({ missionId: mission.id, checkpoint })
+  }
   return Object.assign(mission, { _completed: completed })
 }
 

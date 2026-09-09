@@ -1,15 +1,14 @@
 /**
- * dispatch-ready — Mission Control kickoff / continuation dispatcher.
+ * dispatch-ready — shared kickoff for Mission Control pipeline missions.
  *
- * Reads a mission's `readyQueuedAssignments`, splits them by runtime declared
- * in agents.yaml, and dispatches via the appropriate path:
- *   - hermes      → dispatchSwarmAssignments (allowAsync: true)
- *   - non-hermes  → dispatchAssignment (managed CLI runtime)
+ * Routes ready queued assignments by runtime:
+ *   - hermes  → existing swarm-dispatch path (dispatchSwarmAssignments, async)
+ *   - managed → agent-runtime dispatchAssignment
  *
- * After dispatching it refreshes the kanban lane so the Mission Control board
- * reflects the new state. This module also registers a checkpoint hook so that
- * when a pipeline mission reaches a terminal DONE/HANDOFF checkpoint the next
- * ready stage is dispatched automatically.
+ * Used by:
+ *   - createTask autoDispatch kickoff
+ *   - POST /api/tasks/:cardId/start retry/continue
+ *   - terminal checkpoint continuation hook
  */
 import { dispatchSwarmAssignments } from '../../routes/api/swarm-dispatch'
 import { dispatchAssignment } from '../agent-runtime/dispatch'
@@ -18,10 +17,10 @@ import {
   getSwarmMission,
   readyQueuedAssignments,
   setOnCheckpointTerminalHook,
-  type ParsedSwarmCheckpoint,
 } from '../swarm-missions'
 import { updateKanbanCard } from '../kanban-backend'
-import { syncLaneFromMission, type KanbanLane } from './lane-sync'
+import { syncLaneFromMission } from './lane-sync'
+import type { SwarmMissionAssignment } from '../swarm-missions'
 
 export type DispatchedAssignmentSummary = {
   assignmentId: string
@@ -35,100 +34,86 @@ export type DispatchReadyResult = {
   dispatched: Array<DispatchedAssignmentSummary>
 }
 
-/** Prevent concurrent dispatch loops for the same mission. */
-const dispatchingMissions = new Set<string>()
-
-function isHermesRuntime(workerId: string): boolean {
+function resolveAssignmentRuntime(workerId: string): 'hermes' | 'managed' {
   try {
-    const router = getAgentRuntimeRouter()
-    const decl = router.registry.byId.get(workerId)
-    return decl?.runtime === 'hermes'
-  } catch {
-    // If the runtime router is unavailable, fall back to the historical
-    // default: hermes workers are dispatched via swarm-dispatch.
-    return true
+    const decl = getAgentRuntimeRouter().registry.byId.get(workerId)
+    if (decl) return decl.runtime === 'hermes' ? 'hermes' : 'managed'
+  } catch (error) {
+    console.warn(
+      `[dispatch-ready] failed to resolve runtime for ${workerId}:`,
+      error instanceof Error ? error.message : String(error),
+    )
+  }
+  return 'hermes'
+}
+
+async function syncCardLane(missionId: string): Promise<void> {
+  const mission = getSwarmMission(missionId)
+  if (!mission?.taskId) return
+  try {
+    await syncLaneFromMission({
+      cardId: mission.taskId,
+      missionId,
+      updateCard: (id, lane) => updateKanbanCard(id, { status: lane }),
+    })
+  } catch (error) {
+    console.warn(
+      `[dispatch-ready] lane sync failed for ${missionId}:`,
+      error instanceof Error ? error.message : String(error),
+    )
   }
 }
 
 /**
- * Dispatch every queued assignment whose dependencies are satisfied.
- * Partial failure does not roll back already-dispatched assignments
- * (matches swarm-dispatch semantics). Returns a per-assignment summary.
+ * Dispatch all ready queued assignments for a mission.
+ * Partial failures do not roll back already-dispatched assignments.
  */
 export async function dispatchReadyAssignments(
   missionId: string,
 ): Promise<DispatchReadyResult> {
-  if (dispatchingMissions.has(missionId)) {
+  const ready = readyQueuedAssignments(missionId)
+  if (ready.length === 0) {
     return { ok: true, dispatched: [] }
   }
-  dispatchingMissions.add(missionId)
 
-  try {
-    const mission = getSwarmMission(missionId)
-    if (!mission) return { ok: true, dispatched: [] }
+  const hermesAssignments = ready.filter(
+    (a) => resolveAssignmentRuntime(a.workerId) === 'hermes',
+  )
+  const managedAssignments = ready.filter(
+    (a) => resolveAssignmentRuntime(a.workerId) === 'managed',
+  )
 
-    const ready = readyQueuedAssignments(missionId)
-    if (ready.length === 0) {
-      return { ok: true, dispatched: [] }
-    }
+  const dispatched: Array<DispatchedAssignmentSummary> = []
 
-    const hermesAssignments = ready.filter((a) => isHermesRuntime(a.workerId))
-    const managedAssignments = ready.filter((a) => !isHermesRuntime(a.workerId))
-
-    const dispatched: Array<DispatchedAssignmentSummary> = []
-
-    if (hermesAssignments.length > 0) {
-      try {
-        const result = await dispatchSwarmAssignments({
-          missionId,
-          assignments: hermesAssignments.map((a) => ({
-            workerId: a.workerId,
-            task: a.task,
-            rationale: a.rationale ?? undefined,
-            assignmentId: a.id,
-            dependsOn: a.dependsOn,
-            reviewRequired: a.reviewRequired,
-          })),
-          allowAsync: true,
-        })
-        for (const assignment of hermesAssignments) {
-          const workerResult = result.results.find(
-            (r) => r.workerId === assignment.workerId,
-          )
-          dispatched.push({
-            assignmentId: assignment.id,
-            workerId: assignment.workerId,
-            ok: workerResult?.ok ?? true,
-            error: workerResult?.error ?? undefined,
-          })
+  if (hermesAssignments.length > 0) {
+    try {
+      const result = await dispatchSwarmAssignments({
+        missionId,
+        assignments: hermesAssignments.map((a) => ({
+          workerId: a.workerId,
+          task: a.task,
+          rationale: a.rationale ?? undefined,
+          dependsOn: a.dependsOn,
+          reviewRequired: a.reviewRequired,
+          assignmentId: a.id,
+          direct: false,
+        })),
+        allowAsync: true,
+      })
+      for (const [index, assignment] of hermesAssignments.entries()) {
+        const workerResult = result.results[index] ?? {
+          ok: false,
+          error: 'missing result',
         }
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : String(error)
-        for (const assignment of hermesAssignments) {
-          dispatched.push({
-            assignmentId: assignment.id,
-            workerId: assignment.workerId,
-            ok: false,
-            error: message,
-          })
-        }
-      }
-    }
-
-    for (const assignment of managedAssignments) {
-      try {
-        const result = await dispatchAssignment({
-          missionId,
-          assignmentId: assignment.id,
-        })
         dispatched.push({
           assignmentId: assignment.id,
           workerId: assignment.workerId,
-          ok: result.ok,
-          error: result.ok ? undefined : result.error,
+          ok: workerResult.ok,
+          error: workerResult.error ?? undefined,
         })
-      } catch (error) {
+      }
+    } catch (error) {
+      for (const assignment of hermesAssignments) {
         dispatched.push({
           assignmentId: assignment.id,
           workerId: assignment.workerId,
@@ -137,41 +122,67 @@ export async function dispatchReadyAssignments(
         })
       }
     }
+  }
 
-    // Refresh the board lane so the card moves from ready → running.
-    if (mission.taskId) {
-      await syncLaneFromMission({
-        cardId: mission.taskId,
+  for (const assignment of managedAssignments) {
+    try {
+      const result = await dispatchAssignment({
         missionId,
-        updateCard: (id: string, lane: KanbanLane) =>
-          updateKanbanCard(id, { status: lane }),
+        assignmentId: assignment.id,
+      })
+      dispatched.push({
+        assignmentId: assignment.id,
+        workerId: assignment.workerId,
+        ok: result.ok,
+        error: result.ok ? undefined : (result as { error: string }).error,
+      })
+    } catch (error) {
+      dispatched.push({
+        assignmentId: assignment.id,
+        workerId: assignment.workerId,
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
       })
     }
+  }
 
-    return { ok: true, dispatched }
-  } finally {
-    dispatchingMissions.delete(missionId)
+  await syncCardLane(missionId)
+
+  return {
+    ok: dispatched.every((d) => d.ok),
+    dispatched,
   }
 }
 
-function isTerminalContinuationCheckpoint(
-  checkpoint: ParsedSwarmCheckpoint,
-): boolean {
-  // DONE completes a stage; HANDOFF explicitly hands off to the next stage.
-  // BLOCKED/NEEDS_INPUT are terminal but require human intervention first.
-  return checkpoint.stateLabel === 'DONE' || checkpoint.stateLabel === 'HANDOFF'
-}
-
 /**
- * Register a fire-and-forget continuation: when a pipeline mission reaches a
- * terminal DONE/HANDOFF checkpoint, dispatch the next ready assignments.
- * The in-flight Set inside dispatchReadyAssignments prevents duplicate loops.
+ * Terminal checkpoint continuation: when a pipeline mission worker reports
+ * DONE/HANDOFF, try to dispatch the next ready stage. Fire-and-forget so
+ * harvest/mission-sync callers are not blocked.
+ *
+ * An in-flight Set prevents duplicate concurrent continuations for the same
+ * mission.
  */
-setOnCheckpointTerminalHook(({ missionId }) => {
-  void dispatchReadyAssignments(missionId).catch((error) => {
-    console.error(
-      '[dispatch-ready] pipeline continuation failed:',
-      error instanceof Error ? error.message : String(error),
-    )
-  })
+const continuationInFlight = new Set<string>()
+
+setOnCheckpointTerminalHook(({ missionId, checkpoint }) => {
+  if (checkpoint.stateLabel !== 'DONE' && checkpoint.stateLabel !== 'HANDOFF') {
+    return
+  }
+  const mission = getSwarmMission(missionId)
+  if (!mission?.pipelineId) return
+  if (continuationInFlight.has(missionId)) return
+
+  continuationInFlight.add(missionId)
+  void (async () => {
+    try {
+      await dispatchReadyAssignments(missionId)
+    } catch (error) {
+      console.error(
+        `[dispatch-ready] checkpoint continuation failed for ${missionId}:`,
+        error instanceof Error ? error.message : String(error),
+      )
+    } finally {
+      continuationInFlight.delete(missionId)
+    }
+  })()
 })

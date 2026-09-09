@@ -1,5 +1,7 @@
+/** @vitest-environment node */
 import { describe, it, expect, beforeEach } from 'vitest'
 import {
+  isGroupInfraFailureText,
   isGroupPassText,
   isGroupTranscriptBusy,
   pickGroupTurnReply,
@@ -86,6 +88,33 @@ describe('responder-utils', () => {
     it('allows real replies', () => {
       expect(isGroupPassText('I agree with the plan')).toBe(false)
       expect(isGroupPassText('passing the salt')).toBe(false)
+    })
+  })
+
+  describe('isGroupInfraFailureText', () => {
+    it('detects Hermes API / import failures', () => {
+      expect(
+        isGroupInfraFailureText(
+          "API call failed after 3 retries: cannot import name '_bound_prompt_cache_key_field'",
+        ),
+      ).toBe(true)
+      expect(
+        isGroupInfraFailureText('No LLM provider configured for this session'),
+      ).toBe(true)
+      expect(
+        isGroupInfraFailureText(
+          "ImportError: cannot import name '_bound_prompt_cache_key_field'",
+        ),
+      ).toBe(true)
+    })
+
+    it('does not treat research prose as infra failure', () => {
+      expect(
+        isGroupInfraFailureText(
+          'We should investigate ImportError handling in the gateway.',
+        ),
+      ).toBe(false)
+      expect(isGroupInfraFailureText('LF supports ROS 2 bridging.')).toBe(false)
     })
   })
 

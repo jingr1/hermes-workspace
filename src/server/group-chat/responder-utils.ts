@@ -68,6 +68,31 @@ export function isGroupPassText(text: string | null | undefined): boolean {
 }
 
 /**
+ * True when assistant text is a Hermes/runtime infrastructure failure that
+ * was wrongly persisted as chat content (e.g. "API call failed after 3
+ * retries: cannot import name …"). These must not be posted to the room or
+ * they become the next mission via @mention chase.
+ *
+ * Match anchors are line-start / whole-message so research prose that merely
+ * *mentions* ImportError is not classified as a failure.
+ */
+export function isGroupInfraFailureText(
+  text: string | null | undefined,
+): boolean {
+  const trimmed = String(text || '').trim()
+  if (!trimmed) return false
+  return (
+    /^API call failed after \d+ retries:/i.test(trimmed) ||
+    /^No LLM provider configured\b/i.test(trimmed) ||
+    /^cannot import name\b/i.test(trimmed) ||
+    /^(ImportError|ModuleNotFoundError|AttributeError|TypeError|RuntimeError|SyntaxError):\s/i.test(
+      trimmed,
+    ) ||
+    /^Traceback \(most recent call last\):/i.test(trimmed)
+  )
+}
+
+/**
  * Pick the substantive reply from a sequence of assistant messages.
  * Scans newest-first and prefers the last non-pass answer. This handles the
  * case where a model emits an answer followed by a synthetic "(pass)".

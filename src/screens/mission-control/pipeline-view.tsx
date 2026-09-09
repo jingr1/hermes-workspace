@@ -1,14 +1,22 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import type {
   PipelineStage,
+  TaskDetail,
   TaskRun,
   TaskSummary,
 } from '@/lib/mission-control-api'
 import { cn } from '@/lib/utils'
-import { fetchTaskDetail, fetchTasks } from '@/lib/mission-control-api'
+import {
+  fetchTaskDetail,
+  fetchTasks,
+  startTask,
+} from '@/lib/mission-control-api'
+import { createRoomFromMission } from '@/lib/group-chat-api'
+import { toast } from '@/components/ui/toast'
 
 const TASKS_QUERY_KEY = ['mission-control', 'tasks'] as const
 
@@ -61,6 +69,78 @@ function StageBar({
           </div>
         )
       })}
+    </div>
+  )
+}
+
+function PipelineActions({
+  activeTask,
+  detail,
+}: {
+  activeTask: TaskSummary
+  detail: TaskDetail | null | undefined
+}) {
+  const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const [roomBusy, setRoomBusy] = useState(false)
+
+  const startMutation = useMutation({
+    mutationFn: () => startTask(activeTask.cardId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ['mission-control', 'task', activeTask.cardId],
+      })
+      void queryClient.invalidateQueries({
+        queryKey: ['mission-control', 'tasks'],
+      })
+      toast('Task started', { type: 'success' })
+    },
+    onError: (error: Error) => {
+      toast(error.message || 'Failed to start task', { type: 'error' })
+    },
+  })
+
+  const missionId = detail?.task.missionId ?? activeTask.missionId
+  const stages = detail?.pipeline?.stages ?? []
+  const hasReady = stages.some((s) => s.state === 'queued')
+  const isRunning = stages.some(
+    (s) => s.state === 'dispatched' || s.state === 'running',
+  )
+  const startLabel = isRunning ? 'Running' : hasReady ? 'Start / Continue' : 'No ready stage'
+
+  return (
+    <div className="flex shrink-0 items-center gap-2">
+      <button
+        type="button"
+        disabled={startMutation.isPending || !hasReady || isRunning}
+        onClick={() => startMutation.mutate()}
+        className="rounded-md bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[var(--theme-accent-strong)] disabled:opacity-50"
+      >
+        {startMutation.isPending ? 'Starting…' : startLabel}
+      </button>
+      {missionId && (
+        <button
+          type="button"
+          disabled={roomBusy}
+          onClick={async () => {
+            setRoomBusy(true)
+            try {
+              const result = await createRoomFromMission(missionId)
+              if (result.room.id) {
+                navigate({
+                  to: '/group-chat/$roomId',
+                  params: { roomId: result.room.id },
+                })
+              }
+            } finally {
+              setRoomBusy(false)
+            }
+          }}
+          className="rounded-md border border-[var(--theme-border)] px-3 py-1.5 text-xs font-medium text-[var(--theme-text)] hover:bg-[var(--theme-hover)] disabled:opacity-50"
+        >
+          {roomBusy ? 'Opening…' : 'Enter room'}
+        </button>
+      )}
     </div>
   )
 }
@@ -217,13 +297,18 @@ export function PipelineView({
         {activeTask ? (
           <>
             <div className="mb-4">
-              <h2 className="text-lg font-semibold">{activeTask.title}</h2>
-              <div className="mt-1 flex items-center gap-3 text-xs text-[var(--theme-muted)]">
-                <span>进度 {activeTask.progress}%</span>
-                <span>状态 {activeTask.derivedLane ?? activeTask.lane}</span>
-                {activeTask.currentAssignee && (
-                  <span>执行 {activeTask.currentAssignee}</span>
-                )}
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold">{activeTask.title}</h2>
+                  <div className="mt-1 flex items-center gap-3 text-xs text-[var(--theme-muted)]">
+                    <span>进度 {activeTask.progress}%</span>
+                    <span>状态 {activeTask.derivedLane ?? activeTask.lane}</span>
+                    {activeTask.currentAssignee && (
+                      <span>执行 {activeTask.currentAssignee}</span>
+                    )}
+                  </div>
+                </div>
+                <PipelineActions activeTask={activeTask} detail={detail} />
               </div>
             </div>
 

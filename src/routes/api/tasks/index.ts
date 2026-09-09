@@ -80,7 +80,7 @@ export const Route = createFileRoute('/api/tasks/')({
           const effectiveLane = mission ? laneFromMission(mission) : card.status
           return {
             cardId: card.id,
-            title: mission?.title?.trim() ? mission.title.trim() : card.title,
+            title: mission && mission.title.trim() ? mission.title.trim() : card.title,
             lane: card.status,
             missionId: mission?.id ?? null,
             missionState: mission?.state ?? null,
@@ -103,6 +103,7 @@ export const Route = createFileRoute('/api/tasks/')({
           pipelineId?: string
           acceptanceCriteria?: Array<string>
           projectId?: string
+          autoDispatch?: boolean
         }
         try {
           body = await request.json()
@@ -120,6 +121,7 @@ export const Route = createFileRoute('/api/tasks/')({
             pipelineId: body.pipelineId,
             acceptanceCriteria: body.acceptanceCriteria ?? [],
             projectId: body.projectId ?? null,
+            autoDispatch: body.autoDispatch,
           })
           return json(created, { status: 201 })
         } catch (error) {

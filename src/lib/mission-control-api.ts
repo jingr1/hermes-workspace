@@ -143,6 +143,21 @@ export async function fetchTaskDetail(taskId: string): Promise<TaskDetail> {
   return res.json()
 }
 
+export async function startTask(taskId: string): Promise<{
+  ok: boolean
+  dispatched: Array<{ assignmentId: string; workerId: string; ok: boolean; error?: string }>
+}> {
+  const res = await fetch(`/api/tasks/${taskId}/start`, { method: 'POST' })
+  const data = (await res.json().catch(() => ({}))) as { error?: string; dispatched?: unknown }
+  if (!res.ok || data.error) {
+    throw new Error(data.error || `Failed to start task: ${res.status}`)
+  }
+  return {
+    ok: true,
+    dispatched: Array.isArray(data.dispatched) ? data.dispatched : [],
+  }
+}
+
 export type CollabEvent = {
   event: string
   data: Record<string, unknown>

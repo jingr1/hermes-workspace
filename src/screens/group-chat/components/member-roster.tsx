@@ -41,6 +41,7 @@ export function MemberRoster({ participants, onRemove }: MemberRosterProps) {
                     kind={p.kind}
                     status={p.online ? 'idle' : 'failed'}
                     size={38}
+                    showTooltip={false}
                   />
                 </DialogTrigger>
               </TooltipTrigger>

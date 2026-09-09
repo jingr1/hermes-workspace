@@ -12,6 +12,8 @@
  *   interrupt and return accumulated text or failed (no stranded harvest).
  * - On success: prefer pickGroupTurnReply over the session transcript so the
  *   newest substantive (non-pass) assistant message wins — not the first ack.
+ * - Infrastructure failure text (API call failed / ImportError / …) maps to
+ *   `failed`, never `reply`, so it cannot enter the room and derail @mentions.
  * - Self-heals once when a poisoned Hermes session yields
  *   "No LLM provider configured".
  */
@@ -29,7 +31,11 @@ import {
   GROUP_TURN_TIMEOUT_MS,
 } from './constants'
 import { forgetSession, getOrCreateSession } from './agent-session-manager'
-import { isGroupPassText, pickGroupTurnReply } from './responder-utils'
+import {
+  isGroupInfraFailureText,
+  isGroupPassText,
+  pickGroupTurnReply,
+} from './responder-utils'
 import type { GroupMember, GroupTurnResult } from './types'
 
 export type TurnExecutorOptions = {
@@ -122,6 +128,10 @@ async function executeManagedMemberTurn(
       }
     }
     if (isGroupPassText(text)) return { kind: 'pass' }
+    // Gateway/runtime exceptions must not enter the room as agent speech.
+    if (isGroupInfraFailureText(text)) {
+      return { kind: 'failed', reason: text.slice(0, 500) }
+    }
     return {
       kind: 'reply',
       text,
@@ -317,6 +327,16 @@ async function toTurnResult(
     before,
     capture.replyText,
   )
+
+  // Prefer streamError, but Hermes often materializes infra failures as
+  // assistant content with no SSE error event — classify that text as failed
+  // so the runner advances watermark without posting to the room.
+  if (isGroupInfraFailureText(replyText) || isGroupInfraFailureText(capture.streamError)) {
+    return {
+      kind: 'failed',
+      reason: (capture.streamError || replyText).slice(0, 500),
+    }
+  }
 
   if (replyText) {
     return isGroupPassText(replyText)

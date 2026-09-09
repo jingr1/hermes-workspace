@@ -289,4 +289,56 @@ describe('executeMemberTurn timeout / stranded', () => {
     })
     expect(result).toEqual({ kind: 'pass' })
   })
+
+  it('maps Hermes infra failure assistant text to failed (not room reply)', async () => {
+    getOrCreateSession.mockResolvedValue({
+      sessionId: 'sess_writer',
+      existed: true,
+      profile: 'writer',
+    })
+    const failure =
+      "API call failed after 3 retries: cannot import name '_bound_prompt_cache_key_field'"
+    getMessages.mockResolvedValue([
+      { role: 'user', content: 'prior' },
+      { role: 'assistant', content: failure },
+    ])
+    streamChat.mockImplementation(
+      async (
+        _sessionId: string,
+        _body: unknown,
+        opts?: {
+          onEvent?: (payload: {
+            event: string
+            data: Record<string, unknown>
+          }) => void
+        },
+      ) => {
+        opts?.onEvent?.({
+          event: 'assistant.completed',
+          data: { content: failure },
+        })
+      },
+    )
+    const { executeMemberTurn } = await import('../turn-executor')
+    const result = await executeMemberTurn({
+      roomId: 'room1',
+      roomTitle: 'test',
+      member: {
+        id: 'row',
+        kind: 'agent',
+        participantId: 'writer',
+        displayName: 'writer',
+        name: 'writer',
+        mentionName: 'writer',
+        runtime: 'hermes',
+        isBot: true,
+        profile: 'writer',
+      },
+      prompt: 'write the report',
+    })
+    expect(result).toEqual({
+      kind: 'failed',
+      reason: failure,
+    })
+  })
 })

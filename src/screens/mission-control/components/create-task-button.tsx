@@ -2,10 +2,12 @@
 
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { PlusSignIcon } from '@hugeicons/core-free-icons'
 import { cn } from '@/lib/utils'
 import { toast } from '@/components/ui/toast'
+import { createRoomFromMission } from '@/lib/group-chat-api'
 
 const PIPELINES_QUERY_KEY = ['mission-control', 'pipelines'] as const
 
@@ -27,17 +29,55 @@ async function createTask(payload: {
   spec: string
   pipelineId: string
   acceptanceCriteria: Array<string>
-}): Promise<unknown> {
+  autoDispatch: boolean
+}): Promise<{ missionId?: string | null; cardId?: string; dispatched?: Array<unknown> }> {
   const res = await fetch('/api/tasks', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
-  const data = (await res.json().catch(() => ({}))) as { error?: string }
+  const data = (await res.json().catch(() => ({}))) as {
+    error?: string
+    missionId?: string | null
+    cardId?: string
+    dispatched?: Array<unknown>
+  }
   if (!res.ok || data.error) {
     throw new Error(data.error || `Failed to create task: ${res.status}`)
   }
   return data
+}
+
+function CreateRoomAction({
+  missionId,
+  onDone,
+}: {
+  missionId: string
+  onDone: () => void
+}) {
+  const [busy, setBusy] = useState(false)
+  const navigate = useNavigate()
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true)
+        try {
+          const result = await createRoomFromMission(missionId)
+          if (result.room.id) {
+            navigate({ to: '/group-chat/$roomId', params: { roomId: result.room.id } })
+          }
+        } finally {
+          setBusy(false)
+          onDone()
+        }
+      }}
+      className="rounded-md border border-[var(--theme-border)] px-3 py-1.5 text-xs font-medium text-[var(--theme-text)] hover:bg-[var(--theme-hover)] disabled:opacity-50"
+    >
+      {busy ? 'Opening…' : 'Open room'}
+    </button>
+  )
 }
 
 type CreateTaskButtonProps = {
@@ -52,6 +92,7 @@ export function CreateTaskButton({
   const [spec, setSpec] = useState('')
   const [criteria, setCriteria] = useState('')
   const [selectedPipelineId, setSelectedPipelineId] = useState('')
+  const [autoDispatch, setAutoDispatch] = useState(true)
   const queryClient = useQueryClient()
 
   const pipelinesQuery = useQuery({
@@ -62,19 +103,30 @@ export function CreateTaskButton({
 
   const createMutation = useMutation({
     mutationFn: createTask,
-    onSuccess: () => {
+    onSuccess: (data) => {
       setOpen(false)
       setTitle('')
       setSpec('')
       setCriteria('')
       setSelectedPipelineId('')
+      setAutoDispatch(true)
       void queryClient.invalidateQueries({
         queryKey: ['mission-control', 'tasks'],
       })
       void queryClient.invalidateQueries({
         queryKey: ['mission-control', 'agents'],
       })
-      toast('Task created', { type: 'success' })
+      toast('Task created and started', {
+        type: 'success',
+        action: data.missionId ? (
+          <CreateRoomAction
+            missionId={data.missionId}
+            onDone={() => {
+              /* toast auto-dismisses */
+            }}
+          />
+        ) : undefined,
+      })
     },
     onError: (error: Error) => {
       toast(error.message || 'Failed to create task', { type: 'error' })
@@ -185,6 +237,16 @@ export function CreateTaskButton({
                   className="w-full resize-none rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-xs outline-none focus:border-[var(--theme-accent)]"
                 />
               </div>
+
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={autoDispatch}
+                  onChange={(e) => setAutoDispatch(e.target.checked)}
+                  className="h-3.5 w-3.5 accent-[var(--theme-accent)]"
+                />
+                <span className="text-xs">Start immediately</span>
+              </label>
             </div>
 
             <div className="mt-5 flex justify-end gap-2">
@@ -211,6 +273,7 @@ export function CreateTaskButton({
                       .split('\n')
                       .map((s) => s.trim())
                       .filter(Boolean),
+                    autoDispatch,
                   })
                 }}
                 className="rounded-md bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[var(--theme-accent-strong)] disabled:opacity-50"
