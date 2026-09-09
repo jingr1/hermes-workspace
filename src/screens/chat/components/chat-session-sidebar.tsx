@@ -10,7 +10,6 @@ import { useRenameSession } from '../hooks/use-rename-session'
 import { useDeleteSession } from '../hooks/use-delete-session'
 import { chatQueryKeys, fetchHistory, fetchSessions } from '../chat-queries'
 import { resolveSessionForProfile, writeLastSession } from '../last-session'
-import { listExternalChatSessions } from '@/lib/external-chat-sessions'
 import { SidebarSessions } from './sidebar/sidebar-sessions'
 import { SessionDeleteDialog } from './sidebar/session-delete-dialog'
 import { AgentList } from './agent-list'
@@ -238,8 +237,7 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
         return
       }
 
-      // Non-Hermes agent: restore last localStorage session (same as Hermes
-      // profile last-session), so switching back to Claude Code is not blank.
+      // Non-Hermes agent: restore last session from store / last-session helper.
       if (activeFriendlyId && activeFriendlyId !== 'new') {
         const currentAgentId = useAgentStore.getState().activeAgentId
         if (currentAgentId) {
@@ -249,13 +247,19 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
         }
       }
 
-      const localSessions = listExternalChatSessions(agent.agentId).map(
-        (session) => ({ friendlyId: session.sessionId }),
-      )
+      const cached =
+        useAgentStore.getState().sessionsByAgentId.get(agent.agentId) ?? []
+      const localSessions = cached.map((session) => ({
+        friendlyId: session.sessionId,
+      }))
       const resolvedSession = resolveSessionForProfile(
         localSessions,
         agent.agentId,
-        { sessionsLoaded: true },
+        {
+          sessionsLoaded:
+            cached.length > 0 ||
+            useAgentStore.getState().sessionsByAgentId.has(agent.agentId),
+        },
       )
 
       navigate({

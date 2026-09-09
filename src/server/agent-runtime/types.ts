@@ -31,6 +31,11 @@ export type AgentStreamEvent =
     }
   | { type: 'run_exited'; runId: string; exitCode: number | null }
   | { type: 'error'; runId: string; message: string }
+  | {
+      type: 'native_session'
+      runId: string
+      sessionId: string
+    }
 
 export type McpHandshake = {
   /** e.g. http://127.0.0.1:<port>/api/mcp-rpc (see mcp-rpc.ts route note) */
@@ -58,6 +63,13 @@ export type AgentRunInput = {
   effort?: string
   /** Extra env merged over process.env. Secrets MUST come via env, not files. */
   env?: Record<string, string>
+  /**
+   * Claude Code native session UUID. First turn: pair with resume=false
+   * (--session-id). Subsequent turns: resume=true (--resume).
+   */
+  nativeSessionId?: string
+  /** When true with nativeSessionId, spawn uses `--resume` instead of `--session-id`. */
+  nativeResume?: boolean
 }
 
 export type AgentProbeResult = {

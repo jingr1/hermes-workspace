@@ -40,6 +40,10 @@ export type RunManagedTurnInput = {
   onEvent?: (event: AgentStreamEvent) => void
   /** Abort / client disconnect — interrupt the run. */
   signal?: AbortSignal
+  /** Claude native session UUID (--session-id / --resume). */
+  nativeSessionId?: string
+  /** When true, spawn with `--resume` instead of `--session-id`. */
+  nativeResume?: boolean
 }
 
 export type RunManagedTurnResult =
@@ -119,6 +123,12 @@ export async function runManagedTurn(
       ...(input.model ? { model: input.model } : {}),
       ...(input.effort ? { effort: input.effort } : {}),
       ...(input.cwd ? { cwd: input.cwd } : {}),
+      ...(input.nativeSessionId
+        ? {
+            nativeSessionId: input.nativeSessionId,
+            nativeResume: Boolean(input.nativeResume),
+          }
+        : {}),
       roomId: input.roomId ?? null,
       mcp: {
         endpoint: getMcpEndpoint(),
@@ -265,6 +275,8 @@ export async function startManagedChatRun(input: {
   roomId?: string | null
   cwd?: string | null
   probe?: boolean
+  nativeSessionId?: string
+  nativeResume?: boolean
 }): Promise<
   | {
       ok: true
@@ -319,6 +331,12 @@ export async function startManagedChatRun(input: {
       ...(input.model ? { model: input.model } : {}),
       ...(input.effort ? { effort: input.effort } : {}),
       ...(input.cwd ? { cwd: input.cwd } : {}),
+      ...(input.nativeSessionId
+        ? {
+            nativeSessionId: input.nativeSessionId,
+            nativeResume: Boolean(input.nativeResume),
+          }
+        : {}),
       roomId: input.roomId ?? null,
       mcp: {
         endpoint: getMcpEndpoint(),

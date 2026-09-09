@@ -2,21 +2,26 @@ import { createFileRoute } from '@tanstack/react-router'
 import { isAuthenticated } from '../../../../server/auth-middleware'
 import { publishChatEvent } from '../../../../server/chat-event-bus'
 import { startManagedChatRun } from '../../../../server/agent-runtime/run-managed-turn'
+import {
+  appendManagedChatMessage,
+  ensureManagedChatSession,
+  recordNativeSessionId,
+  resolveNativeSessionForRun,
+} from '../../../../server/agent-runtime/managed-chat-store'
+import { getAgentRuntimeRouter } from '../../../../server/agent-runtime/router'
 import type { AgentStreamEvent } from '../../../../server/agent-runtime/types'
 
 /**
  * POST /api/agents/:agentId/chat
  *
- * Chat endpoint for managed non-Hermes runtimes (claude-code today, codex
- * tomorrow). Starts a single one-shot agent run and streams the adapter
- * events back as SSE.
+ * Managed non-Hermes chat (claude-code today). Persists UI transcript in
+ * collab.db and resumes Claude via --session-id / --resume (studio-style).
  *
  * Body: {
  *   message: string,
  *   sessionId?: string,
  *   model?: string,
  *   effort?: string,
- *   history?: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
  * }
  *
  * SSE events:
@@ -24,6 +29,7 @@ import type { AgentStreamEvent } from '../../../../server/agent-runtime/types'
  *   text_delta { runId, text }
  *   thinking   { runId, text }
  *   tool       { runId, phase, name, args }
+ *   native_session { runId, sessionId }
  *   error      { runId, message }
  *   run_exited { runId, exitCode }
  */
@@ -72,45 +78,45 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
           typeof body.effort === 'string' ? body.effort.trim() : ''
 
         const sessionId =
-          typeof body.sessionId === 'string' ? body.sessionId.trim() : ''
-        const rawHistory = body.history
-        const historyLines: Array<string> = []
-        if (Array.isArray(rawHistory)) {
-          for (const entry of rawHistory) {
-            if (!entry || typeof entry !== 'object') continue
-            const role = String((entry as Record<string, unknown>).role ?? '')
-            const content = String(
-              (entry as Record<string, unknown>).content ?? '',
-            ).trim()
-            if (!content) continue
-            if (role === 'user') {
-              historyLines.push(`User: ${content}`)
-            } else if (role === 'assistant') {
-              historyLines.push(`Assistant: ${content}`)
-            } else if (role === 'system') {
-              historyLines.push(`System: ${content}`)
-            }
-          }
-        }
+          typeof body.sessionId === 'string' && body.sessionId.trim()
+            ? body.sessionId.trim()
+            : crypto.randomUUID()
 
-        const promptParts: Array<string> = []
-        if (historyLines.length > 0) {
-          promptParts.push('Here is the conversation history:')
-          promptParts.push(...historyLines)
-          promptParts.push('')
-        }
-        promptParts.push(`User: ${message}`)
-        promptParts.push(
+        const router = getAgentRuntimeRouter()
+        const decl = router.registry.byId.get(agentId)
+        const runtime = decl?.runtime ?? 'claude-code'
+
+        ensureManagedChatSession({
+          id: sessionId,
+          agentId,
+          runtime: runtime === 'hermes' ? 'claude-code' : runtime,
+          ...(requestedModel ? { model: requestedModel } : {}),
+        })
+
+        appendManagedChatMessage({
+          sessionId,
+          role: 'user',
+          content: [{ type: 'text', text: message }],
+          titleFromText: message,
+        })
+
+        const native = resolveNativeSessionForRun({ sessionId })
+
+        // With --resume, Claude already has history — only send the new turn.
+        // First turn (--session-id) also stays single-message; no prompt replay.
+        const task = [
+          `User: ${message}`,
           '直接回应用户，面向用户的叙述使用简体中文（代码、命令、技术标识保持英文）。如有需要可通过 MCP 使用 Hermes 工具。',
-        )
-        const task = promptParts.join('\n')
+        ].join('\n')
 
         const started = await startManagedChatRun({
           agentId,
           task,
           ...(requestedModel ? { model: requestedModel } : {}),
           ...(requestedEffort ? { effort: requestedEffort } : {}),
-          sessionId: sessionId || null,
+          sessionId,
+          nativeSessionId: native.nativeSessionId,
+          nativeResume: native.resume,
           probe: true,
         })
         if (!started.ok) {
@@ -137,6 +143,9 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
           async start(controller) {
             let streamClosed = false
             let heartbeatTimer: ReturnType<typeof setInterval> | null = null
+            let assistantText = ''
+            let lastError: string | null = null
+            let persistedAssistant = false
 
             const sendEvent = (
               event: string,
@@ -149,6 +158,24 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
               } catch {
                 streamClosed = true
               }
+            }
+
+            const persistAssistant = () => {
+              if (persistedAssistant) return
+              const text = assistantText.trim()
+              if (!text && !lastError) return
+              persistedAssistant = true
+              appendManagedChatMessage({
+                sessionId: chatSessionId,
+                role: 'assistant',
+                content: [
+                  {
+                    type: 'text',
+                    text: text || lastError || '',
+                  },
+                ],
+                isError: Boolean(lastError && !text),
+              })
             }
 
             const closeStream = () => {
@@ -169,6 +196,7 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
               'abort',
               () => {
                 void adapter.interrupt(runId, 'client disconnected')
+                persistAssistant()
                 closeStream()
               },
               { once: true },
@@ -191,8 +219,19 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
             try {
               for await (const event of adapter.streamEvents(runId)) {
                 if (streamClosed) break
+                if (event.type === 'text_delta' && event.text) {
+                  assistantText += event.text
+                } else if (event.type === 'error' && event.message.trim()) {
+                  lastError = event.message
+                } else if (event.type === 'native_session') {
+                  recordNativeSessionId({
+                    sessionId: chatSessionId,
+                    nativeSessionId: event.sessionId,
+                  })
+                }
                 relayEvent(sendEvent, event)
                 if (event.type === 'run_exited') {
+                  persistAssistant()
                   setTimeout(closeStream, 50)
                   break
                 }
@@ -200,13 +239,16 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
             } catch (error) {
               const detail =
                 error instanceof Error ? error.message : String(error)
+              lastError = detail
               sendEvent('error', { runId, message: detail })
+              persistAssistant()
               closeStream()
             } finally {
               if (heartbeatTimer) {
                 clearInterval(heartbeatTimer)
                 heartbeatTimer = null
               }
+              persistAssistant()
               setTimeout(closeStream, 100)
             }
           },
@@ -260,6 +302,13 @@ function relayEvent(
         phase: event.phase,
         name: event.name,
         args: event.args,
+      })
+      break
+    case 'native_session':
+      send('native_session', {
+        type: 'native_session',
+        runId: event.runId,
+        sessionId: event.sessionId,
       })
       break
     case 'run_exited':

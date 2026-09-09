@@ -18,6 +18,12 @@
 import { getClaudeApiClient } from '../claude-api-profile'
 import { runManagedTurn } from '../agent-runtime/run-managed-turn'
 import {
+  ensureManagedChatSession,
+  recordNativeSessionId,
+  resolveNativeSessionForRun,
+  roomManagedSessionId,
+} from '../agent-runtime/managed-chat-store'
+import {
   GROUP_TURN_HARD_CAP_MS,
   GROUP_TURN_POLL_MS,
   GROUP_TURN_TIMEOUT_MS,
@@ -68,12 +74,26 @@ async function executeManagedMemberTurn(
   console.log(
     `[turn-executor] managed member=${opts.member.displayName} runtime=${opts.member.runtime} agent=${opts.member.participantId}`,
   )
+
+  const sessionId = roomManagedSessionId(
+    opts.roomId,
+    opts.member.participantId,
+  )
+  ensureManagedChatSession({
+    id: sessionId,
+    agentId: opts.member.participantId,
+    runtime: opts.member.runtime,
+  })
+  const native = resolveNativeSessionForRun({ sessionId })
+
   const result = await runManagedTurn({
     agentId: opts.member.participantId,
     task: opts.prompt,
     model: opts.model,
     roomId: opts.roomId,
     cwd: opts.cwd,
+    nativeSessionId: native.nativeSessionId,
+    nativeResume: native.resume,
     onEvent: (event) => {
       if (event.type === 'text_delta') {
         opts.onEvent?.('assistant.delta', { delta: event.text })
@@ -81,6 +101,11 @@ async function executeManagedMemberTurn(
         opts.onEvent?.('error', { message: event.message })
       } else if (event.type === 'run_exited') {
         opts.onEvent?.('assistant.completed', {})
+      } else if (event.type === 'native_session') {
+        recordNativeSessionId({
+          sessionId,
+          nativeSessionId: event.sessionId,
+        })
       }
     },
   })

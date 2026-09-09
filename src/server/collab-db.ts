@@ -253,6 +253,38 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_participants_mention
   ON room_participants(room_id, mention_name);
 `,
   },
+  {
+    version: 6,
+    sql: `
+-- Managed (non-Hermes) 1:1 chat sessions — SQLite source of truth for UI
+-- transcript + Claude/Codex native session id (--session-id / --resume).
+CREATE TABLE IF NOT EXISTS managed_chat_sessions (
+  id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL,
+  runtime TEXT NOT NULL DEFAULT 'claude-code',
+  title TEXT,
+  agent_native_session_id TEXT NOT NULL DEFAULT '',
+  native_resume_ready INTEGER NOT NULL DEFAULT 0,
+  model TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_managed_chat_sessions_agent
+  ON managed_chat_sessions(agent_id, updated_at);
+
+CREATE TABLE IF NOT EXISTS managed_chat_messages (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  content_json TEXT NOT NULL,
+  is_error INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  FOREIGN KEY (session_id) REFERENCES managed_chat_sessions(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_managed_chat_messages_session
+  ON managed_chat_messages(session_id, created_at);
+`,
+  },
 ]
 
 export function ensureCollabDb(dbPath: string = getCollabDbPath()): void {

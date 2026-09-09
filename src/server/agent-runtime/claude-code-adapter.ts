@@ -341,11 +341,20 @@ export class ClaudeCodeAdapter implements AgentRuntimeAdapter {
       extra: input.env,
     })
 
+    const nativeSessionId = input.nativeSessionId?.trim()
+    const nativeSessionArgs =
+      nativeSessionId && nativeSessionId.length > 0
+        ? input.nativeResume
+          ? ['--resume', nativeSessionId]
+          : ['--session-id', nativeSessionId]
+        : []
+
     const args = [
       '--mcp-config',
       mcpConfigPath,
       ...(effectiveModel ? ['--model', effectiveModel] : []),
       ...(effortFlag ? ['--effort', effortFlag] : []),
+      ...nativeSessionArgs,
       ...withStreamJsonOutput(withManagedPermissionBypass(this.decl.args)),
       '--',
       input.task,
@@ -368,6 +377,8 @@ export class ClaudeCodeAdapter implements AgentRuntimeAdapter {
             inputModel: input.model ?? null,
             declModel: this.decl.model ?? null,
             effort: effortFlag ?? null,
+            nativeSessionId: nativeSessionId ?? null,
+            nativeResume: Boolean(input.nativeResume),
           },
           null,
           2,
@@ -435,6 +446,12 @@ export class ClaudeCodeAdapter implements AgentRuntimeAdapter {
             type: 'error',
             runId: input.runId,
             message: event.message,
+          })
+        } else if (event.type === 'session') {
+          push(run, {
+            type: 'native_session',
+            runId: input.runId,
+            sessionId: event.sessionId,
           })
         }
       }

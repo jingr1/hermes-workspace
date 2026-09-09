@@ -14,6 +14,7 @@ export type ClaudeParsedEvent =
       args?: unknown
     }
   | { type: 'error'; message: string }
+  | { type: 'session'; sessionId: string }
 
 type JsonObject = Record<string, unknown>
 
@@ -75,38 +76,48 @@ export class ClaudeStreamJsonParser {
     const type = asString(obj.type)
     if (!type) return []
 
+    const events: Array<ClaudeParsedEvent> = []
+    const sessionId = asString(obj.session_id)?.trim()
+    if (sessionId) {
+      events.push({ type: 'session', sessionId })
+    }
+
     if (type === 'stream_event') {
       const event = asObject(obj.event)
-      return event ? this.handleStreamEvent(event) : []
+      if (event) events.push(...this.handleStreamEvent(event))
+      return events
     }
 
     if (type === 'assistant') {
-      return this.handleAssistantMessage(asObject(obj.message))
+      events.push(...this.handleAssistantMessage(asObject(obj.message)))
+      return events
     }
 
     if (type === 'user') {
-      return this.handleUserMessage(asObject(obj.message))
+      events.push(...this.handleUserMessage(asObject(obj.message)))
+      return events
     }
 
     if (type === 'result') {
-      return this.handleResult(obj)
+      events.push(...this.handleResult(obj))
+      return events
     }
 
     if (type === 'system') {
       const subtype = asString(obj.subtype)
       if (subtype === 'init') {
         const model = asString(obj.model)
-        return [
-          {
-            type: 'thinking',
-            text: model ? `Claude Code started (${model})` : 'Claude Code started',
-          },
-        ]
+        events.push({
+          type: 'thinking',
+          text: model
+            ? `Claude Code started (${model})`
+            : 'Claude Code started',
+        })
       }
-      return []
+      return events
     }
 
-    return []
+    return events
   }
 
   private handleStreamEvent(event: JsonObject): Array<ClaudeParsedEvent> {

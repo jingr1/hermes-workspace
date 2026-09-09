@@ -1,17 +1,18 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import {
-  deleteExternalChatSession,
-  listExternalChatSessions,
-  renameExternalChatSession,
-} from '@/lib/external-chat-sessions'
+  deleteManagedSession,
+  fetchSessionsForAgent,
+  renameManagedSession,
+} from '@/lib/agent-api'
+import type { AgentSession } from '@/lib/agent-types'
 import { useAgentStore } from '@/stores/agent-store'
 import { writeLastSession } from '../last-session'
 import type { SessionController } from '../session-controller'
 import type { SessionMeta } from '../types'
 
-function toSessionMeta(sessions: ReturnType<typeof listExternalChatSessions>) {
+function toSessionMeta(sessions: Array<AgentSession>): Array<SessionMeta> {
   return sessions.map(
     (s): SessionMeta => ({
       key: s.sessionId,
@@ -24,9 +25,7 @@ function toSessionMeta(sessions: ReturnType<typeof listExternalChatSessions>) {
 }
 
 /**
- * Session controller backed by localStorage external-chat index.
- * Used by Claude Code (and other managed runtimes) inside ChatScreen's
- * shared ChatSessionSidebar — no AgentWorkspace outer sidebar.
+ * Session controller backed by collab.db managed_chat_sessions (server API).
  */
 export function useExternalAgentSessions(
   agentId: string | null,
@@ -37,6 +36,7 @@ export function useExternalAgentSessions(
   const setSessions = useAgentStore((s) => s.setSessions)
   const upsertSession = useAgentStore((s) => s.upsertSession)
   const removeSession = useAgentStore((s) => s.removeSession)
+  const setSessionsLoading = useAgentStore((s) => s.setSessionsLoading)
   const sessionsLoading = useAgentStore((s) =>
     agentId ? s.sessionsLoading.has(agentId) : false,
   )
@@ -51,20 +51,26 @@ export function useExternalAgentSessions(
     [storeSessions],
   )
 
-  // Keep store in sync on mount / agent switch.
-  useEffect(() => {
+  const reload = useCallback(() => {
     if (!agentId) return
-    setSessions(agentId, listExternalChatSessions(agentId))
-  }, [agentId, setSessions])
+    setSessionsLoading(agentId, true)
+    void fetchSessionsForAgent(agentId)
+      .then((data) => setSessions(agentId, data.sessions))
+      .catch(() => setSessions(agentId, []))
+      .finally(() => setSessionsLoading(agentId, false))
+  }, [agentId, setSessions, setSessionsLoading])
+
+  useEffect(() => {
+    reload()
+  }, [reload])
 
   const onNewChat = useCallback(() => {
     setActiveSessionId(null)
   }, [setActiveSessionId])
 
   const onRetry = useCallback(() => {
-    if (!agentId) return
-    setSessions(agentId, listExternalChatSessions(agentId))
-  }, [agentId, setSessions])
+    reload()
+  }, [reload])
 
   const onActivateSession = useCallback(
     (session: SessionMeta) => {
@@ -77,12 +83,9 @@ export function useExternalAgentSessions(
   const onRename = useCallback(
     (session: SessionMeta, title: string) => {
       if (!agentId) return
-      const updated = renameExternalChatSession(
-        agentId,
-        session.friendlyId,
-        title,
-      )
-      if (updated) upsertSession(agentId, updated)
+      void renameManagedSession(agentId, session.friendlyId, title)
+        .then((updated) => upsertSession(agentId, updated))
+        .catch(() => undefined)
     },
     [agentId, upsertSession],
   )
@@ -90,8 +93,9 @@ export function useExternalAgentSessions(
   const onDelete = useCallback(
     (session: SessionMeta) => {
       if (!agentId) return
-      deleteExternalChatSession(agentId, session.friendlyId)
-      removeSession(agentId, session.friendlyId)
+      void deleteManagedSession(agentId, session.friendlyId)
+        .then(() => removeSession(agentId, session.friendlyId))
+        .catch(() => undefined)
     },
     [agentId, removeSession],
   )

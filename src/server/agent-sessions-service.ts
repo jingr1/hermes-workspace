@@ -2,11 +2,17 @@
  * Unified session abstraction for the Agent Workspace UI.
  *
  * For hermes agents sessions come from the existing profile state.db.
- * For managed non-hermes runtimes (claude-code, codex, ...) sessions are
- * derived from adapter task history once those adapters are delivered.
+ * For managed non-hermes runtimes (claude-code, …) sessions live in
+ * collab.db via managed-chat-store (SQLite + Claude --resume).
  */
 import { listSessionsForProfile } from './profiles-browser'
 import { getAgentRuntimeRouter } from './agent-runtime/router'
+import {
+  createSessionForManagedAgent,
+  deleteManagedChatSession,
+  listManagedChatSessions,
+  renameManagedChatSession,
+} from './agent-runtime/managed-chat-store'
 import type {
   AgentRuntime,
   AgentSession,
@@ -31,11 +37,9 @@ function listHermesSessions(agentId: string): Array<AgentSession> {
 
 function listManagedRuntimeSessions(
   agentId: string,
-  runtime: Exclude<AgentRuntime, 'hermes'>,
+  _runtime: Exclude<AgentRuntime, 'hermes'>,
 ): Array<AgentSession> {
-  // TODO: adapter-delivered task/run history (P1 步骤 4).
-  void runtime
-  return []
+  return listManagedChatSessions(agentId)
 }
 
 export function listSessionsForAgent(agentId: string): Array<AgentSession> {
@@ -46,7 +50,7 @@ export function listSessionsForAgent(agentId: string): Array<AgentSession> {
     if (router.registry.orphanProfiles.includes(agentId)) {
       return listHermesSessions(agentId)
     }
-    return []
+    return listManagedChatSessions(agentId)
   }
   if (decl.runtime === 'hermes') {
     return listHermesSessions(decl.profile ?? decl.id)
@@ -56,14 +60,41 @@ export function listSessionsForAgent(agentId: string): Array<AgentSession> {
 
 export function createSessionForAgent(
   agentId: string,
-  _payload: { title?: string; model?: string },
+  payload: { title?: string; model?: string },
 ): { sessionId: string } {
   const router = getAgentRuntimeRouter()
   const decl = router.registry.byId.get(agentId)
-  if (!decl || decl.runtime !== 'hermes') {
-    throw new Error(`Session creation for ${agentId} is not yet supported`)
+  const isHermes =
+    decl?.runtime === 'hermes' ||
+    (!decl && router.registry.orphanProfiles.includes(agentId))
+  if (isHermes) {
+    // Hermes new-session creation is handled by the existing /api/sessions flow.
+    return { sessionId: `new-${Date.now()}` }
   }
-  // Hermes new-session creation is handled by the existing /api/sessions flow.
-  // This wrapper returns a deterministic draft id until the user sends a message.
-  return { sessionId: `new-${Date.now()}` }
+  return createSessionForManagedAgent(agentId, {
+    runtime: decl?.runtime ?? 'claude-code',
+    title: payload.title,
+    model: payload.model,
+  })
+}
+
+export function renameSessionForAgent(
+  agentId: string,
+  sessionId: string,
+  title: string,
+): AgentSession | null {
+  const router = getAgentRuntimeRouter()
+  const decl = router.registry.byId.get(agentId)
+  if (!decl || decl.runtime === 'hermes') return null
+  return renameManagedChatSession({ agentId, sessionId, title })
+}
+
+export function deleteSessionForAgent(
+  agentId: string,
+  sessionId: string,
+): boolean {
+  const router = getAgentRuntimeRouter()
+  const decl = router.registry.byId.get(agentId)
+  if (!decl || decl.runtime === 'hermes') return false
+  return deleteManagedChatSession({ agentId, sessionId })
 }

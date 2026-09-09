@@ -219,7 +219,6 @@ import { Route as ApiHermesworldReservationsConfirmRouteImport } from './routes/
 import { Route as ApiAgentsClaudeCodeModelsRouteImport } from './routes/api/agents/claude-code/models'
 import { Route as ApiAgentsAgentIdSessionsRouteImport } from './routes/api/agents/$agentId/sessions'
 import { Route as ApiAgentsAgentIdChatRouteImport } from './routes/api/agents/$agentId/chat'
-import { Route as ApiAgentsAgentIdSessionsIndexRouteImport } from './routes/api/agents/$agentId/sessions/index'
 import { Route as ApiRunsSessionKeyRunIdAbandonRouteImport } from './routes/api/runs/$sessionKey.$runId.abandon'
 import { Route as ApiRoomsRoomIdParticipantsParticipantIdRouteImport } from './routes/api/rooms/$roomId/participants/$participantId'
 import { Route as ApiAgentsAgentIdSessionsSessionIdRouteImport } from './routes/api/agents/$agentId/sessions/$sessionId'
@@ -1294,12 +1293,6 @@ const ApiAgentsAgentIdChatRoute = ApiAgentsAgentIdChatRouteImport.update({
   path: '/api/agents/$agentId/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAgentsAgentIdSessionsIndexRoute =
-  ApiAgentsAgentIdSessionsIndexRouteImport.update({
-    id: '/',
-    path: '/',
-    getParentRoute: () => ApiAgentsAgentIdSessionsRoute,
-  } as any)
 const ApiRunsSessionKeyRunIdAbandonRoute =
   ApiRunsSessionKeyRunIdAbandonRouteImport.update({
     id: '/api/runs/$sessionKey/$runId/abandon',
@@ -1545,7 +1538,6 @@ export interface FileRoutesByFullPath {
   '/api/agents/$agentId/sessions/$sessionId': typeof ApiAgentsAgentIdSessionsSessionIdRoute
   '/api/rooms/$roomId/participants/$participantId': typeof ApiRoomsRoomIdParticipantsParticipantIdRoute
   '/api/runs/$sessionKey/$runId/abandon': typeof ApiRunsSessionKeyRunIdAbandonRoute
-  '/api/agents/$agentId/sessions/': typeof ApiAgentsAgentIdSessionsIndexRoute
   '/api/rooms/$roomId/pending-turns/$turnId/answer': typeof ApiRoomsRoomIdPendingTurnsTurnIdAnswerRoute
   '/api/rooms/$roomId/pending-turns/$turnId/dismiss': typeof ApiRoomsRoomIdPendingTurnsTurnIdDismissRoute
 }
@@ -1745,6 +1737,7 @@ export interface FileRoutesByTo {
   '/api/agents': typeof ApiAgentsIndexRoute
   '/api/tasks': typeof ApiTasksIndexRoute
   '/api/agents/$agentId/chat': typeof ApiAgentsAgentIdChatRoute
+  '/api/agents/$agentId/sessions': typeof ApiAgentsAgentIdSessionsRouteWithChildren
   '/api/agents/claude-code/models': typeof ApiAgentsClaudeCodeModelsRoute
   '/api/hermesworld/reservations/confirm': typeof ApiHermesworldReservationsConfirmRoute
   '/api/mcp/$name/logs': typeof ApiMcpNameLogsRoute
@@ -1760,7 +1753,6 @@ export interface FileRoutesByTo {
   '/api/agents/$agentId/sessions/$sessionId': typeof ApiAgentsAgentIdSessionsSessionIdRoute
   '/api/rooms/$roomId/participants/$participantId': typeof ApiRoomsRoomIdParticipantsParticipantIdRoute
   '/api/runs/$sessionKey/$runId/abandon': typeof ApiRunsSessionKeyRunIdAbandonRoute
-  '/api/agents/$agentId/sessions': typeof ApiAgentsAgentIdSessionsIndexRoute
   '/api/rooms/$roomId/pending-turns/$turnId/answer': typeof ApiRoomsRoomIdPendingTurnsTurnIdAnswerRoute
   '/api/rooms/$roomId/pending-turns/$turnId/dismiss': typeof ApiRoomsRoomIdPendingTurnsTurnIdDismissRoute
 }
@@ -1979,7 +1971,6 @@ export interface FileRoutesById {
   '/api/agents/$agentId/sessions/$sessionId': typeof ApiAgentsAgentIdSessionsSessionIdRoute
   '/api/rooms/$roomId/participants/$participantId': typeof ApiRoomsRoomIdParticipantsParticipantIdRoute
   '/api/runs/$sessionKey/$runId/abandon': typeof ApiRunsSessionKeyRunIdAbandonRoute
-  '/api/agents/$agentId/sessions/': typeof ApiAgentsAgentIdSessionsIndexRoute
   '/api/rooms/$roomId/pending-turns/$turnId/answer': typeof ApiRoomsRoomIdPendingTurnsTurnIdAnswerRoute
   '/api/rooms/$roomId/pending-turns/$turnId/dismiss': typeof ApiRoomsRoomIdPendingTurnsTurnIdDismissRoute
 }
@@ -2199,7 +2190,6 @@ export interface FileRouteTypes {
     | '/api/agents/$agentId/sessions/$sessionId'
     | '/api/rooms/$roomId/participants/$participantId'
     | '/api/runs/$sessionKey/$runId/abandon'
-    | '/api/agents/$agentId/sessions/'
     | '/api/rooms/$roomId/pending-turns/$turnId/answer'
     | '/api/rooms/$roomId/pending-turns/$turnId/dismiss'
   fileRoutesByTo: FileRoutesByTo
@@ -2399,6 +2389,7 @@ export interface FileRouteTypes {
     | '/api/agents'
     | '/api/tasks'
     | '/api/agents/$agentId/chat'
+    | '/api/agents/$agentId/sessions'
     | '/api/agents/claude-code/models'
     | '/api/hermesworld/reservations/confirm'
     | '/api/mcp/$name/logs'
@@ -2414,7 +2405,6 @@ export interface FileRouteTypes {
     | '/api/agents/$agentId/sessions/$sessionId'
     | '/api/rooms/$roomId/participants/$participantId'
     | '/api/runs/$sessionKey/$runId/abandon'
-    | '/api/agents/$agentId/sessions'
     | '/api/rooms/$roomId/pending-turns/$turnId/answer'
     | '/api/rooms/$roomId/pending-turns/$turnId/dismiss'
   id:
@@ -2632,7 +2622,6 @@ export interface FileRouteTypes {
     | '/api/agents/$agentId/sessions/$sessionId'
     | '/api/rooms/$roomId/participants/$participantId'
     | '/api/runs/$sessionKey/$runId/abandon'
-    | '/api/agents/$agentId/sessions/'
     | '/api/rooms/$roomId/pending-turns/$turnId/answer'
     | '/api/rooms/$roomId/pending-turns/$turnId/dismiss'
   fileRoutesById: FileRoutesById
@@ -4279,13 +4268,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentsAgentIdChatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/agents/$agentId/sessions/': {
-      id: '/api/agents/$agentId/sessions/'
-      path: '/'
-      fullPath: '/api/agents/$agentId/sessions/'
-      preLoaderRoute: typeof ApiAgentsAgentIdSessionsIndexRouteImport
-      parentRoute: typeof ApiAgentsAgentIdSessionsRoute
-    }
     '/api/runs/$sessionKey/$runId/abandon': {
       id: '/api/runs/$sessionKey/$runId/abandon'
       path: '/api/runs/$sessionKey/$runId/abandon'
@@ -4646,14 +4628,12 @@ const ApiHermesworldReservationsRouteWithChildren =
 
 interface ApiAgentsAgentIdSessionsRouteChildren {
   ApiAgentsAgentIdSessionsSessionIdRoute: typeof ApiAgentsAgentIdSessionsSessionIdRoute
-  ApiAgentsAgentIdSessionsIndexRoute: typeof ApiAgentsAgentIdSessionsIndexRoute
 }
 
 const ApiAgentsAgentIdSessionsRouteChildren: ApiAgentsAgentIdSessionsRouteChildren =
   {
     ApiAgentsAgentIdSessionsSessionIdRoute:
       ApiAgentsAgentIdSessionsSessionIdRoute,
-    ApiAgentsAgentIdSessionsIndexRoute: ApiAgentsAgentIdSessionsIndexRoute,
   }
 
 const ApiAgentsAgentIdSessionsRouteWithChildren =

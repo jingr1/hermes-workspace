@@ -4,7 +4,6 @@ import { z } from 'zod'
 import { ChatRouteLoading } from '../../../screens/chat/chat-route-loading'
 import { useAgentStore } from '../../../stores/agent-store'
 import { fetchAgents } from '../../../lib/agent-api'
-import { listExternalChatSessions } from '../../../lib/external-chat-sessions'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { resolveSessionForProfile } from '../../../screens/chat/last-session'
 import { chatQueryKeys } from '../../../screens/chat/chat-queries'
@@ -88,12 +87,13 @@ function ChatAgentRoute() {
         return resolved === 'new' ? null : resolved
       }
 
-      // Claude Code / managed: restore from localStorage session index.
-      const local = listExternalChatSessions(id).map((session) => ({
+      // Claude Code / managed: restore from store (SQLite-backed list) or last-session.
+      const cached = useAgentStore.getState().sessionsByAgentId.get(id) ?? []
+      const local = cached.map((session) => ({
         friendlyId: session.sessionId,
       }))
       const resolved = resolveSessionForProfile(local, id, {
-        sessionsLoaded: true,
+        sessionsLoaded: cached.length > 0 || useAgentStore.getState().sessionsByAgentId.has(id),
       })
       return resolved === 'new' ? null : resolved
     }

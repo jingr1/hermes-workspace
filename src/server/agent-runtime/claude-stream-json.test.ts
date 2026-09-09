@@ -57,6 +57,25 @@ describe('ClaudeStreamJsonParser', () => {
     expect(second).toEqual([])
   })
 
+  it('emits session from stream lines with session_id', () => {
+    const parser = new ClaudeStreamJsonParser()
+    const events = parser.push(
+      `${JSON.stringify({
+        type: 'system',
+        subtype: 'init',
+        session_id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+        model: 'sonnet',
+      })}\n`,
+    )
+    expect(events).toEqual([
+      {
+        type: 'session',
+        sessionId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      },
+      { type: 'thinking', text: 'Claude Code started (sonnet)' },
+    ])
+  })
+
   it('emits tool start/end from stream_event and tool_result', () => {
     const parser = new ClaudeStreamJsonParser()
     const events = parser.push(

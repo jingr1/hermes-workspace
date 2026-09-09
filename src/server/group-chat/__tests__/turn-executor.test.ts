@@ -35,6 +35,17 @@ vi.mock('../../agent-runtime/run-managed-turn', () => ({
   runManagedTurn,
 }))
 
+vi.mock('../../agent-runtime/managed-chat-store', () => ({
+  roomManagedSessionId: (roomId: string, participantId: string) =>
+    `gc:${roomId}:${participantId}`,
+  ensureManagedChatSession: vi.fn(),
+  resolveNativeSessionForRun: vi.fn(() => ({
+    nativeSessionId: 'native-uuid',
+    resume: false,
+  })),
+  recordNativeSessionId: vi.fn(),
+}))
+
 vi.mock('../constants', async () => {
   const actual =
     await vi.importActual<typeof import('../constants')>('../constants')
@@ -210,6 +221,8 @@ describe('executeMemberTurn timeout / stranded', () => {
         agentId: 'cc-impl',
         task: 'group prompt',
         roomId: 'room1',
+        nativeSessionId: 'native-uuid',
+        nativeResume: false,
       }),
     )
     expect(getOrCreateSession).not.toHaveBeenCalled()

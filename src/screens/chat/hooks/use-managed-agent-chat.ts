@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  externalChatMessageStorageKey,
-  upsertExternalChatSession,
-} from '@/lib/external-chat-sessions'
+  clearManagedSessionMessages,
+  fetchManagedSessionDetail,
+  fetchSessionsForAgent,
+} from '@/lib/agent-api'
 import { useAgentStore } from '@/stores/agent-store'
 import {
   PENDING_SESSION_MODEL_KEY,
@@ -38,47 +39,7 @@ type ExternalChatEvent =
   | { type: 'error'; runId: string; message: string }
   | { type: 'heartbeat'; timestamp: number }
   | { type: 'run_started'; runId: string; agentId: string }
-
-function storageKey(agentId: string, sessionId: string): string {
-  return externalChatMessageStorageKey(agentId, sessionId)
-}
-
-function loadMessages(agentId: string, sessionId: string): Array<ChatMessage> {
-  if (typeof window === 'undefined') return []
-  try {
-    const raw = localStorage.getItem(storageKey(agentId, sessionId))
-    if (!raw) return []
-    const parsed = JSON.parse(raw) as Array<ChatMessage>
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-function saveMessages(
-  agentId: string,
-  sessionId: string,
-  messages: Array<ChatMessage>,
-): void {
-  if (typeof window === 'undefined') return
-  try {
-    localStorage.setItem(
-      storageKey(agentId, sessionId),
-      JSON.stringify(messages),
-    )
-  } catch {
-    // ignore quota errors
-  }
-}
-
-function clearMessages(agentId: string, sessionId: string): void {
-  if (typeof window === 'undefined') return
-  try {
-    localStorage.removeItem(storageKey(agentId, sessionId))
-  } catch {
-    // ignore
-  }
-}
+  | { type: 'native_session'; runId: string; sessionId: string }
 
 function makeUserMessage(
   text: string,
@@ -107,6 +68,24 @@ function makeAssistantMessage(text: string): ChatMessage {
     content: [{ type: 'text', text }],
     timestamp: Date.now(),
   }
+}
+
+function toChatMessages(
+  rows: Array<{
+    role: string
+    content: unknown
+    isError?: boolean
+    timestamp?: number
+  }>,
+): Array<ChatMessage> {
+  return rows.map((row) => ({
+    role: row.role,
+    content: Array.isArray(row.content)
+      ? (row.content as ChatMessage['content'])
+      : [{ type: 'text', text: String(row.content ?? '') }],
+    ...(row.isError ? { isError: true } : {}),
+    timestamp: row.timestamp,
+  }))
 }
 
 function parseSSEDataLine(
@@ -166,6 +145,12 @@ function parseSSEDataLine(
           type: 'heartbeat',
           timestamp: Number(parsed.timestamp ?? Date.now()),
         }
+      case 'native_session':
+        return {
+          type: 'native_session',
+          runId: String(parsed.runId ?? ''),
+          sessionId: String(parsed.sessionId ?? ''),
+        }
       case 'run_started':
         return null
       default:
@@ -195,9 +180,8 @@ export type ManagedAgentChat = {
 }
 
 /**
- * Managed (non-Hermes) chat transport: localStorage messages + SSE to
- * POST /api/agents/:agentId/chat. Includes the `new-*` → uuid promotion race
- * fix (skipNextSessionLoadRef).
+ * Managed (non-Hermes) chat: SQLite transcript on the server + Claude
+ * --resume. UI is display + SSE; history is not replayed into the prompt.
  */
 export function useManagedAgentChat({
   agentId,
@@ -215,10 +199,9 @@ export function useManagedAgentChat({
   const activeSessionId = sessionId ?? stableNewSessionId
   const setActiveSessionId = useAgentStore((s) => s.setActiveSessionId)
   const upsertSession = useAgentStore((s) => s.upsertSession)
+  const setSessions = useAgentStore((s) => s.setSessions)
 
-  const [messages, setMessages] = useState<Array<ChatMessage>>(() =>
-    loadMessages(agentId, activeSessionId),
-  )
+  const [messages, setMessages] = useState<Array<ChatMessage>>([])
   const [isStreaming, setIsStreaming] = useState(false)
   const [activeToolCalls, setActiveToolCalls] = useState<
     Array<{ id: string; name: string; phase: string }>
@@ -226,14 +209,23 @@ export function useManagedAgentChat({
   const [error, setError] = useState<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const streamingMessageRef = useRef<ChatMessage | null>(null)
-  // When promoting `new-*` → real uuid, keep in-memory messages; a reload from
-  // localStorage would drop the streaming assistant bubble and silently eat
-  // every text_delta (CLI finishes, UI stays empty).
+  // When promoting `new-*` → real uuid, keep in-memory messages; a reload
+  // would drop the streaming assistant bubble.
   const skipNextSessionLoadRef = useRef(false)
+  const loadGenerationRef = useRef(0)
 
   const selectedModel = useSessionModelStore((s) => s.models[activeSessionId])
   const transferModel = useSessionModelStore((s) => s.transferModel)
   const getStoredModel = useSessionModelStore((s) => s.getModel)
+
+  const refreshSessionList = useCallback(async () => {
+    try {
+      const data = await fetchSessionsForAgent(agentId)
+      setSessions(agentId, data.sessions)
+    } catch {
+      // ignore — sidebar can retry
+    }
+  }, [agentId, setSessions])
 
   useEffect(() => {
     if (skipNextSessionLoadRef.current) {
@@ -246,23 +238,25 @@ export function useManagedAgentChat({
     setIsStreaming(false)
     setActiveToolCalls([])
     setError(null)
-    setMessages(loadMessages(agentId, activeSessionId))
-  }, [agentId, activeSessionId])
 
-  useEffect(() => {
-    saveMessages(agentId, activeSessionId, messages)
-    const session = upsertExternalChatSession({
-      agentId,
-      sessionId: activeSessionId,
-      messages,
-    })
-    if (session) {
-      upsertSession(agentId, session)
-      if (!activeSessionId.startsWith('new-')) {
-        writeLastSession(activeSessionId, agentId)
-      }
+    if (activeSessionId.startsWith('new-')) {
+      setMessages([])
+      return
     }
-  }, [agentId, activeSessionId, messages, upsertSession])
+
+    const generation = ++loadGenerationRef.current
+    setMessages([])
+    void fetchManagedSessionDetail(agentId, activeSessionId)
+      .then((detail) => {
+        if (loadGenerationRef.current !== generation) return
+        setMessages(toChatMessages(detail.messages))
+        upsertSession(agentId, detail.session)
+      })
+      .catch(() => {
+        if (loadGenerationRef.current !== generation) return
+        setMessages([])
+      })
+  }, [agentId, activeSessionId, upsertSession])
 
   useEffect(() => {
     if (activeSessionId.startsWith('new-')) return
@@ -271,23 +265,6 @@ export function useManagedAgentChat({
       friendlyId: activeSessionId,
     })
   }, [activeSessionId, onSessionResolved])
-
-  const historyForPrompt = useMemo(() => {
-    return messages
-      .filter(
-        (m): m is ChatMessage & { role: 'user' | 'assistant' | 'system' } =>
-          m.role === 'user' || m.role === 'assistant' || m.role === 'system',
-      )
-      .map((m) => {
-        const textParts = m.content
-          ?.map((part) => (part.type === 'text' ? String(part.text ?? '') : ''))
-          .join('')
-        const text = typeof textParts === 'string' ? textParts.trim() : ''
-        return { role: m.role, content: text }
-      })
-      .filter((m) => m.content.length > 0)
-      .slice(-20)
-  }, [messages])
 
   const appendStreamingText = useCallback((chunk: string) => {
     setMessages((prev) => {
@@ -331,7 +308,6 @@ export function useManagedAgentChat({
       resolvedAgentId: string,
       resolvedSessionId: string,
       text: string,
-      history: Array<{ role: string; content: string }>,
       model?: string,
       effort?: string,
     ) => {
@@ -355,7 +331,6 @@ export function useManagedAgentChat({
             body: JSON.stringify({
               message: text,
               sessionId: resolvedSessionId,
-              history,
               ...(model ? { model } : {}),
               ...(effort ? { effort } : {}),
             }),
@@ -400,11 +375,8 @@ export function useManagedAgentChat({
             if (event.type === 'text_delta') {
               appendStreamingText(event.text)
             } else if (event.type === 'thinking') {
-              // Token-level thinking stays out of the bubble; ThinkingBubble
-              // already covers "still working".
+              // Token-level thinking stays out of the bubble.
             } else if (event.type === 'tool') {
-              // Progress belongs in ThinkingBubble (activeToolCalls), not the
-              // transcript — TaskCreate spam was drowning real replies.
               setActiveToolCalls((prev) => {
                 if (event.phase === 'start') {
                   return [
@@ -431,6 +403,7 @@ export function useManagedAgentChat({
             } else if (event.type === 'run_exited') {
               setActiveToolCalls([])
               finalizeStreamingMessage()
+              void refreshSessionList()
             }
           }
         }
@@ -462,7 +435,7 @@ export function useManagedAgentChat({
         abortControllerRef.current = null
       }
     },
-    [appendStreamingText, finalizeStreamingMessage],
+    [appendStreamingText, finalizeStreamingMessage, refreshSessionList],
   )
 
   const submit = useCallback(
@@ -493,36 +466,10 @@ export function useManagedAgentChat({
           getStoredModel(resolvedSessionId) ||
           getStoredModel(activeSessionId) ||
           selectedModel
-        const prior = messages
-        saveMessages(agentId, resolvedSessionId, [...prior, userMessage])
-        const latestHistory = prior
-          .filter(
-            (
-              m,
-            ): m is ChatMessage & {
-              role: 'user' | 'assistant' | 'system'
-            } =>
-              m.role === 'user' ||
-              m.role === 'assistant' ||
-              m.role === 'system',
-          )
-          .map((m) => {
-            const textParts = m.content
-              ?.map((part) =>
-                part.type === 'text' ? String(part.text ?? '') : '',
-              )
-              .join('')
-            const content =
-              typeof textParts === 'string' ? textParts.trim() : ''
-            return { role: m.role, content }
-          })
-          .filter((m) => m.content.length > 0)
-          .slice(-20)
         await startExternalChat(
           agentId,
           resolvedSessionId,
           text,
-          latestHistory,
           modelForRun,
           effortForRun,
         )
@@ -533,7 +480,6 @@ export function useManagedAgentChat({
         agentId,
         resolvedSessionId,
         text,
-        historyForPrompt,
         modelForRun || getStoredModel(resolvedSessionId),
         effortForRun,
       )
@@ -542,8 +488,6 @@ export function useManagedAgentChat({
       agentId,
       activeSessionId,
       getStoredModel,
-      historyForPrompt,
-      messages,
       selectedModel,
       setActiveSessionId,
       startExternalChat,
@@ -563,7 +507,9 @@ export function useManagedAgentChat({
     setIsStreaming(false)
     setError(null)
     setMessages([])
-    clearMessages(agentId, activeSessionId)
+    if (!activeSessionId.startsWith('new-')) {
+      void clearManagedSessionMessages(agentId, activeSessionId)
+    }
   }, [agentId, activeSessionId])
 
   const startNewSession = useCallback(() => {

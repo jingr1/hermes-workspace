@@ -8,7 +8,6 @@ import {
   fetchSessionsForAgent,
   subscribeAgentEvents,
 } from '@/lib/agent-api'
-import { listExternalChatSessions } from '@/lib/external-chat-sessions'
 import { useAgentStore } from '@/stores/agent-store'
 
 export function useAgentWorkspace() {
@@ -57,33 +56,13 @@ export function useAgentWorkspace() {
     setAgentsLoading,
   ])
 
-  // Load sessions whenever active agent changes (after agents are known so we
-  // can choose localStorage vs Hermes profile sessions).
+  // Load sessions whenever active agent changes.
   useEffect(() => {
     const agentId = activeAgentId
     if (!agentId) return
     if (agentsLoading && agents.length === 0) return
 
-    const agent = agents.find((entry) => entry.agentId === agentId)
-
-    // Claude Code (etc.): always rehydrate from localStorage so an earlier
-    // empty server response does not leave the sidebar stuck blank.
-    if (agent && agent.runtime !== 'hermes') {
-      setSessions(agentId, listExternalChatSessions(agentId))
-      setSessionsLoading(agentId, false)
-      return
-    }
-
     if (useAgentStore.getState().sessionsByAgentId.has(agentId)) return
-
-    if (!agent) {
-      const local = listExternalChatSessions(agentId)
-      if (local.length > 0) {
-        setSessions(agentId, local)
-        setSessionsLoading(agentId, false)
-        return
-      }
-    }
 
     setSessionsLoading(agentId, true)
     fetchSessionsForAgent(agentId)

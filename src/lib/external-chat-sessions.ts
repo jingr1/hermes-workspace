@@ -1,7 +1,8 @@
 /**
- * Client-side session index for managed non-Hermes runtimes (Claude Code…).
- * Message transcripts live in localStorage; this module lists / renames /
- * deletes those sessions so the Agent Workspace sidebar is not empty.
+ * @deprecated Managed (Claude Code) chats now persist in collab.db
+ * (`managed_chat_sessions` / `managed_chat_messages`) via server APIs.
+ * This localStorage helper remains only for optional one-off migration /
+ * debugging — new code should use `/api/agents/:id/sessions`.
  */
 import type { AgentSession } from '@/lib/agent-types'
 import type { ChatMessage } from '@/screens/chat/types'
@@ -81,6 +82,7 @@ function lastMessageAtFromMessages(messages: Array<ChatMessage>): string {
 
 /**
  * Discover all persisted chats for an agent from message keys + optional index.
+ * @deprecated Prefer fetchSessionsForAgent (SQLite).
  */
 export function listExternalChatSessions(agentId: string): Array<AgentSession> {
   if (typeof window === 'undefined') return []
@@ -126,7 +128,7 @@ export function listExternalChatSessions(agentId: string): Array<AgentSession> {
   return sessions
 }
 
-/** Persist / refresh index entry after messages change. */
+/** @deprecated */
 export function upsertExternalChatSession(input: {
   agentId: string
   sessionId: string
@@ -161,6 +163,7 @@ export function upsertExternalChatSession(input: {
   }
 }
 
+/** @deprecated */
 export function renameExternalChatSession(
   agentId: string,
   sessionId: string,
@@ -188,6 +191,7 @@ export function renameExternalChatSession(
   }
 }
 
+/** @deprecated */
 export function deleteExternalChatSession(
   agentId: string,
   sessionId: string,
