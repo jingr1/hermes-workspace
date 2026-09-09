@@ -281,6 +281,72 @@ agents:
 })
 
 describe('ClaudeCodeAdapter process management', () => {
+  it('withManagedPermissionBypass injects skip-permissions unless already set', async () => {
+    const { withManagedPermissionBypass } = await import('./claude-code-adapter')
+    expect(withManagedPermissionBypass(undefined)).toEqual([
+      '--dangerously-skip-permissions',
+      '-p',
+    ])
+    expect(withManagedPermissionBypass(['-p'])).toEqual([
+      '--dangerously-skip-permissions',
+      '-p',
+    ])
+    expect(
+      withManagedPermissionBypass(['--dangerously-skip-permissions', '-p']),
+    ).toEqual(['--dangerously-skip-permissions', '-p'])
+    expect(
+      withManagedPermissionBypass(['--permission-mode', 'acceptEdits', '-p']),
+    ).toEqual(['--permission-mode', 'acceptEdits', '-p'])
+  })
+
+  it('startRun argv includes stream-json flags', async () => {
+    const fakeBin = join(tempRoot, 'fake-claude-stream')
+    writeFileSync(fakeBin, '#!/bin/bash\necho ok\nsleep 2\n')
+    const { chmodSync, readFileSync } = await import('node:fs')
+    chmodSync(fakeBin, 0o755)
+
+    const { ClaudeCodeAdapter } = await import('./claude-code-adapter')
+    const adapter = new ClaudeCodeAdapter({
+      id: 'cc',
+      runtime: 'claude-code',
+      command: fakeBin,
+      args: ['-p'],
+      execution: 'local',
+      capabilities: [],
+    })
+
+    const runId = 'run-cc-stream-argv'
+    await adapter.startRun({
+      runId,
+      agentId: 'cc',
+      task: 'noop',
+      mcp: {
+        endpoint: 'http://127.0.0.1:1/api/mcp-rpc',
+        runToken: 'tok',
+        toolAllowlist: [],
+      },
+    })
+    await new Promise((r) => setTimeout(r, 200))
+    await adapter.interrupt(runId, 'done')
+
+    const argv = JSON.parse(
+      readFileSync(
+        join(
+          process.env.HOME || '/home/ramon.jing',
+          '.hermes/agent-runs',
+          runId,
+          'argv.txt',
+        ),
+        'utf8',
+      ),
+    ) as { args: Array<string> }
+    expect(argv.args).toContain('--dangerously-skip-permissions')
+    expect(argv.args).toContain('--output-format')
+    expect(argv.args).toContain('stream-json')
+    expect(argv.args).toContain('--include-partial-messages')
+    expect(argv.args).toContain('--verbose')
+  }, 10_000)
+
   it('startRun spawns a detached process, streams output, interrupt kills the group', async () => {
     // Use a stand-in "claude" binary: a shell script echoing then sleeping.
     const fakeBin = join(tempRoot, 'fake-claude')

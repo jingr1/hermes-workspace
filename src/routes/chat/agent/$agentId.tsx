@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { ChatRouteLoading } from '../../../screens/chat/chat-route-loading'
 import { useAgentStore } from '../../../stores/agent-store'
 import { fetchAgents } from '../../../lib/agent-api'
+import { listExternalChatSessions } from '../../../lib/external-chat-sessions'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { resolveSessionForProfile } from '../../../screens/chat/last-session'
 import { chatQueryKeys } from '../../../screens/chat/chat-queries'
@@ -74,14 +75,25 @@ function ChatAgentRoute() {
       const agent = useAgentStore
         .getState()
         .agents.find((entry) => entry.agentId === id)
-      if (!agent || agent.runtime !== 'hermes') return null
+      if (!agent) return null
 
-      const profile = agent.runtimeConfig.profile ?? agent.agentId
-      const cached = queryClient.getQueryData<Array<SessionMeta>>(
-        chatQueryKeys.sessionsForProfile(profile),
-      )
-      const resolved = resolveSessionForProfile(cached, profile, {
-        sessionsLoaded: cached !== undefined,
+      if (agent.runtime === 'hermes') {
+        const profile = agent.runtimeConfig.profile ?? agent.agentId
+        const cached = queryClient.getQueryData<Array<SessionMeta>>(
+          chatQueryKeys.sessionsForProfile(profile),
+        )
+        const resolved = resolveSessionForProfile(cached, profile, {
+          sessionsLoaded: cached !== undefined,
+        })
+        return resolved === 'new' ? null : resolved
+      }
+
+      // Claude Code / managed: restore from localStorage session index.
+      const local = listExternalChatSessions(id).map((session) => ({
+        friendlyId: session.sessionId,
+      }))
+      const resolved = resolveSessionForProfile(local, id, {
+        sessionsLoaded: true,
       })
       return resolved === 'new' ? null : resolved
     }
@@ -123,15 +135,22 @@ function ChatAgentRoute() {
 
   // Keep the URL in sync with the active session selection.
   useEffect(() => {
-    return useAgentStore.subscribe((state) => {
+    return useAgentStore.subscribe((state, prev) => {
       const currentSession = state.activeSessionId
+      const agentChanged = state.activeAgentId !== prev.activeAgentId
+
       if (currentSession && currentSession !== search.session) {
         void navigate({
           search: { session: currentSession },
           replace: true,
         })
+        return
       }
-      if (!currentSession && search.session) {
+
+      // Only clear ?session= for an intentional New Chat on the same agent.
+      // Agent switches briefly null the session before restore — wiping the
+      // URL here caused Claude Code to land on blank "New Chat".
+      if (!currentSession && search.session && !agentChanged) {
         void navigate({
           search: {},
           replace: true,

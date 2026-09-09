@@ -101,7 +101,7 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
         }
         promptParts.push(`User: ${message}`)
         promptParts.push(
-          'Reply directly to the user. You may use Hermes tools via MCP if helpful.',
+          '直接回应用户，面向用户的叙述使用简体中文（代码、命令、技术标识保持英文）。如有需要可通过 MCP 使用 Hermes 工具。',
         )
         const task = promptParts.join('\n')
 

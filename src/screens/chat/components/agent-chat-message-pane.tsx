@@ -15,12 +15,14 @@ export function AgentChatMessagePane({
   sessionKey,
   emptyState,
   headerHeight = 48,
+  activeToolCalls,
 }: {
   messages: Array<ChatMessage>
   waitingForResponse: boolean
   sessionKey: string
   emptyState?: ReactNode
   headerHeight?: number
+  activeToolCalls?: Array<{ id: string; name: string; phase: string }>
 }) {
   const empty = messages.length === 0
 
@@ -36,6 +38,8 @@ export function AgentChatMessagePane({
       pinGroupMinHeight={0}
       headerHeight={headerHeight}
       sessionKey={sessionKey}
+      isStreaming={waitingForResponse}
+      activeToolCalls={activeToolCalls}
     />
   )
 }

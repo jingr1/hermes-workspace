@@ -158,8 +158,14 @@ export function AgentList({
 
   const handleSelect = useCallback(
     (agentId: string) => {
+      // Sidebar passes onSelect (navigate + restore last session). Do not
+      // setActiveAgentId here — that clears activeSessionId and races the
+      // URL ?session= restore into a blank "New Chat".
+      if (onSelect) {
+        onSelect(agentId)
+        return
+      }
       storeSetActiveAgentId(agentId)
-      onSelect?.(agentId)
     },
     [onSelect, storeSetActiveAgentId],
   )

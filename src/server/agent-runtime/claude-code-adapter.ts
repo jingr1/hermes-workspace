@@ -2,13 +2,19 @@
  * claude-code adapter — minimal path (P1 step 2).
  *
  * Spawns one managed process per run:
- *   claude -p "<task>" --mcp-config <per-run-config.json>
+ *   claude --dangerously-skip-permissions -p --output-format stream-json
+ *     --verbose --include-partial-messages --mcp-config <…> -- "<task>"
  *
  * - Provider + model come from ~/.claude/settings.json (not agents.yaml).
  *   settings.env is injected into the child because `claude -p` does not
  *   reliably apply that block for auth the way an interactive session does.
  * - Per-run MCP config is a temp file (never the user's ~/.claude.json);
  *   MCP credentials live only in the process env (HERMES_MCP_TOKEN).
+ * - Print mode has stdin ignored and no Hermes permission UI bridge, so we
+ *   always bypass Claude Code permission prompts (unless agents.yaml already
+ *   sets --permission-mode / --dangerously-skip-permissions).
+ * - stdout is NDJSON (stream-json); parsed into text_delta / thinking / tool
+ *   so the chat UI can show progress instead of a silent wait.
  * - detached:true + own process group so interrupt() can SIGKILL the group
  *   and the process survives server restarts; the pid registry re-attaches.
  * - stdout/stderr are teed to (a) a per-run log file (task_runs.log_path
@@ -42,6 +48,11 @@ import {
   resolveClaudeCodeCurrentModel,
   settingsEnvRecord,
 } from '../claude-code-settings'
+import {
+  ClaudeStreamJsonParser,
+  withStreamJsonOutput,
+  type ClaudeParsedEvent,
+} from './claude-stream-json'
 
 const execFileAsync = promisify(execFile)
 
@@ -97,6 +108,22 @@ function buildClaudeSpawnEnv(input: {
   }
 
   return env
+}
+
+const SKIP_PERMISSIONS_FLAG = '--dangerously-skip-permissions'
+
+/**
+ * Managed `-p` runs cannot surface Claude Code's interactive permission
+ * dialog (stdin is ignore). Inject skip-permissions unless the declaration
+ * already chose an explicit permission policy.
+ */
+export function withManagedPermissionBypass(
+  declArgs: Array<string> | undefined,
+): Array<string> {
+  const base = declArgs?.length ? [...declArgs] : ['-p']
+  if (base.includes(SKIP_PERMISSIONS_FLAG)) return base
+  if (base.includes('--permission-mode')) return base
+  return [SKIP_PERMISSIONS_FLAG, ...base]
 }
 
 function resolveClaudeEffortFlag(
@@ -319,7 +346,7 @@ export class ClaudeCodeAdapter implements AgentRuntimeAdapter {
       mcpConfigPath,
       ...(effectiveModel ? ['--model', effectiveModel] : []),
       ...(effortFlag ? ['--effort', effortFlag] : []),
-      ...(this.decl.args ?? ['-p']),
+      ...withStreamJsonOutput(withManagedPermissionBypass(this.decl.args)),
       '--',
       input.task,
     ]
@@ -382,15 +409,40 @@ export class ClaudeCodeAdapter implements AgentRuntimeAdapter {
       logPath,
     })
 
+    const streamParser = new ClaudeStreamJsonParser()
+    const emitParsed = (parsed: Array<ClaudeParsedEvent>) => {
+      for (const event of parsed) {
+        if (event.type === 'text_delta') {
+          const text = stripClaudeDiagnostics(event.text)
+          if (!text) continue
+          push(run, { type: 'text_delta', runId: input.runId, text })
+        } else if (event.type === 'thinking') {
+          push(run, {
+            type: 'thinking',
+            runId: input.runId,
+            text: event.text,
+          })
+        } else if (event.type === 'tool') {
+          push(run, {
+            type: 'tool',
+            runId: input.runId,
+            phase: event.phase,
+            name: event.name,
+            args: event.args,
+          })
+        } else if (event.type === 'error') {
+          push(run, {
+            type: 'error',
+            runId: input.runId,
+            message: event.message,
+          })
+        }
+      }
+    }
+
     child.stdout.on('data', (data: Buffer) => {
       fs.writeSync(logFd, data)
-      const text = stripClaudeDiagnostics(data.toString())
-      if (!text) return
-      push(run, {
-        type: 'text_delta',
-        runId: input.runId,
-        text,
-      })
+      emitParsed(streamParser.push(data.toString()))
     })
     child.stderr.on('data', (data: Buffer) => {
       fs.writeSync(logFd, data)
@@ -403,6 +455,7 @@ export class ClaudeCodeAdapter implements AgentRuntimeAdapter {
     child.on('exit', (exitCode) => {
       if (run.done) return // interrupt() already emitted the terminal event
       run.done = true
+      emitParsed(streamParser.flush())
       fs.closeSync(logFd)
       unregisterPid(input.runId)
       push(run, { type: 'run_exited', runId: input.runId, exitCode })
@@ -466,6 +519,9 @@ export class ClaudeCodeAdapter implements AgentRuntimeAdapter {
 }
 
 if (import.meta.hot) {
+  // Ensure Vite re-runs this module on edit; dispose clears the router
+  // singleton so the next startRun uses the new argv/stream-json path.
+  import.meta.hot.accept()
   import.meta.hot.dispose(() => {
     void import('./router').then((mod) => {
       mod.resetAgentRuntimeRouter()

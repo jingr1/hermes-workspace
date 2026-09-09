@@ -7,6 +7,7 @@ import {
   renameExternalChatSession,
 } from '@/lib/external-chat-sessions'
 import { useAgentStore } from '@/stores/agent-store'
+import { writeLastSession } from '../last-session'
 import type { SessionController } from '../session-controller'
 import type { SessionMeta } from '../types'
 
@@ -67,9 +68,10 @@ export function useExternalAgentSessions(
 
   const onActivateSession = useCallback(
     (session: SessionMeta) => {
+      if (agentId) writeLastSession(session.friendlyId, agentId)
       setActiveSessionId(session.friendlyId)
     },
-    [setActiveSessionId],
+    [agentId, setActiveSessionId],
   )
 
   const onRename = useCallback(

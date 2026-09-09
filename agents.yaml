@@ -31,7 +31,9 @@ agents:
     runtime: claude-code
     displayName: Claude Code
     command: claude
-    args: ['-p']
+    # -p is non-interactive; skip-permissions required because Hermes has no
+    # Claude Code permission-dialog bridge (stdin is ignored).
+    args: ['--dangerously-skip-permissions', '-p']
     mentionName: claude
   - id: codex-impl
     runtime: codex

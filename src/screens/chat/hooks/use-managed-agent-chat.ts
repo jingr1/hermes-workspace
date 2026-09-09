@@ -10,6 +10,7 @@ import {
   PENDING_SESSION_MODEL_KEY,
   useSessionModelStore,
 } from '@/stores/session-model-store'
+import { writeLastSession } from '../last-session'
 import type { ChatMessage, ChatAttachment } from '../types'
 
 type ComposerAttachment = {
@@ -179,6 +180,8 @@ export type ManagedAgentChat = {
   activeSessionId: string
   messages: Array<ChatMessage>
   isStreaming: boolean
+  /** Live tool calls for ThinkingBubble — not written into the message bubble. */
+  activeToolCalls: Array<{ id: string; name: string; phase: string }>
   error: string | null
   activeTitle: string
   submit: (
@@ -217,6 +220,9 @@ export function useManagedAgentChat({
     loadMessages(agentId, activeSessionId),
   )
   const [isStreaming, setIsStreaming] = useState(false)
+  const [activeToolCalls, setActiveToolCalls] = useState<
+    Array<{ id: string; name: string; phase: string }>
+  >([])
   const [error, setError] = useState<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const streamingMessageRef = useRef<ChatMessage | null>(null)
@@ -238,6 +244,7 @@ export function useManagedAgentChat({
     abortControllerRef.current = null
     streamingMessageRef.current = null
     setIsStreaming(false)
+    setActiveToolCalls([])
     setError(null)
     setMessages(loadMessages(agentId, activeSessionId))
   }, [agentId, activeSessionId])
@@ -249,7 +256,12 @@ export function useManagedAgentChat({
       sessionId: activeSessionId,
       messages,
     })
-    if (session) upsertSession(agentId, session)
+    if (session) {
+      upsertSession(agentId, session)
+      if (!activeSessionId.startsWith('new-')) {
+        writeLastSession(activeSessionId, agentId)
+      }
+    }
   }, [agentId, activeSessionId, messages, upsertSession])
 
   useEffect(() => {
@@ -324,6 +336,7 @@ export function useManagedAgentChat({
       effort?: string,
     ) => {
       setIsStreaming(true)
+      setActiveToolCalls([])
       setError(null)
       const assistantMessage = makeAssistantMessage('')
       streamingMessageRef.current = assistantMessage
@@ -387,14 +400,36 @@ export function useManagedAgentChat({
             if (event.type === 'text_delta') {
               appendStreamingText(event.text)
             } else if (event.type === 'thinking') {
-              appendStreamingText(`\n[thinking]\n${event.text}\n[/thinking]\n`)
+              // Token-level thinking stays out of the bubble; ThinkingBubble
+              // already covers "still working".
             } else if (event.type === 'tool') {
-              appendStreamingText(`\n[tool:${event.name}:${event.phase}]\n`)
+              // Progress belongs in ThinkingBubble (activeToolCalls), not the
+              // transcript — TaskCreate spam was drowning real replies.
+              setActiveToolCalls((prev) => {
+                if (event.phase === 'start') {
+                  return [
+                    ...prev,
+                    {
+                      id: `${event.name}-${Date.now()}-${prev.length}`,
+                      name: event.name,
+                      phase: 'running',
+                    },
+                  ]
+                }
+                const idx = prev.findIndex(
+                  (t) => t.name === event.name && t.phase === 'running',
+                )
+                if (idx < 0) return prev
+                const next = [...prev]
+                next[idx] = { ...next[idx]!, phase: 'done' }
+                return next
+              })
             } else if (event.type === 'error') {
               if (event.message.trim()) {
                 setError(event.message)
               }
             } else if (event.type === 'run_exited') {
+              setActiveToolCalls([])
               finalizeStreamingMessage()
             }
           }
@@ -422,6 +457,7 @@ export function useManagedAgentChat({
         })
       } finally {
         setIsStreaming(false)
+        setActiveToolCalls([])
         streamingMessageRef.current = null
         abortControllerRef.current = null
       }
@@ -448,6 +484,7 @@ export function useManagedAgentChat({
         resolvedSessionId = crypto.randomUUID()
         skipNextSessionLoadRef.current = true
         setActiveSessionId(resolvedSessionId)
+        writeLastSession(resolvedSessionId, agentId)
         transferModel(activeSessionId, resolvedSessionId)
         if (!getStoredModel(resolvedSessionId)) {
           transferModel(PENDING_SESSION_MODEL_KEY, resolvedSessionId)
@@ -550,6 +587,7 @@ export function useManagedAgentChat({
     activeSessionId,
     messages,
     isStreaming,
+    activeToolCalls,
     error,
     activeTitle,
     submit,

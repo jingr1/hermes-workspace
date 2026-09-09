@@ -263,6 +263,7 @@ export async function startManagedChatRun(input: {
   effort?: string
   sessionId?: string | null
   roomId?: string | null
+  cwd?: string | null
   probe?: boolean
 }): Promise<
   | {

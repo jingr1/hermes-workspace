@@ -115,8 +115,11 @@ export function ManagedAgentChatView({
       value: string,
       attachments: Array<ChatComposerAttachment>,
       _fastMode: boolean,
-      _helpers: ChatComposerHelpers,
+      helpers: ChatComposerHelpers,
     ) => {
+      // Hermes onSubmit always helpers.reset(); managed must too — composer
+      // clearDraft() only drops sessionStorage, not the controlled value.
+      helpers.reset()
       void chat.submit(value, attachments, { effort: thinkingLevel })
     },
     [chat, thinkingLevel],
@@ -173,6 +176,7 @@ export function ManagedAgentChatView({
             <AgentChatMessagePane
               messages={chat.messages}
               waitingForResponse={chat.isStreaming}
+              activeToolCalls={chat.activeToolCalls}
               sessionKey={chat.activeSessionId}
               emptyState={
                 <ChatEmptyState

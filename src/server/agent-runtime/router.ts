@@ -159,6 +159,9 @@ export function setAgentRuntimeRouterForTests(
 }
 
 if (import.meta.hot) {
+  // Force this module to re-apply on edit; dispose drops the singleton so the
+  // next getAgentRuntimeRouter() rebuilds ClaudeCodeAdapter with new argv logic.
+  import.meta.hot.accept()
   import.meta.hot.dispose(() => {
     resetAgentRuntimeRouter()
   })

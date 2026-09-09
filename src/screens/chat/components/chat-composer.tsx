@@ -1561,6 +1561,7 @@ function ChatComposerComponent({
 
   const clearDraft = useCallback(
     function clearDraft() {
+      setValue('')
       if (typeof window === 'undefined') return
       window.sessionStorage.removeItem(draftStorageKey)
     },

@@ -469,6 +469,20 @@ export type RecordCheckpointResult =
   | (SwarmMission & { _completed?: boolean; _ignoredReason?: string })
   | null
 
+type CheckpointTerminalHook = (input: {
+  missionId: string
+  checkpoint: ParsedSwarmCheckpoint
+}) => void | Promise<void>
+
+let onCheckpointTerminal: CheckpointTerminalHook | null = null
+
+/** Register a hook fired after a terminal DONE/HANDOFF checkpoint is recorded. */
+export function setOnCheckpointTerminalHook(
+  hook: CheckpointTerminalHook | null,
+): void {
+  onCheckpointTerminal = hook
+}
+
 export function recordMissionCheckpoint(input: {
   missionId?: string | null
   assignmentId?: string | null

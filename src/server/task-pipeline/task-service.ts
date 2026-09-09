@@ -20,6 +20,10 @@ import { getPipelineTemplate } from './pipeline-templates'
 import { generateStageBrief } from './stage-brief'
 import { syncLaneFromMission } from './lane-sync'
 import { getProject } from './projects'
+import {
+  dispatchReadyAssignments,
+  type DispatchedAssignmentSummary,
+} from './dispatch-ready'
 import type { PipelineTemplate } from './pipeline-templates'
 import type { SwarmMission } from '../swarm-missions'
 import type { KanbanLane } from './lane-sync'
@@ -42,6 +46,7 @@ export type CreatedTask = {
   workspaceMode: string
   worktreePath: string | null
   firstAssignmentIds: Array<string>
+  dispatched: Array<DispatchedAssignmentSummary>
 }
 
 export function instantiatePipeline(input: {
@@ -178,6 +183,13 @@ export async function createTask(input: CreateTaskInput): Promise<CreatedTask> {
   })
 
   const firstAssignmentIds = readyQueuedAssignments(mission.id).map((a) => a.id)
+
+  let dispatched: Array<DispatchedAssignmentSummary> = []
+  if (input.autoDispatch !== false) {
+    const dispatchResult = await dispatchReadyAssignments(mission.id)
+    dispatched = dispatchResult.dispatched
+  }
+
   return {
     cardId: card.id,
     missionId: mission.id,
@@ -186,6 +198,7 @@ export async function createTask(input: CreateTaskInput): Promise<CreatedTask> {
     workspaceMode: template.workspaceMode,
     worktreePath,
     firstAssignmentIds,
+    dispatched,
   }
 }
 
