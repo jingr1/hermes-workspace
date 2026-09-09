@@ -1,4 +1,6 @@
 export type ThemeId =
+  | 'default'
+  | 'default-light'
   | 'claude-nous'
   | 'claude-nous-light'
   | 'matrix'
@@ -11,8 +13,6 @@ export type ThemeId =
   | 'claude-slate-light'
   | 'scifi'
   | 'scifi-light'
-  | 'webui'
-  | 'webui-light'
 
 export const THEMES: Array<{
   id: ThemeId
@@ -20,6 +20,18 @@ export const THEMES: Array<{
   description: string
   icon: string
 }> = [
+  {
+    id: 'default',
+    label: '默认',
+    description: 'Calm console — navy-black with gold accent',
+    icon: '◎',
+  },
+  {
+    id: 'default-light',
+    label: '默认浅色',
+    description: 'Paper cream with dark-gold accent',
+    icon: '◎',
+  },
   {
     id: 'claude-nous',
     label: 'Nous',
@@ -93,56 +105,49 @@ export const THEMES: Array<{
     description: 'Cold steel and teal — cyberpunk interface in daylight',
     icon: '🌌',
   },
-  {
-    id: 'webui',
-    label: 'WebUI',
-    description: 'Hermes WebUI calm console — navy-black with gold accent',
-    icon: '◎',
-  },
-  {
-    id: 'webui-light',
-    label: 'WebUI Light',
-    description: 'Hermes WebUI paper cream with dark-gold accent',
-    icon: '◎',
-  },
 ]
 
 const STORAGE_KEY = 'claude-theme'
-const DEFAULT_THEME: ThemeId = 'claude-nous'
+const DEFAULT_THEME: ThemeId = 'default'
+/** Legacy ids from before the default theme rename. */
+const LEGACY_THEME_IDS: Record<string, ThemeId> = {
+  webui: 'default',
+  'webui-light': 'default-light',
+}
 const THEME_SET = new Set<ThemeId>(THEMES.map((theme) => theme.id))
 const LIGHT_THEME_MAP: Record<
   Exclude<ThemeId, `${string}-light`>,
   Extract<ThemeId, `${string}-light`>
 > = {
+  default: 'default-light',
   'claude-nous': 'claude-nous-light',
   matrix: 'matrix-light',
   'claude-official': 'claude-official-light',
   'claude-classic': 'claude-classic-light',
   'claude-slate': 'claude-slate-light',
   scifi: 'scifi-light',
-  webui: 'webui-light',
 }
 const DARK_THEME_MAP: Record<
   Extract<ThemeId, `${string}-light`>,
   Exclude<ThemeId, `${string}-light`>
 > = {
+  'default-light': 'default',
   'claude-nous-light': 'claude-nous',
   'matrix-light': 'matrix',
   'claude-official-light': 'claude-official',
   'claude-classic-light': 'claude-classic',
   'claude-slate-light': 'claude-slate',
   'scifi-light': 'scifi',
-  'webui-light': 'webui',
 }
 
 const LIGHT_THEMES = new Set<ThemeId>([
+  'default-light',
   'claude-nous-light',
   'matrix-light',
   'claude-official-light',
   'claude-classic-light',
   'claude-slate-light',
   'scifi-light',
-  'webui-light',
 ])
 
 export function isValidTheme(
@@ -170,10 +175,20 @@ export function getThemeVariant(
     : DARK_THEME_MAP[theme as keyof typeof DARK_THEME_MAP]
 }
 
+function resolveStoredTheme(raw: string | null): ThemeId {
+  if (!raw) return DEFAULT_THEME
+  const migrated = LEGACY_THEME_IDS[raw] ?? raw
+  return isValidTheme(migrated) ? migrated : DEFAULT_THEME
+}
+
 export function getTheme(): ThemeId {
   if (typeof window === 'undefined') return DEFAULT_THEME
   const stored = localStorage.getItem(STORAGE_KEY)
-  return isValidTheme(stored) ? stored : DEFAULT_THEME
+  const theme = resolveStoredTheme(stored)
+  if (stored && stored !== theme) {
+    localStorage.setItem(STORAGE_KEY, theme)
+  }
+  return theme
 }
 
 export function setTheme(theme: ThemeId): void {

@@ -196,14 +196,14 @@ const THEME_PREVIEWS: Record<
     accent: '#0097A7',
     text: '#0A1628',
   },
-  webui: {
+  default: {
     bg: '#0D0D1A',
     panel: '#1A1A2E',
     border: '#2A2A45',
     accent: '#FFD700',
     text: '#FFF8DC',
   },
-  'webui-light': {
+  'default-light': {
     bg: '#FEFCF7',
     panel: '#FAF7F0',
     border: '#E0D8C8',

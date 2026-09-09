@@ -1,10 +1,10 @@
 /* ════════════════════════════════════════════════════════════════════
-   WebUI Theme — nesquena/hermes-webui default calm-console palette
+   Default theme — calm console palette
    Dark:  navy-black #0D0D1A, cornsilk text, gold #FFD700 accent
    Light: paper cream #FEFCF7, ink #1A1610, dark-gold #B8860B accent
    ═══════════════════════════════════════════════════════════════════ */
 
-[data-theme='webui'] {
+[data-theme='default'] {
   color-scheme: dark !important;
 
   --theme-bg: #0d0d1a;
@@ -57,7 +57,7 @@
   --theme-input: #1a1a2e;
 }
 
-[data-theme='webui-light'] {
+[data-theme='default-light'] {
   color-scheme: light !important;
 
   --theme-bg: #fefcf7;
@@ -110,23 +110,23 @@
   --theme-input: #ffffff;
 }
 
-[data-theme='webui'] html,
-[data-theme='webui'] body,
-[data-theme='webui'] #root,
-[data-theme='webui'] .dark {
+[data-theme='default'] html,
+[data-theme='default'] body,
+[data-theme='default'] #root,
+[data-theme='default'] .dark {
   background-color: var(--theme-bg);
   color: var(--theme-text);
 }
 
-[data-theme='webui-light'] html,
-[data-theme='webui-light'] body,
-[data-theme='webui-light'] #root,
-[data-theme='webui-light'] .light {
+[data-theme='default-light'] html,
+[data-theme='default-light'] body,
+[data-theme='default-light'] #root,
+[data-theme='default-light'] .light {
   background-color: var(--theme-bg);
   color: var(--theme-text);
 }
 
-[data-theme='webui'] {
+[data-theme='default'] {
   --color-primary-50: var(--theme-panel) !important;
   --color-primary-100: var(--theme-card) !important;
   --color-primary-200: var(--theme-border-subtle) !important;
@@ -146,7 +146,7 @@
   --color-accent-600: var(--theme-accent) !important;
 }
 
-[data-theme='webui-light'] {
+[data-theme='default-light'] {
   --color-primary-50: var(--theme-card) !important;
   --color-primary-100: var(--theme-card2) !important;
   --color-primary-200: var(--theme-border) !important;

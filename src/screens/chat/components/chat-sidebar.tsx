@@ -83,8 +83,10 @@ function ThemeToggleMini() {
     'claude-classic-light': 'claude-classic',
     'claude-slate': 'claude-slate-light',
     'claude-slate-light': 'claude-slate',
-    webui: 'webui-light',
-    'webui-light': 'webui',
+    webui: 'default-light',
+    'webui-light': 'default',
+    default: 'default-light',
+    'default-light': 'default',
   }
 
   return (

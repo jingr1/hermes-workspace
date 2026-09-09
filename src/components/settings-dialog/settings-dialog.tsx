@@ -549,12 +549,12 @@ function AppearanceContent() {
 }
 
 const ENTERPRISE_THEME_FAMILIES: Array<ThemeId> = [
+  'default',
   'claude-nous',
   'matrix',
   'claude-official',
   'claude-classic',
   'claude-slate',
-  'webui',
 ]
 
 const ENTERPRISE_THEMES = THEMES.map((theme) => ({
@@ -633,7 +633,7 @@ const ENTERPRISE_THEMES = THEMES.map((theme) => ({
                           accent: '#7eb8f6',
                           text: '#c9d1d9',
                         }
-                      : theme.id === 'webui'
+                      : theme.id === 'default'
                         ? {
                             bg: '#0D0D1A',
                             panel: '#1A1A2E',
@@ -641,7 +641,7 @@ const ENTERPRISE_THEMES = THEMES.map((theme) => ({
                             accent: '#FFD700',
                             text: '#FFF8DC',
                           }
-                        : theme.id === 'webui-light'
+                        : theme.id === 'default-light'
                           ? {
                               bg: '#FEFCF7',
                               panel: '#FAF7F0',

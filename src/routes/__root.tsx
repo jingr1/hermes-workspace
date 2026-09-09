@@ -45,8 +45,10 @@ import { LoginScreen } from '@/components/auth/login-screen'
 // (production) and vite.config.ts (dev/preview). Leave it that way.
 
 const THEME_STORAGE_KEY = 'claude-theme'
-const DEFAULT_THEME = 'claude-nous'
+const DEFAULT_THEME = 'default'
 const VALID_THEMES = [
+  'default',
+  'default-light',
   'claude-nous',
   'claude-nous-light',
   'claude-official',
@@ -55,8 +57,10 @@ const VALID_THEMES = [
   'claude-classic-light',
   'claude-slate',
   'claude-slate-light',
-  'webui',
-  'webui-light',
+  'matrix',
+  'matrix-light',
+  'scifi',
+  'scifi-light',
 ]
 
 const themeScript = `
@@ -65,9 +69,14 @@ const themeScript = `
 
   try {
     const root = document.documentElement
-    const storedTheme = localStorage.getItem('${THEME_STORAGE_KEY}')
+    const storedRaw = localStorage.getItem('${THEME_STORAGE_KEY}')
+    const legacy = { webui: 'default', 'webui-light': 'default-light' }
+    const storedTheme = legacy[storedRaw] || storedRaw
+    if (storedRaw && legacy[storedRaw]) {
+      localStorage.setItem('${THEME_STORAGE_KEY}', storedTheme)
+    }
     const theme = ${JSON.stringify(VALID_THEMES)}.includes(storedTheme) ? storedTheme : '${DEFAULT_THEME}'
-    const lightThemes = ['claude-nous-light', 'claude-official-light', 'claude-classic-light', 'claude-slate-light', 'webui-light']
+    const lightThemes = ['default-light', 'claude-nous-light', 'claude-official-light', 'claude-classic-light', 'claude-slate-light', 'matrix-light', 'scifi-light']
     const isDark = !lightThemes.includes(theme)
     root.classList.remove('light', 'dark', 'system')
     root.classList.add(isDark ? 'dark' : 'light')
@@ -90,6 +99,8 @@ const themeColorScript = `
     const root = document.documentElement
     const theme = root.getAttribute('data-theme') || '${DEFAULT_THEME}'
     const colors = {
+      'default': '#0D0D1A',
+      'default-light': '#FEFCF7',
       'claude-nous': '#031A1A',
       'claude-nous-light': '#F8FAF8',
       'claude-official': '#0A0E1A',
@@ -98,11 +109,13 @@ const themeColorScript = `
       'claude-classic-light': '#F5F2ED',
       'claude-slate': '#0d1117',
       'claude-slate-light': '#F6F8FA',
-      'webui': '#0D0D1A',
-      'webui-light': '#FEFCF7',
+      'matrix': '#000000',
+      'matrix-light': '#F5FFF5',
+      'scifi': '#0A1628',
+      'scifi-light': '#EEF1F5',
     }
     const nextColor = colors[theme] || colors['${DEFAULT_THEME}']
-    const isDark = !['claude-nous-light', 'claude-official-light', 'claude-classic-light', 'claude-slate-light', 'webui-light'].includes(String(theme))
+    const isDark = !['default-light', 'claude-nous-light', 'claude-official-light', 'claude-classic-light', 'claude-slate-light', 'matrix-light', 'scifi-light'].includes(String(theme))
 
     let meta = document.querySelector('meta[name="theme-color"]')
     if (!meta) {
@@ -549,7 +562,19 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             var bg = '#031A1A', txt = '#F8F1E3', muted = '#9CB2AE', accent = '#FFAC02';
             try {
               var theme = localStorage.getItem('${THEME_STORAGE_KEY}') || '${DEFAULT_THEME}';
-              if (theme === 'claude-nous') {
+              if (theme === 'webui') theme = 'default';
+              if (theme === 'webui-light') theme = 'default-light';
+              if (theme === 'default') {
+                bg = '#0D0D1A';
+                txt = '#FFF8DC';
+                muted = '#C0C0C0';
+                accent = '#FFD700';
+              } else if (theme === 'default-light') {
+                bg = '#FEFCF7';
+                txt = '#1A1610';
+                muted = '#5C5344';
+                accent = '#B8860B';
+              } else if (theme === 'claude-nous') {
                 bg = '#031A1A';
                 txt = '#F8F1E3';
                 muted = '#9CB2AE';
@@ -584,20 +609,10 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                 txt = '#24292f';
                 muted = '#57606A';
                 accent = '#3b82f6';
-              } else if (theme === 'webui') {
-                bg = '#0D0D1A';
-                txt = '#FFF8DC';
-                muted = '#C0C0C0';
-                accent = '#FFD700';
-              } else if (theme === 'webui-light') {
-                bg = '#FEFCF7';
-                txt = '#1A1610';
-                muted = '#5C5344';
-                accent = '#B8860B';
               }
             } catch(e){}
 
-            var isDark = !['claude-nous-light','claude-official-light','claude-classic-light','claude-slate-light','webui-light'].includes(theme);
+            var isDark = !['default-light','claude-nous-light','claude-official-light','claude-classic-light','claude-slate-light','matrix-light','scifi-light'].includes(theme);
             var quips = ["Consulting the oracle...","Loading ancient knowledge...","Warming up the messenger...","Calibrating tool chain...","Summoning your agent...","Preparing the workspace...","Bridging realms...","Initializing agent runtime..."];
             var quip = quips[Math.floor(Math.random() * quips.length)];
 
