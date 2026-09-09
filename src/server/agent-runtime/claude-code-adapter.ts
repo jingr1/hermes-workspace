@@ -379,6 +379,7 @@ export class ClaudeCodeAdapter implements AgentRuntimeAdapter {
             effort: effortFlag ?? null,
             nativeSessionId: nativeSessionId ?? null,
             nativeResume: Boolean(input.nativeResume),
+            cwd: input.cwd ?? process.cwd(),
           },
           null,
           2,

@@ -10,6 +10,17 @@ import {
 } from '../../../../server/agent-runtime/managed-chat-store'
 import { getAgentRuntimeRouter } from '../../../../server/agent-runtime/router'
 import type { AgentStreamEvent } from '../../../../server/agent-runtime/types'
+import { loadWorkspaceCatalog } from '../../workspace'
+import { buildWorkspaceScopedTextMessage } from '../../../../lib/workspace-message-scope'
+import {
+  isBlockedSystemPath,
+  isHermesStatePath,
+  normalizeCandidate,
+} from '../../../../server/workspace-path-policy'
+import {
+  remoteWorkspaceContextForScope,
+  workspaceProfileScope,
+} from '../../../../server/workspace-profile'
 
 /**
  * POST /api/agents/:agentId/chat
@@ -102,10 +113,15 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
 
         const native = resolveNativeSessionForRun({ sessionId })
 
+        // Same active workspace as the UI folder picker / Hermes send-stream.
+        const workspace = await loadWorkspaceCatalog().catch(() => null)
+        const workspaceCwd = resolveManagedChatCwd(workspace)
+
         // With --resume, Claude already has history — only send the new turn.
         // First turn (--session-id) also stays single-message; no prompt replay.
+        const scopedUser = buildWorkspaceScopedTextMessage(message, workspace)
         const task = [
-          `User: ${message}`,
+          `User: ${scopedUser}`,
           '直接回应用户，面向用户的叙述使用简体中文（代码、命令、技术标识保持英文）。如有需要可通过 MCP 使用 Hermes 工具。',
         ].join('\n')
 
@@ -117,6 +133,7 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
           sessionId,
           nativeSessionId: native.nativeSessionId,
           nativeResume: native.resume,
+          ...(workspaceCwd ? { cwd: workspaceCwd } : {}),
           probe: true,
         })
         if (!started.ok) {
@@ -126,6 +143,12 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
               status: started.status,
               headers: { 'Content-Type': 'application/json' },
             },
+          )
+        }
+
+        if (workspaceCwd) {
+          console.log(
+            `[agents/chat] agent=${agentId} cwd=${workspaceCwd} session=${sessionId}`,
           )
         }
 
@@ -192,11 +215,15 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
               }
             }
 
+            // Client disconnect (session/agent switch, tab close) must NOT
+            // SIGKILL the managed run — only detach the SSE. Explicit Stop
+            // goes through POST .../runs/:runId/interrupt.
             request.signal.addEventListener(
               'abort',
               () => {
-                void adapter.interrupt(runId, 'client disconnected')
-                persistAssistant()
+                console.log(
+                  `[agents/chat] client detached runId=${runId} — run continues in background`,
+                )
                 closeStream()
               },
               { once: true },
@@ -218,7 +245,6 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
 
             try {
               for await (const event of adapter.streamEvents(runId)) {
-                if (streamClosed) break
                 if (event.type === 'text_delta' && event.text) {
                   assistantText += event.text
                 } else if (event.type === 'error' && event.message.trim()) {
@@ -229,10 +255,13 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
                     nativeSessionId: event.sessionId,
                   })
                 }
-                relayEvent(sendEvent, event)
+                // Still drain + persist after detach; only skip wire writes.
+                if (!streamClosed) {
+                  relayEvent(sendEvent, event)
+                }
                 if (event.type === 'run_exited') {
                   persistAssistant()
-                  setTimeout(closeStream, 50)
+                  if (!streamClosed) setTimeout(closeStream, 50)
                   break
                 }
               }
@@ -240,16 +269,18 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
               const detail =
                 error instanceof Error ? error.message : String(error)
               lastError = detail
-              sendEvent('error', { runId, message: detail })
+              if (!streamClosed) {
+                sendEvent('error', { runId, message: detail })
+              }
               persistAssistant()
-              closeStream()
+              if (!streamClosed) closeStream()
             } finally {
               if (heartbeatTimer) {
                 clearInterval(heartbeatTimer)
                 heartbeatTimer = null
               }
               persistAssistant()
-              setTimeout(closeStream, 100)
+              if (!streamClosed) setTimeout(closeStream, 100)
             }
           },
         })
@@ -266,6 +297,29 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
     },
   },
 })
+
+/** Map UI workspace catalog → local spawn cwd (skip invalid / Hermes state paths). */
+function resolveManagedChatCwd(
+  workspace: {
+    path?: string
+    isValid?: boolean
+  } | null,
+): string | undefined {
+  // SSH/remote workspaces are not usable as a local Claude Code spawn cwd.
+  if (remoteWorkspaceContextForScope(workspaceProfileScope())) {
+    return undefined
+  }
+  if (!workspace?.isValid || !workspace.path?.trim()) return undefined
+  const normalized = normalizeCandidate(workspace.path.trim())
+  if (
+    !normalized ||
+    isHermesStatePath(normalized) ||
+    isBlockedSystemPath(normalized)
+  ) {
+    return undefined
+  }
+  return normalized
+}
 
 function relayEvent(
   send: (event: string, data: Record<string, unknown>) => void,

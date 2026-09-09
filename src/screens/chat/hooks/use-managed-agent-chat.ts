@@ -208,6 +208,7 @@ export function useManagedAgentChat({
   >([])
   const [error, setError] = useState<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+  const activeRunIdRef = useRef<string | null>(null)
   const streamingMessageRef = useRef<ChatMessage | null>(null)
   // When promoting `new-*` → real uuid, keep in-memory messages; a reload
   // would drop the streaming assistant bubble.
@@ -232,8 +233,10 @@ export function useManagedAgentChat({
       skipNextSessionLoadRef.current = false
       return
     }
+    // Detach UI stream only — server keeps the managed run alive.
     abortControllerRef.current?.abort()
     abortControllerRef.current = null
+    activeRunIdRef.current = null
     streamingMessageRef.current = null
     setIsStreaming(false)
     setActiveToolCalls([])
@@ -321,6 +324,7 @@ export function useManagedAgentChat({
       abortControllerRef.current?.abort()
       const controller = new AbortController()
       abortControllerRef.current = controller
+      activeRunIdRef.current = null
 
       try {
         const res = await fetch(
@@ -372,7 +376,9 @@ export function useManagedAgentChat({
             const event = parseSSEDataLine(trimmed, currentEventName)
             if (!event) continue
             currentEventName = ''
-            if (event.type === 'text_delta') {
+            if (event.type === 'connected') {
+              activeRunIdRef.current = event.runId
+            } else if (event.type === 'text_delta') {
               appendStreamingText(event.text)
             } else if (event.type === 'thinking') {
               // Token-level thinking stays out of the bubble.
@@ -403,6 +409,7 @@ export function useManagedAgentChat({
             } else if (event.type === 'run_exited') {
               setActiveToolCalls([])
               finalizeStreamingMessage()
+              activeRunIdRef.current = null
               void refreshSessionList()
             }
           }
@@ -496,24 +503,35 @@ export function useManagedAgentChat({
   )
 
   const abort = useCallback(() => {
+    const runId = activeRunIdRef.current
     abortControllerRef.current?.abort()
+    abortControllerRef.current = null
+    activeRunIdRef.current = null
     setIsStreaming(false)
     streamingMessageRef.current = null
-  }, [])
+    // Explicit Stop — kill the managed process (unlike session switch detach).
+    if (runId) {
+      void fetch(
+        `/api/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(runId)}/interrupt`,
+        { method: 'POST' },
+      ).catch(() => undefined)
+    }
+  }, [agentId])
 
   const clearSessionMessages = useCallback(() => {
-    abortControllerRef.current?.abort()
-    streamingMessageRef.current = null
-    setIsStreaming(false)
+    abort()
     setError(null)
     setMessages([])
     if (!activeSessionId.startsWith('new-')) {
       void clearManagedSessionMessages(agentId, activeSessionId)
     }
-  }, [agentId, activeSessionId])
+  }, [abort, agentId, activeSessionId])
 
   const startNewSession = useCallback(() => {
+    // New chat: detach UI only; leave any background run to finish+persist.
     abortControllerRef.current?.abort()
+    abortControllerRef.current = null
+    activeRunIdRef.current = null
     streamingMessageRef.current = null
     setIsStreaming(false)
     setError(null)
