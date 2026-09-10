@@ -14,6 +14,7 @@ import {
   File01Icon,
   McpServerIcon,
   MessageMultiple01Icon,
+  MessageMultiple02Icon,
   Moon02Icon,
   PencilEdit02Icon,
   PuzzleIcon,
@@ -24,7 +25,6 @@ import {
   Target02Icon,
   UserGroupIcon,
   UserMultipleIcon,
-  MessageMultiple02Icon,
 } from '@hugeicons/core-free-icons'
 import { AnimatePresence, motion } from 'motion/react'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
