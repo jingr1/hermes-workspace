@@ -52,12 +52,6 @@ import {
   useChatSettingsStore,
 } from '@/hooks/use-chat-settings'
 import { StatusDot } from '@/components/status-indicator'
-import {
-  MenuContent,
-  MenuItem,
-  MenuRoot,
-  MenuTrigger,
-} from '@/components/ui/menu'
 import { applyTheme, useSettingsStore } from '@/hooks/use-settings'
 
 type WorkspaceStats = Record<string, unknown>
@@ -1101,55 +1095,39 @@ function ChatSidebarComponent({
             isVisuallyCollapsed ? 'flex-col gap-2 py-2' : 'gap-2.5 px-2 py-1.5',
           )}
         >
-          {/* User menu trigger */}
-          <MenuRoot>
-            <MenuTrigger
-              data-tour="settings"
-              className={cn(
-                'flex items-center gap-2.5 rounded-lg py-1 transition-colors hover:bg-primary-200 dark:hover:bg-neutral-800 flex-1 min-w-0',
-                isVisuallyCollapsed ? 'justify-center px-0' : 'px-1.5',
+          {/* User profile trigger */}
+          <button
+            type="button"
+            data-tour="settings"
+            onClick={() => handleOpenSettings('profile')}
+            className={cn(
+              'flex items-center gap-2.5 rounded-lg py-1 text-left transition-colors hover:bg-primary-200 dark:hover:bg-neutral-800 flex-1 min-w-0',
+              isVisuallyCollapsed ? 'justify-center px-0' : 'px-1.5',
+            )}
+            aria-label="User settings"
+          >
+            <UserAvatar
+              size={28}
+              src={profileAvatarDataUrl}
+              alt={profileDisplayName}
+            />
+            <AnimatePresence initial={false} mode="wait">
+              {!isVisuallyCollapsed && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={transition}
+                  className="flex-1 min-w-0 flex items-center gap-1.5"
+                >
+                  <span className="block truncate text-sm font-medium text-primary-900 dark:text-neutral-100">
+                    {profileDisplayName}
+                  </span>
+                  <StatusDot />
+                </motion.div>
               )}
-            >
-              <UserAvatar
-                size={28}
-                src={profileAvatarDataUrl}
-                alt={profileDisplayName}
-              />
-              <AnimatePresence initial={false} mode="wait">
-                {!isVisuallyCollapsed && (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={transition}
-                    className="flex-1 min-w-0 flex items-center gap-1.5"
-                  >
-                    <span className="block truncate text-sm font-medium text-primary-900 dark:text-neutral-100">
-                      {profileDisplayName}
-                    </span>
-                    <StatusDot />
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </MenuTrigger>
-            <MenuContent side="top" align="start" className="min-w-[200px]">
-              <MenuItem
-                onClick={function onOpenSettings() {
-                  handleOpenSettings('profile')
-                }}
-                className="justify-between"
-              >
-                <span className="flex items-center gap-2">
-                  <HugeiconsIcon
-                    icon={Settings01Icon}
-                    size={20}
-                    strokeWidth={1.5}
-                  />
-                  Settings
-                </span>
-              </MenuItem>
-            </MenuContent>
-          </MenuRoot>
+            </AnimatePresence>
+          </button>
 
           {/* Settings + Theme toggle */}
           {!isVisuallyCollapsed && (

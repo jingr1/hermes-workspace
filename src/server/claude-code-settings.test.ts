@@ -212,7 +212,7 @@ describe('claude-code-settings', () => {
   })
 
   describe('listClaudeCodeModels', () => {
-    it('lists default env slots and current model', async () => {
+    it('lists default env slots and current model without duplicates', async () => {
       const claudeDir = createTempClaudeDir()
       process.env.TEST_CLAUDE_HOME = path.dirname(claudeDir)
       fs.writeFileSync(
@@ -224,7 +224,7 @@ describe('claude-code-settings', () => {
             ANTHROPIC_DEFAULT_HAIKU_MODEL: 'claude-haiku-3-5',
             ANTHROPIC_DEFAULT_OPUS_MODEL: 'claude-opus-4-8',
             ANTHROPIC_DEFAULT_FABLE_MODEL: 'claude-fable-5',
-            CLAUDE_CODE_SUBAGENT_MODEL: 'claude-haiku-3-5',
+            CLAUDE_CODE_SUBAGENT_MODEL: 'haiku',
           },
         }),
       )

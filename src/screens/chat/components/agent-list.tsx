@@ -6,7 +6,10 @@ import { AgentStatusDot } from './agent-status-dot'
 import type { AgentRuntime, AgentWithStatus } from '@/lib/agent-types'
 import type { UnifiedAgentStatus } from '@/lib/agent-status'
 import { SettingsDialog } from '@/components/settings-dialog'
-import { AssistantAvatar } from '@/components/avatars'
+import {
+  AGENT_ACCENT_COLORS,
+  AgentAvatar,
+} from '@/screens/gateway/components/agent-avatar'
 import { cn } from '@/lib/utils'
 import { useAgentStore } from '@/stores/agent-store'
 import { statusLabel } from '@/lib/agent-status'
@@ -71,27 +74,15 @@ function toUnifiedStatus(
   }
 }
 
-function AgentAvatar({ runtime }: { runtime: AgentRuntime }) {
-  if (runtime === 'claude-code') {
-    return (
-      <AssistantAvatar
-        src="/claude-code-mark.svg"
-        alt="Claude Code"
-        size={28}
-        className="rounded-md"
-      />
-    )
-  }
-  return <AssistantAvatar size={28} className="rounded-md" />
-}
-
 function AgentListItem({
   agent,
+  index,
   isActive,
   onSelect,
   onOpenSettings,
 }: {
   agent: AgentWithStatus
+  index: number
   isActive: boolean
   onSelect: (agentId: string) => void
   onOpenSettings: (agentId: string) => void
@@ -102,6 +93,7 @@ function AgentListItem({
     const targetProfileName = agent.runtimeConfig.profile ?? agent.agentId
     return profiles.find((p) => p.name === targetProfileName)
   }, [agent, profiles])
+  const accent = AGENT_ACCENT_COLORS[index % AGENT_ACCENT_COLORS.length]
 
   return (
     <div
@@ -126,10 +118,17 @@ function AgentListItem({
           event.stopPropagation()
           onOpenSettings(agent.agentId)
         }}
-        className="shrink-0 rounded-md p-0.5 transition-colors hover:bg-primary-300/60"
+        className="shrink-0 rounded-md transition-colors hover:bg-primary-300/60"
         title="Agent settings"
       >
-        <AgentAvatar runtime={agent.runtime} />
+        <div
+          className={cn(
+            'flex size-8 items-center justify-center overflow-hidden rounded-md',
+            accent.avatar,
+          )}
+        >
+          <AgentAvatar index={index} color={accent.hex} size={28} />
+        </div>
       </button>
       <AgentStatusDot
         status={agent.status}
@@ -209,10 +208,11 @@ export function AgentList({
         </p>
       ) : (
         <div className="space-y-0.5">
-          {sortedAgents.map((agent) => (
+          {sortedAgents.map((agent, index) => (
             <AgentListItem
               key={agent.agentId}
               agent={agent}
+              index={index}
               isActive={agent.agentId === activeAgentId}
               onSelect={handleSelect}
               onOpenSettings={setSettingsAgentId}
@@ -223,8 +223,24 @@ export function AgentList({
     </>
   )
 
+  const settingsDialog = (
+    <SettingsDialog
+      open={settingsAgentId !== null}
+      onOpenChange={(open) => {
+        if (!open) setSettingsAgentId(null)
+      }}
+      agentId={settingsAgentId ?? undefined}
+      initialSection="claude"
+    />
+  )
+
   if (!renderContainer) {
-    return listContent
+    return (
+      <>
+        {listContent}
+        {settingsDialog}
+      </>
+    )
   }
 
   return (
@@ -233,14 +249,7 @@ export function AgentList({
         Agents
       </div>
       <div className="flex-1 overflow-y-auto p-2">{listContent}</div>
-      <SettingsDialog
-        open={settingsAgentId !== null}
-        onOpenChange={(open) => {
-          if (!open) setSettingsAgentId(null)
-        }}
-        agentId={settingsAgentId ?? undefined}
-        initialSection="claude"
-      />
+      {settingsDialog}
     </div>
   )
 }

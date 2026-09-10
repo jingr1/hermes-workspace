@@ -9,6 +9,8 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
+import { listCatalogProvidersForClaudeCode } from './provider-catalog'
+
 export type ClaudeCodeSettings = {
   model?: string
   env?: Record<string, string | number | boolean>
@@ -124,21 +126,26 @@ export function settingsEnvRecord(
 
 /**
  * Derive a display provider from settings.env.ANTHROPIC_BASE_URL.
- * ANTHROPIC_BASE_URL only changes where requests are sent, not which model
- * answers them. Defaults to Anthropic API ('claude-code').
+ * Prefer the Hermes provider catalog name when the base URL matches a
+ * configured provider; fall back to the URL host; finally 'claude-code'.
  */
 export function resolveClaudeCodeProvider(
   settings: ClaudeCodeSettings | null,
 ): string {
   const baseUrl = settingsEnvRecord(settings).ANTHROPIC_BASE_URL?.trim()
-  if (baseUrl) {
-    try {
-      return new URL(baseUrl).host || 'claude-code'
-    } catch {
-      return 'claude-code'
+  if (!baseUrl) return 'claude-code'
+  const normalizedBase = baseUrl.replace(/\/v1\/?$/, '')
+  for (const entry of listCatalogProvidersForClaudeCode()) {
+    const entryBase = entry.baseUrl.replace(/\/v1\/?$/, '')
+    if (entryBase && entryBase === normalizedBase) {
+      return entry.name || entry.id
     }
   }
-  return 'claude-code'
+  try {
+    return new URL(baseUrl).host || 'claude-code'
+  } catch {
+    return 'claude-code'
+  }
 }
 
 const ALIAS_KEYS: Array<{ alias: string; envKey: string }> = [
@@ -183,8 +190,10 @@ export function resolveClaudeCodeCurrentModel(
 
 /**
  * Models exposed in the Claude Code picker — sourced from settings.model and
- * settings.env defaults (haiku/sonnet/opus/fable + subagent), not the Hermes
- * provider catalog.
+ * settings.env defaults (haiku/sonnet/opus/fable). The subagent model is not
+ * listed here because it is for workflow/subagent use, not the main chat
+ * picker, and aliases like "haiku" can collide with the Claude Code aliases
+ * we surface by name.
  */
 export function listClaudeCodeModels(
   settings: ClaudeCodeSettings | null = readClaudeCodeSettings(),
@@ -213,7 +222,6 @@ export function listClaudeCodeModels(
   for (const { alias, envKey } of ALIAS_KEYS) {
     push(env[envKey], alias, alias)
   }
-  push(env.CLAUDE_CODE_SUBAGENT_MODEL)
 
   const currentModel = resolveClaudeCodeCurrentModel(settings)
   // Ensure the currently selected model appears even if it isn't one of the
