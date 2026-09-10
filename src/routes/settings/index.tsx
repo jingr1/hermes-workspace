@@ -26,6 +26,7 @@ import {
   SettingsSidebar,
 } from '@/components/settings/settings-sidebar'
 import { ModelProviderScopePanel } from '@/components/settings/model-provider-scope'
+import { ClaudeCodeSettingsPanel } from '@/components/settings-dialog'
 import { usePageTitle } from '@/hooks/use-page-title'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -377,6 +378,17 @@ function SettingsRoute() {
           )}
           {activeSection === 'display' && (
             <ClaudeConfigSection activeView="display" />
+          )}
+
+          {/* ── Claude Code ─────────────────────────────────────── */}
+          {activeSection === 'claude-code' && (
+            <SettingsSection
+              title="Claude Code"
+              description="Configure the Claude Code CLI adapter model and provider defaults."
+              icon={SourceCodeSquareIcon}
+            >
+              <ClaudeCodeSettingsPanel />
+            </SettingsSection>
           )}
 
           {/* ── Appearance ──────────────────────────────────────── */}

@@ -20,12 +20,14 @@ import {
 import { Component, useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ModelProviderPanel } from './model-provider-panel'
+import { ClaudeCodeSettingsPanel } from './claude-code-settings-panel'
 import type * as React from 'react'
 import type { AccentColor, SettingsThemeMode } from '@/hooks/use-settings'
 import type { LoaderStyle } from '@/hooks/use-chat-settings'
 import type { BrailleSpinnerPreset } from '@/components/ui/braille-spinner'
 import type { ThemeId } from '@/lib/theme'
 import type { LocaleId } from '@/lib/i18n'
+import type { AgentWithStatus } from '@/lib/agent-types'
 import { GROQ_STT_MODELS, STT_PROVIDER_OPTIONS } from '@/lib/stt-config'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -58,6 +60,7 @@ import {
   saveProfileModelProvider,
 } from '@/lib/model-provider'
 import { useProviderCatalog } from '@/components/settings/provider-catalog-panel'
+import { fetchAgents } from '@/lib/agent-api'
 import {
   DialogClose,
   DialogContent,
@@ -167,7 +170,7 @@ const SETTINGS_CARD_CLASS =
 
 // ── Section components ──────────────────────────────────────────────────
 
-function HermesContent() {
+function HermesContent({ profileName }: { profileName?: string }) {
   const configAvailable = useFeatureAvailable('config')
   const queryClient = useQueryClient()
   const { activeProfileName, isReady } = useProfiles()
@@ -178,11 +181,13 @@ function HermesContent() {
   const [memEnabled, setMemEnabled] = useState(true)
   const [userProfileEnabled, setUserProfileEnabled] = useState(true)
 
+  const targetProfileName = profileName || activeProfileName
+
   useEffect(() => {
     if (!isReady) return
     let cancelled = false
     setLoaded(false)
-    fetch(`/api/profiles/read?name=${encodeURIComponent(activeProfileName)}`)
+    fetch(`/api/profiles/read?name=${encodeURIComponent(targetProfileName)}`)
       .then((r) => r.json())
       .then((d: { profile?: { config?: Record<string, unknown> } }) => {
         if (cancelled) return
@@ -197,7 +202,7 @@ function HermesContent() {
     return () => {
       cancelled = true
     }
-  }, [activeProfileName, isReady])
+  }, [targetProfileName, isReady])
 
   useEffect(() => {
     fetch('/api/hermes-config')
@@ -242,20 +247,20 @@ function HermesContent() {
     <div className="space-y-5">
       <SectionHeader
         title="Model & Provider"
-        description={`Active profile: ${activeProfileName}. Changes apply only to this profile.`}
+        description={`Active profile: ${targetProfileName}. Changes apply only to this profile.`}
       />
       {loaded ? (
         <ModelProviderPanel
-          key={`${activeProfileName}:${catalog?.providers.map((p) => p.id).join(',')}`}
+          key={`${targetProfileName}:${catalog?.providers.map((p) => p.id).join(',')}`}
           initialProvider={initialProvider}
           initialModel={initialModel}
-          banner={`Editing the active profile (${activeProfileName}). Use All settings for global or other profiles.`}
-          configPathLabel={profileConfigPathLabel(activeProfileName)}
+          banner={`Editing profile ${targetProfileName}. Use All settings for global or other profiles.`}
+          configPathLabel={profileConfigPathLabel(targetProfileName)}
           showApiKeys={false}
           extraProviders={catalog?.providers ?? []}
           onSetDefault={async (providerId, modelId) => {
             const message = await saveProfileModelProvider(
-              activeProfileName,
+              targetProfileName,
               providerId,
               modelId,
             )
@@ -1586,11 +1591,101 @@ function LanguageContent() {
   )
 }
 
+// ── Agent context header ────────────────────────────────────────────────
+
+const RUNTIME_LABELS: Record<string, string> = {
+  hermes: 'Hermes',
+  'claude-code': 'Claude Code',
+  codex: 'Codex',
+  'deepseek-harness': 'DeepSeek',
+  opencode: 'OpenCode',
+}
+
+function runtimeLabel(runtime: string): string {
+  return RUNTIME_LABELS[runtime] ?? runtime
+}
+
+function AgentInfo({ agent }: { agent: AgentWithStatus }) {
+  return (
+    <div className="mb-5 rounded-xl border border-primary-200 bg-primary-50/80 p-4 dark:border-primary-800 dark:bg-neutral-900">
+      <div className="mb-3 flex items-center gap-3">
+        <div className="flex size-10 items-center justify-center rounded-lg bg-primary-100 dark:bg-neutral-800">
+          <span className="text-sm font-semibold text-primary-700 dark:text-neutral-200">
+            {agent.name.slice(0, 2).toUpperCase()}
+          </span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <h4 className="truncate text-sm font-semibold text-primary-900 dark:text-neutral-100">
+            {agent.name}
+          </h4>
+          <p className="text-xs text-primary-500 dark:text-neutral-400">
+            {runtimeLabel(agent.runtime)}
+          </p>
+        </div>
+      </div>
+      <dl className="space-y-1.5 text-xs">
+        <div className="flex justify-between gap-4">
+          <dt className="text-primary-500 dark:text-neutral-400">Agent ID</dt>
+          <dd className="font-mono text-primary-900 dark:text-neutral-200">
+            {agent.agentId}
+          </dd>
+        </div>
+        {agent.runtimeConfig.profile ? (
+          <div className="flex justify-between gap-4">
+            <dt className="text-primary-500 dark:text-neutral-400">Profile</dt>
+            <dd className="font-mono text-primary-900 dark:text-neutral-200">
+              {agent.runtimeConfig.profile}
+            </dd>
+          </div>
+        ) : null}
+        {agent.runtimeConfig.command ? (
+          <div className="flex justify-between gap-4">
+            <dt className="text-primary-500 dark:text-neutral-400">Command</dt>
+            <dd className="font-mono text-primary-900 dark:text-neutral-200">
+              {agent.runtimeConfig.command}
+            </dd>
+          </div>
+        ) : null}
+        {agent.runtimeConfig.capabilities.length > 0 ? (
+          <div className="flex justify-between gap-4">
+            <dt className="text-primary-500 dark:text-neutral-400">Capabilities</dt>
+            <dd className="text-right text-primary-900 dark:text-neutral-200">
+              {agent.runtimeConfig.capabilities.join(', ')}
+            </dd>
+          </div>
+        ) : null}
+      </dl>
+    </div>
+  )
+}
+
+function UnsupportedRuntimeContent({ runtime }: { runtime: string }) {
+  return (
+    <div className="space-y-4">
+      <SectionHeader
+        title="Model & Provider"
+        description={`${runtimeLabel(runtime)} configuration is managed externally.`}
+      />
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800/50 dark:bg-amber-900/15 dark:text-amber-300">
+        <p className="font-medium">Managed runtime configuration</p>
+        <p className="mt-1">
+          {runtime} adapters are still being wired. To change settings, edit the
+          agent declaration in <code>agents.yaml</code> and reload the workspace.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 // ── Main Dialog ─────────────────────────────────────────────────────────
+
+function DefaultHermesContent() {
+  return <HermesContent />
+}
 
 const CONTENT_MAP: Record<SectionId, () => React.JSX.Element> = {
   profile: ProfileContent,
-  claude: HermesContent,
+  claude: DefaultHermesContent,
   agent: AgentBehaviorContent,
   voice: VoiceContent,
   display: DisplayContent,
@@ -1604,16 +1699,35 @@ type SettingsDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   initialSection?: SectionId
+  /** When set, the dialog scopes settings to this agent and surfaces its runtime-specific config. */
+  agentId?: string
 }
 
 export function SettingsDialog({
   open,
   onOpenChange,
   initialSection = 'claude',
+  agentId,
 }: SettingsDialogProps) {
   const [active, setActive] = useState<SectionId>(initialSection)
   const [mobileView, setMobileView] = useState<'nav' | 'content'>('nav')
-  const ActiveContent = CONTENT_MAP[active]
+  const [agent, setAgent] = useState<AgentWithStatus | null>(null)
+  const [agentLoading, setAgentLoading] = useState(false)
+
+  useEffect(() => {
+    if (!open || !agentId) {
+      setAgent(null)
+      return
+    }
+    setAgentLoading(true)
+    fetchAgents()
+      .then((data) => {
+        const found = data.agents.find((a) => a.agentId === agentId)
+        if (found) setAgent(found)
+      })
+      .catch(() => {})
+      .finally(() => setAgentLoading(false))
+  }, [open, agentId])
 
   useEffect(() => {
     if (open) {
@@ -1627,6 +1741,33 @@ export function SettingsDialog({
     setMobileView('content')
   }
 
+  const ActiveContent = CONTENT_MAP[active]
+
+  function renderContent() {
+    if (active !== 'claude' || !agentId) {
+      return <ActiveContent />
+    }
+    if (agentLoading) {
+      return (
+        <div className="h-20 animate-pulse rounded-lg bg-primary-100/70 dark:bg-neutral-800" />
+      )
+    }
+    if (!agent) {
+      return (
+        <div className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-400">
+          Agent not found
+        </div>
+      )
+    }
+    if (agent.runtime === 'hermes') {
+      return <HermesContent profileName={agent.runtimeConfig.profile} />
+    }
+    if (agent.runtime === 'claude-code') {
+      return <ClaudeCodeSettingsPanel agentId={agent.agentId} />
+    }
+    return <UnsupportedRuntimeContent runtime={agent.runtime} />
+  }
+
   return (
     <DialogRoot open={open} onOpenChange={onOpenChange}>
       <DialogContent className="inset-0 h-full w-full max-w-none translate-x-0 translate-y-0 overflow-hidden rounded-none border-0 p-0 shadow-xl md:inset-auto md:left-1/2 md:top-1/2 md:h-[min(88dvh,740px)] md:min-h-[520px] md:w-full md:max-w-3xl md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl md:border md:border-primary-200 bg-[var(--theme-bg)]">
@@ -1634,7 +1775,7 @@ export function SettingsDialog({
           <div className="flex items-center justify-between border-b border-primary-200 bg-primary-50/80 px-4 py-4 md:rounded-t-2xl md:px-5">
             <div>
               <DialogTitle className="text-base font-semibold text-primary-900 dark:text-neutral-100">
-                Settings
+                {agent ? `${agent.name} Settings` : 'Settings'}
               </DialogTitle>
               <DialogDescription className="sr-only">
                 Configure Hermes Workspace
@@ -1710,7 +1851,8 @@ export function SettingsDialog({
                     Back
                   </Button>
                 </div>
-                <ActiveContent />
+                {agent && <AgentInfo agent={agent} />}
+                {renderContent()}
               </div>
             </div>
           </SettingsErrorBoundary>

@@ -23,48 +23,76 @@ async function loadModules() {
     SWARM_MEMORY_HANDOFFS: join(tempRoot, 'memory'),
     SWARM_LEGACY_OUTPUT_ROOT: join(tempRoot, 'output'),
   }))
-  const mockAgents = [
-    {
-      id: 'orchestrator',
-      runtime: 'hermes',
-      execution: 'local',
-      profile: 'orchestrator',
-      capabilities: [],
-    },
-    {
-      id: 'gpuserver',
-      runtime: 'hermes',
-      execution: 'ssh',
-      profile: 'gpuserver',
-      capabilities: ['gpu'],
-    },
-    {
-      id: 'cc-impl',
-      runtime: 'claude-code',
-      execution: 'local',
-      command: 'claude',
-      capabilities: [],
-    },
-    ...AGENTS.filter(
-      (id) => !['orchestrator', 'gpuserver', 'cc-impl'].includes(id),
-    ).map((id) => ({
-      id,
-      runtime: 'claude-code',
-      execution: 'local',
-      profile: id,
-      capabilities: [],
-    })),
-  ]
   vi.doMock('../../server/agent-runtime/agents-config', () => ({
     loadAgentsRegistry: () => ({
       version: 1,
-      agents: mockAgents,
-      byId: new Map(mockAgents.map((a) => [a.id, a])),
+      agents: [
+        {
+          id: 'orchestrator',
+          runtime: 'hermes',
+          execution: 'local',
+          profile: 'orchestrator',
+          capabilities: [],
+        },
+        {
+          id: 'gpuserver',
+          runtime: 'hermes',
+          execution: 'ssh',
+          profile: 'gpuserver',
+          capabilities: ['gpu'],
+        },
+        {
+          id: 'cc-impl',
+          runtime: 'claude-code',
+          execution: 'local',
+          command: 'claude',
+          capabilities: [],
+        },
+      ],
+      byId: new Map([
+        [
+          'orchestrator',
+          {
+            id: 'orchestrator',
+            runtime: 'hermes',
+            execution: 'local',
+            profile: 'orchestrator',
+            capabilities: [],
+          },
+        ],
+        [
+          'gpuserver',
+          {
+            id: 'gpuserver',
+            runtime: 'hermes',
+            execution: 'ssh',
+            profile: 'gpuserver',
+            capabilities: ['gpu'],
+          },
+        ],
+        [
+          'cc-impl',
+          {
+            id: 'cc-impl',
+            runtime: 'claude-code',
+            execution: 'local',
+            command: 'claude',
+            capabilities: [],
+          },
+        ],
+      ]),
       orphanProfiles: [],
     }),
     detectExecutionFromProfile: () => 'local',
     getProfileSshHost: () => null,
   }))
+  vi.doMock('../../server/swarm-missions', async () => {
+    const actual = await vi.importActual('../../server/swarm-missions')
+    return {
+      ...actual,
+      setOnCheckpointReviewHook: () => {},
+    }
+  })
   const templates =
     await import('../../server/task-pipeline/pipeline-templates')
   const taskService = await import('../../server/task-pipeline/task-service')

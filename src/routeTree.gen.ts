@@ -200,6 +200,7 @@ import { Route as ApiDashboardOverviewRouteImport } from './routes/api/dashboard
 import { Route as ApiClaudeTasksTaskIdRouteImport } from './routes/api/claude-tasks.$taskId'
 import { Route as ApiClaudeProxySplatRouteImport } from './routes/api/claude-proxy/$'
 import { Route as ApiClaudeJobsJobIdRouteImport } from './routes/api/claude-jobs.$jobId'
+import { Route as ApiClaudeCodeSettingsRouteImport } from './routes/api/claude-code/settings'
 import { Route as ApiAuthCodexRouteImport } from './routes/api/auth.codex'
 import { Route as ApiAuthAnthropicRouteImport } from './routes/api/auth.anthropic'
 import { Route as ApiArtifactsArtifactIdRouteImport } from './routes/api/artifacts.$artifactId'
@@ -1190,6 +1191,11 @@ const ApiClaudeJobsJobIdRoute = ApiClaudeJobsJobIdRouteImport.update({
   path: '/$jobId',
   getParentRoute: () => ApiClaudeJobsRoute,
 } as any)
+const ApiClaudeCodeSettingsRoute = ApiClaudeCodeSettingsRouteImport.update({
+  id: '/api/claude-code/settings',
+  path: '/api/claude-code/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthCodexRoute = ApiAuthCodexRouteImport.update({
   id: '/codex',
   path: '/codex',
@@ -1459,6 +1465,7 @@ export interface FileRoutesByFullPath {
   '/api/artifacts/$artifactId': typeof ApiArtifactsArtifactIdRoute
   '/api/auth/anthropic': typeof ApiAuthAnthropicRoute
   '/api/auth/codex': typeof ApiAuthCodexRoute
+  '/api/claude-code/settings': typeof ApiClaudeCodeSettingsRoute
   '/api/claude-jobs/$jobId': typeof ApiClaudeJobsJobIdRoute
   '/api/claude-proxy/$': typeof ApiClaudeProxySplatRoute
   '/api/claude-tasks/$taskId': typeof ApiClaudeTasksTaskIdRoute
@@ -1675,6 +1682,7 @@ export interface FileRoutesByTo {
   '/api/artifacts/$artifactId': typeof ApiArtifactsArtifactIdRoute
   '/api/auth/anthropic': typeof ApiAuthAnthropicRoute
   '/api/auth/codex': typeof ApiAuthCodexRoute
+  '/api/claude-code/settings': typeof ApiClaudeCodeSettingsRoute
   '/api/claude-jobs/$jobId': typeof ApiClaudeJobsJobIdRoute
   '/api/claude-proxy/$': typeof ApiClaudeProxySplatRoute
   '/api/claude-tasks/$taskId': typeof ApiClaudeTasksTaskIdRoute
@@ -1894,6 +1902,7 @@ export interface FileRoutesById {
   '/api/artifacts/$artifactId': typeof ApiArtifactsArtifactIdRoute
   '/api/auth/anthropic': typeof ApiAuthAnthropicRoute
   '/api/auth/codex': typeof ApiAuthCodexRoute
+  '/api/claude-code/settings': typeof ApiClaudeCodeSettingsRoute
   '/api/claude-jobs/$jobId': typeof ApiClaudeJobsJobIdRoute
   '/api/claude-proxy/$': typeof ApiClaudeProxySplatRoute
   '/api/claude-tasks/$taskId': typeof ApiClaudeTasksTaskIdRoute
@@ -2114,6 +2123,7 @@ export interface FileRouteTypes {
     | '/api/artifacts/$artifactId'
     | '/api/auth/anthropic'
     | '/api/auth/codex'
+    | '/api/claude-code/settings'
     | '/api/claude-jobs/$jobId'
     | '/api/claude-proxy/$'
     | '/api/claude-tasks/$taskId'
@@ -2330,6 +2340,7 @@ export interface FileRouteTypes {
     | '/api/artifacts/$artifactId'
     | '/api/auth/anthropic'
     | '/api/auth/codex'
+    | '/api/claude-code/settings'
     | '/api/claude-jobs/$jobId'
     | '/api/claude-proxy/$'
     | '/api/claude-tasks/$taskId'
@@ -2548,6 +2559,7 @@ export interface FileRouteTypes {
     | '/api/artifacts/$artifactId'
     | '/api/auth/anthropic'
     | '/api/auth/codex'
+    | '/api/claude-code/settings'
     | '/api/claude-jobs/$jobId'
     | '/api/claude-proxy/$'
     | '/api/claude-tasks/$taskId'
@@ -2759,6 +2771,7 @@ export interface RootRouteChildren {
   ChatIndexRoute: typeof ChatIndexRoute
   ApiAgentsOperationsRoute: typeof ApiAgentsOperationsRoute
   ApiAgentsStatusRoute: typeof ApiAgentsStatusRoute
+  ApiClaudeCodeSettingsRoute: typeof ApiClaudeCodeSettingsRoute
   ApiClaudeProxySplatRoute: typeof ApiClaudeProxySplatRoute
   ApiDashboardOverviewRoute: typeof ApiDashboardOverviewRoute
   ApiExternalMemoryCandidatesRoute: typeof ApiExternalMemoryCandidatesRoute
@@ -4149,6 +4162,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiClaudeJobsJobIdRouteImport
       parentRoute: typeof ApiClaudeJobsRoute
     }
+    '/api/claude-code/settings': {
+      id: '/api/claude-code/settings'
+      path: '/api/claude-code/settings'
+      fullPath: '/api/claude-code/settings'
+      preLoaderRoute: typeof ApiClaudeCodeSettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/codex': {
       id: '/api/auth/codex'
       path: '/codex'
@@ -4782,6 +4802,7 @@ const rootRouteChildren: RootRouteChildren = {
   ChatIndexRoute: ChatIndexRoute,
   ApiAgentsOperationsRoute: ApiAgentsOperationsRoute,
   ApiAgentsStatusRoute: ApiAgentsStatusRoute,
+  ApiClaudeCodeSettingsRoute: ApiClaudeCodeSettingsRoute,
   ApiClaudeProxySplatRoute: ApiClaudeProxySplatRoute,
   ApiDashboardOverviewRoute: ApiDashboardOverviewRoute,
   ApiExternalMemoryCandidatesRoute: ApiExternalMemoryCandidatesRoute,

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { AGENT_ACCENT_COLORS, AgentAvatar } from './agent-avatar'
 import { cn } from '@/lib/utils'
 
 function formatRelativeTime(ts: number): string {
@@ -35,7 +36,7 @@ export type AgentWorkingRow = {
 }
 
 type AgentsWorkingPanelProps = {
-  agents: AgentWorkingRow[]
+  agents: Array<AgentWorkingRow>
   className?: string
   onSelectAgent?: (agentId: string) => void
   onKillAgent?: (agentId: string) => void
@@ -45,15 +46,6 @@ type AgentsWorkingPanelProps = {
   selectedAgentId?: string
 }
 
-// Accent colors per agent index (cycled) — must match AGENT_ACCENT_COLORS in agent-hub-layout
-const ACCENT_COLORS = [
-  { bar: 'bg-orange-500', text: 'text-orange-600' },
-  { bar: 'bg-blue-500', text: 'text-blue-600' },
-  { bar: 'bg-violet-500', text: 'text-violet-600' },
-  { bar: 'bg-emerald-500', text: 'text-emerald-600' },
-  { bar: 'bg-rose-500', text: 'text-rose-600' },
-  { bar: 'bg-amber-500', text: 'text-amber-600' },
-]
 
 const MODEL_BADGE: Record<string, string> = {
   auto: 'border border-neutral-200 bg-neutral-100 text-neutral-600',
@@ -153,7 +145,7 @@ function AgentRow({
   onSteer?: (message: string) => void
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
-  const accent = ACCENT_COLORS[accentIndex % ACCENT_COLORS.length]
+  const accent = AGENT_ACCENT_COLORS[accentIndex % AGENT_ACCENT_COLORS.length]
   const isActive = agent.status === 'active'
   const isSpawning = agent.status === 'spawning'
   const canSteer =
@@ -178,6 +170,16 @@ function AgentRow({
     >
       {/* Left accent bar */}
       <div className={cn('w-0.5 shrink-0', accent.bar)} />
+
+      {/* Avatar */}
+      <div
+        className={cn(
+          'flex size-8 shrink-0 items-center justify-center self-center overflow-hidden rounded-md',
+          accent.avatar,
+        )}
+      >
+        <AgentAvatar index={accentIndex} color={accent.hex} size={28} />
+      </div>
 
       {/* Content */}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5 py-2 pl-3 pr-2">
@@ -336,7 +338,7 @@ function AgentCompactCard({
   isSelected: boolean
   onSelect: () => void
 }) {
-  const accent = ACCENT_COLORS[accentIndex % ACCENT_COLORS.length]
+  const accent = AGENT_ACCENT_COLORS[accentIndex % AGENT_ACCENT_COLORS.length]
   const isActive = agent.status === 'active'
 
   return (
@@ -351,6 +353,14 @@ function AgentCompactCard({
       {/* Top accent bar */}
       <div className={cn('absolute inset-x-0 top-0 h-0.5', accent.bar)} />
       <div className="flex items-center gap-1.5 pt-0.5">
+        <div
+          className={cn(
+            'flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-md',
+            accent.avatar,
+          )}
+        >
+          <AgentAvatar index={accentIndex} color={accent.hex} size={16} />
+        </div>
         {isActive ? (
           <span className="relative flex size-1.5 shrink-0">
             <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/60" />

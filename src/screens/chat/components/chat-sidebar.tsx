@@ -1154,9 +1154,8 @@ function ChatSidebarComponent({
           {/* Settings + Theme toggle */}
           {!isVisuallyCollapsed && (
             <div className="flex items-center gap-0.5">
-              <button
-                type="button"
-                onClick={() => handleOpenSettings('claude')}
+              <Link
+                to="/settings"
                 className="shrink-0 rounded-lg p-1.5 text-primary-400 hover:bg-primary-200 dark:hover:bg-neutral-800 hover:text-primary-600 dark:hover:text-neutral-300 transition-colors"
                 aria-label="Settings"
               >
@@ -1165,7 +1164,7 @@ function ChatSidebarComponent({
                   size={16}
                   strokeWidth={1.5}
                 />
-              </button>
+              </Link>
               <ThemeToggleMini />
             </div>
           )}

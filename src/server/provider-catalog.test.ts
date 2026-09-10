@@ -3,8 +3,10 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  getCatalogProviderCredential,
   getProviderCatalog,
   isBuiltinCatalogProvider,
+  listCatalogProvidersForClaudeCode,
   readProfileProviderSelection,
   removeCatalogProvider,
   updateProfileFallback,
@@ -317,5 +319,49 @@ describe('provider catalog', () => {
     expect(readProfileProviderSelection('default').fallbackModel).toBe(
       'GLM-5.2',
     )
+  })
+
+  describe('getCatalogProviderCredential', () => {
+    it('resolves the real base_url and API key for a configured provider', () => {
+      seedProfiles()
+      upsertCatalogKey('DEEPSEEK_API_KEY', 'ds-secret', 'deepseek')
+      const credential = getCatalogProviderCredential('deepseek')
+      expect(credential).toEqual({
+        baseUrl: 'https://api.deepseek.com/v1',
+        apiKey: 'ds-secret',
+      })
+    })
+
+    it('returns an empty API key when no key is configured', () => {
+      seedProfiles()
+      const credential = getCatalogProviderCredential('deepseek')
+      expect(credential).toEqual({
+        baseUrl: 'https://api.deepseek.com/v1',
+        apiKey: '',
+      })
+    })
+
+    it('returns null for an unknown provider id', () => {
+      seedProfiles()
+      expect(getCatalogProviderCredential('does-not-exist')).toBeNull()
+    })
+  })
+
+  describe('listCatalogProvidersForClaudeCode', () => {
+    it('exposes every configured provider, not just Anthropic', () => {
+      seedProfiles()
+      upsertCatalogKey('ANTHROPIC_API_KEY', 'sk-ant-secret', 'anthropic')
+      const listed = listCatalogProvidersForClaudeCode()
+      const ids = listed.map((p) => p.id)
+      expect(ids).toContain('anthropic')
+      expect(ids).toContain('tokenx')
+      const anthropicEntry = listed.find((p) => p.id === 'anthropic')
+      expect(anthropicEntry).toMatchObject({
+        keyConfigured: true,
+        maskedKey: expect.stringContaining('sk-'),
+      })
+      // Never leaks the raw secret to this "safe for browser" projection.
+      expect(JSON.stringify(listed)).not.toContain('sk-ant-secret')
+    })
   })
 })

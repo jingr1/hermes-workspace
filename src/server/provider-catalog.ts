@@ -312,6 +312,25 @@ function lookupKeyValue(name: string): string {
   return readEnvMap(defaultEnvPath())[name] || ''
 }
 
+/**
+ * Resolve a catalog provider's real base URL and API key, server-side only.
+ * Callers (e.g. the Claude Code settings bridge) can copy these into another
+ * config file without ever sending the raw secret to the browser.
+ */
+export function getCatalogProviderCredential(
+  providerId: string,
+): { baseUrl: string; apiKey: string } | null {
+  const id = providerId.trim()
+  if (!id) return null
+  const entry = mergeCatalog().providers.find((item) => item.id === id)
+  const preset = BUILTIN_PROVIDER_PRESETS[id]
+  if (!entry && !preset) return null
+  const baseUrl = entry?.base_url || preset?.base_url || ''
+  const keyEnv = entry?.key_env || preset?.key_env || ''
+  const apiKey = keyEnv ? lookupKeyValue(keyEnv) : ''
+  return { baseUrl, apiKey }
+}
+
 function writeKeyToAllEnvs(name: string, value: string): void {
   const secret = value.trim()
   if (!name.trim() || !secret) return
@@ -511,6 +530,36 @@ function mergeCatalog(): CatalogFile {
     writeCatalogFile(merged)
   }
   return merged
+}
+
+/**
+ * Every provider configured on the Hermes "Model & Provider" page, reshaped
+ * for the Claude Code settings panel's provider dropdown.
+ *
+ * We deliberately do NOT filter this down to the builtin `anthropic` entry.
+ * Claude Code talks the Anthropic Messages API directly against
+ * ANTHROPIC_BASE_URL, so most Hermes providers (OpenAI-compatible gateways)
+ * won't work — but the user may have added a custom provider that IS an
+ * Anthropic-compatible gateway/proxy, and we can't tell protocol from the
+ * catalog data alone. Surface everything the user already configured and
+ * let them pick; the panel shows a hint rather than hiding options.
+ */
+export function listCatalogProvidersForClaudeCode(): Array<{
+  id: string
+  name: string
+  baseUrl: string
+  keyConfigured: boolean
+  maskedKey: string
+  models: Array<string>
+}> {
+  return getProviderCatalog().providers.map((entry) => ({
+    id: entry.id,
+    name: entry.name,
+    baseUrl: entry.base_url,
+    keyConfigured: entry.keyConfigured,
+    maskedKey: entry.maskedKey,
+    models: entry.models,
+  }))
 }
 
 export function getProviderCatalog(): ProviderCatalog {

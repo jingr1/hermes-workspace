@@ -1,15 +1,15 @@
 'use client'
 
-import { useCallback, useMemo } from 'react'
-import { HugeiconsIcon } from '@hugeicons/react'
-import { Settings01Icon } from '@hugeicons/core-free-icons'
-import { useNavigate } from '@tanstack/react-router'
+import { useCallback, useMemo, useState } from 'react'
 import { useProfiles } from '../hooks/use-profiles'
 import { AgentStatusDot } from './agent-status-dot'
 import type { AgentRuntime, AgentWithStatus } from '@/lib/agent-types'
+import type { UnifiedAgentStatus } from '@/lib/agent-status'
+import { SettingsDialog } from '@/components/settings-dialog'
+import { AssistantAvatar } from '@/components/avatars'
 import { cn } from '@/lib/utils'
 import { useAgentStore } from '@/stores/agent-store'
-import { statusLabel, type UnifiedAgentStatus } from '@/lib/agent-status'
+import { statusLabel } from '@/lib/agent-status'
 
 const RUNTIME_LABELS: Record<AgentRuntime, string> = {
   hermes: 'Hermes',
@@ -71,16 +71,31 @@ function toUnifiedStatus(
   }
 }
 
+function AgentAvatar({ runtime }: { runtime: AgentRuntime }) {
+  if (runtime === 'claude-code') {
+    return (
+      <AssistantAvatar
+        src="/claude-code-mark.svg"
+        alt="Claude Code"
+        size={28}
+        className="rounded-md"
+      />
+    )
+  }
+  return <AssistantAvatar size={28} className="rounded-md" />
+}
+
 function AgentListItem({
   agent,
   isActive,
   onSelect,
+  onOpenSettings,
 }: {
   agent: AgentWithStatus
   isActive: boolean
   onSelect: (agentId: string) => void
+  onOpenSettings: (agentId: string) => void
 }) {
-  const navigate = useNavigate()
   const { profiles } = useProfiles()
   const profile = useMemo(() => {
     if (agent.runtime !== 'hermes') return undefined
@@ -105,6 +120,17 @@ function AgentListItem({
         isActive && 'bg-primary-200',
       )}
     >
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation()
+          onOpenSettings(agent.agentId)
+        }}
+        className="shrink-0 rounded-md p-0.5 transition-colors hover:bg-primary-300/60"
+        title="Agent settings"
+      >
+        <AgentAvatar runtime={agent.runtime} />
+      </button>
       <AgentStatusDot
         status={agent.status}
         needsSetup={toUnifiedStatus(agent, profile) === 'needsSetup'}
@@ -122,25 +148,6 @@ function AgentListItem({
           {agentSubtitle(agent, profile, toUnifiedStatus(agent, profile))}
         </p>
       </div>
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation()
-          void navigate({
-            to: '/settings/agents/$agentId',
-            params: { agentId: agent.agentId },
-          })
-        }}
-        className={cn(
-          'shrink-0 rounded-md p-1.5 opacity-0 transition-opacity',
-          'text-primary-600 hover:bg-primary-300/60 hover:text-primary-800',
-          'group-hover:opacity-100 focus:opacity-100',
-          'dark:text-primary-300 dark:hover:bg-primary-700 dark:hover:text-primary-100',
-        )}
-        title="Agent settings"
-      >
-        <HugeiconsIcon icon={Settings01Icon} size={14} strokeWidth={2} />
-      </button>
     </div>
   )
 }
@@ -155,6 +162,7 @@ export function AgentList({
   const agents = useAgentStore((state) => state.agents)
   const activeAgentId = useAgentStore((state) => state.activeAgentId)
   const storeSetActiveAgentId = useAgentStore((state) => state.setActiveAgentId)
+  const [settingsAgentId, setSettingsAgentId] = useState<string | null>(null)
 
   const handleSelect = useCallback(
     (agentId: string) => {
@@ -207,6 +215,7 @@ export function AgentList({
               agent={agent}
               isActive={agent.agentId === activeAgentId}
               onSelect={handleSelect}
+              onOpenSettings={setSettingsAgentId}
             />
           ))}
         </div>
@@ -224,6 +233,14 @@ export function AgentList({
         Agents
       </div>
       <div className="flex-1 overflow-y-auto p-2">{listContent}</div>
+      <SettingsDialog
+        open={settingsAgentId !== null}
+        onOpenChange={(open) => {
+          if (!open) setSettingsAgentId(null)
+        }}
+        agentId={settingsAgentId ?? undefined}
+        initialSection="claude"
+      />
     </div>
   )
 }
