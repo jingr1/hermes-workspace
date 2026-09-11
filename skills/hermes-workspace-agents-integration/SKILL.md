@@ -34,8 +34,11 @@ hermes-workspace 的 agent 运行时分为两类：
 - `src/server/agent-runtime/run-managed-turn.ts` — 统一的单轮执行器，被 chat、群聊、mission control 复用。
 - `src/server/claude-code-settings.ts` — 读写 `~/.claude/settings.json`，处理 alias、provider 显示、模型列表等。
 - `src/server/codex-settings.ts` — 读写 `~/.codex/config.toml`，复用 Hermes Provider Catalog 的 provider/model/key。
+- `src/server/local-env-check.ts` — 检测受管理 CLI agent（Claude Code、Codex 等）的本地版本与最新版本。
+- `src/server/agent-env-action.ts` — 执行 npm 全局安装/升级，支持可选 sudo 提权。
 - `src/routes/api/claude-code/settings.ts` + `claude-code-settings-panel.tsx` — Claude Code Settings UI 与 API。
 - `src/routes/api/agents/codex-impl/config.ts` + `codex-settings-panel.tsx` — Codex Settings UI 与 API。
+- `src/routes/api/agents/$agentId/env-check.ts` + `env-action.ts` — 动态 agent 本地环境检查与生命周期 action。
 - `src/routes/api/agents/claude-code/models.ts` / `src/routes/api/agents/codex-impl/models.ts` — chat/model picker 的模型列表。
 - `src/routes/api/agents/operations.ts` — Mission Control / Operations agent 列表，拼接 Hermes profiles 与外部 agent。
 - `src/routes/api/agents/$agentId/chat.ts` — 1:1 managed chat SSE endpoint。
@@ -92,6 +95,8 @@ Settings panel 会从 `src/server/provider-catalog.ts` 读取已配置的 provid
 | 接入点 | 负责组件 | 说明 |
 |---|---|---|
 | Settings | `claude-code-settings-panel.tsx` + `src/routes/api/claude-code/settings.ts` | 选 provider、auth mode、model alias 和默认模型 |
+| Local env check | `local-env-check-section.tsx` + `src/server/local-env-check.ts` | 检测本地 CLI 版本，提示安装/升级 |
+| Env action | `src/server/agent-env-action.ts` + `src/routes/api/agents/$agentId/env-action.ts` | npm 全局安装/升级，可选 sudo 提权 |
 | 1:1 Chat | `src/screens/chat/components/managed-agent-chat-view.tsx` | 选择 claude-code / codex agent 后进入 managed chat 界面 |
 | Chat API | `src/routes/api/agents/$agentId/chat.ts` | SSE 推送 `text_delta/thinking/tool/error/run_exited` |
 | Model Picker | `src/routes/api/agents/claude-code/models.ts` / `src/routes/api/agents/codex-impl/models.ts` | 返回当前 agent 的可用模型 + 当前 model/provider |
@@ -130,6 +135,7 @@ Codex 使用 `~/.codex/config.toml`，通过 `src/server/codex-settings.ts` 管�
 ### 4.3 Settings UI
 
 - `src/components/settings-dialog/codex-settings-panel.tsx`：复用 catalog provider 下拉 + model 下拉。
+- `src/components/settings-dialog/local-env-check-section.tsx`：Codex 本地环境检查卡片，展示当前/最新版本、可升级状态，支持一键安装/升级（通过 `/api/agents/$agentId/env-action` 调用 `src/server/agent-env-action.ts` 运行 npm 命令）。
 - `src/components/settings/settings-sidebar.tsx` 与 `src/routes/settings/index.tsx`：把 Codex 加进独立 `/settings` 页面。
 - `src/components/settings-dialog/settings-dialog.tsx`：按 runtime 渲染 Codex 设置面板。
 
@@ -162,11 +168,44 @@ agents:
     displayName: Codex
 ```
 
-## 5. 实现新的外部 Agent（通用步骤）
+## 5. 本地环境检查与一键升级
+
+受管理的 CLI agent 在 Settings 面板中会展示本地环境检查卡片：
+
+### 5.1 后端
+
+- `src/server/local-env-check.ts`：
+  - 根据 `agentId`（如 `cc-impl`、`codex-impl`）找到 `MANAGED_AGENTS` 配置。
+  - 通过 `command --version` 探测本地版本，并尝试解析 npm registry 的 `dist-tags.latest`。
+  - 返回 `{ currentVersion, latestVersion, installed, installedButBroken, detail, envType }`。
+- `src/server/agent-env-action.ts`：
+  - 支持 `install` / `update` 两种 action，实际都是 `npm i -g <pkg>@latest`。
+  - 格式化命令时优先使用与已安装 CLI 同目录的 npm，确保升级与当前 PATH 一致。
+  - 可选 `useSudo + sudoPassword`，在 Linux/macOS 非 root 时调用 `sudo -S`。
+- `src/routes/api/agents/$agentId/env-check.ts` 与 `env-action.ts`：
+  - 通用路由，`params.agentId` 传递给 `checkLocalEnvForAgent` / `runAgentEnvAction`，所有 `MANAGED_AGENTS` 中的 agent 都支持。
+
+### 5.2 前端
+
+- `src/components/settings-dialog/local-env-check-section.tsx`：
+  - 卡片展示：agent 名称（如 Codex）、本地环境检查标签、状态 pill（可升级/未安装/异常/平台）。
+  - 版本行：当前版本 / 最新版本。
+  - 右下角按钮：可升级时为蓝色“升级”，未安装/异常时为“安装”，已是最新时为“刷新”。
+  - 点击升级/安装弹出 Dialog：可勾选 sudo，输入密码，显示命令输出。
+- `src/components/settings-dialog/codex-settings-panel.tsx`、`claude-code-settings-panel.tsx` 中渲染 `<LocalEnvCheckSection agentId="..." />`，平台标签由后端 `envType` 动态决定。
+
+### 5.3 添加新 agent
+
+1. 在 `agents.yaml` 声明 `id`、`runtime`、`command`、`displayName`。
+2. 在 `src/server/local-env-check.ts` 的 `MANAGED_AGENTS` 与 `src/server/agent-env-action.ts` 的 `MANAGED_AGENTS` 中同步加入 `{ agentId, name, command, npmPackage }`。
+3. 如果该 agent 需要独立的 Settings 面板，创建对应的 `*-settings-panel.tsx` 并在 `src/components/settings-dialog/settings-dialog.tsx` 的 `renderAgentSpecificSettings` 中路由。
+4. 如果与 `claude-code` 接口兼容（如 opencode），可直接复用 `ClaudeCodeSettingsPanel`。
+
+## 6. 实现新的外部 Agent（通用步骤）
 
 要让新的 CLI agent（如 Pi）复用同一套接入模式，需要：
 
-### 5.1 扩展 `AgentRuntimeKind`
+### 6.1 扩展 `AgentRuntimeKind`
 
 在 `src/server/agent-runtime/types.ts` 中：
 
@@ -176,10 +215,11 @@ export type AgentRuntimeKind =
   | 'claude-code'
   | 'codex'
   | 'deepseek-harness'
+  | 'opencode'
   | 'pi'
 ```
 
-### 5.2 新增 Adapter
+### 6.2 新增 Adapter
 
 在 `src/server/agent-runtime/` 下新建 `<agent>-adapter.ts`，实现 `AgentRuntimeAdapter`：
 
@@ -189,11 +229,11 @@ export type AgentRuntimeKind =
 - `streamEvents()` — 解析该 CLI 的 stdout/stderr 为 `AgentStreamEvent`。
 - `interrupt()` — SIGKILL 整个进程组。
 
-### 5.3 注册到 Router
+### 6.3 注册到 Router
 
 在 `src/server/agent-runtime/router.ts` 的 `AgentRuntimeRouter` 中，根据 `decl.runtime === '<agent>'` 返回新 adapter 实例。
 
-### 5.4 配置桥接（Settings）
+### 6.4 配置桥接（Settings）
 
 参照 Codex 模式：
 
@@ -201,7 +241,7 @@ export type AgentRuntimeKind =
 - Settings panel（可通用化为 `external-agent-settings-panel.tsx` 抽象层）。
 - Provider/model 解析，优先复用 Hermes Provider Catalog 的 `base_url` / `key_env` / `models`。
 
-### 5.5 更新 Operations 列表
+### 6.5 更新 Operations 列表
 
 `src/routes/api/agents/operations.ts` 中继续扩展 `readExternalAgentConfig`：
 
@@ -220,11 +260,14 @@ function readPiConfig(): { model: string; provider: string } {
 - **Mask 不写回文件：** UI 使用 `keyDirty` 状态，只有用户真实编辑的 key 才会被写入。
 - **Provider 显示：** 优先从 Hermes catalog 反查 provider 名称，而不是用 URL host。
 - **Subagent model 不进入 picker：** `CLAUDE_CODE_SUBAGENT_MODEL` 用于 workflow/subagent，不应在 chat picker 中与 alias 模型重复显示。
-- **Codex 不用硬编码 `api_key`：** 因为 Codex 0.146+ 对 `[model_providers.<id>].api_key` 解析/优先级有问题，导致 401。应在 TOML 中写 `env_key = "TOKENX_API_KEY_VPEL"`（对应 Hermes catalog 的 `key_env`），由 adapter 启动时注入真实 key。
+- **Codex 不写硬编码 `api_key`：** 因为 Codex 0.146+ 对 `[model_providers.<id>].api_key` 解析/优先级有问题，导致 401。应在 TOML 中写 `env_key = "TOKENX_API_KEY_VPEL"`（对应 Hermes catalog 的 `key_env`），由 adapter 启动时注入真实 key。
 - **Codex 子进程 key 注入 fallback：** 服务端进程可能没继承用户 shell 的环境变量。adapter 先从 Hermes catalog 的 `.env` 读取，失败再 fallback 读 `~/.hermes/.env`。
 - **Codex 配置 patch 要避免 duplicate key：** 原文件 block 缺失 `env_key`/`requires_openai_auth` 时，不能往文件末尾追加，必须紧跟对应 table header 插入到 block 内部。
 - **Codex 切换 provider 时清理旧 block：** 从 catalog provider 切回 `openai` 时，要把旧 catalog block 的 `env_key` 注释掉，否则 Codex 仍可能用旧 gateway 认证。
 - **Chat 品牌动态化：** `ChatComposer` / `AgentChatFrame` 不要写死 "Claude Code"，通过 `runtimeLabel` / `runtimeConfigHint` props 由 `ManagedAgentChatView` 按 agent runtime/brand 传入，并同步切换头像（`ClaudeCodeMark` / `CodexMark`）。
+- **本地环境检查 agentId 一致：** `agents.yaml`、`local-env-check.ts`、`agent-env-action.ts` 中的 `agentId` 必须一一对应，否则 env-check 会返回 "Unsupported agent"。
+- **动态路由与静态路径并存：** `env-check` / `env-action` 使用 `src/routes/api/agents/$agentId/*`，对所有 managed agent 通用；专属路由（如 `codex-impl/config` 、`codex-impl/models`）仍然保留静态目录。
+- **sudo 密码仅用于本机提权：** 传输过程中不做加密，如需更高安全等级别请改用 keyring / pkexec / sudo -A。
 
 ## 7. Claude Code adapter 启动时的环境传递
 
@@ -250,6 +293,10 @@ function readPiConfig(): { model: string; provider: string } {
 - `src/server/agent-runtime/agent-runtime.test.ts` 要覆盖：
   - `CodexAdapter.probe()` 在 PATH 中存在/不存在 codex 时的行为。
 - 类型检查：`pnpm tsc -p tsconfig.json --noEmit` 无新增报错。
+- 本地环境检查测试：
+  - `src/server/local-env-check.test.ts` 要覆盖 `cc-impl` 和 `codex-impl` 的版本检测。
+  - `src/server/agent-env-action.test.ts` 要覆盖升级流程、不支持 agent 的错误返回。
+  - 手动验证：`GET /api/agents/<agentId>/env-check` 返回版本信息；`POST /api/agents/<agentId>/env-action` 执行 `npm i -g <pkg>@latest`。
 - 真实呼叫检查：
   - Claude Code 使用 `claude -p "hi"` 确保认证、base URL、model alias 生效。
   - Codex 使用 `codex exec --skip-git-repo-check "hi"` 确保 `env_key` 模式下 tokenx `/v1/responses` 返回 200。

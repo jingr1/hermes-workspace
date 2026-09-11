@@ -399,6 +399,30 @@ export function toChatMessage(
     content.push({ type: 'text', text: msg.content })
   }
 
+  // Preserve any thinking / redacted_thinking blocks the gateway returned in
+  // the content array. Without this, assistant reasoning content is silently
+  // dropped when history is loaded from the server.
+  if (Array.isArray(msg.content) && msg.role === 'assistant') {
+    for (const block of msg.content) {
+      const record = block as Record<string, unknown>
+      const blockType = record.type
+      if (
+        blockType === 'thinking' ||
+        blockType === 'redacted_thinking'
+      ) {
+        content.push({
+          type: blockType,
+          thinking:
+            typeof record.thinking === 'string'
+              ? record.thinking
+              : typeof record.text === 'string'
+                ? record.text
+                : '',
+        })
+      }
+    }
+  }
+
   return {
     id: `msg-${msg.id}`,
     role: msg.role,

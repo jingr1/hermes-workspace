@@ -53,6 +53,8 @@ export type ResponsesChatRequest = {
   model?: string
   sessionId?: string
   signal?: AbortSignal
+  agentId?: string
+  profileName?: string
 }
 
 const _authHeaders = (): Record<string, string> =>
@@ -112,6 +114,8 @@ export async function* streamResponses(
   if (req.sessionId && BEARER_TOKEN) {
     headers['X-Hermes-Session-Id'] = req.sessionId
   }
+  if (req.agentId) headers['X-Hermes-Agent-Id'] = req.agentId
+  if (req.profileName) headers['X-Hermes-Profile'] = req.profileName
 
   const body: Record<string, unknown> = {
     input: req.input,

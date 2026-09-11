@@ -11,6 +11,7 @@ export type AgentRuntimeKind =
   | 'claude-code'
   | 'codex'
   | 'deepseek-harness'
+  | 'opencode'
 
 export type AgentStreamEvent =
   | {

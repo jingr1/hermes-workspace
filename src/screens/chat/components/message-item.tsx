@@ -2118,6 +2118,7 @@ function MessageItemComponent({
   hideActivityCard = false,
   isLastAssistant = false,
 }: MessageItemProps) {
+  const [isHovered, setIsHovered] = useState(false)
   const role = message.role || 'assistant'
   const profileDisplayName = useChatSettingsStore(selectChatProfileDisplayName)
   const profileAvatarDataUrl = useChatSettingsStore(
@@ -2648,6 +2649,8 @@ function MessageItemComponent({
         isUser ? 'items-end' : 'items-start',
         !isUser && isNew && 'animate-[message-fade-in_0.4s_ease-out]',
       )}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
       {/* Completed turns: compact tool-count chip above the bubble. Streaming
           activity renders AFTER the bubble (below) so assistant narration stays
@@ -2960,7 +2963,7 @@ function MessageItemComponent({
           text={fullText}
           timestamp={timestamp}
           align={isUser ? 'end' : 'start'}
-          forceVisible={forceActionsVisible}
+          forceVisible={forceActionsVisible || isHovered}
           isQueued={isUser && isQueued && !isFailed}
           isFailed={isUser && (isFailed || isStuckSending)}
           onRetry={

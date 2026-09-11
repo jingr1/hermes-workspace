@@ -24,6 +24,12 @@ import {
 import { AchievementsCard } from './components/achievements-card'
 import { ActiveModelKpi } from './components/active-model-kpi'
 import { AnalyticsChartCard } from './components/analytics-chart-card'
+import { UsageStatsCard } from './components/usage-stats-card'
+import { UsageTablesCard } from './components/usage-tables-card'
+import {
+  type UsageFilters,
+  type UsageRange,
+} from './hooks/use-usage-data'
 import { AttentionMarquee } from './components/attention-marquee'
 import { CacheEfficiencyCard } from './components/cache-efficiency-card'
 import { CostLedgerCard } from './components/cost-ledger-card'
@@ -819,13 +825,24 @@ export function DashboardScreen() {
     if (typeof window === 'undefined') return 30
     const stored = window.localStorage.getItem('dashboard.analyticsPeriod')
     const n = Number(stored)
-    if (n === 7 || n === 14 || n === 30) return n
+    if (n === 1 || n === 7 || n === 30) return n
     return 30
   })
   useEffect(() => {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem('dashboard.analyticsPeriod', String(period))
     }
+  }, [period])
+
+  const [usageFilters, setUsageFilters] = useState<UsageFilters>(() => ({
+    range: '30d',
+    dataSource: 'all',
+  }))
+  useEffect(() => {
+    setUsageFilters((prev) => ({
+      ...prev,
+      range: String(period) as UsageRange,
+    }))
   }, [period])
 
   // Aggregate dashboard overview — surfaces the data the native
@@ -1114,6 +1131,13 @@ export function DashboardScreen() {
         {/* ── Edit-mode banner (only renders when toggled). ── */}
         <EditModePanel layout={layout} />
 
+        {/* ── Usage stats (full width) for the selected analytics window. */}
+        {layout.isVisible('usage_stats') ? (
+          <WidgetShell id="usage_stats" layout={layout}>
+            <UsageStatsCard filters={usageFilters} />
+          </WidgetShell>
+        ) : null}
+
         {/* ── Analytics chart (left) + Top models / Provider mix / Cache
            efficiency stacked on the right. The right-side stack now
            occupies the full vertical of the chart so we don't get the
@@ -1123,11 +1147,10 @@ export function DashboardScreen() {
             <div className="lg:col-span-8">
               <WidgetShell id="analytics_chart" layout={layout}>
                 <AnalyticsChartCard
-                  analytics={overview?.analytics ?? null}
-                  insights={overview?.insights ?? []}
                   period={period}
                   onPeriodChange={setPeriod}
-                  loading={overviewQuery.isFetching}
+                  filters={usageFilters}
+                  onFiltersChange={setUsageFilters}
                 />
               </WidgetShell>
             </div>
@@ -1171,6 +1194,13 @@ export function DashboardScreen() {
                   <CostLedgerCard analytics={overview?.analytics ?? null} />
                 </WidgetShell>
               ) : null}
+            </div>
+          ) : null}
+          {layout.isVisible('usage_tables') ? (
+            <div className="lg:col-span-12">
+              <WidgetShell id="usage_tables" layout={layout}>
+                <UsageTablesCard filters={usageFilters} />
+              </WidgetShell>
             </div>
           ) : null}
         </div>

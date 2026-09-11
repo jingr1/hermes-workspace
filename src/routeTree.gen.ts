@@ -136,6 +136,14 @@ import { Route as ApiAgentsIndexRouteImport } from './routes/api/agents/index'
 import { Route as SettingsAgentsAgentIdRouteImport } from './routes/settings/agents/$agentId'
 import { Route as ChatAgentAgentIdRouteImport } from './routes/chat/agent/$agentId'
 import { Route as ApiWorkspaceFoldersRouteImport } from './routes/api/workspace.folders'
+import { Route as ApiUsageTrendsRouteImport } from './routes/api/usage/trends'
+import { Route as ApiUsageSummaryRouteImport } from './routes/api/usage/summary'
+import { Route as ApiUsagePricingRouteImport } from './routes/api/usage/pricing'
+import { Route as ApiUsageLogsRouteImport } from './routes/api/usage/logs'
+import { Route as ApiUsageByProviderRouteImport } from './routes/api/usage/by-provider'
+import { Route as ApiUsageByProfileRouteImport } from './routes/api/usage/by-profile'
+import { Route as ApiUsageByModelRouteImport } from './routes/api/usage/by-model'
+import { Route as ApiUsageByAgentRouteImport } from './routes/api/usage/by-agent'
 import { Route as ApiUpdateWorkspaceRouteImport } from './routes/api/update/workspace'
 import { Route as ApiUpdateStatusRouteImport } from './routes/api/update/status'
 import { Route as ApiUpdateAgentRouteImport } from './routes/api/update/agent'
@@ -221,6 +229,8 @@ import { Route as ApiAgentsCodexImplModelsRouteImport } from './routes/api/agent
 import { Route as ApiAgentsCodexImplConfigRouteImport } from './routes/api/agents/codex-impl/config'
 import { Route as ApiAgentsClaudeCodeModelsRouteImport } from './routes/api/agents/claude-code/models'
 import { Route as ApiAgentsAgentIdSessionsRouteImport } from './routes/api/agents/$agentId/sessions'
+import { Route as ApiAgentsAgentIdEnvCheckRouteImport } from './routes/api/agents/$agentId/env-check'
+import { Route as ApiAgentsAgentIdEnvActionRouteImport } from './routes/api/agents/$agentId/env-action'
 import { Route as ApiAgentsAgentIdChatRouteImport } from './routes/api/agents/$agentId/chat'
 import { Route as ApiRunsSessionKeyRunIdAbandonRouteImport } from './routes/api/runs/$sessionKey.$runId.abandon'
 import { Route as ApiRoomsRoomIdParticipantsParticipantIdRouteImport } from './routes/api/rooms/$roomId/participants/$participantId'
@@ -867,6 +877,46 @@ const ApiWorkspaceFoldersRoute = ApiWorkspaceFoldersRouteImport.update({
   path: '/folders',
   getParentRoute: () => ApiWorkspaceRoute,
 } as any)
+const ApiUsageTrendsRoute = ApiUsageTrendsRouteImport.update({
+  id: '/api/usage/trends',
+  path: '/api/usage/trends',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiUsageSummaryRoute = ApiUsageSummaryRouteImport.update({
+  id: '/api/usage/summary',
+  path: '/api/usage/summary',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiUsagePricingRoute = ApiUsagePricingRouteImport.update({
+  id: '/api/usage/pricing',
+  path: '/api/usage/pricing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiUsageLogsRoute = ApiUsageLogsRouteImport.update({
+  id: '/api/usage/logs',
+  path: '/api/usage/logs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiUsageByProviderRoute = ApiUsageByProviderRouteImport.update({
+  id: '/api/usage/by-provider',
+  path: '/api/usage/by-provider',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiUsageByProfileRoute = ApiUsageByProfileRouteImport.update({
+  id: '/api/usage/by-profile',
+  path: '/api/usage/by-profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiUsageByModelRoute = ApiUsageByModelRouteImport.update({
+  id: '/api/usage/by-model',
+  path: '/api/usage/by-model',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiUsageByAgentRoute = ApiUsageByAgentRouteImport.update({
+  id: '/api/usage/by-agent',
+  path: '/api/usage/by-agent',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiUpdateWorkspaceRoute = ApiUpdateWorkspaceRouteImport.update({
   id: '/api/update/workspace',
   path: '/api/update/workspace',
@@ -1309,6 +1359,18 @@ const ApiAgentsAgentIdSessionsRoute =
     path: '/api/agents/$agentId/sessions',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiAgentsAgentIdEnvCheckRoute =
+  ApiAgentsAgentIdEnvCheckRouteImport.update({
+    id: '/api/agents/$agentId/env-check',
+    path: '/api/agents/$agentId/env-check',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAgentsAgentIdEnvActionRoute =
+  ApiAgentsAgentIdEnvActionRouteImport.update({
+    id: '/api/agents/$agentId/env-action',
+    path: '/api/agents/$agentId/env-action',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAgentsAgentIdChatRoute = ApiAgentsAgentIdChatRouteImport.update({
   id: '/api/agents/$agentId/chat',
   path: '/api/agents/$agentId/chat',
@@ -1544,12 +1606,22 @@ export interface FileRoutesByFullPath {
   '/api/update/agent': typeof ApiUpdateAgentRoute
   '/api/update/status': typeof ApiUpdateStatusRoute
   '/api/update/workspace': typeof ApiUpdateWorkspaceRoute
+  '/api/usage/by-agent': typeof ApiUsageByAgentRoute
+  '/api/usage/by-model': typeof ApiUsageByModelRoute
+  '/api/usage/by-profile': typeof ApiUsageByProfileRoute
+  '/api/usage/by-provider': typeof ApiUsageByProviderRoute
+  '/api/usage/logs': typeof ApiUsageLogsRoute
+  '/api/usage/pricing': typeof ApiUsagePricingRoute
+  '/api/usage/summary': typeof ApiUsageSummaryRoute
+  '/api/usage/trends': typeof ApiUsageTrendsRoute
   '/api/workspace/folders': typeof ApiWorkspaceFoldersRoute
   '/chat/agent/$agentId': typeof ChatAgentAgentIdRoute
   '/settings/agents/$agentId': typeof SettingsAgentsAgentIdRoute
   '/api/agents/': typeof ApiAgentsIndexRoute
   '/api/tasks/': typeof ApiTasksIndexRoute
   '/api/agents/$agentId/chat': typeof ApiAgentsAgentIdChatRoute
+  '/api/agents/$agentId/env-action': typeof ApiAgentsAgentIdEnvActionRoute
+  '/api/agents/$agentId/env-check': typeof ApiAgentsAgentIdEnvCheckRoute
   '/api/agents/$agentId/sessions': typeof ApiAgentsAgentIdSessionsRouteWithChildren
   '/api/agents/claude-code/models': typeof ApiAgentsClaudeCodeModelsRoute
   '/api/agents/codex-impl/config': typeof ApiAgentsCodexImplConfigRoute
@@ -1763,12 +1835,22 @@ export interface FileRoutesByTo {
   '/api/update/agent': typeof ApiUpdateAgentRoute
   '/api/update/status': typeof ApiUpdateStatusRoute
   '/api/update/workspace': typeof ApiUpdateWorkspaceRoute
+  '/api/usage/by-agent': typeof ApiUsageByAgentRoute
+  '/api/usage/by-model': typeof ApiUsageByModelRoute
+  '/api/usage/by-profile': typeof ApiUsageByProfileRoute
+  '/api/usage/by-provider': typeof ApiUsageByProviderRoute
+  '/api/usage/logs': typeof ApiUsageLogsRoute
+  '/api/usage/pricing': typeof ApiUsagePricingRoute
+  '/api/usage/summary': typeof ApiUsageSummaryRoute
+  '/api/usage/trends': typeof ApiUsageTrendsRoute
   '/api/workspace/folders': typeof ApiWorkspaceFoldersRoute
   '/chat/agent/$agentId': typeof ChatAgentAgentIdRoute
   '/settings/agents/$agentId': typeof SettingsAgentsAgentIdRoute
   '/api/agents': typeof ApiAgentsIndexRoute
   '/api/tasks': typeof ApiTasksIndexRoute
   '/api/agents/$agentId/chat': typeof ApiAgentsAgentIdChatRoute
+  '/api/agents/$agentId/env-action': typeof ApiAgentsAgentIdEnvActionRoute
+  '/api/agents/$agentId/env-check': typeof ApiAgentsAgentIdEnvCheckRoute
   '/api/agents/$agentId/sessions': typeof ApiAgentsAgentIdSessionsRouteWithChildren
   '/api/agents/claude-code/models': typeof ApiAgentsClaudeCodeModelsRoute
   '/api/agents/codex-impl/config': typeof ApiAgentsCodexImplConfigRoute
@@ -1985,12 +2067,22 @@ export interface FileRoutesById {
   '/api/update/agent': typeof ApiUpdateAgentRoute
   '/api/update/status': typeof ApiUpdateStatusRoute
   '/api/update/workspace': typeof ApiUpdateWorkspaceRoute
+  '/api/usage/by-agent': typeof ApiUsageByAgentRoute
+  '/api/usage/by-model': typeof ApiUsageByModelRoute
+  '/api/usage/by-profile': typeof ApiUsageByProfileRoute
+  '/api/usage/by-provider': typeof ApiUsageByProviderRoute
+  '/api/usage/logs': typeof ApiUsageLogsRoute
+  '/api/usage/pricing': typeof ApiUsagePricingRoute
+  '/api/usage/summary': typeof ApiUsageSummaryRoute
+  '/api/usage/trends': typeof ApiUsageTrendsRoute
   '/api/workspace/folders': typeof ApiWorkspaceFoldersRoute
   '/chat/agent/$agentId': typeof ChatAgentAgentIdRoute
   '/settings/agents/$agentId': typeof SettingsAgentsAgentIdRoute
   '/api/agents/': typeof ApiAgentsIndexRoute
   '/api/tasks/': typeof ApiTasksIndexRoute
   '/api/agents/$agentId/chat': typeof ApiAgentsAgentIdChatRoute
+  '/api/agents/$agentId/env-action': typeof ApiAgentsAgentIdEnvActionRoute
+  '/api/agents/$agentId/env-check': typeof ApiAgentsAgentIdEnvCheckRoute
   '/api/agents/$agentId/sessions': typeof ApiAgentsAgentIdSessionsRouteWithChildren
   '/api/agents/claude-code/models': typeof ApiAgentsClaudeCodeModelsRoute
   '/api/agents/codex-impl/config': typeof ApiAgentsCodexImplConfigRoute
@@ -2208,12 +2300,22 @@ export interface FileRouteTypes {
     | '/api/update/agent'
     | '/api/update/status'
     | '/api/update/workspace'
+    | '/api/usage/by-agent'
+    | '/api/usage/by-model'
+    | '/api/usage/by-profile'
+    | '/api/usage/by-provider'
+    | '/api/usage/logs'
+    | '/api/usage/pricing'
+    | '/api/usage/summary'
+    | '/api/usage/trends'
     | '/api/workspace/folders'
     | '/chat/agent/$agentId'
     | '/settings/agents/$agentId'
     | '/api/agents/'
     | '/api/tasks/'
     | '/api/agents/$agentId/chat'
+    | '/api/agents/$agentId/env-action'
+    | '/api/agents/$agentId/env-check'
     | '/api/agents/$agentId/sessions'
     | '/api/agents/claude-code/models'
     | '/api/agents/codex-impl/config'
@@ -2427,12 +2529,22 @@ export interface FileRouteTypes {
     | '/api/update/agent'
     | '/api/update/status'
     | '/api/update/workspace'
+    | '/api/usage/by-agent'
+    | '/api/usage/by-model'
+    | '/api/usage/by-profile'
+    | '/api/usage/by-provider'
+    | '/api/usage/logs'
+    | '/api/usage/pricing'
+    | '/api/usage/summary'
+    | '/api/usage/trends'
     | '/api/workspace/folders'
     | '/chat/agent/$agentId'
     | '/settings/agents/$agentId'
     | '/api/agents'
     | '/api/tasks'
     | '/api/agents/$agentId/chat'
+    | '/api/agents/$agentId/env-action'
+    | '/api/agents/$agentId/env-check'
     | '/api/agents/$agentId/sessions'
     | '/api/agents/claude-code/models'
     | '/api/agents/codex-impl/config'
@@ -2648,12 +2760,22 @@ export interface FileRouteTypes {
     | '/api/update/agent'
     | '/api/update/status'
     | '/api/update/workspace'
+    | '/api/usage/by-agent'
+    | '/api/usage/by-model'
+    | '/api/usage/by-profile'
+    | '/api/usage/by-provider'
+    | '/api/usage/logs'
+    | '/api/usage/pricing'
+    | '/api/usage/summary'
+    | '/api/usage/trends'
     | '/api/workspace/folders'
     | '/chat/agent/$agentId'
     | '/settings/agents/$agentId'
     | '/api/agents/'
     | '/api/tasks/'
     | '/api/agents/$agentId/chat'
+    | '/api/agents/$agentId/env-action'
+    | '/api/agents/$agentId/env-check'
     | '/api/agents/$agentId/sessions'
     | '/api/agents/claude-code/models'
     | '/api/agents/codex-impl/config'
@@ -2838,10 +2960,20 @@ export interface RootRouteChildren {
   ApiUpdateAgentRoute: typeof ApiUpdateAgentRoute
   ApiUpdateStatusRoute: typeof ApiUpdateStatusRoute
   ApiUpdateWorkspaceRoute: typeof ApiUpdateWorkspaceRoute
+  ApiUsageByAgentRoute: typeof ApiUsageByAgentRoute
+  ApiUsageByModelRoute: typeof ApiUsageByModelRoute
+  ApiUsageByProfileRoute: typeof ApiUsageByProfileRoute
+  ApiUsageByProviderRoute: typeof ApiUsageByProviderRoute
+  ApiUsageLogsRoute: typeof ApiUsageLogsRoute
+  ApiUsagePricingRoute: typeof ApiUsagePricingRoute
+  ApiUsageSummaryRoute: typeof ApiUsageSummaryRoute
+  ApiUsageTrendsRoute: typeof ApiUsageTrendsRoute
   ChatAgentAgentIdRoute: typeof ChatAgentAgentIdRoute
   ApiAgentsIndexRoute: typeof ApiAgentsIndexRoute
   ApiTasksIndexRoute: typeof ApiTasksIndexRoute
   ApiAgentsAgentIdChatRoute: typeof ApiAgentsAgentIdChatRoute
+  ApiAgentsAgentIdEnvActionRoute: typeof ApiAgentsAgentIdEnvActionRoute
+  ApiAgentsAgentIdEnvCheckRoute: typeof ApiAgentsAgentIdEnvCheckRoute
   ApiAgentsAgentIdSessionsRoute: typeof ApiAgentsAgentIdSessionsRouteWithChildren
   ApiAgentsClaudeCodeModelsRoute: typeof ApiAgentsClaudeCodeModelsRoute
   ApiAgentsCodexImplConfigRoute: typeof ApiAgentsCodexImplConfigRoute
@@ -3742,6 +3874,62 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiWorkspaceFoldersRouteImport
       parentRoute: typeof ApiWorkspaceRoute
     }
+    '/api/usage/trends': {
+      id: '/api/usage/trends'
+      path: '/api/usage/trends'
+      fullPath: '/api/usage/trends'
+      preLoaderRoute: typeof ApiUsageTrendsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/usage/summary': {
+      id: '/api/usage/summary'
+      path: '/api/usage/summary'
+      fullPath: '/api/usage/summary'
+      preLoaderRoute: typeof ApiUsageSummaryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/usage/pricing': {
+      id: '/api/usage/pricing'
+      path: '/api/usage/pricing'
+      fullPath: '/api/usage/pricing'
+      preLoaderRoute: typeof ApiUsagePricingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/usage/logs': {
+      id: '/api/usage/logs'
+      path: '/api/usage/logs'
+      fullPath: '/api/usage/logs'
+      preLoaderRoute: typeof ApiUsageLogsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/usage/by-provider': {
+      id: '/api/usage/by-provider'
+      path: '/api/usage/by-provider'
+      fullPath: '/api/usage/by-provider'
+      preLoaderRoute: typeof ApiUsageByProviderRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/usage/by-profile': {
+      id: '/api/usage/by-profile'
+      path: '/api/usage/by-profile'
+      fullPath: '/api/usage/by-profile'
+      preLoaderRoute: typeof ApiUsageByProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/usage/by-model': {
+      id: '/api/usage/by-model'
+      path: '/api/usage/by-model'
+      fullPath: '/api/usage/by-model'
+      preLoaderRoute: typeof ApiUsageByModelRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/usage/by-agent': {
+      id: '/api/usage/by-agent'
+      path: '/api/usage/by-agent'
+      fullPath: '/api/usage/by-agent'
+      preLoaderRoute: typeof ApiUsageByAgentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/update/workspace': {
       id: '/api/update/workspace'
       path: '/api/update/workspace'
@@ -4337,6 +4525,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentsAgentIdSessionsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/agents/$agentId/env-check': {
+      id: '/api/agents/$agentId/env-check'
+      path: '/api/agents/$agentId/env-check'
+      fullPath: '/api/agents/$agentId/env-check'
+      preLoaderRoute: typeof ApiAgentsAgentIdEnvCheckRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agents/$agentId/env-action': {
+      id: '/api/agents/$agentId/env-action'
+      path: '/api/agents/$agentId/env-action'
+      fullPath: '/api/agents/$agentId/env-action'
+      preLoaderRoute: typeof ApiAgentsAgentIdEnvActionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/agents/$agentId/chat': {
       id: '/api/agents/$agentId/chat'
       path: '/api/agents/$agentId/chat'
@@ -4886,10 +5088,20 @@ const rootRouteChildren: RootRouteChildren = {
   ApiUpdateAgentRoute: ApiUpdateAgentRoute,
   ApiUpdateStatusRoute: ApiUpdateStatusRoute,
   ApiUpdateWorkspaceRoute: ApiUpdateWorkspaceRoute,
+  ApiUsageByAgentRoute: ApiUsageByAgentRoute,
+  ApiUsageByModelRoute: ApiUsageByModelRoute,
+  ApiUsageByProfileRoute: ApiUsageByProfileRoute,
+  ApiUsageByProviderRoute: ApiUsageByProviderRoute,
+  ApiUsageLogsRoute: ApiUsageLogsRoute,
+  ApiUsagePricingRoute: ApiUsagePricingRoute,
+  ApiUsageSummaryRoute: ApiUsageSummaryRoute,
+  ApiUsageTrendsRoute: ApiUsageTrendsRoute,
   ChatAgentAgentIdRoute: ChatAgentAgentIdRoute,
   ApiAgentsIndexRoute: ApiAgentsIndexRoute,
   ApiTasksIndexRoute: ApiTasksIndexRoute,
   ApiAgentsAgentIdChatRoute: ApiAgentsAgentIdChatRoute,
+  ApiAgentsAgentIdEnvActionRoute: ApiAgentsAgentIdEnvActionRoute,
+  ApiAgentsAgentIdEnvCheckRoute: ApiAgentsAgentIdEnvCheckRoute,
   ApiAgentsAgentIdSessionsRoute: ApiAgentsAgentIdSessionsRouteWithChildren,
   ApiAgentsClaudeCodeModelsRoute: ApiAgentsClaudeCodeModelsRoute,
   ApiAgentsCodexImplConfigRoute: ApiAgentsCodexImplConfigRoute,

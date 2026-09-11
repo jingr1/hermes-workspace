@@ -2361,6 +2361,7 @@ export function ChatScreen({
         fastMode,
         model: currentModel || undefined,
         idempotencyKey: optimisticClientId || crypto.randomUUID(),
+        profileName: workspaceProfileName || activeProfileName || undefined,
       }).catch((err: unknown) => {
         const messageText = err instanceof Error ? err.message : String(err)
         if (import.meta.env.DEV) {

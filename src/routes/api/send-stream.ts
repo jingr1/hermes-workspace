@@ -695,6 +695,10 @@ export const Route = createFileRoute('/api/send-stream')({
                             : undefined,
                         sessionId: portableSessionKey,
                         signal: abortController.signal,
+                        profileName:
+                          typeof body.profileName === 'string'
+                            ? body.profileName
+                            : undefined,
                       })
                       for await (const ev of responsesStream) {
                         if (ev.kind === 'text.delta') {
@@ -844,6 +848,10 @@ export const Route = createFileRoute('/api/send-stream')({
                     stream: true,
                     sessionId: portableSessionKey,
                     baseUrl: localBaseUrl,
+                    profileName:
+                      typeof body.profileName === 'string'
+                        ? body.profileName
+                        : undefined,
                   })
 
                   let thinking = ''

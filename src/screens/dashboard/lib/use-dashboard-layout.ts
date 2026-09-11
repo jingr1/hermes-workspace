@@ -12,6 +12,8 @@ const STORAGE_KEY = 'dashboard.layout.v1'
  */
 export type WidgetId =
   | 'analytics_chart'
+  | 'usage_stats'
+  | 'usage_tables'
   | 'top_models'
   | 'provider_mix'
   | 'cache_efficiency'
@@ -35,6 +37,22 @@ export type WidgetMeta = {
 }
 
 export const WIDGET_CATALOG: ReadonlyArray<WidgetMeta> = [
+  {
+    id: 'usage_stats',
+    label: 'Usage stats',
+    description:
+      'Cross-runtime token consumption, cache hit rate, and estimated cost for the selected window.',
+    column: 'main',
+    hideable: true,
+  },
+  {
+    id: 'usage_tables',
+    label: 'Usage tables',
+    description:
+      'Agent / Profile / Model / Provider breakdown with token, cache, and cost columns.',
+    column: 'main',
+    hideable: true,
+  },
   {
     id: 'analytics_chart',
     label: 'Analytics chart',

@@ -78,7 +78,9 @@ export async function fetchHistory(payload: {
   /** Initial paint should stay small; default keeps last N messages. */
   limit?: number
 }): Promise<HistoryResponse> {
-  const limit = Math.min(500, Math.max(1, payload.limit ?? 80))
+  // Server caps history at 500 messages; request the full window so longer
+  // sessions can show the "load earlier" UI instead of silently truncating.
+  const limit = Math.min(500, Math.max(1, payload.limit ?? 500))
   const query = new URLSearchParams({ limit: String(limit) })
   if (payload.sessionKey) query.set('sessionKey', payload.sessionKey)
   if (payload.friendlyId) query.set('friendlyId', payload.friendlyId)

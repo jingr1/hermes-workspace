@@ -22,6 +22,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { ModelProviderPanel } from './model-provider-panel'
 import { ClaudeCodeSettingsPanel } from './claude-code-settings-panel'
 import { CodexSettingsPanel } from './codex-settings-panel'
+import { UsagePricingPanel } from './usage-pricing-panel'
 import type * as React from 'react'
 import type { AccentColor, SettingsThemeMode } from '@/hooks/use-settings'
 import type { LoaderStyle } from '@/hooks/use-chat-settings'
@@ -90,10 +91,12 @@ type SectionId =
   | 'chat'
   | 'notifications'
   | 'language'
+  | 'usage_pricing'
 
 const SECTIONS: Array<{ id: SectionId; label: string; icon: any }> = [
   { id: 'profile', label: 'Profile', icon: UserIcon },
   { id: 'claude', label: 'Model & Provider', icon: CloudIcon },
+  { id: 'usage_pricing', label: 'Usage Pricing', icon: CloudIcon },
   { id: 'agent', label: 'Agent', icon: Settings02Icon },
   { id: 'voice', label: 'Voice', icon: VolumeHighIcon },
   { id: 'display', label: 'Display', icon: PaintBoardIcon },
@@ -1687,6 +1690,7 @@ function DefaultHermesContent() {
 const CONTENT_MAP: Record<SectionId, () => React.JSX.Element> = {
   profile: ProfileContent,
   claude: DefaultHermesContent,
+  usage_pricing: UsagePricingPanel,
   agent: AgentBehaviorContent,
   voice: VoiceContent,
   display: DisplayContent,
@@ -1763,7 +1767,7 @@ export function SettingsDialog({
     if (agent.runtime === 'hermes') {
       return <HermesContent profileName={agent.runtimeConfig.profile} />
     }
-    if (agent.runtime === 'claude-code') {
+    if (agent.runtime === 'claude-code' || agent.runtime === 'opencode') {
       return <ClaudeCodeSettingsPanel agentId={agent.agentId} />
     }
     if (agent.runtime === 'codex') {

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { LocalEnvCheckSection } from './local-env-check-section'
 
 type CatalogProviderLite = {
   id: string
@@ -199,17 +200,7 @@ export function CodexSettingsPanel({ onSaved }: CodexSettingsPanelProps) {
         </div>
       )}
 
-      <div
-        className="rounded-xl border px-4 py-3 shadow-sm"
-        style={cardStyle}
-      >
-        <p className="text-sm font-medium" style={mutedStyle}>
-          Codex configuration path
-        </p>
-        <p className="mt-1 font-mono text-xs text-primary-700 dark:text-neutral-300">
-          {config?.configPath ?? '~/.codex/config.toml'}
-        </p>
-      </div>
+      <LocalEnvCheckSection agentId="codex-impl" />
 
       <div
         className="space-y-3 rounded-xl border px-4 py-3 shadow-sm"
@@ -296,8 +287,9 @@ export function CodexSettingsPanel({ onSaved }: CodexSettingsPanelProps) {
         </div>
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex justify-end">
         <Button
+          size="sm"
           onClick={() => void handleSave()}
           disabled={saving}
           className="h-9 rounded-lg px-4 text-sm"

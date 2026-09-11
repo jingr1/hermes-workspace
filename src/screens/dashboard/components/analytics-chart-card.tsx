@@ -14,10 +14,24 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { ChartLineData01Icon, CancelIcon } from '@hugeicons/core-free-icons'
 import type { DashboardOverview } from '@/server/dashboard-aggregator'
 import { formatModelName } from '@/screens/dashboard/lib/formatters'
+import {
+  useUsageTrends,
+  useUsageByModel,
+  type UsageFilters,
+  type UsageDataSource,
+  type UsageRange,
+} from '../hooks/use-usage-data'
 
-export type AnalyticsPeriod = 7 | 14 | 30
+export type AnalyticsPeriod = 1 | 7 | 30
 
-const PERIODS: Array<AnalyticsPeriod> = [7, 14, 30]
+const PERIODS: Array<AnalyticsPeriod> = [1, 7, 30]
+
+const DATA_SOURCE_OPTIONS: Array<{ value: UsageDataSource; label: string }> = [
+  { value: 'all', label: 'All runtimes' },
+  { value: 'hermes', label: 'Hermes gateway' },
+  { value: 'claude-code', label: 'Claude Code' },
+  { value: 'codex', label: 'Codex' },
+]
 
 function formatTokens(n: number): string {
   if (!n || n <= 0) return '0'
@@ -64,37 +78,51 @@ type ChartDatum = {
  * Hero KPIs use the same window.
  */
 export function AnalyticsChartCard({
-  analytics,
-  insights,
   period,
   onPeriodChange,
-  loading,
+  filters,
+  onFiltersChange,
 }: {
-  analytics: DashboardOverview['analytics']
-  insights: DashboardOverview['insights']
   period: AnalyticsPeriod
   onPeriodChange: (next: AnalyticsPeriod) => void
-  loading?: boolean
+  filters: UsageFilters
+  onFiltersChange: (filters: UsageFilters) => void
 }) {
   const [showModal, setShowModal] = useState(false)
 
+  const trendsQuery = useUsageTrends(filters)
+  const byModelQuery = useUsageByModel(filters)
+  const isLoading = trendsQuery.isLoading || byModelQuery.isLoading
+  const trends = trendsQuery.data ?? []
+  const topModels = byModelQuery.data ?? []
+
   const data: Array<ChartDatum> = useMemo(() => {
-    if (!analytics) return []
-    return analytics.daily.map((d) => ({
-      day: d.day,
-      label: shortDay(d.day),
-      tokens: d.inputTokens + d.outputTokens,
+    return trends.map((d) => ({
+      day: d.date,
+      label: shortDay(d.date),
+      tokens: d.totalTokens,
       input: d.inputTokens,
       output: d.outputTokens,
       cache: d.cacheReadTokens,
-      reasoning: d.reasoningTokens,
-      sessions: d.sessions,
-      cost: d.estimatedCost,
+      reasoning: 0,
+      sessions: d.requestCount,
+      cost: Number(d.estimatedCost ?? 0),
     }))
-  }, [analytics])
+  }, [trends])
 
-  if (!analytics) return null
-  const hasData = analytics.source === 'analytics' && data.length > 0
+  const totalTokens = useMemo(
+    () => topModels.reduce((sum, m) => sum + m.totalTokens, 0),
+    [topModels],
+  )
+  const totalCalls = useMemo(
+    () => topModels.reduce((sum, m) => sum + m.requestCount, 0),
+    [topModels],
+  )
+  const totalCost = useMemo(
+    () => topModels.reduce((sum, m) => sum + Number(m.estimatedCost ?? 0), 0),
+    [topModels],
+  )
+  const hasData = data.length > 0
 
   return (
     <>
@@ -131,15 +159,29 @@ export function AnalyticsChartCard({
                 className="font-mono text-[10px] uppercase tracking-[0.1em]"
                 style={{ color: 'var(--theme-muted)' }}
               >
-                {formatTokens(analytics.totalTokens)} tokens ·{' '}
-                {analytics.totalApiCalls.toLocaleString()} calls ·{' '}
-                {formatCost(analytics.estimatedCostUsd ?? 0)}
-                {loading ? ' · refreshing…' : ''}
+                {formatTokens(totalTokens)} tokens ·{' '}
+                {totalCalls.toLocaleString()} calls · {formatCost(totalCost)}
+                {isLoading ? ' · refreshing…' : ''}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-1">
-            <PeriodSwitch value={period} onChange={onPeriodChange} />
+            <DataSourceSelect
+              value={filters.dataSource ?? 'all'}
+              onChange={(dataSource) =>
+                onFiltersChange({ ...filters, dataSource })
+              }
+            />
+            <PeriodSwitch
+              value={period}
+              onChange={(next) => {
+                onPeriodChange(next)
+                onFiltersChange({
+                  ...filters,
+                  range: String(next) as UsageRange,
+                })
+              }}
+            />
             {hasData ? (
               <button
                 type="button"
@@ -155,40 +197,6 @@ export function AnalyticsChartCard({
             ) : null}
           </div>
         </div>
-
-        {insights.length > 0 ? (
-          <ul
-            className="flex flex-col gap-1 rounded-md border p-2 text-[11px]"
-            style={{
-              borderColor: 'var(--theme-border)',
-              background:
-                'color-mix(in srgb, var(--theme-card) 92%, transparent)',
-            }}
-          >
-            {insights.map((line, i) => {
-              const tone =
-                line.tone === 'positive'
-                  ? 'var(--theme-success)'
-                  : line.tone === 'warn'
-                    ? 'var(--theme-warning)'
-                    : 'var(--theme-accent)'
-              return (
-                <li
-                  key={i}
-                  className="flex items-center gap-2"
-                  style={{ color: 'var(--theme-text)' }}
-                >
-                  <span
-                    aria-hidden
-                    className="size-1.5 shrink-0 rounded-full"
-                    style={{ background: tone }}
-                  />
-                  <span>{line.text}</span>
-                </li>
-              )
-            })}
-          </ul>
-        ) : null}
 
         {hasData ? (
           <div className="h-[200px] w-full">
@@ -288,7 +296,7 @@ export function AnalyticsChartCard({
               color: 'var(--theme-muted)',
             }}
           >
-            No analytics usage in the last {analytics.windowDays}d.
+            No analytics usage in the last {period}d.
           </div>
         )}
 
@@ -302,13 +310,45 @@ export function AnalyticsChartCard({
 
       {showModal && hasData ? (
         <AnalyticsModal
-          analytics={analytics}
           data={data}
           period={period}
+          topModels={topModels}
+          totalTokens={totalTokens}
+          totalCalls={totalCalls}
+          totalCost={totalCost}
           onClose={() => setShowModal(false)}
         />
       ) : null}
     </>
+  )
+}
+
+function DataSourceSelect({
+  value,
+  onChange,
+}: {
+  value: UsageDataSource
+  onChange: (value: UsageDataSource) => void
+}) {
+  return (
+    <div
+      className="inline-flex items-center overflow-hidden rounded border"
+      style={{ borderColor: 'var(--theme-border)' }}
+      aria-label="Data source"
+    >
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as UsageDataSource)}
+        className="appearance-none bg-transparent px-2 py-1 font-mono text-[10px] uppercase tracking-[0.15em] text-[var(--theme-muted)] outline-none"
+        style={{ border: 'none' }}
+      >
+        {DATA_SOURCE_OPTIONS.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+    </div>
   )
 }
 
@@ -371,17 +411,36 @@ function Legend({ tone, label }: { tone: string; label: string }) {
   )
 }
 
+type UsageByModelRow = {
+  model: string
+  provider: string
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+  totalTokens: number
+  estimatedCost: string
+  requestCount: number
+}
+
 function AnalyticsModal({
-  analytics,
   data,
   period,
+  topModels,
+  totalTokens,
+  totalCalls,
+  totalCost,
   onClose,
 }: {
-  analytics: NonNullable<DashboardOverview['analytics']>
   data: Array<ChartDatum>
   period: AnalyticsPeriod
+  topModels: UsageByModelRow[] | undefined
+  totalTokens: number
+  totalCalls: number
+  totalCost: number
   onClose: () => void
 }) {
+  const models = topModels ?? []
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 px-4 py-6"
@@ -409,10 +468,8 @@ function AnalyticsModal({
               className="font-mono text-[10px] uppercase tracking-[0.1em]"
               style={{ color: 'var(--theme-muted)' }}
             >
-              {formatTokens(analytics.totalTokens)} tokens ·{' '}
-              {analytics.totalSessions.toLocaleString()} sessions ·{' '}
-              {analytics.totalApiCalls.toLocaleString()} calls ·{' '}
-              {formatCost(analytics.estimatedCostUsd ?? 0)}
+              {formatTokens(totalTokens)} tokens ·{' '}
+              {totalCalls.toLocaleString()} calls · {formatCost(totalCost)}
             </p>
           </div>
           <button
@@ -514,9 +571,9 @@ function AnalyticsModal({
               Models · ranked by tokens
             </h3>
             <div className="space-y-2">
-              {analytics.topModels.map((m, i) => (
+              {models.map((m, i) => (
                 <div
-                  key={m.id}
+                  key={m.model}
                   className="rounded border px-3 py-2"
                   style={{ borderColor: 'var(--theme-border)' }}
                 >
@@ -531,39 +588,33 @@ function AnalyticsModal({
                       >
                         {i + 1}
                       </span>
-                      {formatModelName(m.id)}
+                      {formatModelName(m.model)}
                     </span>
                     <span
                       className="font-mono text-[10px] tabular-nums"
                       style={{ color: 'var(--theme-muted)' }}
                     >
-                      {formatTokens(m.tokens)}
+                      {formatTokens(m.totalTokens)}
                     </span>
                   </div>
                   <div
                     className="mt-1 truncate font-mono text-[10px]"
                     style={{ color: 'var(--theme-muted)' }}
-                    title={m.id}
+                    title={m.model}
                   >
-                    {m.id}
+                    {m.model}
                   </div>
                   <div className="mt-1 flex items-center gap-3 text-[10px]">
                     <span style={{ color: 'var(--theme-muted)' }}>
                       sessions{' '}
                       <span style={{ color: 'var(--theme-text)' }}>
-                        {m.sessions.toLocaleString()}
-                      </span>
-                    </span>
-                    <span style={{ color: 'var(--theme-muted)' }}>
-                      calls{' '}
-                      <span style={{ color: 'var(--theme-text)' }}>
-                        {m.calls.toLocaleString()}
+                        {m.requestCount.toLocaleString()}
                       </span>
                     </span>
                     <span style={{ color: 'var(--theme-muted)' }}>
                       cost{' '}
                       <span style={{ color: 'var(--theme-text)' }}>
-                        {formatCost(m.cost)}
+                        {formatCost(Number(m.estimatedCost ?? 0))}
                       </span>
                     </span>
                   </div>

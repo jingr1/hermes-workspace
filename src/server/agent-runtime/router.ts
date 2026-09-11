@@ -72,6 +72,7 @@ export class AgentRuntimeRouter {
       case 'hermes':
         return new HermesAdapterStub(decl)
       case 'claude-code':
+      case 'opencode':
         return new ClaudeCodeAdapter(decl)
       case 'codex':
         return new CodexAdapter(decl)

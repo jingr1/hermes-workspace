@@ -54,6 +54,7 @@ const RUNTIMES: ReadonlyArray<AgentRuntimeKind> = [
   'claude-code',
   'codex',
   'deepseek-harness',
+  'opencode',
 ]
 
 export function getAgentsYamlPath(repoRoot?: string): string {

@@ -36,7 +36,7 @@ function isLoopbackUrl(raw: string): boolean {
   }
 }
 
-function pairingGatewayUrl(): string {
+export function pairingGatewayUrl(): string {
   try {
     const raw = fs.readFileSync(
       path.join(getStateDir(), 'workspace-overrides.json'),

@@ -89,6 +89,8 @@ export type OpenAIChatOptions = {
   temperature?: number
   signal?: AbortSignal
   sessionId?: string
+  agentId?: string
+  profileName?: string
   /** Override the base URL (e.g. for local providers). Bypasses gateway. */
   baseUrl?: string
 }
@@ -288,10 +290,10 @@ export async function openaiChat(
   // Agent to derive a fresh api-* session from each message payload.
   if (options.sessionId) {
     headers['X-Hermes-Session-Id'] = options.sessionId
-    // Back-compat for older/Claude-compatible adapters that still look for
-    // the pre-Hermes header name.  Hermes Agent ignores this alias.
     headers['X-Claude-Session-Id'] = options.sessionId
   }
+  if (options.agentId) headers['X-Hermes-Agent-Id'] = options.agentId
+  if (options.profileName) headers['X-Hermes-Profile'] = options.profileName
 
   const endpoint = options.baseUrl
     ? `${options.baseUrl.replace(/\/+$/, '')}/chat/completions`

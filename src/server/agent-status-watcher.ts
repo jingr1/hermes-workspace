@@ -16,7 +16,7 @@ import type { SwarmRuntime } from './swarm-foundation'
 
 export type AgentStatusSnapshot = {
   agentId: string
-  runtime: 'hermes' | 'claude-code' | 'codex' | 'deepseek-harness'
+  runtime: 'hermes' | 'claude-code' | 'codex' | 'deepseek-harness' | 'opencode'
   state: string
   currentTask: string | null
   taskId: string | null

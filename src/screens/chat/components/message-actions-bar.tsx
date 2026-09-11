@@ -81,7 +81,7 @@ export function MessageActionsBar({
   return (
     <div
       className={cn(
-        'flex items-center gap-2 text-xs text-primary-600 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 duration-100 ease-out',
+        'flex items-center gap-2 text-xs text-primary-600 transition-opacity duration-100 ease-out',
         forceVisible || isQueued || isFailed ? 'opacity-100' : 'opacity-0',
         positionClass,
       )}

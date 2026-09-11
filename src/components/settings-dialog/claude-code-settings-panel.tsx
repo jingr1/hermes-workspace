@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { LocalEnvCheckSection } from './local-env-check-section'
 
 /** Fixed provider id: talk to Anthropic's official API, no base URL override, no catalog key. */
 const DIRECT_ANTHROPIC_ID = '__anthropic_direct__'
@@ -507,6 +508,8 @@ export function ClaudeCodeSettingsPanel({
           {msg}
         </div>
       )}
+
+      <LocalEnvCheckSection agentId="cc-impl" />
 
       <div className="space-y-3 rounded-xl px-3 py-2.5" style={cardStyle}>
         <p
