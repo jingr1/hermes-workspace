@@ -1,16 +1,37 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from '@/components/ui/select'
 import { useModelPricing } from '@/screens/dashboard/hooks/use-usage-data'
+import { fetchModels } from '@/lib/gateway-api'
 import { cn } from '@/lib/utils'
 
 function formatPrice(n: string): string {
   const v = Number.parseFloat(n)
   if (!Number.isFinite(v) || v < 0) return '0.0000'
   return v.toFixed(4)
+}
+
+function modelIdFromEntry(entry: { id?: string; model?: string; alias?: string; name?: string; label?: string; displayName?: string } | string): string {
+  if (typeof entry === 'string') return entry
+  return entry.id || entry.model || entry.alias || entry.name || entry.label || entry.displayName || ''
+}
+
+function modelLabelFromEntry(entry: { id?: string; model?: string; alias?: string; name?: string; label?: string; displayName?: string; provider?: string } | string): string {
+  if (typeof entry === 'string') return entry
+  const id = entry.id || entry.model || entry.alias || ''
+  const tail = id.split('/').pop() || id
+  const provider = entry.provider ? `[${entry.provider}] ` : ''
+  return `${provider}${tail}`
 }
 
 type PricingEntryRow = {
@@ -79,8 +100,24 @@ export function UsagePricingPanel() {
   const { data: config, isLoading } = useModelPricing()
   const [defaultMultiplier, setDefaultMultiplier] = useState('1')
   const [entries, setEntries] = useState<PricingEntryRow[]>([])
-  const [newModelId, setNewModelId] = useState('')
+  const [selectedModel, setSelectedModel] = useState('')
   const [message, setMessage] = useState<string | null>(null)
+
+  const modelsQuery = useQuery({
+    queryKey: ['models', 'catalog'],
+    queryFn: fetchModels,
+    staleTime: 60_000,
+  })
+
+  const availableModels = useMemo(() => {
+    const raw = modelsQuery.data?.models ?? []
+    return raw
+      .map((m) => ({
+        id: modelIdFromEntry(m),
+        label: modelLabelFromEntry(m),
+      }))
+      .filter((m) => m.id)
+  }, [modelsQuery.data])
 
   useEffect(() => {
     if (!config) return
@@ -137,14 +174,14 @@ export function UsagePricingPanel() {
   })
 
   function addEntry() {
-    const id = newModelId.trim()
+    const id = selectedModel.trim()
     if (!id) return
     if (entries.some((e) => e.modelId === id)) {
       setMessage('Model already exists')
       return
     }
     setEntries((prev) => [...prev, emptyEntry(id)])
-    setNewModelId('')
+    setSelectedModel('')
   }
 
   function removeEntry(modelId: string) {
@@ -337,16 +374,23 @@ export function UsagePricingPanel() {
       </div>
 
       <div className="flex items-center gap-2">
-        <Input
-          placeholder="model-id"
-          value={newModelId}
-          onChange={(e) => setNewModelId(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') addEntry()
-          }}
-          className="flex-1"
-        />
-        <Button variant="secondary" onClick={addEntry}>
+        <Select value={selectedModel} onValueChange={(v) => setSelectedModel(v ?? '')}>
+          <SelectTrigger className="flex-1 bg-[var(--theme-card)] text-[var(--theme-text)] border-[var(--theme-border)]">
+            <SelectValue placeholder="Select a model…" />
+          </SelectTrigger>
+          <SelectContent className="bg-[var(--theme-card)] text-[var(--theme-text)] border-[var(--theme-border)]">
+            {availableModels.map((m) => (
+              <SelectItem
+                key={m.id}
+                value={m.id}
+                className="text-[var(--theme-text)] hover:bg-[var(--theme-accent-subtle)] focus:bg-[var(--theme-accent-subtle)] data-[state=checked]:bg-[var(--theme-accent-subtle)]"
+              >
+                {m.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button variant="secondary" onClick={addEntry} disabled={!selectedModel}>
           Add model
         </Button>
       </div>

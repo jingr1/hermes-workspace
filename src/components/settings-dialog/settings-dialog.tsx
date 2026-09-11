@@ -6,6 +6,7 @@ import {
   Cancel01Icon,
   CheckmarkCircle02Icon,
   CloudIcon,
+  CoinsDollarIcon,
   ComputerIcon,
   MessageMultiple01Icon,
   Mic01Icon,
@@ -96,7 +97,7 @@ type SectionId =
 const SECTIONS: Array<{ id: SectionId; label: string; icon: any }> = [
   { id: 'profile', label: 'Profile', icon: UserIcon },
   { id: 'claude', label: 'Model & Provider', icon: CloudIcon },
-  { id: 'usage_pricing', label: 'Usage Pricing', icon: CloudIcon },
+  { id: 'usage_pricing', label: 'Usage Pricing', icon: CoinsDollarIcon },
   { id: 'agent', label: 'Agent', icon: Settings02Icon },
   { id: 'voice', label: 'Voice', icon: VolumeHighIcon },
   { id: 'display', label: 'Display', icon: PaintBoardIcon },

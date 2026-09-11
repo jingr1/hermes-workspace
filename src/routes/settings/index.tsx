@@ -10,6 +10,7 @@ import {
   SparklesIcon,
   UserIcon,
   VolumeHighIcon,
+  CoinsDollarIcon,
 } from '@hugeicons/core-free-icons'
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useState } from 'react'
@@ -28,6 +29,7 @@ import {
 import { ModelProviderScopePanel } from '@/components/settings/model-provider-scope'
 import { ClaudeCodeSettingsPanel } from '@/components/settings-dialog'
 import { CodexSettingsPanel } from '@/components/settings-dialog/codex-settings-panel'
+import { UsagePricingPanel } from '@/components/settings-dialog/usage-pricing-panel'
 import { usePageTitle } from '@/hooks/use-page-title'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -400,6 +402,17 @@ function SettingsRoute() {
               icon={SourceCodeSquareIcon}
             >
               <CodexSettingsPanel />
+            </SettingsSection>
+          )}
+
+          {/* ── Usage Pricing ───────────────────────────────────── */}
+          {activeSection === 'usage-pricing' && (
+            <SettingsSection
+              title="Usage Pricing"
+              description="Configure per-model cost multipliers and token prices for usage analytics."
+              icon={CoinsDollarIcon}
+            >
+              <UsagePricingPanel />
             </SettingsSection>
           )}
 

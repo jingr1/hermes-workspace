@@ -15,6 +15,7 @@ export type SettingsNavId =
   | 'notifications'
   | 'language'
   | 'routing'
+  | 'usage-pricing'
 
 type NavItem = { id: SettingsNavId; label: string }
 
@@ -24,6 +25,7 @@ export const SETTINGS_NAV_ITEMS: Array<NavItem> = [
   { id: 'claude', label: 'Model & Provider' },
   { id: 'claude-code', label: 'Claude Code' },
   { id: 'codex', label: 'Codex' },
+  { id: 'usage-pricing', label: 'Usage Pricing' },
   { id: 'agent', label: 'Agent Behavior' },
   { id: 'voice', label: 'Voice' },
   { id: 'display', label: 'Display' },
