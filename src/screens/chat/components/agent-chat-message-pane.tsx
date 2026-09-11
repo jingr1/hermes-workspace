@@ -22,7 +22,7 @@ export function AgentChatMessagePane({
   sessionKey: string
   emptyState?: ReactNode
   headerHeight?: number
-  activeToolCalls?: Array<{ id: string; name: string; phase: string }>
+  activeToolCalls?: Array<{ id: string; name: string; phase: string; args?: unknown }>
 }) {
   const empty = messages.length === 0
 

@@ -179,7 +179,7 @@ function ToolCallCard({ name, phase }: { name: string; phase: string }) {
 }
 
 type ThinkingBubbleProps = {
-  activeToolCalls?: Array<{ id: string; name: string; phase: string }>
+  activeToolCalls?: Array<{ id: string; name: string; phase: string; args?: unknown }>
   liveToolActivity?: Array<{ name: string; timestamp: number }>
   researchCard?: UseResearchCardResult
   isCompacting?: boolean
@@ -693,7 +693,7 @@ type ChatMessageListProps = {
   }>
   isStreaming?: boolean
   bottomOffset?: number | string
-  activeToolCalls?: Array<{ id: string; name: string; phase: string }>
+  activeToolCalls?: Array<{ id: string; name: string; phase: string; args?: unknown }>
   liveToolActivity?: Array<{ name: string; timestamp: number }>
   researchCard?: UseResearchCardResult
   hideSystemMessages?: boolean
@@ -1483,10 +1483,18 @@ function ChatMessageListComponent({
   function isMessageStreaming(message: ChatMessage, index: number) {
     if (!isStreaming || !streamingMessageId) return false
     const messageId = message.__optimisticId || (message as any).id
-    return (
-      messageId === streamingMessageId ||
-      (message.role === 'assistant' && index === lastAssistantIndex)
-    )
+    if (messageId === streamingMessageId) return true
+    // Fallback only while the streaming turn hasn't been assigned an id yet.
+    // Once a message has a stable id, it must NOT match by index, otherwise
+    // sending a new user message re-streams the previous assistant turn.
+    if (
+      !messageId &&
+      message.role === 'assistant' &&
+      index === lastAssistantIndex
+    ) {
+      return true
+    }
+    return false
   }
 
   function renderMessage(entry: DisplayEntry, entryIndex: number) {
@@ -2189,7 +2197,8 @@ function ChatMessageListComponent({
                       aria-hidden
                     />
                     <div className="min-w-0 flex-1 pt-1">
-                      {normalizedStreamingToolCalls.length > 0 ? (
+                      {normalizedStreamingToolCalls.length > 0 ||
+                      (streamingThinking && streamingThinking.trim().length > 0) ? (
                         <TuiActivityCard
                           toolSections={normalizedStreamingToolCalls
                             .slice(streamActivityMode ? -12 : -3)
@@ -2224,7 +2233,7 @@ function ChatMessageListComponent({
                                 state,
                               }
                             })}
-                          thinking={null}
+                          thinking={streamingThinking || null}
                           isStreaming={true}
                           expandAll={streamActivityMode}
                           formatLabel={(name) => name.replace(/_/g, ' ')}

@@ -114,9 +114,9 @@ function ToolRow({
   formatLabel: (name: string, args?: Record<string, unknown>) => string
   formatArg: (name: string, args?: Record<string, unknown>) => string | null
 }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(() => !!expandAll)
   useEffect(() => {
-    if (expandAll) setOpen(true)
+    setOpen(!!expandAll)
   }, [expandAll])
 
   const isError = section.state === 'output-error'
@@ -153,19 +153,13 @@ function ToolRow({
 
   const hasInputData = section.input && Object.keys(section.input).length > 0
   const hasOutputData = !!(section.outputText || section.errorText)
-  const canExpand = hasInputData || hasOutputData
 
   return (
     <div className="font-mono text-[12px] leading-relaxed">
       <button
         type="button"
-        onClick={() => canExpand && setOpen((v) => !v)}
-        className={cn(
-          'group flex w-full items-baseline gap-2 px-3 py-1.5 text-left rounded-sm',
-          canExpand &&
-            'hover:bg-[color-mix(in_srgb,var(--theme-accent)_8%,transparent)]',
-          !canExpand && 'cursor-default',
-        )}
+        onClick={() => setOpen((v) => !v)}
+        className="group flex w-full items-baseline gap-2 px-3 py-1.5 text-left rounded-sm hover:bg-[color-mix(in_srgb,var(--theme-accent)_8%,transparent)]"
       >
         <span
           className={cn(
@@ -199,14 +193,12 @@ function ToolRow({
             {formatElapsed(elapsed)}
           </span>
         ) : null}
-        {canExpand ? (
-          <span
-            className="shrink-0 text-[10px] opacity-40"
-            style={{ color: 'var(--theme-muted)' }}
-          >
-            {open ? '▾' : '▸'}
-          </span>
-        ) : null}
+        <span
+          className="shrink-0 text-[10px] opacity-40"
+          style={{ color: 'var(--theme-muted)' }}
+        >
+          {open ? '▾' : '▸'}
+        </span>
       </button>
       {/* Output preview line — TUI-style ⎿ */}
       <div
@@ -220,7 +212,7 @@ function ToolRow({
         <span className="shrink-0 leading-none opacity-50">⎿</span>
         <span className="truncate min-w-0">{outputSummary}</span>
       </div>
-      {open && canExpand ? (
+      {open ? (
         <div
           className="mx-3 mt-2 mb-1 rounded border px-3 py-2 text-[11px]"
           style={{
@@ -267,6 +259,14 @@ function ToolRow({
               >
                 {section.outputText || section.errorText || ''}
               </pre>
+            </div>
+          ) : null}
+          {!hasInputData && !hasOutputData ? (
+            <div
+              className="italic opacity-60"
+              style={{ color: 'var(--theme-muted)' }}
+            >
+              No details
             </div>
           ) : null}
         </div>
@@ -361,12 +361,17 @@ function TuiActivityCardComponent({
   formatArg,
 }: TuiActivityCardProps) {
   const bodyRef = useRef<HTMLDivElement | null>(null)
+  const [cardOpen, setCardOpen] = useState(true)
   const hasThinking = !!(thinking && thinking.trim().length > 0)
   const hasTools = toolSections.length > 0
   const { visible: visibleTools, hiddenCount } = useMemo(
     () => visibleStreamingToolSections(toolSections, isStreaming),
     [toolSections, isStreaming],
   )
+
+  useEffect(() => {
+    if (expandAll) setCardOpen(true)
+  }, [expandAll])
 
   const summary = useMemo(() => {
     if (!hasTools) return null
@@ -412,8 +417,10 @@ function TuiActivityCardComponent({
         borderColor: 'color-mix(in srgb, var(--theme-border) 88%, transparent)',
       }}
     >
-      <div
-        className="sticky top-0 z-[1] flex items-center gap-2 border-b px-4 py-2.5"
+      <button
+        type="button"
+        onClick={() => setCardOpen((v) => !v)}
+        className="sticky top-0 z-[1] flex w-full items-center gap-2 border-b px-4 py-2.5 text-left"
         style={{
           borderColor:
             'color-mix(in srgb, var(--theme-border) 70%, transparent)',
@@ -441,58 +448,66 @@ function TuiActivityCardComponent({
             style={{ background: 'var(--theme-accent, #6366f1)' }}
           />
         ) : null}
-      </div>
-      <div
-        ref={bodyRef}
-        className={cn(
-          'flex flex-col gap-1.5 px-2 py-3',
-          // Cap height while streaming so stick-to-bottom keeps the assistant
-          // narration (above this card) in the viewport instead of burying it.
-          isStreaming && 'max-h-[min(40vh,280px)] overflow-y-auto',
-        )}
-      >
-        {hasThinking ? (
-          <ThinkingRow
-            thinking={thinking!}
-            elapsedSeconds={thinkingElapsedSeconds}
-            isStreaming={isStreaming}
-            expandAll={expandAll}
-          />
-        ) : null}
-        {hiddenCount > 0 ? (
-          <div
-            className="px-3 py-1 font-mono text-[11px] opacity-60"
-            style={{ color: 'var(--theme-muted)' }}
-          >
-            +{hiddenCount} earlier {hiddenCount === 1 ? 'tool' : 'tools'}
-          </div>
-        ) : null}
-        {visibleTools.map((section, index) => (
-          <ToolRow
-            key={section.key || `${section.type}-${index}`}
-            section={section}
-            isStreamingActive={isStreaming}
-            expandAll={expandAll}
-            formatLabel={formatLabel}
-            formatArg={formatArg}
-          />
-        ))}
-        {isWorkingStub ? (
-          <div
-            className="flex items-baseline gap-2 px-3 py-1 font-mono text-[12px] leading-relaxed"
-            style={{ color: 'var(--theme-muted)' }}
-          >
-            <span
-              className="size-1.5 rounded-full animate-pulse"
-              style={{ background: 'var(--theme-accent, #6366f1)' }}
+        <span
+          className="ml-1 font-mono text-[10px] opacity-45"
+          style={{ color: 'var(--theme-muted)' }}
+        >
+          {cardOpen ? '▾' : '▸'}
+        </span>
+      </button>
+      {cardOpen && (
+        <div
+          ref={bodyRef}
+          className={cn(
+            'flex flex-col gap-1.5 px-2 py-3',
+            // Cap height while streaming so stick-to-bottom keeps the assistant
+            // narration (above this card) in the viewport instead of burying it.
+            isStreaming && 'max-h-[min(40vh,280px)] overflow-y-auto',
+          )}
+        >
+          {hasThinking ? (
+            <ThinkingRow
+              thinking={thinking!}
+              elapsedSeconds={thinkingElapsedSeconds}
+              isStreaming={isStreaming}
+              expandAll={expandAll}
             />
-            <span className="opacity-80">working…</span>
-            <span className="opacity-50 text-[10px]">
-              tool activity will appear after the run
-            </span>
-          </div>
-        ) : null}
-      </div>
+          ) : null}
+          {hiddenCount > 0 ? (
+            <div
+              className="px-3 py-1 font-mono text-[11px] opacity-60"
+              style={{ color: 'var(--theme-muted)' }}
+            >
+              +{hiddenCount} earlier {hiddenCount === 1 ? 'tool' : 'tools'}
+            </div>
+          ) : null}
+          {visibleTools.map((section, index) => (
+            <ToolRow
+              key={section.key || `${section.type}-${index}`}
+              section={section}
+              isStreamingActive={isStreaming}
+              expandAll={expandAll}
+              formatLabel={formatLabel}
+              formatArg={formatArg}
+            />
+          ))}
+          {isWorkingStub ? (
+            <div
+              className="flex items-baseline gap-2 px-3 py-1 font-mono text-[12px] leading-relaxed"
+              style={{ color: 'var(--theme-muted)' }}
+            >
+              <span
+                className="size-1.5 rounded-full animate-pulse"
+                style={{ background: 'var(--theme-accent, #6366f1)' }}
+              />
+              <span className="opacity-80">working…</span>
+              <span className="opacity-50 text-[10px]">
+                tool activity will appear after the run
+              </span>
+            </div>
+          ) : null}
+        </div>
+      )}
     </div>
   )
 }

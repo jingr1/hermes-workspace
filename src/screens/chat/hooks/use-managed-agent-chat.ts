@@ -166,7 +166,7 @@ export type ManagedAgentChat = {
   messages: Array<ChatMessage>
   isStreaming: boolean
   /** Live tool calls for ThinkingBubble — not written into the message bubble. */
-  activeToolCalls: Array<{ id: string; name: string; phase: string }>
+  activeToolCalls: Array<{ id: string; name: string; phase: string; args?: unknown }>
   error: string | null
   activeTitle: string
   submit: (
@@ -204,7 +204,7 @@ export function useManagedAgentChat({
   const [messages, setMessages] = useState<Array<ChatMessage>>([])
   const [isStreaming, setIsStreaming] = useState(false)
   const [activeToolCalls, setActiveToolCalls] = useState<
-    Array<{ id: string; name: string; phase: string }>
+    Array<{ id: string; name: string; phase: string; args?: unknown }>
   >([])
   const [error, setError] = useState<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -381,7 +381,28 @@ export function useManagedAgentChat({
             } else if (event.type === 'text_delta') {
               appendStreamingText(event.text)
             } else if (event.type === 'thinking') {
-              // Token-level thinking stays out of the bubble.
+              setMessages((prev) => {
+                let idx = streamingMessageRef.current
+                  ? prev.indexOf(streamingMessageRef.current)
+                  : -1
+                if (idx < 0) {
+                  for (let i = prev.length - 1; i >= 0; i -= 1) {
+                    if (prev[i]?.role === 'assistant') {
+                      idx = i
+                      break
+                    }
+                  }
+                }
+                if (idx < 0) return prev
+                const next = [...prev]
+                const current = next[idx]!
+                next[idx] = {
+                  ...current,
+                  __streamingThinking: event.text,
+                }
+                streamingMessageRef.current = next[idx]
+                return next
+              })
             } else if (event.type === 'tool') {
               setActiveToolCalls((prev) => {
                 if (event.phase === 'start') {
@@ -391,6 +412,7 @@ export function useManagedAgentChat({
                       id: `${event.name}-${Date.now()}-${prev.length}`,
                       name: event.name,
                       phase: 'running',
+                      args: event.args,
                     },
                   ]
                 }
@@ -535,6 +557,7 @@ export function useManagedAgentChat({
     streamingMessageRef.current = null
     setIsStreaming(false)
     setError(null)
+    setMessages([])
     setActiveSessionId(null)
   }, [setActiveSessionId])
 

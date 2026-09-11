@@ -2305,7 +2305,10 @@ function MessageItemComponent({
   const thinking =
     remoteStreamingActive && remoteStreamingThinking !== undefined
       ? remoteStreamingThinking
-      : thinkingFromMessage(message)
+      : thinkingFromMessage(message) ||
+        (typeof message.__streamingThinking === 'string'
+          ? message.__streamingThinking
+          : null)
   const isUser = role === 'user'
   const execNotification = isUser ? readExecNotification(message) : null
   const timestamp = getMessageTimestamp(message)
@@ -2367,8 +2370,19 @@ function MessageItemComponent({
       }))
       .filter((entry: any) => entry.id.length > 0)
   }, [message])
-  const effectiveStreamToolCalls =
-    streamToolCalls.length > 0 ? streamToolCalls : embeddedStreamToolCalls
+  // Combine live stream tool calls with embedded tool calls from the final
+  // message. Hermes Agent surfaces tools as content toolCall blocks rather than
+  // standalone SSE tool events, so the message itself is the authoritative source.
+  const effectiveStreamToolCalls = useMemo(
+    () => [
+      ...streamToolCalls,
+      ...embeddedStreamToolCalls.filter(
+        (embedded) =>
+          !streamToolCalls.some((live) => live.id && live.id === embedded.id),
+      ),
+    ],
+    [streamToolCalls, embeddedStreamToolCalls],
+  )
   const hasStreamToolCalls = effectiveStreamToolCalls.length > 0
   const effectiveLifecycleEvents = lifecycleEvents
   const hasLifecycleEvents = effectiveLifecycleEvents.length > 0
@@ -2903,8 +2917,9 @@ function MessageItemComponent({
       {!isUser &&
       !hideActivityCard &&
       effectiveIsStreaming &&
-      finalToolSections.length > 0 &&
-      hasText ? (
+      hasText &&
+      (finalToolSections.length > 0 ||
+        (thinking && thinking.trim().length > 0)) ? (
         <div className="w-full max-w-[var(--chat-content-max-width)] flex">
           <div className="w-6 shrink-0" aria-hidden />
           <div className="min-w-0 flex-1">
