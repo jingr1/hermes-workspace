@@ -12,6 +12,7 @@ import {
   updateProfileFallback,
   upsertCatalogKey,
   upsertCatalogProvider,
+  __resetProviderCatalogCacheForTests,
 } from './provider-catalog'
 import { readProfile } from './profiles-browser'
 
@@ -34,6 +35,7 @@ describe('provider catalog', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+    __resetProviderCatalogCacheForTests()
     delete process.env.HERMES_HOME
     delete process.env.HERMES_WORKSPACE_STATE_DIR
     fs.rmSync(tempHome, { recursive: true, force: true })

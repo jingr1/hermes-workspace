@@ -78,6 +78,8 @@ export type AgentChatFrameProps = {
     slashRuntime?: SlashCommandRuntime
     thinkingLevel?: ThinkingLevel
     onThinkingLevelChange?: (level: ThinkingLevel) => void
+    runtimeLabel?: string
+    runtimeConfigHint?: string
     onQueue?: (
       value: string,
       attachments: Array<ChatComposerAttachment>,

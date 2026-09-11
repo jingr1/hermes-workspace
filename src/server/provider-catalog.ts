@@ -319,7 +319,7 @@ function lookupKeyValue(name: string): string {
  */
 export function getCatalogProviderCredential(
   providerId: string,
-): { baseUrl: string; apiKey: string } | null {
+): { baseUrl: string; apiKey: string; keyEnv: string } | null {
   const id = providerId.trim()
   if (!id) return null
   const entry = mergeCatalog().providers.find((item) => item.id === id)
@@ -328,7 +328,7 @@ export function getCatalogProviderCredential(
   const baseUrl = entry?.base_url || preset?.base_url || ''
   const keyEnv = entry?.key_env || preset?.key_env || ''
   const apiKey = keyEnv ? lookupKeyValue(keyEnv) : ''
-  return { baseUrl, apiKey }
+  return { baseUrl, apiKey, keyEnv }
 }
 
 function writeKeyToAllEnvs(name: string, value: string): void {
@@ -532,38 +532,16 @@ function mergeCatalog(): CatalogFile {
   return merged
 }
 
-/**
- * Every provider configured on the Hermes "Model & Provider" page, reshaped
- * for the Claude Code settings panel's provider dropdown.
- *
- * We deliberately do NOT filter this down to the builtin `anthropic` entry.
- * Claude Code talks the Anthropic Messages API directly against
- * ANTHROPIC_BASE_URL, so most Hermes providers (OpenAI-compatible gateways)
- * won't work — but the user may have added a custom provider that IS an
- * Anthropic-compatible gateway/proxy, and we can't tell protocol from the
- * catalog data alone. Surface everything the user already configured and
- * let them pick; the panel shows a hint rather than hiding options.
- */
-export function listCatalogProvidersForClaudeCode(): Array<{
-  id: string
-  name: string
-  baseUrl: string
-  keyConfigured: boolean
-  maskedKey: string
-  models: Array<string>
-}> {
-  return getProviderCatalog().providers.map((entry) => ({
-    id: entry.id,
-    name: entry.name,
-    baseUrl: entry.base_url,
-    keyConfigured: entry.keyConfigured,
-    maskedKey: entry.maskedKey,
-    models: entry.models,
-  }))
+const PROVIDER_CATALOG_CACHE_TTL_MS = 5_000
+let providerCatalogCache:
+  | { catalog: ProviderCatalog; expiresAt: number }
+  | undefined
+
+export function __resetProviderCatalogCacheForTests(): void {
+  providerCatalogCache = undefined
 }
 
-export function getProviderCatalog(): ProviderCatalog {
-  pruneAllRedundantBuiltinProvidersFromProfiles()
+function buildProviderCatalog(): ProviderCatalog {
   return {
     providers: mergeCatalog()
       .providers.filter(
@@ -582,6 +560,54 @@ export function getProviderCatalog(): ProviderCatalog {
         }
       }),
   }
+}
+
+/**
+ * Every provider configured on the Hermes "Model & Provider" page, reshaped
+ * for the Claude Code settings panel's provider dropdown.
+ *
+ * We deliberately do NOT filter this down to the builtin `anthropic` entry.
+ * Claude Code talks the Anthropic Messages API directly against
+ * ANTHROPIC_BASE_URL, so most Hermes providers (OpenAI-compatible gateways)
+ * won't work — but the user may have added a custom provider that IS an
+ * Anthropic-compatible gateway/proxy, and we can't tell protocol from the
+ * catalog data alone. Surface everything the user already configured and
+ * let them pick; the panel shows a hint rather than hiding options.
+ */
+export function listCatalogProvidersForClaudeCode(): Array<{
+  id: string
+  name: string
+  baseUrl: string
+  keyEnv: string
+  keyConfigured: boolean
+  maskedKey: string
+  models: Array<string>
+}> {
+  return getProviderCatalog().providers.map((entry) => ({
+    id: entry.id,
+    name: entry.name,
+    baseUrl: entry.base_url,
+    keyEnv: entry.key_env,
+    keyConfigured: entry.keyConfigured,
+    maskedKey: entry.maskedKey,
+    models: entry.models,
+  }))
+}
+
+export function getProviderCatalog(): ProviderCatalog {
+  const now = Date.now()
+  if (
+    providerCatalogCache &&
+    providerCatalogCache.expiresAt > now
+  ) {
+    return providerCatalogCache.catalog
+  }
+  const catalog = buildProviderCatalog()
+  providerCatalogCache = {
+    catalog,
+    expiresAt: now + PROVIDER_CATALOG_CACHE_TTL_MS,
+  }
+  return catalog
 }
 
 function patchAllProfileProviders(

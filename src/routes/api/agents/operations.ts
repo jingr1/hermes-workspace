@@ -13,6 +13,10 @@ import {
   resolveClaudeCodeCurrentModel,
   resolveClaudeCodeProvider,
 } from '../../../server/claude-code-settings'
+import {
+  readCodexConfig,
+  resolveCodexProviderDisplay,
+} from '../../../server/codex-settings'
 
 export type OperationsAgentConfig = {
   id: string
@@ -81,24 +85,6 @@ function readClaudeCodeConfig(): { model: string; provider: string } {
   }
 }
 
-function readCodexConfig(): { model: string; provider: string } {
-  const configPath = path.join(os.homedir(), '.codex', 'config.toml')
-  const config = safeReadToml(configPath)
-  const model =
-    typeof config.model === 'string'
-      ? config.model
-      : typeof config.selectedModel === 'string'
-        ? config.selectedModel
-        : ''
-  const provider =
-    typeof config.model_provider === 'string'
-      ? config.model_provider
-      : typeof config.provider === 'string'
-        ? config.provider
-        : ''
-  return { model, provider }
-}
-
 function readExternalAgentConfig(runtime: string): {
   model: string
   provider: string
@@ -106,8 +92,13 @@ function readExternalAgentConfig(runtime: string): {
   switch (runtime) {
     case 'claude-code':
       return readClaudeCodeConfig()
-    case 'codex':
-      return readCodexConfig()
+    case 'codex': {
+      const cfg = readCodexConfig()
+      return {
+        model: cfg.model,
+        provider: resolveCodexProviderDisplay(cfg),
+      }
+    }
     default:
       return { model: '', provider: '' }
   }

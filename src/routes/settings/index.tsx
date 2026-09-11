@@ -27,6 +27,7 @@ import {
 } from '@/components/settings/settings-sidebar'
 import { ModelProviderScopePanel } from '@/components/settings/model-provider-scope'
 import { ClaudeCodeSettingsPanel } from '@/components/settings-dialog'
+import { CodexSettingsPanel } from '@/components/settings-dialog/codex-settings-panel'
 import { usePageTitle } from '@/hooks/use-page-title'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -388,6 +389,17 @@ function SettingsRoute() {
               icon={SourceCodeSquareIcon}
             >
               <ClaudeCodeSettingsPanel />
+            </SettingsSection>
+          )}
+
+          {/* ── Codex ───────────────────────────────────────────── */}
+          {activeSection === 'codex' && (
+            <SettingsSection
+              title="Codex"
+              description="Configure the OpenAI Codex CLI provider and model via Hermes Model & Provider."
+              icon={SourceCodeSquareIcon}
+            >
+              <CodexSettingsPanel />
             </SettingsSection>
           )}
 

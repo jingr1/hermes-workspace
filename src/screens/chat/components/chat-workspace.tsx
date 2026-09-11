@@ -42,7 +42,7 @@ export function ChatWorkspace() {
     )
   }
 
-  if (agent.runtime === 'claude-code') {
+  if (agent.runtime === 'claude-code' || agent.runtime === 'codex') {
     return (
       <ManagedAgentChatView agent={agent} sessionId={sessionId ?? null} />
     )

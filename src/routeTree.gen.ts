@@ -217,6 +217,8 @@ import { Route as ApiRoomsRoomIdMessagesRouteImport } from './routes/api/rooms/$
 import { Route as ApiMcpHubSourcesIdRouteImport } from './routes/api/mcp/hub-sources.$id'
 import { Route as ApiMcpNameLogsRouteImport } from './routes/api/mcp/$name.logs'
 import { Route as ApiHermesworldReservationsConfirmRouteImport } from './routes/api/hermesworld/reservations/confirm'
+import { Route as ApiAgentsCodexImplModelsRouteImport } from './routes/api/agents/codex-impl/models'
+import { Route as ApiAgentsCodexImplConfigRouteImport } from './routes/api/agents/codex-impl/config'
 import { Route as ApiAgentsClaudeCodeModelsRouteImport } from './routes/api/agents/claude-code/models'
 import { Route as ApiAgentsAgentIdSessionsRouteImport } from './routes/api/agents/$agentId/sessions'
 import { Route as ApiAgentsAgentIdChatRouteImport } from './routes/api/agents/$agentId/chat'
@@ -1283,6 +1285,18 @@ const ApiHermesworldReservationsConfirmRoute =
     path: '/confirm',
     getParentRoute: () => ApiHermesworldReservationsRoute,
   } as any)
+const ApiAgentsCodexImplModelsRoute =
+  ApiAgentsCodexImplModelsRouteImport.update({
+    id: '/api/agents/codex-impl/models',
+    path: '/api/agents/codex-impl/models',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAgentsCodexImplConfigRoute =
+  ApiAgentsCodexImplConfigRouteImport.update({
+    id: '/api/agents/codex-impl/config',
+    path: '/api/agents/codex-impl/config',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAgentsClaudeCodeModelsRoute =
   ApiAgentsClaudeCodeModelsRouteImport.update({
     id: '/api/agents/claude-code/models',
@@ -1538,6 +1552,8 @@ export interface FileRoutesByFullPath {
   '/api/agents/$agentId/chat': typeof ApiAgentsAgentIdChatRoute
   '/api/agents/$agentId/sessions': typeof ApiAgentsAgentIdSessionsRouteWithChildren
   '/api/agents/claude-code/models': typeof ApiAgentsClaudeCodeModelsRoute
+  '/api/agents/codex-impl/config': typeof ApiAgentsCodexImplConfigRoute
+  '/api/agents/codex-impl/models': typeof ApiAgentsCodexImplModelsRoute
   '/api/hermesworld/reservations/confirm': typeof ApiHermesworldReservationsConfirmRoute
   '/api/mcp/$name/logs': typeof ApiMcpNameLogsRoute
   '/api/mcp/hub-sources/$id': typeof ApiMcpHubSourcesIdRoute
@@ -1755,6 +1771,8 @@ export interface FileRoutesByTo {
   '/api/agents/$agentId/chat': typeof ApiAgentsAgentIdChatRoute
   '/api/agents/$agentId/sessions': typeof ApiAgentsAgentIdSessionsRouteWithChildren
   '/api/agents/claude-code/models': typeof ApiAgentsClaudeCodeModelsRoute
+  '/api/agents/codex-impl/config': typeof ApiAgentsCodexImplConfigRoute
+  '/api/agents/codex-impl/models': typeof ApiAgentsCodexImplModelsRoute
   '/api/hermesworld/reservations/confirm': typeof ApiHermesworldReservationsConfirmRoute
   '/api/mcp/$name/logs': typeof ApiMcpNameLogsRoute
   '/api/mcp/hub-sources/$id': typeof ApiMcpHubSourcesIdRoute
@@ -1975,6 +1993,8 @@ export interface FileRoutesById {
   '/api/agents/$agentId/chat': typeof ApiAgentsAgentIdChatRoute
   '/api/agents/$agentId/sessions': typeof ApiAgentsAgentIdSessionsRouteWithChildren
   '/api/agents/claude-code/models': typeof ApiAgentsClaudeCodeModelsRoute
+  '/api/agents/codex-impl/config': typeof ApiAgentsCodexImplConfigRoute
+  '/api/agents/codex-impl/models': typeof ApiAgentsCodexImplModelsRoute
   '/api/hermesworld/reservations/confirm': typeof ApiHermesworldReservationsConfirmRoute
   '/api/mcp/$name/logs': typeof ApiMcpNameLogsRoute
   '/api/mcp/hub-sources/$id': typeof ApiMcpHubSourcesIdRoute
@@ -2196,6 +2216,8 @@ export interface FileRouteTypes {
     | '/api/agents/$agentId/chat'
     | '/api/agents/$agentId/sessions'
     | '/api/agents/claude-code/models'
+    | '/api/agents/codex-impl/config'
+    | '/api/agents/codex-impl/models'
     | '/api/hermesworld/reservations/confirm'
     | '/api/mcp/$name/logs'
     | '/api/mcp/hub-sources/$id'
@@ -2413,6 +2435,8 @@ export interface FileRouteTypes {
     | '/api/agents/$agentId/chat'
     | '/api/agents/$agentId/sessions'
     | '/api/agents/claude-code/models'
+    | '/api/agents/codex-impl/config'
+    | '/api/agents/codex-impl/models'
     | '/api/hermesworld/reservations/confirm'
     | '/api/mcp/$name/logs'
     | '/api/mcp/hub-sources/$id'
@@ -2632,6 +2656,8 @@ export interface FileRouteTypes {
     | '/api/agents/$agentId/chat'
     | '/api/agents/$agentId/sessions'
     | '/api/agents/claude-code/models'
+    | '/api/agents/codex-impl/config'
+    | '/api/agents/codex-impl/models'
     | '/api/hermesworld/reservations/confirm'
     | '/api/mcp/$name/logs'
     | '/api/mcp/hub-sources/$id'
@@ -2818,6 +2844,8 @@ export interface RootRouteChildren {
   ApiAgentsAgentIdChatRoute: typeof ApiAgentsAgentIdChatRoute
   ApiAgentsAgentIdSessionsRoute: typeof ApiAgentsAgentIdSessionsRouteWithChildren
   ApiAgentsClaudeCodeModelsRoute: typeof ApiAgentsClaudeCodeModelsRoute
+  ApiAgentsCodexImplConfigRoute: typeof ApiAgentsCodexImplConfigRoute
+  ApiAgentsCodexImplModelsRoute: typeof ApiAgentsCodexImplModelsRoute
   ApiRunsRunIdSteerRoute: typeof ApiRunsRunIdSteerRoute
   ApiRunsSessionKeyRunIdAbandonRoute: typeof ApiRunsSessionKeyRunIdAbandonRoute
   ApiAgentsAgentIdRunsRunIdInterruptRoute: typeof ApiAgentsAgentIdRunsRunIdInterruptRoute
@@ -4281,6 +4309,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiHermesworldReservationsConfirmRouteImport
       parentRoute: typeof ApiHermesworldReservationsRoute
     }
+    '/api/agents/codex-impl/models': {
+      id: '/api/agents/codex-impl/models'
+      path: '/api/agents/codex-impl/models'
+      fullPath: '/api/agents/codex-impl/models'
+      preLoaderRoute: typeof ApiAgentsCodexImplModelsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agents/codex-impl/config': {
+      id: '/api/agents/codex-impl/config'
+      path: '/api/agents/codex-impl/config'
+      fullPath: '/api/agents/codex-impl/config'
+      preLoaderRoute: typeof ApiAgentsCodexImplConfigRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/agents/claude-code/models': {
       id: '/api/agents/claude-code/models'
       path: '/api/agents/claude-code/models'
@@ -4850,6 +4892,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentsAgentIdChatRoute: ApiAgentsAgentIdChatRoute,
   ApiAgentsAgentIdSessionsRoute: ApiAgentsAgentIdSessionsRouteWithChildren,
   ApiAgentsClaudeCodeModelsRoute: ApiAgentsClaudeCodeModelsRoute,
+  ApiAgentsCodexImplConfigRoute: ApiAgentsCodexImplConfigRoute,
+  ApiAgentsCodexImplModelsRoute: ApiAgentsCodexImplModelsRoute,
   ApiRunsRunIdSteerRoute: ApiRunsRunIdSteerRoute,
   ApiRunsSessionKeyRunIdAbandonRoute: ApiRunsSessionKeyRunIdAbandonRoute,
   ApiAgentsAgentIdRunsRunIdInterruptRoute:

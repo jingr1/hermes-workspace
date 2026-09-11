@@ -3,3 +3,7 @@ export {
   ClaudeCodeSettingsPanel,
   type ClaudeCodeSettingsPanelProps,
 } from './claude-code-settings-panel'
+export {
+  CodexSettingsPanel,
+  type CodexSettingsPanelProps,
+} from './codex-settings-panel'

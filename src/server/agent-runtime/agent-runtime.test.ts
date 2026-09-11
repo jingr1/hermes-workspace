@@ -219,7 +219,7 @@ describe('pid-registry', () => {
 })
 
 describe('AgentRuntimeRouter', () => {
-  it('builds adapters per runtime; codex/deepseek are declared-but-unavailable', async () => {
+  it('builds adapters per runtime; deepseek is declared-but-unavailable', async () => {
     const router = new AgentRuntimeRouter({
       rawYaml: `
 version: 1
@@ -232,14 +232,15 @@ agents:
     command: claude
   - id: cx
     runtime: codex
-    command: codex
+    command: /definitely-not-a-real-binary-xyz
 `,
     })
     expect(router.getAdapter('dev')?.kind).toBe('hermes')
     expect(router.getAdapter('cc')?.kind).toBe('claude-code')
+    expect(router.getAdapter('cx')?.kind).toBe('codex')
     const codexProbe = await router.getAdapter('cx')!.probe()
     expect(codexProbe.available).toBe(false)
-    expect(codexProbe.detail).toMatch(/not yet delivered/)
+    expect(codexProbe.detail).toMatch(/codex executable not found/)
   })
 
   it('hermes stub refuses startRun (existing dispatch path owns it)', async () => {
@@ -267,7 +268,7 @@ agents:
     profile: developer
   - id: cc
     runtime: claude-code
-    command: definitely-not-a-real-binary-xyz
+    command: /definitely-not-a-real-binary-xyz
 `,
     })
     const rows = await router.probeAll()

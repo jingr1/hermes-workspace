@@ -21,6 +21,7 @@ import { Component, useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ModelProviderPanel } from './model-provider-panel'
 import { ClaudeCodeSettingsPanel } from './claude-code-settings-panel'
+import { CodexSettingsPanel } from './codex-settings-panel'
 import type * as React from 'react'
 import type { AccentColor, SettingsThemeMode } from '@/hooks/use-settings'
 import type { LoaderStyle } from '@/hooks/use-chat-settings'
@@ -1764,6 +1765,9 @@ export function SettingsDialog({
     }
     if (agent.runtime === 'claude-code') {
       return <ClaudeCodeSettingsPanel agentId={agent.agentId} />
+    }
+    if (agent.runtime === 'codex') {
+      return <CodexSettingsPanel agentId={agent.agentId} />
     }
     return <UnsupportedRuntimeContent runtime={agent.runtime} />
   }

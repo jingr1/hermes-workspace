@@ -6,6 +6,7 @@
  * *does* probe the profile's gateway health so UI status reflects reachability.
  */
 import { ClaudeCodeAdapter } from './claude-code-adapter'
+import { CodexAdapter } from './codex-adapter'
 import { loadAgentsRegistry } from './agents-config'
 import type { AgentDeclaration, AgentsRegistry } from './agents-config'
 import type { AgentProbeResult, AgentRuntimeAdapter } from './types'
@@ -32,7 +33,7 @@ class HermesAdapterStub implements AgentRuntimeAdapter {
   }
 }
 
-const UNSUPPORTED_RUNTIMES = new Set(['codex', 'deepseek-harness'])
+const UNSUPPORTED_RUNTIMES = new Set(['deepseek-harness'])
 
 /** Adapter slot for declared runtimes whose adapter ships in a later step. */
 class UnavailableAdapter implements AgentRuntimeAdapter {
@@ -72,6 +73,8 @@ export class AgentRuntimeRouter {
         return new HermesAdapterStub(decl)
       case 'claude-code':
         return new ClaudeCodeAdapter(decl)
+      case 'codex':
+        return new CodexAdapter(decl)
       default:
         if (UNSUPPORTED_RUNTIMES.has(decl.runtime)) {
           return new UnavailableAdapter(decl)

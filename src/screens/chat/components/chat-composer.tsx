@@ -159,6 +159,15 @@ type ChatComposerProps = {
   embedded?: boolean
   hideModelSelector?: boolean
   /**
+   * Runtime identity label shown in the composer footer (e.g. "Claude Code",
+   * "Codex"). Defaults to "Claude Code" for managed runtimes.
+   */
+  runtimeLabel?: string
+  /**
+   * Tooltip/config hint for the runtime identity label.
+   */
+  runtimeConfigHint?: string
+  /**
    * Override the models catalog URL. Defaults to `/api/models` (Hermes).
    * Claude Code passes `/api/agents/claude-code/models` so the same picker
    * lists models from ~/.claude/settings.json.
@@ -967,6 +976,8 @@ function ChatComposerComponent({
   queuedCount = 0,
   onClearQueue,
   slashRuntime,
+  runtimeLabel = 'Claude Code',
+  runtimeConfigHint,
 }: ChatComposerProps) {
   const resolvedModelsEndpoint = modelsEndpoint?.trim() || '/api/models'
   const useCustomModelsEndpoint = Boolean(modelsEndpoint?.trim())
@@ -3268,7 +3279,7 @@ function ChatComposerComponent({
                       className="inline-flex max-w-[8rem] items-center gap-1.5 px-1 text-xs text-primary-500"
                       title={
                         useCustomModelsEndpoint
-                          ? 'Claude Code · ~/.claude/settings.json'
+                          ? runtimeConfigHint || `${runtimeLabel} · managed runtime`
                           : activeProfile
                             ? [
                                 activeProfile.name,
@@ -3316,7 +3327,7 @@ function ChatComposerComponent({
                       )}
                       <span className="truncate">
                         {useCustomModelsEndpoint
-                          ? 'Claude Code'
+                          ? runtimeLabel
                           : activeProfileName}
                       </span>
                     </span>

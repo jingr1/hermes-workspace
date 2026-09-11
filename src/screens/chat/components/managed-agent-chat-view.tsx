@@ -6,7 +6,7 @@ import { ChatScreen } from '../chat-screen'
 import { AgentChatFrame } from './agent-chat-frame'
 import { AgentChatMessagePane } from './agent-chat-message-pane'
 import { ChatEmptyState } from './chat-empty-state'
-import { CLAUDE_CODE_CHAT_BRAND } from '../agent-chat-brands'
+import { CLAUDE_CODE_CHAT_BRAND, CODEX_CHAT_BRAND } from '../agent-chat-brands'
 import { createClaudeCodeSlashRuntime } from '../slash-commands/claude-code'
 import { useExternalAgentSessions } from '../hooks/use-external-agent-sessions'
 import { useManagedAgentChat } from '../hooks/use-managed-agent-chat'
@@ -45,8 +45,18 @@ function readStoredThinking(sessionId: string | null): ThinkingLevel {
   return 'medium'
 }
 
+function getBrand(agent: AgentWithStatus) {
+  if (agent.runtime === 'codex') return CODEX_CHAT_BRAND
+  return CLAUDE_CODE_CHAT_BRAND
+}
+
+function getModelsEndpoint(agentId: string, runtime: string): string {
+  if (runtime === 'codex') return `/api/agents/${encodeURIComponent(agentId)}/models`
+  return '/api/agents/claude-code/models'
+}
+
 /**
- * Claude Code (and future managed runtimes) — same ChatScreen shell
+ * Claude Code / Codex (and future managed runtimes) — same ChatScreen shell
  * (session sidebar) + AgentChatFrame (messages / composer / file explorer).
  */
 export function ManagedAgentChatView({
@@ -129,9 +139,31 @@ export function ManagedAgentChatView({
   const isNewChat =
     !sessionId || sessionId === 'new' || activeFriendlyId === 'new'
 
+  const brand = useMemo(() => getBrand(agent), [agent])
+  const modelsEndpoint = useMemo(
+    () => getModelsEndpoint(agent.agentId, agent.runtime),
+    [agent.agentId, agent.runtime],
+  )
+
+  const composerBrand = useMemo(() => {
+    if (agent.runtime === 'codex') {
+      return {
+        label: agent.name || brand.label,
+        hint: `Codex · ${agent.name || brand.label} · ~/.codex/config.toml`,
+      }
+    }
+    return {
+      label: agent.name || brand.label,
+      hint: `Claude Code · ${agent.name || brand.label} · ~/.claude/settings.json`,
+    }
+  }, [agent, brand])
+
   return (
     <AssistantAvatarProvider
-      value={{ src: '/claude-code-mark.svg', alt: 'Claude Code' }}
+      value={{
+        src: agent.runtime === 'codex' ? '/codex-mark.svg' : '/claude-code-mark.svg',
+        alt: brand.label,
+      }}
     >
       <ChatScreen
         activeFriendlyId={
@@ -142,7 +174,7 @@ export function ManagedAgentChatView({
         hermesChrome={false}
         renderMain={
           <AgentChatFrame
-            brand={CLAUDE_CODE_CHAT_BRAND}
+            brand={brand}
             activeTitle={chat.activeTitle}
             isMobile={isMobile}
             defaultFileExplorerCollapsed={false}
@@ -158,12 +190,14 @@ export function ManagedAgentChatView({
               onAbort: chat.abort,
               sessionKey: chat.activeSessionId,
               embedded: true,
-              modelsEndpoint: '/api/agents/claude-code/models',
+              modelsEndpoint,
               modelKeyMode: 'bare',
               gatewayQueriesEnabled: false,
               slashRuntime,
               thinkingLevel,
               onThinkingLevelChange: handleThinkingLevelChange,
+              runtimeLabel: composerBrand.label,
+              runtimeConfigHint: composerBrand.hint,
             }}
             topNotices={
               chat.error ? (
@@ -180,7 +214,7 @@ export function ManagedAgentChatView({
               sessionKey={chat.activeSessionId}
               emptyState={
                 <ChatEmptyState
-                  brand={CLAUDE_CODE_CHAT_BRAND}
+                  brand={brand}
                   compact={isMobile}
                   onSuggestionClick={(prompt) =>
                     void chat.submit(prompt, [], { effort: thinkingLevel })

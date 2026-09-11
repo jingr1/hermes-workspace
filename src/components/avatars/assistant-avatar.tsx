@@ -2,6 +2,7 @@ import { memo } from 'react'
 import { cn } from '@/lib/utils'
 import { useAssistantAvatarConfig } from './assistant-avatar-context'
 import { ClaudeCodeMark } from './claude-code-mark'
+import { CodexMark } from './codex-mark'
 
 type AvatarProps = {
   size?: number
@@ -12,9 +13,10 @@ type AvatarProps = {
 }
 
 const CLAUDE_CODE_MARK_SRC = '/claude-code-mark.svg'
+const CODEX_MARK_SRC = '/codex-mark.svg'
 
 /**
- * Assistant avatar — defaults to Hermes Agent; Claude Code wraps the tree
+ * Assistant avatar — defaults to Hermes Agent; Claude Code / Codex wrap the tree
  * with AssistantAvatarProvider to swap in the CLI mark.
  */
 function AssistantAvatarComponent({
@@ -30,6 +32,16 @@ function AssistantAvatarComponent({
   if (resolvedSrc === CLAUDE_CODE_MARK_SRC) {
     return (
       <ClaudeCodeMark
+        size={size}
+        className={cn('shrink-0 rounded-[20%]', className)}
+        title={resolvedAlt}
+      />
+    )
+  }
+
+  if (resolvedSrc === CODEX_MARK_SRC) {
+    return (
+      <CodexMark
         size={size}
         className={cn('shrink-0 rounded-[20%]', className)}
         title={resolvedAlt}
