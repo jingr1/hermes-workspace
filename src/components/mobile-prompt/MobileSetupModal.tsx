@@ -223,7 +223,7 @@ export function MobileSetupModal({ isOpen, onClose }: MobileSetupModalProps) {
 
         <div className="mb-4 flex items-center gap-3 pr-10">
           <img
-            src="/claude-avatar.webp"
+            src="/hermes-agent-avatar.webp"
             alt="Hermes Agent"
             className="size-9 rounded-xl"
           />

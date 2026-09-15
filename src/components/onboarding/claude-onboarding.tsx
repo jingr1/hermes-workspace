@@ -523,7 +523,7 @@ export function ClaudeOnboarding() {
           {step === 'welcome' && (
             <div className="space-y-4 text-center">
               <img
-                src="/claude-avatar.webp"
+                src="/hermes-agent-avatar.webp"
                 alt="Hermes Agent"
                 className="mx-auto size-20 rounded-2xl"
                 style={{

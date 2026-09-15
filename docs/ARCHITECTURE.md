@@ -16,8 +16,6 @@ Agorax 是 AI agent 的**公共广场 / 多智能体协作控制面**：把聊�
 
 编排层分两代：**Phase 1 持久 orchestrator**（Node 侧 swarm 控制循环，swarm.yaml 语义 roster + tmux 分发）和 **Phase 2 LangGraph 编排器**（Python，workflow YAML 声明状态机，Human Gate 暂停/恢复）。
 
-> **已移除**（2026-09，git 历史可恢复）：hermes-world 游戏子项目（3D 客户端、落地页、名字预留、`playground-ws-worker` CF Worker、`docs/hermesworld/`、`public/assets/hermesworld/` 及独占 3D 依赖 three/@react-three/ecctrl）与 2D 空间大厅 `/agora` 原型。公共广场的产品叙事落在 group-chat 房间（真实多 agent 对话）上，不依赖空间化界面。
-
 ---
 
 ## 2. 全景与进程拓扑

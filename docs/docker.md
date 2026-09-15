@@ -5,8 +5,8 @@ Agorax + Hermes Agent in containers.
 ## TL;DR (single-host, localhost-only)
 
 ```bash
-git clone https://github.com/outsourc-e/hermes-workspace
-cd hermes-workspace
+git clone https://github.com/jingr1/agorax
+cd agorax
 cp .env.example .env
 # add at least one provider key (e.g. OPENROUTER_API_KEY=...)
 docker compose up -d
@@ -66,7 +66,7 @@ If the workspace shows "**Disconnected**" or "**Missing Hermes APIs detected**" 
 ### Step 1 — Verify the agent is reachable from inside the workspace container
 
 ```bash
-docker compose exec hermes-workspace sh
+docker compose exec agorax sh
 # inside the workspace container:
 curl -fsS http://hermes-agent:8642/health
 curl -fsS -H "Authorization: Bearer $HERMES_API_TOKEN" http://hermes-agent:8642/v1/models | head -c 200
@@ -78,7 +78,7 @@ If `/health` returns a JSON `{"status": "ok"}`, the agent is alive on the docker
 ### Step 2 — Confirm the workspace's environment
 
 ```bash
-docker compose exec hermes-workspace env | grep -E "HERMES_API|API_SERVER"
+docker compose exec agorax env | grep -E "HERMES_API|API_SERVER"
 ```
 
 You should see:
@@ -101,7 +101,7 @@ This re-runs the probe and returns the fresh capability map. If it now reads `mo
 The workspace logs the full capability summary on every probe. Look for the `[gateway]` line:
 
 ```bash
-docker compose logs hermes-workspace 2>&1 | grep '\[gateway\]' | tail -3
+docker compose logs agorax 2>&1 | grep '\[gateway\]' | tail -3
 ```
 
 A healthy log looks like:
@@ -150,7 +150,7 @@ If you bind the agent to `0.0.0.0` on a NAS without `API_SERVER_KEY`, the agent 
 
 The workspace is the **UI**. The agent is the **engine**. Splitting them lets you:
 
-- Update either independently (`docker compose pull hermes-workspace` etc.)
+- Update either independently (`docker compose pull agorax` etc.)
 - Run multiple workspaces against one agent (different ports)
 - Run the workspace on a tablet/phone while the agent stays on a beefy machine
 
@@ -158,10 +158,10 @@ The default compose colocates them for simplicity. The split-host setup above is
 
 ## Filing bugs
 
-If your setup matches the playbook above and still breaks, file an issue at <https://github.com/outsourc-e/hermes-workspace/issues> with:
+If your setup matches the playbook above and still breaks, file an issue at <https://github.com/jingr1/agorax/issues> with:
 
 1. Your `docker-compose.yml` (redact secrets)
-2. The output of `docker compose logs hermes-workspace 2>&1 | grep '\[gateway\]' | tail -5`
+2. The output of `docker compose logs agorax 2>&1 | grep '\[gateway\]' | tail -5`
 3. The output of `curl -fsS http://<workspace-host>:3000/api/gateway-reprobe -X POST` (also redact)
 
 That gets us to the actual cause within a couple of comments instead of a long back-and-forth.

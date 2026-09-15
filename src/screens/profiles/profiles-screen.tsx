@@ -354,7 +354,7 @@ export function ProfilesScreen() {
                     )}
                   >
                     <img
-                      src="/claude-avatar.webp"
+                      src="/hermes-agent-avatar.webp"
                       alt={profile.name}
                       className={cn(
                         'size-20 rounded-full border-2 object-cover',
@@ -868,7 +868,7 @@ export function ProfilesScreen() {
             <div className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-3">
                 <img
-                  src="/claude-avatar.webp"
+                  src="/hermes-agent-avatar.webp"
                   alt={detailsName || ''}
                   className="size-12 rounded-full border-2 border-primary-200 object-cover dark:border-neutral-700"
                 />

@@ -167,7 +167,7 @@ in
 
     systemd.services.hermes-workspace = {
       description = "Agorax Web Server";
-      documentation = [ "https://github.com/outsourc-e/hermes-workspace" ];
+      documentation = [ "https://github.com/jingr1/agorax" ];
       wantedBy = [ "multi-user.target" ];
       after = [ "network.target" ];
 

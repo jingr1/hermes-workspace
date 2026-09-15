@@ -611,7 +611,7 @@ Phase 2 真实执行依赖 **Agorax**（`:3000`）。常见根因：
 2. **Workspace 未运行**：先 `pnpm dev`，等 Vite ready 后再跑 LangGraph。
 
 ```bash
-cd hermes-workspace && pnpm dev
+cd agorax && pnpm dev
 curl -s http://127.0.0.1:3000/api/swarm-roster | head
 ```
 

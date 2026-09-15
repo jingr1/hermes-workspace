@@ -895,7 +895,7 @@ function ChatSidebarComponent({
                 )}
               >
                 <img
-                  src="/claude-avatar.webp"
+                  src="/hermes-agent-avatar.webp"
                   alt="Hermes Agent"
                   className="size-6 rounded-lg"
                 />

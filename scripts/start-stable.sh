@@ -16,7 +16,7 @@ fi
 
 PORT="${PORT:-3002}"
 RUNTIME_DIR="$ROOT/.runtime"
-PID_FILE="$RUNTIME_DIR/hermes-workspace.pid"
+PID_FILE="$RUNTIME_DIR/agorax.pid"
 LOG_FILE="$RUNTIME_DIR/hermes-workspace.log"
 BUILD_LOG_FILE="$RUNTIME_DIR/hermes-workspace.build.log"
 mkdir -p "$RUNTIME_DIR"

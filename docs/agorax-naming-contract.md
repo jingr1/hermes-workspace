@@ -15,7 +15,7 @@ Use these in all new UI, docs, skills, prompts, tests, review comments, and hand
 
 Do **not** introduce these in new work unless quoting legacy history or compatibility behavior:
 
-- **Agorax** — the former product name (legacy only)
+- **Hermes Workspace** — the former product name (legacy only)
 - **hermes-workspace** — the former package/image/slug (legacy only; the GitHub repo path `outsourc-e/hermes-workspace` stays until the repo itself is renamed)
 - Claude-branded product names, paths, or wrapper guidance
 

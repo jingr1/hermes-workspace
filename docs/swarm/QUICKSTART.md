@@ -17,8 +17,8 @@ The workspace can still render without tmux, but tmux is what makes the worker s
 ## 1. Clone the workspace
 
 ```bash
-git clone https://github.com/outsourc-e/hermes-workspace.git
-cd hermes-workspace
+git clone https://github.com/jingr1/agorax.git
+cd agorax
 ```
 
 ## 2. Install dependencies

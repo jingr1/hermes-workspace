@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-RELEASE="${HERMES_RELEASE_DIR:-$ROOT/../hermes-workspace-release}"
+RELEASE="${HERMES_RELEASE_DIR:-$ROOT/../agorax-release}"
 CMD="${1:-help}"
 
 case "$CMD" in

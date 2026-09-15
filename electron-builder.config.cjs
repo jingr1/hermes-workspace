@@ -55,5 +55,5 @@ module.exports = {
   },
   asar: false,
   compression: 'maximum',
-  artifactName: 'hermes-workspace-setup-${version}.${ext}',
+  artifactName: 'agorax-setup-${version}.${ext}',
 }

@@ -121,7 +121,7 @@ def _workspace_unreachable_hint(swarm_url: str) -> str:
     base = swarm_url.removesuffix("/api")
     return (
         f"Workspace API unreachable at {swarm_url}. "
-        f"Start Workspace first: `cd hermes-workspace && pnpm dev` "
+        f"Start Agorax first: `cd agorax && pnpm dev` "
         f"(then verify `curl {base}/api/swarm-roster`). "
         f"Vite dev may need 10–30s on first SSR compile after startup. "
         f"Override URL with --swarm-url or AGORAX_URL."

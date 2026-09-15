@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 
-const PROFILES = path.join(os.homedir(), '.claude', 'profiles')
+const PROFILES = path.join(os.homedir(), '.hermes', 'profiles')
 const NOW = Date.now()
 const LANES = {
   swarm1: [

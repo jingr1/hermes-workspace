@@ -10,7 +10,7 @@
 }:
 
 stdenv.mkDerivation (finalAttrs: {
-  pname = "hermes-workspace";
+  pname = "agorax";
   version = "2.3.0";
 
   src = lib.cleanSourceWith {
@@ -97,7 +97,7 @@ stdenv.mkDerivation (finalAttrs: {
 
   meta = {
     description = "Desktop workspace for Hermes Agent — chat, orchestration, and multi-agent coding pipelines";
-    homepage = "https://github.com/outsourc-e/hermes-workspace";
+    homepage = "https://github.com/jingr1/agorax";
     license = lib.licenses.mit;
     maintainers = [ ];
     platforms = lib.platforms.linux ++ lib.platforms.darwin;

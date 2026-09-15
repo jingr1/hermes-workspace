@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 PORT="${PORT:-3002}"
-PID_FILE="$ROOT/.runtime/hermes-workspace.pid"
+PID_FILE="$ROOT/.runtime/agorax.pid"
 
 stop_pid() {
   local pid="$1"

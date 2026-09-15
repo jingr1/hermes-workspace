@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./public/claude-avatar.webp" alt="Agorax" width="80" style="border-radius: 16px" />
+<img src="./public/hermes-agent-avatar.webp" alt="Hermes Agent" width="80" style="border-radius: 16px" />
 <!-- avatar filename retained for cache stability — do not rename without coordinated cache-bust -->
 
 # Agorax
@@ -14,7 +14,7 @@
 
 > Not a chat wrapper. A complete workspace — orchestrate agents, browse memory, manage skills, and control everything from one interface.
 
-> **v2 — zero-fork.** Clone, don't fork. Runs on vanilla [`NousResearch/hermes-agent`](https://github.com/NousResearch/hermes-agent) installed via Nous's own installer. Chat, sessions, memory, skills, jobs, MCP, terminal, dashboard, Agent View, and Operations are all in vanilla parity. **Conductor** uses the dashboard mission API when available and falls back to Workspace-native Swarm dispatch (`mode: native-swarm`) when the dashboard endpoint is absent, preserving zero-fork behavior ([#262](https://github.com/outsourc-e/hermes-workspace/issues/262)).
+> **v2 — zero-fork.** Clone, don't fork. Runs on vanilla [`NousResearch/hermes-agent`](https://github.com/NousResearch/hermes-agent) installed via Nous's own installer. Chat, sessions, memory, skills, jobs, MCP, terminal, dashboard, Agent View, and Operations are all in vanilla parity. **Conductor** uses the dashboard mission API when available and falls back to Workspace-native Swarm dispatch (`mode: native-swarm`) when the dashboard endpoint is absent, preserving zero-fork behavior ([#262](https://github.com/jingr1/agorax/issues/262)).
 
 ![Agorax](./docs/screenshots/splash.png)
 
@@ -120,8 +120,8 @@ Open http://localhost:3000. That's it.
 If you already have `hermes-agent` installed (via Nous's official installer, a source checkout, systemd, Docker, or another existing setup) and it's serving the gateway at `http://<host>:8642`, you don't need to reinstall anything — just point the workspace at it.
 
 ```bash
-git clone https://github.com/outsourc-e/hermes-workspace.git
-cd hermes-workspace
+git clone https://github.com/jingr1/agorax.git
+cd agorax
 pnpm install
 cp .env.example .env
 
@@ -216,8 +216,8 @@ Our one-liner installer (below) does both steps automatically. If you're using a
 
 ```bash
 # In a new terminal
-git clone https://github.com/outsourc-e/hermes-workspace.git
-cd hermes-workspace
+git clone https://github.com/jingr1/agorax.git
+cd agorax
 pnpm install
 cp .env.example .env
 printf '\nHERMES_API_URL=http://127.0.0.1:8642\n' >> .env
@@ -499,8 +499,8 @@ The Docker setup runs both the **Hermes Agent gateway** and **Agorax** together.
 ### Step 1: Configure Environment
 
 ```bash
-git clone https://github.com/outsourc-e/hermes-workspace.git
-cd hermes-workspace
+git clone https://github.com/jingr1/agorax.git
+cd agorax
 cp .env.example .env
 ```
 
@@ -851,7 +851,7 @@ If using Docker Compose and getting auth errors:
 
 5. **Check workspace logs for gateway status:**
    ```bash
-   docker compose logs hermes-workspace
+   docker compose logs agorax
    ```
    Look for: `[gateway] http://hermes-agent:8642 mode=...` — if it shows `mode=disconnected`, the agent isn't running correctly.
 
@@ -891,7 +891,7 @@ The Docker setup runs both automatically — no action needed if using `docker c
 
 | Feature                       | Status                                                                                                                                                                                   |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Conductor missions            | Workspace UI is shipped; uses dashboard mission API when available and Workspace-native Swarm fallback otherwise (see [#262](https://github.com/outsourc-e/hermes-workspace/issues/262)) |
+| Conductor missions            | Workspace UI is shipped; uses dashboard mission API when available and Workspace-native Swarm fallback otherwise (see [#262](https://github.com/jingr1/agorax/issues/262)) |
 | Native Desktop App (Electron) | Spec'd; PWA install path works today                                                                                                                                                     |
 
 ### Coming 🔜
