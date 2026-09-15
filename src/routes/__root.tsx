@@ -129,8 +129,8 @@ const themeColorScript = `
 `
 
 const DEFAULT_SPLASH_HTML = `
-<img src="/hermes-agent-avatar.webp" alt="Hermes Agent" style="width:80px;height:80px;margin-bottom:20px;border-radius:16px;filter:drop-shadow(0 8px 32px color-mix(in srgb,#FFAC02 45%, transparent))" />
-<img src="/hermes-agent-banner.png" alt="Hermes Agent" style="width:280px;height:auto;margin-bottom:8px;filter:drop-shadow(0 4px 16px rgba(0,0,0,0.5))" />
+<img src="/agorax-icon-512.png" alt="Agorax" style="width:112px;height:112px;margin-bottom:20px;border-radius:16px;filter:drop-shadow(0 8px 32px rgba(232,163,61,0.32))" />
+<div style="font:600 32px/1.1 system-ui,-apple-system,sans-serif;color:#FFFFFF;letter-spacing:-0.02em;margin-bottom:8px">Agorax</div>
 <div style="font:400 14px/1 system-ui,-apple-system,sans-serif;letter-spacing:0.04em;color:#9CB2AE">The agora for AI agents</div>
 <div style="margin-top:28px;width:140px;height:3px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;position:relative"><div id="splash-bar" style="width:0%;height:100%;background:#FFAC02;border-radius:3px;transition:width 0.4s ease"></div></div>
 `
@@ -192,7 +192,7 @@ export const Route = createRootRoute({
       {
         rel: 'icon',
         type: 'image/png',
-        href: '/hermes-agent-avatar.png',
+        href: '/agorax-favicon.png',
       },
       // PWA manifest and icons
       {
@@ -201,7 +201,7 @@ export const Route = createRootRoute({
       },
       {
         rel: 'apple-touch-icon',
-        href: '/apple-touch-icon.png',
+        href: '/agorax-apple-touch-icon.png',
         sizes: '180x180',
       },
     ],
@@ -600,8 +600,8 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             var quip = quips[Math.floor(Math.random() * quips.length)];
 
             d.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:'+bg+';transition:opacity 0.5s ease;';
-            d.innerHTML = '<img src="/hermes-agent-avatar.webp" alt="Hermes Agent" style="width:80px;height:80px;margin-bottom:20px;border-radius:16px;filter:drop-shadow(0 8px 32px color-mix(in srgb,'+accent+' 45%, transparent))" />'
-              + '<img src="'+(isDark ? '/hermes-agent-banner.png' : '/hermes-agent-banner-light.png')+'" alt="Hermes Agent" style="width:280px;height:auto;margin-bottom:8px;filter:drop-shadow(0 4px 16px '+(isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.1)')+')" />'
+            d.innerHTML = '<img src="/agorax-icon-512.png" alt="Agorax" style="width:112px;height:112px;margin-bottom:20px;border-radius:16px;filter:drop-shadow(0 8px 32px rgba(232,163,61,0.32))" />'
+              + '<div style="font:600 32px/1.1 system-ui,-apple-system,sans-serif;color:'+txt+';letter-spacing:-0.02em;margin-bottom:8px">Agorax</div>'
               + '<div style="font:400 14px/1 system-ui,-apple-system,sans-serif;letter-spacing:0.04em;color:'+muted+'">The agora for AI agents</div>'
               + '<div style="margin-top:28px;width:140px;height:3px;background:'+(isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)')+';border-radius:3px;overflow:hidden;position:relative"><div id=splash-bar style="width:0%;height:100%;background:'+accent+';border-radius:3px;transition:width 0.4s ease"></div></div>';
 
@@ -614,9 +614,11 @@ function RootDocument({ children }: { children: React.ReactNode }) {
               setTimeout(function(){ bar.style.width='92%' }, 3200);
             }
 
+            var splashDismissed = false;
             window.__dismissSplash = function() {
               var el = document.getElementById('splash-screen');
-              if (!el) return;
+              if (!el || splashDismissed) return;
+              splashDismissed = true;
               if (bar) bar.style.width = '100%';
               setTimeout(function(){
                 el.style.opacity = '0';
@@ -626,14 +628,8 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                 }, 200);
               }, 80);
             };
-            // Fallback: always dismiss after 2s
-            setTimeout(function(){ window.__dismissSplash && window.__dismissSplash(); }, 2000);
-            // Fast dismiss: returning users skip quickly
-            try {
-              if (localStorage.getItem('claude-claude-url') || localStorage.getItem('claude-url') || localStorage.getItem('claude-onboarding-complete') === 'true') {
-                setTimeout(function(){ window.__dismissSplash && window.__dismissSplash(); }, 200);
-              }
-            } catch(e) {}
+            // Safety fallback; normal dismissal waits for the connection screen.
+            setTimeout(function(){ window.__dismissSplash && window.__dismissSplash(); }, 10000);
           })()
         `),
           }}
@@ -646,9 +642,15 @@ function RootDocument({ children }: { children: React.ReactNode }) {
           (function(){
             var start = Date.now();
             function check() {
-              var el = document.querySelector('nav, aside, .workspace-shell, [data-testid]');
+              var el = document.querySelector('[data-connection-startup]');
               var elapsed = Date.now() - start;
-              if (el && elapsed > 150) { window.__dismissSplash && window.__dismissSplash(); }
+              if (el && elapsed > 150) {
+                requestAnimationFrame(function(){
+                  requestAnimationFrame(function(){
+                    window.__dismissSplash && window.__dismissSplash();
+                  });
+                });
+              }
               else { setTimeout(check, 50); }
             }
             setTimeout(check, 150);

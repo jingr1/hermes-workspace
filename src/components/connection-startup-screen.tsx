@@ -49,12 +49,6 @@ function getSetupSteps(
 
 type Props = { onConnected: (status: AuthStatus) => void }
 
-declare global {
-  interface Window {
-    __dismissSplash?: () => void
-  }
-}
-
 export function ConnectionStartupScreen({ onConnected }: Props) {
   const [showFailureState, setShowFailureState] = useState(false)
   const [serverStarting, setServerStarting] = useState(false)
@@ -72,14 +66,6 @@ export function ConnectionStartupScreen({ onConnected }: Props) {
   }, [onConnected])
 
   const isDone = useRef(false)
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const dismiss = window.__dismissSplash
-    if (!dismiss) return
-    const timer = setTimeout(() => dismiss(), 60)
-    return () => clearTimeout(timer)
-  }, [])
 
   useEffect(() => {
     isDone.current = false
@@ -212,6 +198,7 @@ export function ConnectionStartupScreen({ onConnected }: Props) {
 
   return (
     <div
+      data-connection-startup
       className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto px-6 py-10 text-white"
       style={{
         backgroundColor: '#0A0E1A',
@@ -220,14 +207,17 @@ export function ConnectionStartupScreen({ onConnected }: Props) {
     >
       <div className="flex w-full max-w-lg flex-col items-center text-center">
         <img
-          src="/hermes-agent-avatar.webp"
-          alt="Hermes Agent"
-          className="mb-5 h-20 w-20 rounded-2xl object-cover shadow-[0_12px_40px_rgba(0,0,0,0.45)]"
+          src="/agorax-icon-512.png"
+          alt="Agorax"
+          className="mb-5 h-28 w-28 rounded-2xl object-cover shadow-[0_12px_40px_rgba(232,163,61,0.32)]"
         />
 
         <h1 className="text-[2rem] font-semibold tracking-tight text-white">
           Agorax
         </h1>
+        <p className="mt-2 text-sm tracking-wide text-white/55">
+          The agora for AI agents
+        </p>
 
         {/* Connecting spinner */}
         <div

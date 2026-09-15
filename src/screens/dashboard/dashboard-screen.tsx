@@ -972,7 +972,7 @@ export function DashboardScreen() {
               }}
             >
               <img
-                src="/hermes-agent-avatar.webp"
+                src="/agorax-icon-512.png"
                 alt="Agorax logo"
                 className="size-8 rounded-md"
                 style={{ background: 'transparent' }}
