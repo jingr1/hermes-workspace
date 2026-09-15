@@ -12,13 +12,13 @@ declare global {
      * a rebuild. Set this on `window` before the app bundle executes — for
      * example via an inline `<script>` injected by the proxy.
      */
-    __HERMES_WORKSPACE_BASEPATH__?: string
+    __AGORAX_BASEPATH__?: string
   }
 }
 
 export function resolveRouterBasepath(): string {
   if (typeof window === 'undefined') return '/'
-  const value = window.__HERMES_WORKSPACE_BASEPATH__
+  const value = window.__AGORAX_BASEPATH__
   if (typeof value !== 'string') return '/'
   const trimmed = value.trim()
   if (!trimmed) return '/'

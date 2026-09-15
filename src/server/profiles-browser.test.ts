@@ -27,20 +27,20 @@ describe('listProfiles', () => {
     )
     vi.spyOn(os, 'homedir').mockReturnValue(tempHome)
     process.env.HERMES_HOME = path.join(tempHome, '.hermes')
-    process.env.HERMES_WORKSPACE_STATE_DIR = path.join(
+    process.env.AGORAX_STATE_DIR = path.join(
       tempHome,
       '.hermes',
       'workspace',
     )
     delete process.env.CLAUDE_HOME
-    delete process.env.HERMES_WORKSPACE_STICKY_PROFILE
+    delete process.env.AGORAX_STICKY_PROFILE
   })
 
   afterEach(() => {
     vi.restoreAllMocks()
     delete process.env.HERMES_HOME
-    delete process.env.HERMES_WORKSPACE_STATE_DIR
-    delete process.env.HERMES_WORKSPACE_STICKY_PROFILE
+    delete process.env.AGORAX_STATE_DIR
+    delete process.env.AGORAX_STICKY_PROFILE
     fs.rmSync(tempHome, { recursive: true, force: true })
   })
 

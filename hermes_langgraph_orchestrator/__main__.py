@@ -84,7 +84,7 @@ async def main():
     )
     parser.add_argument("--mission-id", type=str, default="", help="mission ID，默认自动生成唯一 ID")
     parser.add_argument("--goal", type=str, default="")
-    parser.add_argument("--swarm-url", type=str, default="", help="Workspace API base URL (default: HERMES_WORKSPACE_URL or http://127.0.0.1:3000/api)")
+    parser.add_argument("--swarm-url", type=str, default="", help="Workspace API base URL (default: AGORAX_URL or http://127.0.0.1:3000/api)")
     parser.add_argument("--workflow", type=str, default="", help="workflow YAML 路径，默认 radw.yaml")
     parser.add_argument(
         "--initial-workers",
@@ -136,7 +136,7 @@ async def main():
 
     swarm_url = (
         args.swarm_url.strip()
-        or os.environ.get("HERMES_WORKSPACE_URL", "").strip()
+        or os.environ.get("AGORAX_URL", "").strip()
         or os.environ.get("SWARM_API_URL", "").strip()
         or "http://127.0.0.1:3000/api"
     ).rstrip("/")

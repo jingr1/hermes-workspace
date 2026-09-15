@@ -1091,14 +1091,14 @@ export function FilesScreen() {
       })
       if (!res.ok)
         throw new Error(
-          `HTTP ${res.status} — check that HERMES_WORKSPACE_DIR is set`,
+          `HTTP ${res.status} — check that AGORAX_DIR is set`,
         )
       const data = (await res.json()) as FilesListResponse
       setEntries(Array.isArray(data.entries) ? data.entries : [])
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
         setTreeError(
-          'Could not load files — request timed out. Check that HERMES_WORKSPACE_DIR is set.',
+          'Could not load files — request timed out. Check that AGORAX_DIR is set.',
         )
       } else {
         setTreeError(err instanceof Error ? err.message : String(err))
@@ -1297,7 +1297,7 @@ export function FilesScreen() {
               <div className="space-y-1 px-3 py-2 text-xs text-red-500">
                 <div>{treeError}</div>
                 <div className="text-primary-400 dark:text-neutral-500">
-                  Check the server workspace catalog or HERMES_WORKSPACE_DIR;
+                  Check the server workspace catalog or AGORAX_DIR;
                   this browser no longer needs local folder access.
                 </div>
               </div>

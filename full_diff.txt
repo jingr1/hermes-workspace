@@ -440,7 +440,7 @@ index e01c46d4..33511a21 100644
    return path.join(getClaudeRoot(), 'active_profile')
  }
 @@ -97,6 +134,11 @@ function stickyActiveProfileEnabled(): boolean {
-   return process.env.HERMES_WORKSPACE_STICKY_PROFILE !== '0'
+   return process.env.AGORAX_STICKY_PROFILE !== '0'
  }
  
 +function clearStickyActiveProfile(): void {

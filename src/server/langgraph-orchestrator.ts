@@ -10,7 +10,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 export function resolveLanggraphWorkspaceRoot(): string {
-  const override = process.env.HERMES_WORKSPACE_ROOT
+  const override = process.env.AGORAX_ROOT
   if (override) return override
   return process.cwd()
 }

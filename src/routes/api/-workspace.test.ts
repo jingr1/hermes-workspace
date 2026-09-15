@@ -25,7 +25,7 @@ beforeEach(async () => {
   tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'hermes-workspace-route-'))
   process.env = { ...originalEnv }
   process.env.HERMES_HOME = path.join(tempRoot, '.hermes')
-  delete process.env.HERMES_WORKSPACE_DIR
+  delete process.env.AGORAX_DIR
   delete process.env.CLAUDE_WORKSPACE_DIR
   delete process.env.HERMES_WEBUI_DEFAULT_WORKSPACE
   await fs.mkdir(process.env.HERMES_HOME, { recursive: true })

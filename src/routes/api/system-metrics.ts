@@ -124,7 +124,7 @@ function readMemory() {
 
 function readDisk() {
   const diskPath =
-    process.env.HERMES_WORKSPACE_METRICS_DISK_PATH || os.homedir()
+    process.env.AGORAX_METRICS_DISK_PATH || os.homedir()
 
   try {
     const stats = fs.statfsSync(diskPath)

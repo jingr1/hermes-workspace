@@ -101,7 +101,7 @@ services:
       - .env
     environment:
       HERMES_HOME: /home/workspace/.hermes
-      HERMES_WORKSPACE_DIR: /workspace
+      AGORAX_DIR: /workspace
       # Internal Docker network URL (not localhost!)
       HERMES_API_URL: http://hermes-agent:8642
       HERMES_DASHBOARD_URL: http://hermes-agent:9119

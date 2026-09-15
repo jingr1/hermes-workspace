@@ -5,12 +5,12 @@ import { resolveRouterBasepath } from './router'
 function setBasepathGlobal(value: unknown) {
   ;(
     window as unknown as Record<string, unknown>
-  ).__HERMES_WORKSPACE_BASEPATH__ = value
+  ).__AGORAX_BASEPATH__ = value
 }
 
 function clearBasepathGlobal() {
   delete (window as unknown as Record<string, unknown>)
-    .__HERMES_WORKSPACE_BASEPATH__
+    .__AGORAX_BASEPATH__
 }
 
 afterEach(() => {

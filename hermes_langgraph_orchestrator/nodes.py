@@ -78,7 +78,7 @@ def _swarm_api_url(state: OrchestratorState) -> str:
 
 def _default_swarm_api_url() -> str:
     return (
-        os.environ.get("HERMES_WORKSPACE_URL")
+        os.environ.get("AGORAX_URL")
         or os.environ.get("SWARM_API_URL")
         or "http://127.0.0.1:3000/api"
     ).rstrip("/")
@@ -86,7 +86,7 @@ def _default_swarm_api_url() -> str:
 
 def _swarm_http_headers() -> dict[str, str]:
     """Auth headers for Workspace API calls (password-protected deployments)."""
-    token = os.environ.get("HERMES_WORKSPACE_TOKEN", "").strip()
+    token = os.environ.get("AGORAX_TOKEN", "").strip()
     if not token:
         sessions_path = Path(
             os.environ.get("HERMES_HOME", os.path.expanduser("~/.hermes"))
@@ -124,7 +124,7 @@ def _workspace_unreachable_hint(swarm_url: str) -> str:
         f"Start Workspace first: `cd hermes-workspace && pnpm dev` "
         f"(then verify `curl {base}/api/swarm-roster`). "
         f"Vite dev may need 10–30s on first SSR compile after startup. "
-        f"Override URL with --swarm-url or HERMES_WORKSPACE_URL."
+        f"Override URL with --swarm-url or AGORAX_URL."
     )
 
 
@@ -189,7 +189,7 @@ async def check_swarm_workspace(swarm_url: str) -> str | None:
             if resp.status_code == 401:
                 return (
                     f"Workspace returned 401 for {swarm_url}. "
-                    "Set HERMES_WORKSPACE_TOKEN to a valid claude-auth session token."
+                    "Set AGORAX_TOKEN to a valid claude-auth session token."
                 )
             resp.raise_for_status()
             return None
@@ -224,7 +224,7 @@ async def _fetch_roster_ids(swarm_url: str) -> tuple[set[str], str | None]:
             if resp.status_code == 401:
                 return set(), (
                     "Workspace returned 401 for /swarm-roster. "
-                    "Set HERMES_WORKSPACE_TOKEN or disable HERMES_PASSWORD for local runs."
+                    "Set AGORAX_TOKEN or disable HERMES_PASSWORD for local runs."
                 )
             resp.raise_for_status()
             data = resp.json()

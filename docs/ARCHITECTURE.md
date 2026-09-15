@@ -96,7 +96,7 @@ Agorax 是 AI agent 的**公共广场 / 多智能体协作控制面**：把聊�
 
 | 职责 | 要点 |
 | --- | --- |
-| Dev 自动拉起 | Hermes gateway（`src/server/gateway-pool.ts`，可用 `HERMES_WORKSPACE_AUTO_START_AGENT=false` 禁用）；workspace-daemon（指数重试 ≤20 次 + 健康检查） |
+| Dev 自动拉起 | Hermes gateway（`src/server/gateway-pool.ts`，可用 `AGORAX_AUTO_START_AGENT=false` 禁用）；workspace-daemon（指数重试 ≤20 次 + 健康检查） |
 | 代理表 | `/ws-claude`→:18789；`/api/claude-proxy`、`/claude-ui`→`$CLAUDE_API_URL`（默认 :8642）；`/workspace-api`→:3099 |
 | 安全头 | 全量 CSP / X-Content-Type-Options / Referrer-Policy（与 `src/lib/csp.ts`、`__root.tsx` meta 三处保持同步） |
 | Watch ignore | `.runtime/**`、`.tanstack/**` `swarm.yaml`、`*.log` 等，防止运行时文件触发 HMR |
@@ -180,7 +180,7 @@ Python 包 `hermes_langgraph_orchestrator/`，把 mission 执行建模为**声�
 | collab.db | 仓库根（`collab-db.ts`，schema_migrations v1–v6） | rooms/messages/watermarks/summaries/pending_turns、run_tokens、task_runs、managed_chat_sessions/messages、pid 表、group_chat_sessions | 群聊/会话/run 记录 |
 | swarm-missions.json | `.runtime/` | mission / assignment 状态、依赖 DAG | **mission 状态真源**（已知 JSON/SQLite 双写负债，`reconcile.ts` 缓解） |
 | langgraph-checkpoints.db | `~/.hermes/` | LangGraph state + needs_human 标记 | Phase 2 编排状态 |
-| usage.db | `~/.hermes/workspace/`（`getStateDir()`，`HERMES_WORKSPACE_STATE_DIR` 可覆盖） | token/费用（`usage-db.ts`） | 用量 |
+| usage.db | `~/.hermes/workspace/`（`getStateDir()`，`AGORAX_STATE_DIR` 可覆盖） | token/费用（`usage-db.ts`） | 用量 |
 | worker state.db | `~/.hermes/profiles/<id>/` | worker 聊天历史（WebUI/收割读取源） | worker 会话 |
 | 记忆 | `memory/`（`SWARM_MEMORY_ROOT` 可覆盖） | missions 归档 / handoffs 总线 / worker 草稿；`memory/goals/` sprint 目标 | 共享记忆 |
 | 长期知识 | `~/wiki`（`WIKI_PATH`） | learning ingest 的领域知识 | 长期知识 |

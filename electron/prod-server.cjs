@@ -45,8 +45,8 @@ async function loadServerBuild() {
 
 async function main() {
   process.env.NODE_ENV = process.env.NODE_ENV || 'production'
-  process.env.HERMES_WORKSPACE_DESKTOP =
-    process.env.HERMES_WORKSPACE_DESKTOP || '1'
+  process.env.AGORAX_DESKTOP =
+    process.env.AGORAX_DESKTOP || '1'
   process.env.HERMES_API_URL =
     process.env.HERMES_API_URL || 'http://127.0.0.1:8642'
   process.env.HERMES_DASHBOARD_URL =

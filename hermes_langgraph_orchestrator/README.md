@@ -615,7 +615,7 @@ cd hermes-workspace && pnpm dev
 curl -s http://127.0.0.1:3000/api/swarm-roster | head
 ```
 
-CLI 启动时会自动加载 `hermes-workspace/.env`（不覆盖已有环境变量）。若启用了 `HERMES_PASSWORD`，设置 `HERMES_WORKSPACE_TOKEN`。
+CLI 启动时会自动加载 `hermes-workspace/.env`（不覆盖已有环境变量）。若启用了 `HERMES_PASSWORD`，设置 `AGORAX_TOKEN`。
 
 CLI 会在 `--execute` 前做 preflight；也可手动指定 API 地址：`--swarm-url http://127.0.0.1:3000/api`。
 

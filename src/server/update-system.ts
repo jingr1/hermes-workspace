@@ -292,11 +292,11 @@ function readCommits(
 
 function workspaceInstallKind(): InstallKind {
   if (
-    process.env.HERMES_WORKSPACE_DESKTOP === '1' ||
+    process.env.AGORAX_DESKTOP === '1' ||
     process.env.ELECTRON_RUN_AS_NODE
   )
     return 'desktop'
-  if (process.env.HERMES_WORKSPACE_DOCKER === '1' || existsSync('/.dockerenv'))
+  if (process.env.AGORAX_DOCKER === '1' || existsSync('/.dockerenv'))
     return 'docker'
   return realGitRepoPath(process.cwd()) ? 'git' : 'unknown'
 }

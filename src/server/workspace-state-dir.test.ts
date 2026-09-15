@@ -6,7 +6,7 @@ describe('getStateDir', () => {
 
   beforeEach(() => {
     // Clear workspace-specific override for clean tests
-    delete process.env.HERMES_WORKSPACE_STATE_DIR
+    delete process.env.AGORAX_STATE_DIR
     // Clear hermes home chain too
     delete process.env.HERMES_HOME
     delete process.env.CLAUDE_HOME
@@ -16,13 +16,13 @@ describe('getStateDir', () => {
     process.env = { ...originalEnv }
   })
 
-  it('returns HERMES_WORKSPACE_STATE_DIR when set', () => {
-    process.env.HERMES_WORKSPACE_STATE_DIR = '/custom/state/dir'
+  it('returns AGORAX_STATE_DIR when set', () => {
+    process.env.AGORAX_STATE_DIR = '/custom/state/dir'
     const result = getStateDir()
     expect(result).toBe('/custom/state/dir')
   })
 
-  it('uses HERMES_HOME/workspace when HERMES_WORKSPACE_STATE_DIR is not set', () => {
+  it('uses HERMES_HOME/workspace when AGORAX_STATE_DIR is not set', () => {
     process.env.HERMES_HOME = '/custom/hermes'
     const result = getStateDir()
     expect(result).toBe('/custom/hermes/workspace')
@@ -41,15 +41,15 @@ describe('getStateDir', () => {
     expect(result).toBe('/hermes/home/workspace')
   })
 
-  it('prefers HERMES_WORKSPACE_STATE_DIR over everything', () => {
-    process.env.HERMES_WORKSPACE_STATE_DIR = '/explicit/workspace'
+  it('prefers AGORAX_STATE_DIR over everything', () => {
+    process.env.AGORAX_STATE_DIR = '/explicit/workspace'
     process.env.HERMES_HOME = '/hermes/home'
     const result = getStateDir()
     expect(result).toBe('/explicit/workspace')
   })
 
   it('trims whitespace from env values', () => {
-    process.env.HERMES_WORKSPACE_STATE_DIR = '  /trimmed/path  '
+    process.env.AGORAX_STATE_DIR = '  /trimmed/path  '
     const result = getStateDir()
     expect(result).toBe('/trimmed/path')
   })

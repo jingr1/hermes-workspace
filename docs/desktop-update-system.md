@@ -39,7 +39,7 @@ For git installs:
 
 ## Desktop behavior to wire next
 
-The packaged app should set `HERMES_WORKSPACE_DESKTOP=1` and provide a desktop updater bridge that:
+The packaged app should set `AGORAX_DESKTOP=1` and provide a desktop updater bridge that:
 
 1. Checks a signed update manifest or GitHub Release.
 2. Downloads the Workspace app update through Electron auto-updater or equivalent.

@@ -213,7 +213,7 @@ function spawnDetached(command, label) {
       stdio: ['ignore', logFd, logFd],
       env: {
         ...process.env,
-        HERMES_WORKSPACE_DESKTOP: '1',
+        AGORAX_DESKTOP: '1',
         API_SERVER_ENABLED: process.env.API_SERVER_ENABLED || 'true',
       },
       windowsHide: true,
@@ -225,7 +225,7 @@ function spawnDetached(command, label) {
       stdio: 'ignore',
       env: {
         ...process.env,
-        HERMES_WORKSPACE_DESKTOP: '1',
+        AGORAX_DESKTOP: '1',
         API_SERVER_ENABLED: process.env.API_SERVER_ENABLED || 'true',
       },
     })
@@ -311,7 +311,7 @@ function startLocalServer() {
           ELECTRON_RUN_AS_NODE: '1',
           NODE_ENV: 'production',
           PORT: String(APP_PORT),
-          HERMES_WORKSPACE_DESKTOP: '1',
+          AGORAX_DESKTOP: '1',
           HERMES_API_URL: process.env.HERMES_API_URL || 'http://127.0.0.1:8642',
           HERMES_DASHBOARD_URL:
             process.env.HERMES_DASHBOARD_URL || 'http://127.0.0.1:9119',

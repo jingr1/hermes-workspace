@@ -137,7 +137,7 @@ function getActiveProfilePath(): string {
  * switches do not stomp the machine-global sticky pointer.
  */
 function stickyActiveProfileEnabled(): boolean {
-  return process.env.HERMES_WORKSPACE_STICKY_PROFILE === '1'
+  return process.env.AGORAX_STICKY_PROFILE === '1'
 }
 
 function clearStickyActiveProfile(): void {
@@ -994,7 +994,7 @@ export function readProfile(name: string): ProfileDetail {
 /**
  * Select the Workspace UI / control-plane profile.
  * Always updates workspace `selected_profile`. Hermes sticky is untouched
- * unless `HERMES_WORKSPACE_STICKY_PROFILE=1`.
+ * unless `AGORAX_STICKY_PROFILE=1`.
  */
 export function setActiveProfile(name: string): void {
   const trimmed = name.trim()

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-const BASE = process.env.HERMES_WORKSPACE_URL || 'http://localhost:3002'
+const BASE = process.env.AGORAX_URL || 'http://localhost:3002'
 
 test.describe('Conductor mobile rendering', () => {
   test.use({

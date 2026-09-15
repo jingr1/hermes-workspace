@@ -16,7 +16,7 @@ resolve_script_path() {
 
 SCRIPT_DIR="$(resolve_script_path)"
 ORCH_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-WORKSPACE_ROOT="${HERMES_WORKSPACE_ROOT:-$(cd "${ORCH_DIR}/.." && pwd)}"
+WORKSPACE_ROOT="${AGORAX_ROOT:-$(cd "${ORCH_DIR}/.." && pwd)}"
 PYTHON="${HERMES_LANGGRAPH_PYTHON:-${ORCH_DIR}/.venv/bin/python}"
 
 if [[ ! -x "${PYTHON}" ]]; then

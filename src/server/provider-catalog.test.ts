@@ -25,7 +25,7 @@ describe('provider catalog', () => {
     )
     vi.spyOn(os, 'homedir').mockReturnValue(tempHome)
     process.env.HERMES_HOME = path.join(tempHome, '.hermes')
-    process.env.HERMES_WORKSPACE_STATE_DIR = path.join(
+    process.env.AGORAX_STATE_DIR = path.join(
       tempHome,
       '.hermes',
       'workspace',
@@ -37,7 +37,7 @@ describe('provider catalog', () => {
     vi.restoreAllMocks()
     __resetProviderCatalogCacheForTests()
     delete process.env.HERMES_HOME
-    delete process.env.HERMES_WORKSPACE_STATE_DIR
+    delete process.env.AGORAX_STATE_DIR
     fs.rmSync(tempHome, { recursive: true, force: true })
   })
 

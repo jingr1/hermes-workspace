@@ -22,7 +22,7 @@ Do **not** introduce these in new work unless quoting legacy history or compatib
 ## Runtime/path rules (unchanged)
 
 - `HERMES_HOME`, `~/.hermes/profiles/<workerId>` remain the canonical runtime paths — do not invent Agorax-branded profile paths.
-- `HERMES_*` / `HERMES_WORKSPACE_*` env vars are wire contracts between Agorax, the Hermes runtime, and the LangGraph orchestrator — do not rename or alias them without a migration plan.
+- `HERMES_*` / `AGORAX_*` env vars are wire contracts between Agorax, the Hermes runtime, and the LangGraph orchestrator — do not rename or alias them without a migration plan.
 - Worker/tmux session naming (`swarm-<workerId>`), `swarm.yaml`, and `agents.yaml` are engine-level identifiers — user-visible labels change via UI copy/i18n only.
 
 ## Reviewer rule

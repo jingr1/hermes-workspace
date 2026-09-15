@@ -59,8 +59,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   delete process.env.HERMES_HOME
   delete process.env.CLAUDE_HOME
-  delete process.env.HERMES_WORKSPACE_STICKY_PROFILE
-  delete process.env.HERMES_WORKSPACE_STATE_DIR
+  delete process.env.AGORAX_STICKY_PROFILE
+  delete process.env.AGORAX_STATE_DIR
 })
 
 async function loadMod() {
@@ -163,8 +163,8 @@ describe('profiles-browser', () => {
       )
     })
 
-    it('mirrors sticky active_profile when HERMES_WORKSPACE_STICKY_PROFILE=1', async () => {
-      process.env.HERMES_WORKSPACE_STICKY_PROFILE = '1'
+    it('mirrors sticky active_profile when AGORAX_STICKY_PROFILE=1', async () => {
+      process.env.AGORAX_STICKY_PROFILE = '1'
 
       existsSync.mockImplementation((p: string) => {
         if (p === jarvisHome) return true
@@ -184,7 +184,7 @@ describe('profiles-browser', () => {
         'utf-8',
       )
 
-      delete process.env.HERMES_WORKSPACE_STICKY_PROFILE
+      delete process.env.AGORAX_STICKY_PROFILE
     })
 
     it('writes selected default without clearing sticky unless opt-in', async () => {
@@ -203,8 +203,8 @@ describe('profiles-browser', () => {
       expect(unlinkSync).not.toHaveBeenCalledWith(stickyPath)
     })
 
-    it('clears sticky when setting default with HERMES_WORKSPACE_STICKY_PROFILE=1', async () => {
-      process.env.HERMES_WORKSPACE_STICKY_PROFILE = '1'
+    it('clears sticky when setting default with AGORAX_STICKY_PROFILE=1', async () => {
+      process.env.AGORAX_STICKY_PROFILE = '1'
       existsSync.mockImplementation((p: string) => {
         if (p === stickyPath) return true
         return false
@@ -213,7 +213,7 @@ describe('profiles-browser', () => {
       const mod = await loadMod()
       mod.setActiveProfile('default')
       expect(unlinkSync).toHaveBeenCalledWith(stickyPath)
-      delete process.env.HERMES_WORKSPACE_STICKY_PROFILE
+      delete process.env.AGORAX_STICKY_PROFILE
     })
 
     it('resolves profile HERMES_HOME paths', async () => {

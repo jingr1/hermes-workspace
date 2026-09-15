@@ -145,7 +145,7 @@ async function configuredDefaultWorkspace(
       : ''
 
   return firstValidDirectory([
-    { path: process.env.HERMES_WORKSPACE_DIR ?? '', source: 'env' },
+    { path: process.env.AGORAX_DIR ?? '', source: 'env' },
     { path: process.env.CLAUDE_WORKSPACE_DIR ?? '', source: 'env' },
     { path: process.env.HERMES_WEBUI_DEFAULT_WORKSPACE ?? '', source: 'env' },
     { path: readString(cfg.workspace), source: 'config.workspace' },
@@ -332,7 +332,7 @@ async function loadWorkspaceCatalogUncached(
   // Priority 2: Environment variable (local profiles only — env paths are host-side)
   if (!remoteCwd) {
     const envWorkspace =
-      process.env.HERMES_WORKSPACE_DIR?.trim() ||
+      process.env.AGORAX_DIR?.trim() ||
       process.env.CLAUDE_WORKSPACE_DIR?.trim()
     if (envWorkspace) {
       const isValid = await isValidDirectory(envWorkspace)
