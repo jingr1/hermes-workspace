@@ -4,7 +4,6 @@ import {
   ArrowLeft01Icon,
   ArrowRight01Icon,
   BrainIcon,
-  Building01Icon,
   Castle02Icon,
   Chat01Icon,
   CheckListIcon,
@@ -564,7 +563,6 @@ function ChatSidebarComponent({
   const isMcpActive = pathname === '/mcp'
   const isFilesActive = pathname === '/files'
   const isPlaygroundActive = pathname === '/playground'
-  const isAgoraActive = pathname === '/agora'
   const isTerminalActive = pathname === '/terminal'
   const isJobsActive = pathname === '/jobs'
   const isMemoryActive = pathname === '/memory'
@@ -766,14 +764,14 @@ function ChatSidebarComponent({
       kind: 'link',
       to: '/mission-control',
       icon: Target02Icon,
-      label: 'Mission Control',
+      label: 'Missions',
       active: isMissionControlActive,
     },
     {
       kind: 'link',
       to: '/group-chat',
       icon: MessageMultiple02Icon,
-      label: 'Group Chat',
+      label: 'Groups',
       active: isGroupChatActive,
     },
     {

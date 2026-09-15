@@ -1945,8 +1945,8 @@ function RouteFallback() {
         </div>
         <div className="mt-1 text-xl font-extrabold">Route fallback active</div>
         <p className="mt-3 text-sm text-white/75">
-          The 3D route failed to render in this browser context. Reload the page
-          or open `/agora` for the lightweight fallback.
+          The 3D route failed to render in this browser context. Reload the
+          page.
         </p>
       </div>
     </div>
