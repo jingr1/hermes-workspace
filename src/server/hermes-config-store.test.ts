@@ -153,3 +153,41 @@ describe('env value round-tripping', () => {
     expect(() => stringifyEnv({ BAD: 'one\ntwo' })).toThrow(/newlines/)
   })
 })
+
+describe('profile-scoped config paths', () => {
+  it('resolves named profile to ~/.hermes/profiles/<name>/config.yaml', () => {
+    const paths = resolveHermesConfigPaths('dev')
+    expect(paths.configPath).toBe(
+      path.join(tmpHome, 'profiles', 'dev', 'config.yaml'),
+    )
+    expect(paths.envPath).toBe(path.join(tmpHome, 'profiles', 'dev', '.env'))
+  })
+
+  it('default and unset profile resolve to the global Hermes root', () => {
+    expect(resolveHermesConfigPaths(undefined).configPath).toBe(
+      path.join(tmpHome, 'config.yaml'),
+    )
+    expect(resolveHermesConfigPaths('').configPath).toBe(
+      path.join(tmpHome, 'config.yaml'),
+    )
+    expect(resolveHermesConfigPaths('default').configPath).toBe(
+      path.join(tmpHome, 'config.yaml'),
+    )
+  })
+
+  it('applies a terminal SSH patch to the named profile config', () => {
+    const paths = resolveHermesConfigPaths('dev')
+    applyHermesConfigPatch(paths, {
+      action: 'set-default-model',
+      providerId: 'openrouter',
+      modelId: 'auto',
+    })
+
+    const parsed = YAML.parse(
+      fs.readFileSync(path.join(tmpHome, 'profiles', 'dev', 'config.yaml'), 'utf-8'),
+    )
+    expect(parsed).toMatchObject({ provider: 'openrouter', model: 'auto' })
+    // Global config must not be created by the profile write.
+    expect(fs.existsSync(path.join(tmpHome, 'config.yaml'))).toBe(false)
+  })
+})

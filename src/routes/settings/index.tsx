@@ -27,6 +27,7 @@ import {
   SettingsSidebar,
 } from '@/components/settings/settings-sidebar'
 import { ModelProviderScopePanel } from '@/components/settings/model-provider-scope'
+import { useProfiles } from '@/screens/chat/hooks/use-profiles'
 import { ClaudeCodeSettingsPanel } from '@/components/settings-dialog'
 import { CodexSettingsPanel } from '@/components/settings-dialog/codex-settings-panel'
 import { UsagePricingPanel } from '@/components/settings-dialog/usage-pricing-panel'
@@ -1193,9 +1194,21 @@ function ClaudeConfigSection({
   const [availableModels, setAvailableModels] = useState<
     Array<{ id: string; description: string }>
   >([])
+  const { profiles, activeProfileName, isReady } = useProfiles()
+  // Profile scope shared with ModelProviderScopePanel — terminal backend
+  // config is read/written against the same profile.
+  const [scope, setScope] = useState<string>('')
 
-  const fetchConfig = useCallback(async () => {
-    const res = await fetch('/api/claude-config')
+  // Terminal config is edited locally and written once on "Save", mirroring the
+  // Model & Provider panel. Writing per-keystroke thrashes config.yaml.
+  const [terminalDraft, setTerminalDraft] = useState<Record<string, string>>({})
+
+  const fetchConfig = useCallback(async (profileName?: string) => {
+    const params =
+      profileName && profileName !== 'default'
+        ? `?profile=${encodeURIComponent(profileName)}`
+        : ''
+    const res = await fetch(`/api/claude-config${params}`)
     const configData = (await res.json()) as ClaudeConfigData
     setData(configData)
     return configData
@@ -1239,15 +1252,38 @@ function ClaudeConfigSection({
   }, [])
 
   useEffect(() => {
-    fetchConfig()
+    // Initialize the scope from the active profile once useProfiles is ready.
+    if (!isReady) return
+    const target = scope || activeProfileName || 'default'
+    if (!scope) {
+      setScope(target)
+      return
+    }
+    // Re-fetch whenever the selected profile changes so the Terminal backend
+    // (and all other config below) reflects the profile picked in the
+    // Model & Provider panel.
+    let cancelled = false
+    void fetchConfig(target === 'default' ? undefined : target)
       .then((configData) => {
+        if (cancelled) return
         setLoading(false)
         if (configData.activeProvider) {
           void fetchModelsForProvider(configData.activeProvider)
         }
       })
-      .catch(() => setLoading(false))
-  }, [fetchConfig, fetchModelsForProvider])
+      .catch(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [
+    activeProfileName,
+    fetchConfig,
+    fetchModelsForProvider,
+    isReady,
+    scope,
+  ])
 
   const saveConfig = async (updates: {
     config?: Record<string, unknown>
@@ -1256,14 +1292,20 @@ function ClaudeConfigSection({
     setSaving(true)
     setSaveMessage(null)
     try {
+      const body = {
+        ...updates,
+        ...(scope && scope !== 'default' ? { profile: scope } : {}),
+      }
       const res = await fetch('/api/claude-config', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
+        body: JSON.stringify(body),
       })
       const result = (await res.json()) as { message?: string }
       setSaveMessage(result.message || 'Saved')
-      const refreshData = await fetchConfig()
+      const refreshData = await fetchConfig(
+        scope === 'default' ? undefined : scope,
+      )
       if (refreshData.activeProvider) {
         void fetchModelsForProvider(refreshData.activeProvider)
       }
@@ -1298,6 +1340,40 @@ function ClaudeConfigSection({
     const value = rawValue === '' ? fallback : Number(rawValue)
     if (!Number.isFinite(value)) return
     void saveConfig({ config: { [section]: { [field]: value } } })
+  }
+
+  // Seed the terminal draft from the currently-loaded config whenever the
+  // profile/scope or fetched data changes (e.g. switching profile).
+  useEffect(() => {
+    if (!data) return
+    const t = asRecord(data.config.terminal)
+    setTerminalDraft({
+      backend: (t.backend as string) || 'local',
+      ssh_host: (t.ssh_host as string) || '',
+      ssh_user: (t.ssh_user as string) || '',
+      ssh_port: t.ssh_port ? String(t.ssh_port) : '',
+      ssh_key: (t.ssh_key as string) || '',
+      cwd: (t.cwd as string) || '',
+      timeout: t.timeout ? String(t.timeout) : '180',
+    })
+  }, [data])
+
+  const saveTerminalConfig = () => {
+    const port = Number(terminalDraft.ssh_port)
+    const timeout = Number(terminalDraft.timeout)
+    void saveConfig({
+      config: {
+        terminal: {
+          backend: terminalDraft.backend || 'local',
+          ssh_host: terminalDraft.ssh_host || '',
+          ssh_user: terminalDraft.ssh_user || '',
+          ssh_port: Number.isFinite(port) ? port : undefined,
+          ssh_key: terminalDraft.ssh_key || '',
+          cwd: terminalDraft.cwd || '',
+          timeout: Number.isFinite(timeout) ? timeout : 180,
+        },
+      },
+    })
   }
 
   if (loading) {
@@ -1348,10 +1424,12 @@ function ClaudeConfigSection({
     <>
       <SettingsSection
         title="Model & Provider"
-        description="Shared providers (URL and keys) live above. Each profile then picks its default and fallback model."
+        description="Shared providers (URL and keys) live above. Each profile then picks its default and fallback model. The profile selector below also scopes the Terminal backend (SSH) config."
         icon={SourceCodeSquareIcon}
       >
         <ModelProviderScopePanel
+          profileName={scope}
+          onProfileChange={setScope}
           onApplied={(providerId) => {
             void fetchModelsForProvider(providerId)
           }}
@@ -1393,17 +1471,92 @@ function ClaudeConfigSection({
 
       <SettingsSection
         title="Terminal"
-        description="Shell execution settings."
+        description="Shell execution settings. Edits are local until you press Save."
         icon={SourceCodeSquareIcon}
       >
         <SettingsRow label="Backend" description="Terminal execution backend.">
-          <span
-            className="text-sm font-mono"
-            style={{ color: 'var(--theme-muted)' }}
+          <select
+            value={terminalDraft.backend || 'local'}
+            onChange={(e) =>
+              setTerminalDraft((d) => ({ ...d, backend: e.target.value }))
+            }
+            className={selectClassName}
           >
-            {(terminalConfig.backend as string) || 'local'}
-          </span>
+            <option value="local">local</option>
+            <option value="ssh">ssh</option>
+          </select>
         </SettingsRow>
+        {(terminalDraft.backend || 'local') === 'ssh' ? (
+          <>
+            <SettingsRow
+              label="SSH host"
+              description="Remote host for SSH terminal."
+            >
+              <Input
+                type="text"
+                value={terminalDraft.ssh_host || ''}
+                onChange={(e) =>
+                  setTerminalDraft((d) => ({ ...d, ssh_host: e.target.value }))
+                }
+                className="md:w-72"
+              />
+            </SettingsRow>
+            <SettingsRow
+              label="SSH user"
+              description="Remote user for SSH terminal."
+            >
+              <Input
+                type="text"
+                value={terminalDraft.ssh_user || ''}
+                onChange={(e) =>
+                  setTerminalDraft((d) => ({ ...d, ssh_user: e.target.value }))
+                }
+                className="md:w-72"
+              />
+            </SettingsRow>
+            <SettingsRow
+              label="SSH port"
+              description="SSH port (default 22)."
+            >
+              <Input
+                type="number"
+                min={1}
+                max={65535}
+                value={terminalDraft.ssh_port || ''}
+                onChange={(e) =>
+                  setTerminalDraft((d) => ({ ...d, ssh_port: e.target.value }))
+                }
+                className="md:w-28"
+              />
+            </SettingsRow>
+            <SettingsRow
+              label="SSH key"
+              description="Path to SSH private key."
+            >
+              <Input
+                type="text"
+                value={terminalDraft.ssh_key || ''}
+                onChange={(e) =>
+                  setTerminalDraft((d) => ({ ...d, ssh_key: e.target.value }))
+                }
+                className="md:w-72"
+              />
+            </SettingsRow>
+            <SettingsRow
+              label="SSH workspace path"
+              description="Working directory on the remote host (terminal.cwd). Leave empty to default to the remote home (~)."
+            >
+              <Input
+                type="text"
+                value={terminalDraft.cwd || ''}
+                onChange={(e) =>
+                  setTerminalDraft((d) => ({ ...d, cwd: e.target.value }))
+                }
+                className="md:w-72"
+              />
+            </SettingsRow>
+          </>
+        ) : null}
         <SettingsRow
           label="Timeout"
           description="Max seconds for terminal commands."
@@ -1411,13 +1564,28 @@ function ClaudeConfigSection({
           <Input
             type="number"
             min={10}
-            value={readNumber(terminalConfig.timeout, 180)}
+            value={terminalDraft.timeout || '180'}
             onChange={(e) =>
-              saveNumberField('terminal', 'timeout', e.target.value, 180)
+              setTerminalDraft((d) => ({ ...d, timeout: e.target.value }))
             }
             className="md:w-28"
           />
         </SettingsRow>
+        <div className="flex items-center justify-end gap-2 pt-1">
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => void saveTerminalConfig()}
+            disabled={saving}
+          >
+            {saving ? 'Saving…' : 'Save Terminal'}
+          </Button>
+          {saveMessage && (
+            <span className="text-xs" style={{ color: 'var(--theme-muted)' }}>
+              {saveMessage}
+            </span>
+          )}
+        </div>
       </SettingsSection>
 
       <SettingsSection

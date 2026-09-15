@@ -61,6 +61,57 @@ function readString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+/**
+ * Thinking tag names the gateway may inline into assistant text. The upstream
+ * can emit reasoning either as a dedicated `tool.progress` (_thinking) event or
+ * embedded in the assistant delta text. When embedded, we split it out here so
+ * the frontend renders it in the Activity/Working panel instead of inside the
+ * visible assistant bubble. `think` is the canonical Claude reasoning tag used
+ * by Hermes Agent's OpenAI-compat stream.
+ */
+const THINKING_TAG_NAMES = ['think', 'thinking', 'antThinking', 'thought'] as const
+
+/**
+ * Extract complete thinking blocks from a streamed text buffer and return the
+ * remaining display text, the concatenated thinking text, and the leftover
+ * buffer for the next chunk.
+ *
+ * Incomplete opening tags (e.g. a `<thinking>` split across two SSE frames) are
+ * held back in the buffer and also suppressed from display so they never flash
+ * in the assistant bubble.
+ */
+function extractStreamingThinking(buffer: string): {
+  displayText: string
+  extractedThinking: string
+  remainingBuffer: string
+} {
+  let extractedThinking = ''
+  let displayText = buffer
+
+  for (const tag of THINKING_TAG_NAMES) {
+    const complete = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'gi')
+    let match: RegExpExecArray | null
+    while ((match = complete.exec(buffer)) !== null) {
+      extractedThinking += match[1]
+      displayText = displayText.replace(match[0], '')
+    }
+  }
+
+  // Suppress a trailing, not-yet-closed opening tag so it cannot leak into the
+  // visible bubble while we wait for the closing tag to arrive.
+  const partialOpen =
+    /<(?:think|thinking|antThinking|thought)\b(?![^>]*>)[\s\S]*$/i.exec(
+      displayText,
+    )
+  let remainingBuffer = displayText
+  if (partialOpen) {
+    displayText = displayText.slice(0, partialOpen.index)
+    remainingBuffer = displayText
+  }
+
+  return { displayText, extractedThinking, remainingBuffer }
+}
+
 function readNumber(value: unknown): number | undefined {
   if (typeof value === 'number' && Number.isFinite(value)) return value
   return undefined
@@ -229,14 +280,49 @@ function getToolName(data: Record<string, unknown>): string {
   const toolCall = readRecord(data.tool_call)
   const tool = readRecord(data.tool)
   const toolFunction = readRecord(toolCall?.function)
-  return (
+  const structured =
     readString(toolCall?.tool_name) ||
     readString(toolCall?.name) ||
     readString(toolFunction?.name) ||
     readString(tool?.name) ||
-    readString(data.tool_name) ||
-    readString(data.name) ||
-    'tool'
+    readString(data.tool_name)
+  if (structured) return structured
+  // Hermes Agent sometimes sends the tool/name as a bare string
+  // (e.g. '_thinking', 'reasoning.available'). Prefer `tool` so a reasoning
+  // payload's `name` field (the actual thinking text) is not mistaken for a
+  // tool name.
+  if (typeof data.tool === 'string' && data.tool.trim()) {
+    return data.tool.trim()
+  }
+  if (typeof data.name === 'string' && data.name.trim()) {
+    return data.name.trim()
+  }
+  return 'tool'
+}
+
+/**
+ * Extract a reasoning delta from a `tool.progress` payload, or null when the
+ * payload is not a reasoning event. Hermes Agent surfaces reasoning through
+ * event_type 'reasoning.available' (text in `preview`) and '_thinking' (text
+ * in `name`), plus the legacy `_thinking`/`tool` tool-name form.
+ */
+export function extractReasoningFromToolProgress(
+  data: Record<string, unknown>,
+): string | null {
+  const delta = readString(data.delta)
+  const toolName = getToolName(data)
+  const eventType = readString(data.event)
+  const isReasoning =
+    toolName === '_thinking' ||
+    toolName === 'reasoning.available' ||
+    eventType === 'reasoning.available' ||
+    eventType === '_thinking'
+  if (!isReasoning) return null
+  return (
+    readString(data.preview) ||
+    (eventType === 'reasoning.available' ? '' : readString(data.name)) ||
+    delta ||
+    null
   )
 }
 
@@ -1018,6 +1104,10 @@ export const Route = createFileRoute('/api/send-stream')({
               }
 
               let startedSent = false
+              let thinkingAccumulated = ''
+              // Buffers raw assistant deltas so we can split out <thinking>
+              // blocks that the gateway inlines into the text stream.
+              let assistantTextBuffer = ''
               // In enhanced mode, the HTTP stream response delivers all events
               // directly to useStreamingMessage. Skip publishChatEvent to prevent
               // useRealtimeChatHistory from creating duplicate message bubbles.
@@ -1194,23 +1284,47 @@ export const Route = createFileRoute('/api/send-stream')({
 
                       if (event === 'assistant.completed') {
                         // Send full content as a chunk — covers cases where
-                        // deltas were missed or response was too short for streaming
+                        // deltas were missed or response was too short for streaming.
+                        // Split out any inline thinking blocks so they land in
+                        // the Activity panel, not the visible bubble.
                         const content =
                           typeof data.content === 'string' ? data.content : ''
                         if (content) {
-                          persistActiveRun((runSessionKey, activeId) =>
-                            appendRunText(runSessionKey, activeId, content, {
-                              replace: true,
-                            }),
-                          )
-                          const translated = {
-                            text: content,
-                            fullReplace: true,
-                            sessionKey: sessionKeyFromEvent,
-                            runId,
+                          assistantTextBuffer += content
+                          const { displayText, extractedThinking, remainingBuffer } =
+                            extractStreamingThinking(assistantTextBuffer)
+                          assistantTextBuffer = remainingBuffer
+                          if (extractedThinking) {
+                            thinkingAccumulated += extractedThinking
+                            persistActiveRun((runSessionKey, activeId) =>
+                              setRunThinking(
+                                runSessionKey,
+                                activeId,
+                                thinkingAccumulated,
+                              ),
+                            )
+                            sendEvent('thinking', {
+                              text: thinkingAccumulated,
+                              sessionKey: sessionKeyFromEvent,
+                              runId,
+                            })
                           }
-                          sendEvent('chunk', translated)
-                          skipPublish || publishChatEvent('chunk', translated)
+                          if (displayText) {
+                            persistActiveRun((runSessionKey, activeId) =>
+                              appendRunText(runSessionKey, activeId, displayText, {
+                                replace: true,
+                              }),
+                            )
+                            const translated = {
+                              text: displayText,
+                              fullReplace: true,
+                              sessionKey: sessionKeyFromEvent,
+                              runId,
+                            }
+                            sendEvent('chunk', translated)
+                            skipPublish ||
+                              publishChatEvent('chunk', translated)
+                          }
                         }
                         return
                       }
@@ -1218,17 +1332,86 @@ export const Route = createFileRoute('/api/send-stream')({
                       if (event === 'assistant.delta') {
                         const delta =
                           typeof data.delta === 'string' ? data.delta : ''
-                        if (!delta) return
-                        persistActiveRun((runSessionKey, activeId) =>
-                          appendRunText(runSessionKey, activeId, delta),
-                        )
-                        const translated = {
-                          text: delta,
-                          sessionKey: sessionKeyFromEvent,
-                          runId,
+                        // Reasoning-capable models (Kimi, DeepSeek, …) send
+                        // reasoning deltas in a separate field; surface them as
+                        // thinking events so they land in the Activity panel.
+                        const reasoningDelta =
+                          (typeof data.reasoning_content === 'string'
+                            ? data.reasoning_content
+                            : '') ||
+                          (typeof data.reasoning === 'string'
+                            ? data.reasoning
+                            : '')
+                        if (reasoningDelta) {
+                          thinkingAccumulated += reasoningDelta
+                          persistActiveRun((runSessionKey, activeId) =>
+                            setRunThinking(
+                              runSessionKey,
+                              activeId,
+                              thinkingAccumulated,
+                            ),
+                          )
+                          sendEvent('thinking', {
+                            text: thinkingAccumulated,
+                            sessionKey: sessionKeyFromEvent,
+                            runId,
+                          })
                         }
-                        sendEvent('chunk', translated)
-                        skipPublish || publishChatEvent('chunk', translated)
+                        if (!delta) return
+                        // Split inline <thinking> blocks out of the text stream
+                        // so they render in the Activity panel instead of
+                        // appearing in the visible assistant bubble.
+                        assistantTextBuffer += delta
+                        const { displayText, extractedThinking, remainingBuffer } =
+                          extractStreamingThinking(assistantTextBuffer)
+                        assistantTextBuffer = remainingBuffer
+                        if (extractedThinking) {
+                          thinkingAccumulated += extractedThinking
+                          persistActiveRun((runSessionKey, activeId) =>
+                            setRunThinking(
+                              runSessionKey,
+                              activeId,
+                              thinkingAccumulated,
+                            ),
+                          )
+                          sendEvent('thinking', {
+                            text: thinkingAccumulated,
+                            sessionKey: sessionKeyFromEvent,
+                            runId,
+                          })
+                          skipPublish ||
+                            publishChatEvent('thinking', {
+                              text: thinkingAccumulated,
+                              sessionKey: sessionKeyFromEvent,
+                              runId,
+                            })
+                        }
+                        if (displayText) {
+                          // displayText is the full visible (thinking-stripped)
+                          // accumulation — replace, never append, so the
+                          // downstream accumulators don't concatenate duplicates.
+                          persistActiveRun((runSessionKey, activeId) =>
+                            appendRunText(
+                              runSessionKey,
+                              activeId,
+                              displayText,
+                              { replace: true },
+                            ),
+                          )
+                          sendEvent('chunk', {
+                            text: displayText,
+                            fullReplace: true,
+                            sessionKey: sessionKeyFromEvent,
+                            runId,
+                          })
+                          skipPublish ||
+                            publishChatEvent('chunk', {
+                              text: displayText,
+                              fullReplace: true,
+                              sessionKey: sessionKeyFromEvent,
+                              runId,
+                            })
+                        }
                         return
                       }
 
@@ -1273,13 +1456,22 @@ export const Route = createFileRoute('/api/send-stream')({
                       if (event === 'tool.progress') {
                         const delta = readString(data.delta)
                         const toolName = getToolName(data)
-                        if (toolName === '_thinking' || toolName === 'tool') {
-                          if (!delta) return
+                        const reasonDelta =
+                          extractReasoningFromToolProgress(data)
+                        if (reasonDelta !== null) {
+                          // tool.progress deltas are incremental; accumulate
+                          // them so the activity card shows the full thinking
+                          // chain instead of only the latest fragment.
+                          thinkingAccumulated += reasonDelta
                           persistActiveRun((runSessionKey, activeId) =>
-                            setRunThinking(runSessionKey, activeId, delta),
+                            setRunThinking(
+                              runSessionKey,
+                              activeId,
+                              thinkingAccumulated,
+                            ),
                           )
                           const translated = {
-                            text: delta,
+                            text: thinkingAccumulated,
                             sessionKey: sessionKeyFromEvent,
                             runId,
                           }
@@ -1287,9 +1479,9 @@ export const Route = createFileRoute('/api/send-stream')({
                           skipPublish ||
                             publishChatEvent('thinking', translated)
                           lastActivity =
-                            delta.length > 60
-                              ? delta.slice(0, 60) + '...'
-                              : delta
+                            thinkingAccumulated.length > 60
+                              ? thinkingAccumulated.slice(0, 60) + '...'
+                              : thinkingAccumulated
                           return
                         }
                         const translated = {

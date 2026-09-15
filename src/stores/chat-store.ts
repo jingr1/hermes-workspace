@@ -359,6 +359,136 @@ export function stripInternalTags(text: string): string {
     .trim()
 }
 
+/**
+ * Thinking tag pairs the provider may inline into the assistant text stream.
+ * Mirrors hermes-webui's `_thinkPairs` (plus `<thinking>` / `<antThinking>`
+ * long forms) so reasoning is surfaced in the Activity panel instead of being
+ * printed as visible message text.
+ */
+const THINKING_TAG_PAIRS: ReadonlyArray<{ open: string; close: string }> = [
+  { open: '<think>', close: '</think>' },
+  { open: '<thinking>', close: '</thinking>' },
+  { open: '<antThinking>', close: '</antThinking>' },
+  { open: '<thought>', close: '</thought>' },
+]
+
+type SplitInlineThinkingResult = {
+  content: string
+  reasoning: string
+  inThinking: boolean
+}
+
+/**
+ * Split inline thinking blocks out of a (possibly streaming) assistant text.
+ *
+ * Code-aware: thinking tags inside a ``` fence, an inline backtick span or an
+ * indented code block are left visible. During streaming an unclosed opening
+ * tag means "still thinking" — its body is held as reasoning and suppressed
+ * from the visible content so partial thinking never flashes in the bubble.
+ * Mirrors hermes-webui's `_extractInlineThinkingFromContent`.
+ */
+export function splitInlineThinking(
+  raw: string,
+  options?: { streaming?: boolean },
+): SplitInlineThinkingResult {
+  const streaming = options?.streaming ?? false
+  const text = String(raw ?? '')
+  if (!text) return { content: text, reasoning: '', inThinking: false }
+
+  const visible: Array<string> = []
+  const extracted: Array<string> = []
+  let cursor = 0
+  let index = 0
+  let fence = ''
+  let inBacktick = false
+  let seenNonspace = false
+  let leadingRemoved = false
+  let inThinking = false
+
+  while (index < text.length) {
+    // Track markdown code state (fence + inline backtick).
+    if (index > 0 && text[index - 1] === '\n') {
+      if (text.startsWith('```', index) || text.startsWith('~~~', index)) {
+        const marker = text.startsWith('```', index) ? '```' : '~~~'
+        fence = fence === marker ? '' : (fence || marker)
+        index += marker.length
+        continue
+      }
+    }
+    const ch = text[index]
+    if (!fence && ch === '`') inBacktick = !inBacktick
+    const inCode = !!fence || inBacktick
+
+    if (!inCode) {
+      // Exact thinking opener at this index?
+      let pair: { open: string; close: string } | null = null
+      for (const candidate of THINKING_TAG_PAIRS) {
+        if (text.startsWith(candidate.open, index)) {
+          pair = candidate
+          break
+        }
+      }
+      if (pair) {
+        const closeIndex = text.indexOf(pair.close, index + pair.open.length)
+        if (closeIndex === -1) {
+          // Unclosed opener. A leading unclosed block is genuine thinking cut
+          // off mid-thought; on the non-streaming render path an unclosed tag
+          // after visible content is treated as a literal typed tag.
+          const leading = !seenNonspace
+          if (!streaming && !leading) break
+          if (leading) leadingRemoved = true
+          visible.push(text.slice(cursor, index))
+          const partial = text.slice(index + pair.open.length)
+          if (partial) extracted.push(partial)
+          inThinking = true
+          cursor = text.length
+          index = text.length
+          break
+        }
+        visible.push(text.slice(cursor, index))
+        extracted.push(text.slice(index + pair.open.length, closeIndex))
+        if (!seenNonspace) leadingRemoved = true
+        seenNonspace = true
+        index = closeIndex + pair.close.length
+        cursor = index
+        continue
+      }
+      if (streaming) {
+        // Trailing partial opener ("...<thi") may be a forming block.
+        let matchedPartial = false
+        for (const candidate of THINKING_TAG_PAIRS) {
+          const rest = text.slice(index)
+          if (
+            rest.length < candidate.open.length &&
+            candidate.open.startsWith(rest)
+          ) {
+            if (!seenNonspace) leadingRemoved = true
+            visible.push(text.slice(cursor, index))
+            inThinking = true
+            cursor = text.length
+            index = text.length
+            matchedPartial = true
+            break
+          }
+        }
+        if (matchedPartial || index >= text.length) break
+      }
+    }
+    if (ch.trim() !== '') seenNonspace = true
+    index++
+  }
+  if (cursor < text.length) visible.push(text.slice(cursor))
+
+  const content = leadingRemoved
+    ? visible.join('').replace(/^\s+/, '')
+    : visible.join('')
+  const reasoning = extracted
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join('\n\n')
+  return { content, reasoning, inThinking }
+}
+
 const LIFECYCLE_PREFIX_EMOJIS = ['⏳', '⚠️', '🔄', '🗜️', '❌'] as const
 
 function parseLifecycleEvent(
@@ -945,8 +1075,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const streamingMap = new Map(state.streamingState)
         const prev = streamingMap.get(sessionKey) ?? createEmptyStreamingState()
 
-        // Server sends full accumulated text with fullReplace=true
-        // Replace entire text (default), or append if fullReplace is explicitly false
+        // The server (send-stream) already splits inline thinking blocks out
+        // of the text stream and emits them as 'thinking' events, so chunk
+        // text here is the clean visible content. Replace when fullReplace
+        // (default), append when fullReplace is explicitly false.
         const next: StreamingState = {
           ...prev,
           text: stripFinalTags(

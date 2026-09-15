@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { stripInternalTags, useChatStore } from './chat-store'
+import { splitInlineThinking, stripInternalTags, useChatStore } from './chat-store'
 import type { ChatMessage } from '../screens/chat/types'
 
 function textMessage(
@@ -47,6 +47,39 @@ describe('stripInternalTags', () => {
       '<thinking>secret</thinking>\n\nhello `code`\n```\nkept <thinking>x</thinking>\n```\n',
     )
     expect(result).toBe('hello `code`\n```\nkept <thinking>x</thinking>\n```')
+  })
+})
+
+describe('splitInlineThinking', () => {
+  it('extracts <think> reasoning and keeps the visible content', () => {
+    const result = splitInlineThinking('<think>I should read the file</think>\nHere is the answer.')
+    expect(result.reasoning).toBe('I should read the file')
+    expect(result.content).toBe('Here is the answer.')
+  })
+
+  it('supports long-form <thinking> and <antThinking> tags', () => {
+    const result = splitInlineThinking(
+      '<thinking>plan</thinking><antThinking>check</antThinking>done',
+    )
+    expect(result.reasoning).toBe('plan\n\ncheck')
+    expect(result.content).toBe('done')
+  })
+
+  it('leaves thinking tags inside fenced code blocks visible', () => {
+    const result = splitInlineThinking(
+      'before\n```\n<think>keep this</think>\n```\nafter',
+    )
+    expect(result.reasoning).toBe('')
+    expect(result.content).toContain('<think>keep this</think>')
+  })
+
+  it('during streaming suppresses an unclosed leading <think> block', () => {
+    const result = splitInlineThinking('<think>still reasoning', {
+      streaming: true,
+    })
+    expect(result.reasoning).toBe('still reasoning')
+    expect(result.content).toBe('')
+    expect(result.inThinking).toBe(true)
   })
 })
 
@@ -99,5 +132,80 @@ describe('chat-store history merge ordering', () => {
       'local-2',
       'local-3',
     ])
+  })
+})
+
+function resetStore(sessionKey: string) {
+  useChatStore.getState().clearSession(sessionKey)
+  useChatStore.getState().clearAllStreaming()
+}
+
+// Simulates the full upstream flow exactly as send-stream.ts emits after
+// server-side thinking split + reasoning extraction:
+//   tool.progress(reasoning.available) -> 'thinking' event
+//   assistant.delta (visible text)     -> 'chunk' with fullReplace:true
+describe('thinking + visible content through the stream store', () => {
+  it('thinking event populates thinking state; chunk carries only visible text', () => {
+    const sessionKey = 'e2e-1'
+    resetStore(sessionKey)
+    const store = useChatStore.getState()
+
+    store.processEvent({
+      type: 'thinking',
+      text: 'Let me inspect the configuration first.',
+      sessionKey,
+      transport: 'send-stream',
+    })
+    store.processEvent({
+      type: 'chunk',
+      text: 'I checked the config. Here is the answer.',
+      fullReplace: true,
+      sessionKey,
+      transport: 'send-stream',
+    })
+
+    const state = store.getStreamingState(sessionKey)
+    expect(state?.thinking).toBe('Let me inspect the configuration first.')
+    expect(state?.text).toBe('I checked the config. Here is the answer.')
+  })
+
+  it('done event builds a message that carries thinking content and clean text', () => {
+    const sessionKey = 'e2e-2'
+    resetStore(sessionKey)
+    const store = useChatStore.getState()
+
+    store.processEvent({
+      type: 'thinking',
+      text: 'reasoning trace',
+      sessionKey,
+      transport: 'send-stream',
+    })
+    store.processEvent({
+      type: 'chunk',
+      text: 'final answer text',
+      fullReplace: true,
+      sessionKey,
+      transport: 'send-stream',
+    })
+    store.processEvent({
+      type: 'done',
+      state: 'complete',
+      sessionKey,
+      transport: 'send-stream',
+    })
+
+    const messages = store.getRealtimeMessages(sessionKey)
+    const assistant = messages.find((m) => m.role === 'assistant')
+    expect(assistant).toBeDefined()
+    const content = assistant?.content
+    expect(Array.isArray(content)).toBe(true)
+    const thinkingPart = (
+      content as Array<{ type: string; thinking?: string }>
+    ).find((p) => p.type === 'thinking')
+    const textPart = (
+      content as Array<{ type: string; text?: string }>
+    ).find((p) => p.type === 'text')
+    expect(thinkingPart?.thinking).toBe('reasoning trace')
+    expect(textPart?.text).toBe('final answer text')
   })
 })

@@ -70,18 +70,25 @@ export function readSshTerminalConfig(
     .toLowerCase()
   if (backend !== 'ssh') return null
   const host = String(t.ssh_host ?? '').trim()
+  if (!host) return null
   const cwd = String(t.cwd ?? '').trim()
-  if (!host || !cwd || cwd === '.') return null
   return {
     host,
     user: String(t.ssh_user ?? '').trim(),
     key: String(t.ssh_key ?? '').trim(),
     port: Number(t.ssh_port) || 22,
-    cwd,
+    // SSH is remote regardless of cwd; default to the remote home directory.
+    cwd: cwd && cwd !== '.' ? cwd : '~',
   }
 }
 
 function posixQuote(value: string): string {
+  // A leading `~` (or `~/…`) must reach the remote shell unquoted so tilde
+  // expansion resolves to the remote home directory; a quoted `'~'` would be
+  // treated as a literal directory name. Only allow a safe trailing charset.
+  if (/^~(\/|$)/.test(value) && /^~[A-Za-z0-9/._@-]*$/.test(value)) {
+    return value
+  }
   return `'${value.replace(/'/g, `'\\''`)}'`
 }
 
@@ -221,6 +228,20 @@ function rejectUnsafeRemotePath(value: string): void {
   }
 }
 
+/**
+ * Corporate SSH gateways print an informational banner to stderr before every
+ * command (NIO, large enterprises…). Strip those banner lines (typically
+ * `#`-prefixed comments) so a real SSH error is visible instead of the banner.
+ */
+export function cleanSshStderr(raw: string): string {
+  return (raw || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#') && !/^=+$/.test(line))
+    .join(' ')
+    .trim()
+}
+
 export function resolveRemoteListTarget(
   subPath: string,
   remoteCwd: string,
@@ -257,7 +278,7 @@ export async function listSshWorkspaceFolders(
     timeoutMs: 20_000,
   })
   if (result.code !== 0) {
-    const detail = result.stderr.trim() || `ssh exited ${result.code}`
+    const detail = cleanSshStderr(result.stderr) || `ssh exited ${result.code}`
     throw new WorkspaceFolderAccessError(
       502,
       `Cannot list remote folders: ${detail}`,
@@ -444,7 +465,7 @@ async function listSshShallowDirectory(input: {
     timeoutMs: 8_000,
   })
   if (result.code !== 0) {
-    const detail = result.stderr.trim() || `ssh exited ${result.code}`
+    const detail = cleanSshStderr(result.stderr) || `ssh exited ${result.code}`
     throw new Error(`Cannot list remote files: ${detail}`)
   }
   return parseSshLsEntries(
@@ -503,7 +524,7 @@ export async function listSshFileTree(input: {
     { timeoutMs: 30_000 },
   )
   if (result.code !== 0) {
-    const detail = result.stderr.trim() || `ssh exited ${result.code}`
+    const detail = cleanSshStderr(result.stderr) || `ssh exited ${result.code}`
     throw new Error(`Cannot list remote files: ${detail}`)
   }
 
@@ -547,7 +568,7 @@ export async function readSshFile(input: {
     },
   )
   if (result.code !== 0) {
-    const detail = result.stderr.trim() || `ssh exited ${result.code}`
+    const detail = cleanSshStderr(result.stderr) || `ssh exited ${result.code}`
     throw new Error(`Cannot read remote file: ${detail}`)
   }
   if (result.stdout.length > MAX_READ_BYTES) {
@@ -572,7 +593,9 @@ export async function writeSshFile(input: {
   const mkdir = await runSsh(ssh, ['mkdir', '-p', parent])
   if (mkdir.code !== 0) {
     throw new Error(
-      `Cannot create remote directory: ${mkdir.stderr.trim() || mkdir.code}`,
+      `Cannot create remote directory: ${
+        cleanSshStderr(mkdir.stderr) || mkdir.code
+      }`,
     )
   }
   const result = await runSsh(
@@ -585,7 +608,7 @@ export async function writeSshFile(input: {
   )
   if (result.code !== 0) {
     throw new Error(
-      `Cannot write remote file: ${result.stderr.trim() || result.code}`,
+      `Cannot write remote file: ${cleanSshStderr(result.stderr) || result.code}`,
     )
   }
 }
@@ -604,7 +627,7 @@ export async function mkdirSshPath(input: {
   const result = await runSsh(ssh, ['mkdir', '-p', target])
   if (result.code !== 0) {
     throw new Error(
-      `Cannot create remote directory: ${result.stderr.trim() || result.code}`,
+      `Cannot create remote directory: ${cleanSshStderr(result.stderr) || result.code}`,
     )
   }
 }
@@ -626,7 +649,7 @@ export async function renameSshPath(input: {
   const result = await runSsh(ssh, ['mv', '-f', from, to])
   if (result.code !== 0) {
     throw new Error(
-      `Cannot rename remote path: ${result.stderr.trim() || result.code}`,
+      `Cannot rename remote path: ${cleanSshStderr(result.stderr) || result.code}`,
     )
   }
 }
@@ -651,7 +674,7 @@ export async function deleteSshPath(input: {
   const result = await runSsh(ssh, ['rm', '-rf', '--', target])
   if (result.code !== 0) {
     throw new Error(
-      `Cannot delete remote path: ${result.stderr.trim() || result.code}`,
+      `Cannot delete remote path: ${cleanSshStderr(result.stderr) || result.code}`,
     )
   }
 }
@@ -770,7 +793,7 @@ export async function zipSshFolder(input: {
     })
   }
   if (result.code !== 0) {
-    const detail = result.stderr.trim() || `ssh exited ${result.code}`
+    const detail = cleanSshStderr(result.stderr) || `ssh exited ${result.code}`
     throw new Error(`Cannot zip remote folder: ${detail}`)
   }
   return result.stdout

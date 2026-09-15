@@ -1413,12 +1413,25 @@ export function ChatScreen({
             }),
           )
         }
-        if (activeSend?.sessionKey) {
-          persistRecoveryMessage(activeSend.sessionKey, message)
-          clearPendingSendForSession(
-            activeSend.sessionKey,
-            activeSend.friendlyId,
+        // Persist recovery under the same session key the history query reads
+        // from. The activeSend key may have been promoted to a backend id during
+        // stream resolution, which can differ from the route-friendly session
+        // key. Using the history key prevents the completed message from being
+        // saved under a key the UI never reads.
+        const persistSessionKey = sessionKeyForHistory || activeSend?.sessionKey
+        const persistFriendlyId = activeFriendlyId || activeSend?.friendlyId
+        if (persistSessionKey && persistFriendlyId) {
+          persistRecoveryMessage(persistSessionKey, message)
+          // Append the final message to the history cache immediately so it
+          // renders without waiting for the next background refetch, which can
+          // race with the realtime buffer being cleared.
+          appendHistoryMessage(
+            queryClient,
+            persistFriendlyId,
+            persistSessionKey,
+            message,
           )
+          clearPendingSendForSession(persistSessionKey, persistFriendlyId)
         }
         activeSendRef.current = null
         refreshHistoryRef.current()
@@ -1431,7 +1444,12 @@ export function ChatScreen({
           playChatComplete()
         }
       },
-      [queryClient, streamFinish],
+      [
+        queryClient,
+        streamFinish,
+        sessionKeyForHistory,
+        activeFriendlyId,
+      ],
     ),
     onError: useCallback(
       (messageText: string) => {
@@ -1604,7 +1622,8 @@ export function ChatScreen({
         const hasStreamToolCalls =
           Array.isArray((msg as any).__streamToolCalls) &&
           (msg as any).__streamToolCalls.length > 0
-        return hasToolCalls || hasStreamToolCalls
+        const hasThinking = content.some((part) => part.type === 'thinking')
+        return hasToolCalls || hasStreamToolCalls || hasThinking
       }
       return false
     })
@@ -3847,7 +3866,10 @@ export function ChatScreen({
   }, [handleToggleFileExplorer, handleToggleSidebarCollapse])
 
   const visibleMessages =
-    sessionVerified || Boolean(historyQuery.data) || !historyLoading
+    sessionVerified ||
+    Boolean(historyQuery.data) ||
+    !historyLoading ||
+    finalDisplayMessages.length > 0
       ? finalDisplayMessages
       : []
   const historyEmpty = !historyLoading && visibleMessages.length === 0

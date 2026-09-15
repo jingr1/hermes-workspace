@@ -253,10 +253,11 @@ export async function* parseOpenAIStream(
           const d = parsed.choices?.[0]?.delta
           const content = d?.content || ''
           const reasoning = d?.reasoning || d?.reasoning_content || ''
-          // Yield content when available; fall back to reasoning only if no content yet
+          // Emit reasoning first when present so it is routed to the thinking
+          // activity card instead of being concatenated into the visible
+          // assistant text. Some providers send both fields in the same delta.
+          if (reasoning) yield { type: 'reasoning' as const, text: reasoning }
           if (content) yield { type: 'content' as const, text: content }
-          else if (reasoning)
-            yield { type: 'reasoning' as const, text: reasoning }
         } catch {
           // Ignore malformed chunks.
         }

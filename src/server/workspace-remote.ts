@@ -33,8 +33,9 @@ export function readRemoteTerminalCwd(
   const terminal = config.terminal
   if (!isRemoteTerminalBackend(terminal)) return null
   const cwd = String((terminal as TerminalConfig).cwd ?? '').trim()
-  if (!cwd || cwd === '.') return null
-  return cwd
+  // Remote-ness is decided by terminal.backend, not by whether cwd was set.
+  // Without an explicit cwd, default to the remote user's home directory.
+  return cwd && cwd !== '.' ? cwd : '~'
 }
 
 function normalizePosixPath(raw: string): string | null {

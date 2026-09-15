@@ -67,6 +67,8 @@ const PatchActionSchema = z.discriminatedUnion('action', [
 const LegacyPatchSchema = z.object({
   config: z.record(z.string(), z.unknown()).optional(),
   env: z.record(z.string(), z.union([z.string(), z.null()])).optional(),
+  /** Optional hermes profile to write into (~/.hermes/profiles/<name>). */
+  profile: z.string().trim().min(1).optional(),
 })
 
 async function authorizeRead(request: Request): Promise<AuthResult> {
@@ -85,6 +87,18 @@ async function authorizeWrite(request: Request): Promise<AuthResult> {
   return true
 }
 
+function profileNameFromUrl(url: string): string | undefined {
+  try {
+    // Server handlers can receive a relative URL (no host); provide a base so
+    // query parsing never throws and silently falls back to the global config.
+    const parsed = new URL(url, 'http://localhost')
+    const value = parsed.searchParams.get('profile')?.trim()
+    return value ? value : undefined
+  } catch {
+    return undefined
+  }
+}
+
 export async function handleHermesConfigGet({
   request,
 }: {
@@ -93,7 +107,8 @@ export async function handleHermesConfigGet({
   const auth = await authorizeRead(request)
   if (auth !== true) return auth
 
-  const paths = resolveHermesConfigPaths()
+  const profile = profileNameFromUrl(request.url)
+  const paths = resolveHermesConfigPaths(profile)
   const files = readHermesConfigFiles(paths)
   const state = normalizeHermesConfigState({
     paths,
@@ -115,6 +130,7 @@ export async function handleHermesConfigGet({
     ...state,
     providers,
     claudeHome: paths.hermesHome,
+    profile: profile ?? 'default',
   })
 }
 
@@ -208,7 +224,13 @@ export async function handleHermesConfigPatch({
     return Response.json({ ok: false, error: 'Invalid JSON' }, { status: 400 })
   }
 
-  const paths = resolveHermesConfigPaths()
+  const profile =
+    body !== null &&
+    typeof body === 'object' &&
+    typeof (body as { profile?: unknown }).profile === 'string'
+      ? ((body as { profile: string }).profile.trim() || undefined)
+      : undefined
+  const paths = resolveHermesConfigPaths(profile)
   const hasAction =
     body !== null &&
     typeof body === 'object' &&
@@ -245,5 +267,9 @@ export async function handleHermesConfigPatch({
     applyLegacyConfigBody(paths.configPath, legacy.data.config)
   if (legacy.data.env) applyLegacyEnvBody(paths.envPath, legacy.data.env)
 
-  return Response.json({ ok: true, message: LEGACY_SAVE_MESSAGE })
+  return Response.json({
+    ok: true,
+    message: LEGACY_SAVE_MESSAGE,
+    profile: profile ?? 'default',
+  })
 }

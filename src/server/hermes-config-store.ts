@@ -55,11 +55,20 @@ export type HermesConfigFiles = {
   authProfiles: Record<string, unknown>
 }
 
-export function resolveHermesConfigPaths(): HermesConfigPaths {
-  const hermesHome =
+export function resolveHermesConfigPaths(
+  profileName?: string,
+): HermesConfigPaths {
+  const root =
     process.env.HERMES_HOME ??
     process.env.CLAUDE_HOME ??
     path.join(os.homedir(), '.hermes')
+  // Named profiles own their own config.yaml under ~/.hermes/profiles/<name>.
+  // 'default' (or unset) resolves to the global Hermes root so the Settings UI
+  // can edit terminal SSH etc. per-profile instead of always hitting the root.
+  const hermesHome =
+    profileName && profileName.trim() && profileName.trim() !== 'default'
+      ? path.join(root, 'profiles', profileName.trim())
+      : root
   return {
     hermesHome,
     configPath: path.join(hermesHome, 'config.yaml'),

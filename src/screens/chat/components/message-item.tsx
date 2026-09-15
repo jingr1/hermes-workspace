@@ -2652,17 +2652,24 @@ function MessageItemComponent({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Completed turns: compact tool-count chip above the bubble. Streaming
-          activity renders AFTER the bubble (below) so assistant narration stays
-          chronological — hoist-above made planning text look pinned under WORKING. */}
-      {!isUser && !effectiveIsStreaming && finalToolSections.length > 0 ? (
-        <div className="w-full max-w-[var(--chat-content-max-width)] flex">
+      {/* Activity panel pinned above the assistant bubble. Renders both while
+          streaming (⚡ Working) and after completion (Activity), so the thinking
+          and tool trace always sits directly above the text it belongs to. */}
+      {!isUser &&
+      !hideActivityCard &&
+      (finalToolSections.length > 0 ||
+        (thinking && thinking.trim().length > 0)) ? (
+        <div className="w-full max-w-[var(--chat-content-max-width)] flex order-first">
           <div className="w-6 shrink-0" aria-hidden />
           <div className="min-w-0 flex-1">
-            <span className="inline-block text-[11px] text-primary-400 dark:text-primary-500 py-0.5 opacity-60">
-              {finalToolSections.length} tool
-              {finalToolSections.length !== 1 ? 's' : ''} used
-            </span>
+            <TuiActivityCard
+              toolSections={finalToolSections}
+              thinking={thinking}
+              isStreaming={effectiveIsStreaming}
+              expandAll={expandAllToolSections}
+              formatLabel={formatToolDisplayLabel}
+              formatArg={keyArgLabel}
+            />
           </div>
         </div>
       ) : null}
@@ -2915,28 +2922,6 @@ function MessageItemComponent({
           </div>
         </Message>
       )}
-      {/* Streaming: WORKING card under the text bubble. While there is no text
-          yet, chat-message-list ThinkingBubble owns the branched card. */}
-      {!isUser &&
-      !hideActivityCard &&
-      effectiveIsStreaming &&
-      hasText &&
-      (finalToolSections.length > 0 ||
-        (thinking && thinking.trim().length > 0)) ? (
-        <div className="w-full max-w-[var(--chat-content-max-width)] flex">
-          <div className="w-6 shrink-0" aria-hidden />
-          <div className="min-w-0 flex-1">
-            <TuiActivityCard
-              toolSections={finalToolSections}
-              thinking={thinking}
-              isStreaming={effectiveIsStreaming}
-              expandAll={expandAllToolSections}
-              formatLabel={formatToolDisplayLabel}
-              formatArg={keyArgLabel}
-            />
-          </div>
-        </div>
-      ) : null}
       {/* Bottom thinking bubble handles empty streaming states; avoid duplicate in-thread working copy. */}
       {hasAssistantMetadata ? (
         <div className="flex flex-wrap justify-end gap-x-2 gap-y-0.5 pl-10 pr-1 mt-0.5 font-mono text-[10px] tabular-nums text-primary-400 leading-relaxed">

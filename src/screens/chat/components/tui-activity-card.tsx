@@ -455,16 +455,17 @@ function TuiActivityCardComponent({
           {cardOpen ? '▾' : '▸'}
         </span>
       </button>
-      {cardOpen && (
-        <div
-          ref={bodyRef}
-          className={cn(
-            'flex flex-col gap-1.5 px-2 py-3',
-            // Cap height while streaming so stick-to-bottom keeps the assistant
-            // narration (above this card) in the viewport instead of burying it.
-            isStreaming && 'max-h-[min(40vh,280px)] overflow-y-auto',
-          )}
-        >
+      <div
+        ref={bodyRef}
+        className={cn(
+          'flex flex-col gap-1.5 px-2 transition-all duration-300 ease-in-out overflow-hidden',
+          cardOpen
+            ? isStreaming
+              ? 'max-h-[min(40vh,280px)] overflow-y-auto py-3'
+              : 'max-h-[1000px] py-3'
+            : 'max-h-0 py-0',
+        )}
+      >
           {hasThinking ? (
             <ThinkingRow
               thinking={thinking!}
@@ -507,7 +508,6 @@ function TuiActivityCardComponent({
             </div>
           ) : null}
         </div>
-      )}
     </div>
   )
 }

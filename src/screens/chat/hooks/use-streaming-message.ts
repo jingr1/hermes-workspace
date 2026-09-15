@@ -434,10 +434,30 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
         ...(payload as Record<string, unknown>),
       }
 
+      // Ensure the chat-store has the final message with both thinking and
+      // text, even when the upstream 'done' event does not carry a message
+      // payload. Without this the realtime buffer may be cleared before the
+      // authoritative message lands in history, leaving the chat blank until
+      // the next history refetch.
+      processStoreEvent({
+        type: 'done',
+        state: 'complete',
+        message,
+        runId: completedRunId ?? undefined,
+        sessionKey: activeSessionKeyRef.current,
+        transport: 'send-stream',
+      })
+
       onComplete?.(message)
       useChatStore.getState().setHeartbeatActivity(null)
     },
-    [clearHandoffTimer, onComplete, stopFrame, unregisterSendStreamRun],
+    [
+      clearHandoffTimer,
+      onComplete,
+      processStoreEvent,
+      stopFrame,
+      unregisterSendStreamRun,
+    ],
   )
 
   const processEvent = useCallback(

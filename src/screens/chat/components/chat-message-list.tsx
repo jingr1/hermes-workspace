@@ -381,33 +381,6 @@ function ThinkingBubble({
   )
 }
 
-/** Minimal status line shown after 10s of thinking when no tool calls
- *  are in flight yet. Shows heartbeat status + elapsed time. */
-function StatusLine() {
-  const heartbeatActivity = useChatStore((s) => s.heartbeatActivity)
-  const [elapsed, setElapsed] = useState(0)
-  useEffect(() => {
-    const interval = window.setInterval(() => setElapsed((s) => s + 1), 1000)
-    return () => window.clearInterval(interval)
-  }, [])
-
-  const elapsedLabel =
-    elapsed >= 60
-      ? `${Math.floor(elapsed / 60)}m ${elapsed % 60}s`
-      : `${elapsed}s`
-
-  return (
-    <div className="flex items-center gap-2 text-[11px] text-primary-400 dark:text-primary-500 py-0.5">
-      <span className="inline-block size-1.5 rounded-full bg-amber-400 animate-pulse" />
-      <span className="opacity-80">{heartbeatActivity || 'Working…'}</span>
-      <span aria-hidden="true" className="opacity-40">
-        ·
-      </span>
-      <span className="tabular-nums opacity-50 font-mono">{elapsedLabel}</span>
-    </div>
-  )
-}
-
 const VIRTUAL_ROW_HEIGHT = 136
 const VIRTUAL_OVERSCAN = 8
 const NEAR_BOTTOM_THRESHOLD = 200
@@ -1303,6 +1276,9 @@ function ChatMessageListComponent({
       !hasInThreadStreamingActivity
     if (isCompacting) return true
     if (streamingButEmpty) return true
+    // The per-message Activity card above the bubble already shows live
+    // thinking/tools — don't render a duplicate bottom thinking bubble.
+    if (hasInThreadStreamingActivity) return false
     if (!effectivelyWaiting) return false
     // If streaming has visible text, hide indicator — response is rendering
     if (isStreaming && streamingText && streamingText.length > 0) return false
@@ -1373,7 +1349,8 @@ function ChatMessageListComponent({
     !hideActivityCards &&
     (thinkingElapsed >= THINKING_ACTIVITY_DELAY_S ||
       activeToolCalls.length > 0 ||
-      liveToolActivity.length > 0)
+      liveToolActivity.length > 0 ||
+      Boolean(streamingThinking && streamingThinking.trim().length > 0))
 
   const outlineEntries = useMemo(() => {
     const next: Array<{ id: string; excerpt: string }> = []
@@ -1678,6 +1655,9 @@ function ChatMessageListComponent({
     sessionKey,
     scrollToBottom,
     streamingText,
+    streamingThinking,
+    activeToolCalls.length,
+    lifecycleEvents.length,
     contentStyle,
   ])
 
@@ -2156,21 +2136,14 @@ function ChatMessageListComponent({
                 ) : null}
               </>
             )}
-            {/* Bottom shimmer + branch TUI card. Hide as soon as the
-                streaming text starts arriving — the per-message TUI card
-                below the assistant bubble takes over from there to avoid
-                a duplicated activity surface. */}
+            {/* Bottom thinking bubble — only for early/empty phases before the
+                per-message Activity card above the assistant bubble exists.
+                Once the card is rendering (thinking/tools present), it owns the
+                live surface and this bubble is suppressed by showTypingIndicator. */}
             {(showTypingIndicator ||
               showResearchCard ||
               isCompacting ||
-              liveToolActivity.length > 0 ||
-              (isStreaming && !streamingText) ||
-              (isStreaming && activeToolCalls.length > 0)) &&
-            !(
-              isStreaming &&
-              streamingText &&
-              streamingText.trim().length > 0
-            ) ? (
+              liveToolActivity.length > 0) ? (
               <div
                 className="flex flex-col gap-1 py-1.5 px-1 animate-in fade-in duration-300 md:gap-1.5 md:py-2"
                 role="status"
@@ -2183,76 +2156,6 @@ function ChatMessageListComponent({
                   isCompacting={isCompacting}
                   forceSimple={!showActivityFeed}
                 />
-                {/* After 10s of thinking, show activity feed. With tool calls:
-                    compact CLI-style TuiActivityCard (last 3). Without tool calls:
-                    a minimal status line showing elapsed time and heartbeat. */}
-                {showActivityFeed ? (
-                  <div className="flex max-w-[var(--chat-content-max-width)]">
-                    <div
-                      className="ml-[14px] mr-2 w-px shrink-0"
-                      style={{
-                        background:
-                          'linear-gradient(to bottom, color-mix(in srgb, var(--theme-accent) 35%, transparent), color-mix(in srgb, var(--theme-border) 60%, transparent))',
-                      }}
-                      aria-hidden
-                    />
-                    <div className="min-w-0 flex-1 pt-1">
-                      {normalizedStreamingToolCalls.length > 0 ||
-                      (streamingThinking && streamingThinking.trim().length > 0) ? (
-                        <TuiActivityCard
-                          toolSections={normalizedStreamingToolCalls
-                            .slice(streamActivityMode ? -12 : -3)
-                            .map((tc) => {
-                              const phase = tc.phase
-                              const state =
-                                phase === 'error'
-                                  ? ('output-error' as const)
-                                  : phase === 'done'
-                                    ? ('output-available' as const)
-                                    : phase === 'running'
-                                      ? ('input-streaming' as const)
-                                      : ('input-available' as const)
-                              return {
-                                key: tc.id,
-                                type: tc.name,
-                                input:
-                                  tc.args &&
-                                  typeof tc.args === 'object' &&
-                                  !Array.isArray(tc.args)
-                                    ? (tc.args as Record<string, unknown>)
-                                    : undefined,
-                                preview: tc.preview,
-                                outputText:
-                                  state === 'output-available'
-                                    ? tc.result || ''
-                                    : '',
-                                errorText:
-                                  state === 'output-error'
-                                    ? tc.result || 'Tool failed'
-                                    : undefined,
-                                state,
-                              }
-                            })}
-                          thinking={streamingThinking || null}
-                          isStreaming={true}
-                          expandAll={streamActivityMode}
-                          formatLabel={(name) => name.replace(/_/g, ' ')}
-                          formatArg={(_name, args) => {
-                            if (!args) return null
-                            const first = Object.values(args).find(
-                              (v) => typeof v === 'string' && v.trim(),
-                            )
-                            return typeof first === 'string'
-                              ? first.trim()
-                              : null
-                          }}
-                        />
-                      ) : (
-                        <StatusLine />
-                      )}
-                    </div>
-                  </div>
-                ) : null}
               </div>
             ) : null}
             {notice && noticePosition === 'end' ? notice : null}

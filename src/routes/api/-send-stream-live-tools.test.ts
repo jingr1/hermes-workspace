@@ -4,6 +4,45 @@ import {
   collectSyntheticLiveToolEvents,
   createSyntheticLiveToolTracker,
 } from './-send-stream-live-tools'
+import { extractReasoningFromToolProgress } from './send-stream'
+
+describe('extractReasoningFromToolProgress', () => {
+  it('extracts reasoning from event_type reasoning.available preview', () => {
+    expect(
+      extractReasoningFromToolProgress({
+        event: 'reasoning.available',
+        preview: 'I should check the config first',
+      }),
+    ).toBe('I should check the config first')
+  })
+
+  it('extracts reasoning from string tool _thinking name', () => {
+    expect(
+      extractReasoningFromToolProgress({
+        tool: '_thinking',
+        name: 'reading the plan',
+      }),
+    ).toBe('reading the plan')
+  })
+
+  it('extracts reasoning from tool object name _thinking', () => {
+    expect(
+      extractReasoningFromToolProgress({
+        tool: { name: '_thinking' },
+        delta: 'incremental token',
+      }),
+    ).toBe('incremental token')
+  })
+
+  it('returns null for a regular tool progress', () => {
+    expect(
+      extractReasoningFromToolProgress({
+        tool: 'read_file',
+        delta: '{"path":"/tmp/a"}',
+      }),
+    ).toBeNull()
+  })
+})
 
 describe('collectSyntheticLiveToolEvents', () => {
   it('emits a live calling event as soon as an assistant tool call appears, before any tool result exists', () => {

@@ -27,6 +27,19 @@ describe('workspace-remote', () => {
     expect(readRemoteTerminalCwd({ terminal: { backend: 'local' } })).toBeNull()
   })
 
+  it('treats ssh backend as remote even without an explicit cwd (defaults to ~)', () => {
+    expect(
+      readRemoteTerminalCwd({
+        terminal: { backend: 'ssh', ssh_host: 'dev-wsl' },
+      }),
+    ).toBe('~')
+    expect(
+      readRemoteTerminalCwd({
+        terminal: { backend: 'ssh', cwd: '.' },
+      }),
+    ).toBe('~')
+  })
+
   it('accepts target-side paths under terminal.cwd without local existence', () => {
     const project = `${REMOTE_CWD}/projects/demo`
     expect(remoteTerminalWorkspaceCandidate(project, REMOTE_CWD)).toBe(project)

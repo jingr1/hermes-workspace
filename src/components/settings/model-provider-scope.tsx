@@ -16,15 +16,29 @@ import { ProfileModelSelector } from '@/components/settings/profile-model-select
 
 type ModelProviderScopePanelProps = {
   onApplied?: (providerId: string, modelId: string) => void
+  /** Controlled profile scope. When provided, the caller owns the selection
+   *  (e.g. the Settings page shares it with the Terminal backend config). */
+  profileName?: string
+  onProfileChange?: (name: string) => void
 }
 
 export function ModelProviderScopePanel({
   onApplied,
+  profileName,
+  onProfileChange,
 }: ModelProviderScopePanelProps) {
   const queryClient = useQueryClient()
   const { profiles, activeProfileName, isReady } = useProfiles()
   const { catalog, setCatalog, refresh, postCatalog } = useProviderCatalog()
-  const [scope, setScope] = useState('')
+  const [internalScope, setInternalScope] = useState('')
+  const scope = profileName ?? internalScope
+  const handleProfileChange = useCallback(
+    (name: string) => {
+      if (onProfileChange) onProfileChange(name)
+      else setInternalScope(name)
+    },
+    [onProfileChange],
+  )
   const [initialProvider, setInitialProvider] = useState('')
   const [initialModel, setInitialModel] = useState('')
   const [fallbackProvider, setFallbackProvider] = useState('')
@@ -41,8 +55,9 @@ export function ModelProviderScopePanel({
 
   useEffect(() => {
     if (!isReady || scope) return
-    setScope(activeProfileName || 'default')
-  }, [activeProfileName, isReady, scope])
+    if (onProfileChange) onProfileChange(activeProfileName || 'default')
+    else setInternalScope(activeProfileName || 'default')
+  }, [activeProfileName, isReady, onProfileChange, scope])
 
   const loadScope = useCallback(
     async (profileName: string) => {
@@ -168,7 +183,7 @@ export function ModelProviderScopePanel({
         loaded={loaded}
         loadError={loadError}
         message={selectMessage}
-        onProfileChange={setScope}
+        onProfileChange={handleProfileChange}
         onSaveDefault={async (providerId, modelId) => {
           const message = await saveProfileModelProvider(
             scope,
