@@ -11,7 +11,7 @@ metadata:
     related_skills: [claude-code, hermes-agent]
 ---
 
-# Hermes Workspace 中接入 Claude Code / Codex 等外部 Agent
+# Agorax 中接入 Claude Code / Codex 等外部 Agent
 
 本 skill 描述如何在 hermes-workspace 中让 Claude Code、Codex 等外部 CLI agent 作为受管理 runtime 接入，并复用 Hermes Provider Catalog 做认证与模型选择。
 

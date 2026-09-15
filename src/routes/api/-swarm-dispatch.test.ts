@@ -332,7 +332,7 @@ describe('buildWorkerPrompt', () => {
     id: 'swarm5',
     name: 'Builder',
     role: 'Primary Builder',
-    specialty: 'full-stack implementation across Hermes Workspace and Swarm2',
+    specialty: 'full-stack implementation across Agorax and Swarm2',
     model: 'GPT-5.5',
     mission: 'Ship focused product slices with tests and clean diffs.',
     modes: [],

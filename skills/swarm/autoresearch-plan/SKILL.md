@@ -2,7 +2,7 @@
 name: autoresearch-plan
 description: Convert a goal into validated autoresearch contract (scope, metric, verify, guard, executor). Ported from uditgoenka/autoresearch plan subcommand.
 version: 2.2.1-hermes
-author: Hermes Workspace (adapted from uditgoenka/autoresearch)
+author: Agorax (adapted from uditgoenka/autoresearch)
 metadata:
   hermes:
     tags: [swarm, autoresearch, planning]

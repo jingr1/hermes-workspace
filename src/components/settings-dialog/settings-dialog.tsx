@@ -1787,7 +1787,7 @@ export function SettingsDialog({
                 {agent ? `${agent.name} Settings` : 'Settings'}
               </DialogTitle>
               <DialogDescription className="sr-only">
-                Configure Hermes Workspace
+                Configure Agorax
               </DialogDescription>
             </div>
             <DialogClose

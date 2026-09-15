@@ -3,7 +3,6 @@ import {
   Outlet,
   Scripts,
   createRootRoute,
-  useRouterState,
 } from '@tanstack/react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
@@ -131,8 +130,8 @@ const themeColorScript = `
 
 const DEFAULT_SPLASH_HTML = `
 <img src="/claude-avatar.webp" alt="Hermes Agent" style="width:80px;height:80px;margin-bottom:20px;border-radius:16px;filter:drop-shadow(0 8px 32px color-mix(in srgb,#FFAC02 45%, transparent))" />
-<img src="/claude-banner.png" alt="Hermes Workspace" style="width:280px;height:auto;margin-bottom:8px;filter:drop-shadow(0 4px 16px rgba(0,0,0,0.5))" />
-<div style="font:400 14px/1 system-ui,-apple-system,sans-serif;letter-spacing:0.04em;color:#9CB2AE">Workspace</div>
+<img src="/claude-banner.png" alt="Agorax" style="width:280px;height:auto;margin-bottom:8px;filter:drop-shadow(0 4px 16px rgba(0,0,0,0.5))" />
+<div style="font:400 14px/1 system-ui,-apple-system,sans-serif;letter-spacing:0.04em;color:#9CB2AE">The agora for AI agents</div>
 <div style="margin-top:28px;width:140px;height:3px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;position:relative"><div id="splash-bar" style="width:0%;height:100%;background:#FFAC02;border-radius:3px;transition:width 0.4s ease"></div></div>
 `
 
@@ -148,12 +147,12 @@ export const Route = createRootRoute({
           'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-visual',
       },
       {
-        title: 'Hermes Workspace',
+        title: 'Agorax',
       },
       {
         name: 'description',
         content:
-          'Hermes Agent workspace for chat, tools, files, memory, and jobs.',
+          'The public square for AI agents — chat, orchestration, and multi-agent collaboration.',
       },
       {
         property: 'og:image',
@@ -281,18 +280,6 @@ export async function registerAppServiceWorker({
 
 function RootLayout() {
   const { settings } = useSettings()
-  const pathname = useRouterState({
-    select: (state) => state.location.pathname,
-  })
-  const isHermesWorldLandingRoute =
-    pathname === '/hermes-world' ||
-    pathname.startsWith('/hermes-world/') ||
-    pathname === '/world' ||
-    pathname.startsWith('/world/')
-  const isGameSurfaceRoute =
-    isHermesWorldLandingRoute ||
-    pathname === '/playground' ||
-    pathname.startsWith('/playground/')
   const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(
     null,
   )
@@ -408,15 +395,12 @@ function RootLayout() {
               <Outlet />
             </ErrorBoundary>
           </WorkspaceShell>
-          {!isHermesWorldLandingRoute ? <SearchModal /> : null}
+          <SearchModal />
           {/* Keep UsageMeter mounted so search-modal OPEN_USAGE still works even when the pill is hidden by default. */}
-          {!isGameSurfaceRoute ? (
-            <UsageMeter visible={settings.showUsageMeter} />
-          ) : null}
-          {!isHermesWorldLandingRoute ? <KeyboardShortcutsModal /> : null}
-          {!isHermesWorldLandingRoute ? <UpdateCenterNotifier /> : null}
-          {rootSurfaceState.showPostOnboardingOverlays &&
-          !isGameSurfaceRoute ? (
+          <UsageMeter visible={settings.showUsageMeter} />
+          <KeyboardShortcutsModal />
+          <UpdateCenterNotifier />
+          {rootSurfaceState.showPostOnboardingOverlays ? (
             <>
               <MobilePromptTrigger />
               <OnboardingTour />
@@ -556,7 +540,6 @@ function RootDocument({ children }: { children: React.ReactNode }) {
           dangerouslySetInnerHTML={{
             __html: wrapInlineScript(`
           (function(){
-            if (location.pathname === '/hermes-world' || location.pathname.indexOf('/hermes-world/') === 0 || location.pathname === '/world' || location.pathname.indexOf('/world/') === 0) return;
             var d = document.getElementById('splash-screen');
             if (!d) return;
             var bg = '#031A1A', txt = '#F8F1E3', muted = '#9CB2AE', accent = '#FFAC02';
@@ -618,8 +601,8 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 
             d.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:'+bg+';transition:opacity 0.5s ease;';
             d.innerHTML = '<img src="/claude-avatar.webp" alt="Hermes Agent" style="width:80px;height:80px;margin-bottom:20px;border-radius:16px;filter:drop-shadow(0 8px 32px color-mix(in srgb,'+accent+' 45%, transparent))" />'
-              + '<img src="'+(isDark ? '/claude-banner.png' : '/claude-banner-light.png')+'" alt="Hermes Workspace" style="width:280px;height:auto;margin-bottom:8px;filter:drop-shadow(0 4px 16px '+(isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.1)')+')" />'
-              + '<div style="font:400 14px/1 system-ui,-apple-system,sans-serif;letter-spacing:0.04em;color:'+muted+'">Workspace</div>'
+              + '<img src="'+(isDark ? '/claude-banner.png' : '/claude-banner-light.png')+'" alt="Agorax" style="width:280px;height:auto;margin-bottom:8px;filter:drop-shadow(0 4px 16px '+(isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.1)')+')" />'
+              + '<div style="font:400 14px/1 system-ui,-apple-system,sans-serif;letter-spacing:0.04em;color:'+muted+'">The agora for AI agents</div>'
               + '<div style="margin-top:28px;width:140px;height:3px;background:'+(isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)')+';border-radius:3px;overflow:hidden;position:relative"><div id=splash-bar style="width:0%;height:100%;background:'+accent+';border-radius:3px;transition:width 0.4s ease"></div></div>';
 
             var bar = document.getElementById('splash-bar');

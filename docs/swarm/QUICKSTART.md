@@ -1,6 +1,6 @@
 # Swarm Mode Quickstart
 
-This quickstart gets a local Hermes Workspace checkout running, confirms profile auto-detection, starts a tmux-backed Hermes Agent, dispatches a first task, and shows where to review the result.
+This quickstart gets a local Agorax checkout running, confirms profile auto-detection, starts a tmux-backed Hermes Agent, dispatches a first task, and shows where to review the result.
 
 ## 0. Prerequisites
 

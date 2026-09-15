@@ -2,7 +2,7 @@
 name: mission-memory-layout
 description: Swarm shared memory layout — missions archive, handoffs bus, wiki promotion path.
 version: 1.0.0
-author: Hermes Workspace
+author: Agorax
 metadata:
   hermes:
     tags: [swarm, memory, missions, handoffs]

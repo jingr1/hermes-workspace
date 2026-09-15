@@ -2,7 +2,7 @@
 name: researcher-quick
 description: Default researcher mode — wiki-first fact gathering, external verification, cited fact sheets (no recommendations).
 version: 1.0.0
-author: Hermes Workspace
+author: Agorax
 metadata:
   hermes:
     tags: [swarm, researcher, quick, facts]

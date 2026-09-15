@@ -14,7 +14,7 @@ A skill is not a vibe. It is a procedure: when to use it, what commands to run, 
 | `byte-verified-code-review`  | Review diffs with byte-level proof for naming-sensitive and generated-file changes.    |
 | `swarm-bench-worker`         | Benchmark/lab work for local models, runtime experiments, and result logging.          |
 | `swarm-pr-worker`            | GitHub issue/PR workflow, triage, patching, PR prep, review feedback.                  |
-| `swarm-ui-worker`            | UI implementation lane for Hermes Workspace surfaces.                                  |
+| `swarm-ui-worker`            | UI implementation lane for Agorax surfaces.                                  |
 | `swarm-dev-runtime`          | Runtime contracts, backend APIs, lifecycle, health, and repair wiring.                 |
 | `swarm-memory`               | File-backed memory expectations for workers and orchestrator history.                  |
 | `swarm-orchestration-loop`   | Canonical orchestration/review loop for persistent worker fleets.                      |

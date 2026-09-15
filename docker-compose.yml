@@ -1,4 +1,4 @@
-# Hermes Workspace + Agent — Docker Compose Setup
+# Agorax + Agent — Docker Compose Setup
 #
 # Requirements:
 #   - Docker & Docker Compose
@@ -15,7 +15,7 @@
 # Images:
 #   This file pulls pre-built images by default — no local build required.
 #     - nousresearch/hermes-agent:latest  (Hermes Agent, Dockerfile upstream)
-#     - ghcr.io/outsourc-e/hermes-workspace:latest  (this workspace)
+#     - ghcr.io/outsourc-e/agorax:latest  (this workspace)
 #
 #   To build from source instead (e.g. for development), use:
 #     docker compose -f docker-compose.yml -f docker-compose.dev.yml up
@@ -25,7 +25,7 @@
 #     Mounted at /opt/data in the agent container and /home/workspace/.hermes
 #     in the workspace container (read-write for config reads; the agent is
 #     the primary writer).
-#   `hermes-workspace-files` — files created from the Workspace file browser.
+#   `hermes-workspace-files` — files created from the Agorax file browser.
 #   Both volumes survive container recreation and `docker compose down`.
 #   Only `docker compose down -v` removes them.
 #
@@ -89,10 +89,10 @@ services:
     ports:
       - '127.0.0.1:8642:8642'
 
-  # The Hermes Workspace Web UI
+  # The Agorax Web UI
   # Connects to hermes-agent at http://hermes-agent:8642
-  hermes-workspace:
-    image: ghcr.io/outsourc-e/hermes-workspace:latest
+  agorax:
+    image: ghcr.io/outsourc-e/agorax:latest
     restart: unless-stopped
     depends_on:
       hermes-agent:

@@ -1,4 +1,4 @@
-// Hermes Workspace Service Worker
+// Agorax Service Worker
 // Network-only PWA registration: enables installability without caching app assets.
 // This avoids stale bundles after PM2/Vite preview deploys while keeping iOS/Chrome
 // standalone launches on the normal live application shell.

@@ -1,5 +1,5 @@
 {
-  description = "Hermes Workspace — desktop workspace for Hermes Agent";
+  description = "Agorax — desktop workspace for Hermes Agent";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";

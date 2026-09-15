@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Hermes Workspace Swarm 软件架构详解</title>
+    <title>Agorax Swarm 软件架构详解</title>
     <style>
       :root {
         --bg: #0f1117;
@@ -236,10 +236,10 @@
     </style>
   </head>
   <body>
-    <h1>Hermes Workspace Swarm 软件架构详解</h1>
+    <h1>Agorax Swarm 软件架构详解</h1>
 
     <p class="meta">
-      版本：基于 Hermes Workspace v2.3.0 &nbsp;|&nbsp; 最后更新：2026-06-08<br />
+      版本：基于 Agorax v2.3.0 &nbsp;|&nbsp; 最后更新：2026-06-08<br />
       涵盖范围：整体架构、多 Agent 协同机制、Swarm Board 与 Hermes Kanban 关系
     </p>
 
@@ -260,7 +260,7 @@
     <h2 id="s1">1. 系统概览</h2>
 
     <p>
-      Hermes Workspace Swarm 是一个<strong>持久化多 Agent 协同系统</strong
+      Agorax Swarm 是一个<strong>持久化多 Agent 协同系统</strong
       >，构建在
       <a href="https://github.com/NousResearch/hermes-agent">Hermes Agent</a>
       之上。它将工作区转变为一个实时控制平面：多个 Hermes Agent 以持久 tmux
@@ -293,7 +293,7 @@
 
     <h3>技术栈</h3>
     <pre><code>┌──────────────────────────────────────────────────────────┐
-│                    Hermes Workspace                       │
+│                    Agorax                       │
 │  React + TanStack Router + Vite + TypeScript (Web UI)    │
 │  Node.js 服务端 (API routes, tmux 管理, 通知路由)         │
 └──────────────────────┬───────────────────────────────────┘

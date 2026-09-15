@@ -147,7 +147,7 @@ def default_workflow_path() -> Path:
 
 
 def resolve_workflow_path(path: str | os.PathLike[str]) -> Path:
-    """Resolve a workflow path relative to the Hermes workspace root when needed."""
+    """Resolve a workflow path relative to the Agorax root when needed."""
     raw = Path(path).expanduser()
     if raw.is_file():
         return raw.resolve()

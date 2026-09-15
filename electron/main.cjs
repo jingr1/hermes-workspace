@@ -389,7 +389,7 @@ async function createWindow() {
     height: 940,
     minWidth: 980,
     minHeight: 680,
-    title: 'hermes-workspace',
+    title: 'Agorax',
     icon: existsSync(join(__dirname, '..', 'assets', 'icon.png'))
       ? join(__dirname, '..', 'assets', 'icon.png')
       : undefined,
@@ -455,4 +455,4 @@ app.on('before-quit', () => {
   localServer?.kill()
 })
 
-app.setName('hermes-workspace')
+app.setName('Agorax')

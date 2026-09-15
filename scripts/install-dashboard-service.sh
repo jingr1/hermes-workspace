@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Install Hermes Workspace as a user-level service.
+# Install Agorax as a user-level service.
 # macOS: launchd user agent
 # Linux: systemd --user unit
 
@@ -78,7 +78,7 @@ EOF
     unit="$HOME/.config/systemd/user/$SERVICE_NAME.service"
     cat > "$unit" <<EOF
 [Unit]
-Description=Hermes Workspace dashboard
+Description=Agorax dashboard
 After=network-online.target
 
 [Service]

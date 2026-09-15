@@ -2,7 +2,7 @@
 name: autoresearch-orchestrate
 description: Hermes autoresearch entry — wizard, plan, validate contract, dispatch executor. Use via orchestrator:autoresearch (Claude /autoresearch equivalent).
 version: 2.3.0-hermes
-author: Hermes Workspace (adapted from uditgoenka/autoresearch)
+author: Agorax (adapted from uditgoenka/autoresearch)
 metadata:
   hermes:
     tags: [swarm, orchestrator, autoresearch, dispatch, wizard]

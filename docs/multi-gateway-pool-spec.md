@@ -1,6 +1,6 @@
 # Multi-Gateway Pool Architecture
 
-## Hermes Workspace — Profile-Parallel Agent Execution
+## Agorax — Profile-Parallel Agent Execution
 
 ### Status: Design Document — PR Proposal
 
@@ -8,7 +8,7 @@
 
 ## 1. Problem Statement
 
-Hermes Workspace currently operates as a **single-gateway, single-profile UI**. The gateway loads one `HERMES_HOME` at startup and all chat sessions, operations, and memory access flow through that one process.
+Agorax currently operates as a **single-gateway, single-profile UI**. The gateway loads one `HERMES_HOME` at startup and all chat sessions, operations, and memory access flow through that one process.
 
 For multi-profile users (the primary Claude use case), this means:
 
@@ -46,7 +46,7 @@ For multi-profile users (the primary Claude use case), this means:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     Hermes Workspace UI                      │
+│                     Agorax UI                      │
 │  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌───────────────┐  │
 │  │ Chat    │  │ Ops     │  │ Memory  │  │ Profile       │  │
 │  │ (Nous)  │  │ (Jules) │  │ (all)   │  │ Selector      │  │
@@ -241,7 +241,7 @@ SESSIONS
 A persistent pill/button in the top-left (next to sidebar toggle):
 
 ```
-[☰] [ nous ▼ ]              Hermes Workspace
+[☰] [ nous ▼ ]              Agorax
 ```
 
 - Dropdown lists all profiles with status indicators
@@ -405,5 +405,5 @@ CLAUDE_GATEWAY_HEALTH_INTERVAL=30  # Health check seconds
 
 ---
 
-_Authored by Nous (Vivere Vitalis) for the Hermes Workspace project._
+_Authored by Nous (Vivere Vitalis) for the Agorax project._
 _First-principles architecture: if each profile is a distinct agent, the workspace must be an agent orchestrator._

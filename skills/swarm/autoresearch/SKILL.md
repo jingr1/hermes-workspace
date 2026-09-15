@@ -2,7 +2,7 @@
 name: autoresearch
 description: Bounded optimization-loop contract and discipline — see docs/swarm/AUTORESEARCH.md.
 version: 2.2.1-hermes
-author: Hermes Workspace (contract index; loop ported from uditgoenka/autoresearch)
+author: Agorax (contract index; loop ported from uditgoenka/autoresearch)
 metadata:
   hermes:
     tags: [swarm, autoresearch, optimization]

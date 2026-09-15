@@ -2,7 +2,7 @@
 name: architect-core
 description: Swarm architect base contract — technical translation, direction decisions, implementation review; no facts or code.
 version: 1.0.0
-author: Hermes Workspace
+author: Agorax
 metadata:
   hermes:
     tags: [swarm, architect, design, review]

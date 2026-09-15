@@ -2,7 +2,7 @@
 name: browser-harness
 description: Use browser tools for source verification, competitive pages, and evidence capture during research.
 version: 1.0.0
-author: Hermes Workspace
+author: Agorax
 metadata:
   hermes:
     tags: [swarm, browser, research, verification]

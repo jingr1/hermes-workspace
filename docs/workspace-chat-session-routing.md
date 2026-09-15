@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Hermes Workspace supports a portable chat path through OpenAI-compatible `/v1/chat/completions`. In this mode, the browser route alone is not enough to preserve conversational context: Workspace must forward a stable server-side session identifier to the Hermes Agent gateway.
+Agorax supports a portable chat path through OpenAI-compatible `/v1/chat/completions`. In this mode, the browser route alone is not enough to preserve conversational context: Workspace must forward a stable server-side session identifier to the Hermes Agent gateway.
 
 This document records the routing contract and the failure mode that caused related turns and attachments to be stored as separate `api-*` sessions.
 

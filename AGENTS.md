@@ -1,4 +1,6 @@
-# Hermes Workspace Agent 合同
+# Agorax Agent 合同
+
+> 产品名：**Agorax**（AI Agent 的公共广场）。运行时由 **Hermes Agent** 提供（gateway / profiles / `~/.hermes`），运行时术语保持 Hermes 命名不变，见 [`docs/agorax-naming-contract.md`](docs/agorax-naming-contract.md)。
 
 本仓库使用语义化 Hermes Swarm worker（不是纯编号 lane）。路由真相源是 [`swarm.yaml`](swarm.yaml)；每个 worker 在 `~/.hermes/profiles/<worker-id>/` 有对应 profile，角色 skill 见下表，wrapper 在 `~/.local/bin/`。
 

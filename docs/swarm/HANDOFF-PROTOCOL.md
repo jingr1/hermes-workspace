@@ -1,6 +1,6 @@
 # Swarm Handoff Protocol
 
-Canonical pipeline for Hermes Workspace (fused from `feature/mychange` protocols onto the main roster):
+Canonical pipeline for Agorax (fused from `feature/mychange` protocols onto the main roster):
 
 ```text
 orchestrator → researcher → architect → (developer | writer) → architect (review + harden) → learning

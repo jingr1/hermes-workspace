@@ -381,9 +381,6 @@ const config = defineConfig(({ mode, command }) => {
       needsInterop: ['xterm', 'xterm-addon-fit', 'xterm-addon-web-links'],
     },
     server: {
-      // Cross-origin isolation is only needed for HermesWorld / Playground (SharedArrayBuffer).
-      // Applying COOP/COEP globally on HTTP LAN IPs triggers browser warnings and is ignored
-      // on non-trustworthy origins anyway — see configureServer middleware below.
       warmup: {
         clientFiles: [
           './src/routes/__root.tsx',
@@ -439,7 +436,7 @@ const config = defineConfig(({ mode, command }) => {
         ],
       },
       proxy: {
-        // WebSocket proxy: clients connect to /ws-claude on the Hermes Workspace
+        // WebSocket proxy: clients connect to /ws-claude on the Agorax
         // server (any IP/port), which internally forwards to the local server.
         // This means phone/LAN/Docker users never need to reach port 18789 directly.
         '/ws-claude': {
@@ -504,22 +501,6 @@ const config = defineConfig(({ mode, command }) => {
           if (command !== 'serve') return
         },
         configureServer(server) {
-          // Cross-origin isolation headers for HermesWorld / Playground only.
-          server.middlewares.use((req, res, next) => {
-            const requestPath = req.url?.split('?')[0] ?? ''
-            const needsIsolation =
-              requestPath === '/hermes-world' ||
-              requestPath.startsWith('/hermes-world/') ||
-              requestPath === '/world' ||
-              requestPath.startsWith('/world/') ||
-              requestPath === '/playground' ||
-              requestPath.startsWith('/playground/')
-            if (needsIsolation) {
-              res.setHeader('Cross-Origin-Opener-Policy', 'same-origin')
-              res.setHeader('Cross-Origin-Embedder-Policy', 'credentialless')
-            }
-            next()
-          })
           // Content Security Policy as a real HTTP response header. Sending
           // it here (not as a `<meta>` tag) keeps the policy authoritative
           // when an edge proxy mutates the response body — e.g. Cloudflare's

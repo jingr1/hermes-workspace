@@ -2,7 +2,7 @@ import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 
 /**
- * Resolve the Hermes workspace state directory.
+ * Resolve the Agorax state directory.
  *
  * Priority:
  * 1. `HERMES_WORKSPACE_STATE_DIR` env var (explicit override)

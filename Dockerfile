@@ -1,13 +1,13 @@
 # syntax=docker/dockerfile:1.6
-# Hermes Workspace — production Docker image
-# Publishes to ghcr.io/outsourc-e/hermes-workspace
+# Agorax — production Docker image
+# Publishes to ghcr.io/outsourc-e/agorax
 #
 # Build locally:
-#   docker build -t hermes-workspace .
+#   docker build -t agorax .
 # Run:
-#   docker run -p 3000:3000 -e HERMES_API_URL=http://host.docker.internal:8642 hermes-workspace
+#   docker run -p 3000:3000 -e HERMES_API_URL=http://host.docker.internal:8642 agorax
 # Or pull pre-built:
-#   docker pull ghcr.io/outsourc-e/hermes-workspace:latest
+#   docker pull ghcr.io/outsourc-e/agorax:latest
 #
 FROM tianon/gosu:1.17-bookworm AS gosu_source
 # ─── build stage ─────────────────────────────────────────────────────────

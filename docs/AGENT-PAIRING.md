@@ -1,6 +1,6 @@
 # Agent Pairing Guide — Workspace ↔ Hermes Agent
 
-> **Audience:** AI agents helping users set up Hermes Workspace.
+> **Audience:** AI agents helping users set up Agorax.
 > Run these steps in order. Each step has a verification command. Do not skip
 > ahead, and do not start a second gateway until the current one fails the
 > checks below.
@@ -9,7 +9,7 @@
 
 ```
 ┌─────────────────┐       HTTP :8642        ┌──────────────────┐
-│  Claude Gateway  │◄──────────────────────►│ Hermes Workspace │
+│  Claude Gateway  │◄──────────────────────►│ Agorax │
 │  (Python, FastAPI)│  /health, /v1/chat,   │  (Node, Vite)     │
 │  hermes gateway   │  /api/sessions, etc.  │  pnpm dev         │
 │  run              │                       │  port 3000        │

@@ -1,5 +1,5 @@
 /**
- * Hermes workspace API.
+ * Agorax API.
  *
  * Important distinction: HERMES_HOME / ~/.hermes is Hermes state/config, not the
  * user's project workspace. Workspace resolution intentionally mirrors the

@@ -2,7 +2,7 @@
 name: autoresearch-execute
 description: Classic autoresearch loop — modify, verify, keep/discard against a pinned metric. Runs on architect or developer after orchestrator dispatch.
 version: 2.2.1-hermes
-author: Hermes Workspace (adapted from uditgoenka/autoresearch classic loop)
+author: Agorax (adapted from uditgoenka/autoresearch classic loop)
 metadata:
   hermes:
     tags: [swarm, autoresearch, optimization, execute]

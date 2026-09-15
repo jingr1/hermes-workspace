@@ -1,4 +1,4 @@
-# Troubleshooting — Hermes Workspace
+# Troubleshooting — Agorax
 
 Common setup issues and how to fix them.
 

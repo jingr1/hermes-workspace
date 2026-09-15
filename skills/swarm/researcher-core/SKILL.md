@@ -2,7 +2,7 @@
 name: researcher-core
 description: Swarm researcher base contract — fact-finding only, source trails, no strategy or recommendations.
 version: 1.0.0
-author: Hermes Workspace
+author: Agorax
 metadata:
   hermes:
     tags: [swarm, researcher, facts, sources]

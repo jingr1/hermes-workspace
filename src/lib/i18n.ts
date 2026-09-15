@@ -1,5 +1,5 @@
 /**
- * Lightweight i18n — UI string translations for Hermes Workspace.
+ * Lightweight i18n — UI string translations for Agorax.
  * Add new languages by adding a locale map below.
  */
 
@@ -322,11 +322,14 @@ export const LOCALE_LABELS: Record<LocaleId, string> = {
   ar: 'العربية',
 }
 
-const STORAGE_KEY = 'hermes-workspace-locale'
+const STORAGE_KEY = 'agorax-locale'
+const LEGACY_STORAGE_KEY = 'hermes-workspace-locale'
 
 export function getLocale(): LocaleId {
   if (typeof window === 'undefined') return 'en'
-  const stored = localStorage.getItem(STORAGE_KEY)
+  const stored =
+    localStorage.getItem(STORAGE_KEY) ??
+    localStorage.getItem(LEGACY_STORAGE_KEY)
   if (stored && stored in LOCALES) return stored as LocaleId
   const full = navigator.language
   if (full in LOCALES) return full as LocaleId

@@ -37,7 +37,7 @@ function fetchText(url) {
 }
 
 const html = await fetchText(baseUrl)
-if (!html.includes('Hermes Workspace')) {
+if (!html.includes('Agorax')) {
   throw new Error(
     `Managed companion did not render the expected shell at ${baseUrl}`,
   )

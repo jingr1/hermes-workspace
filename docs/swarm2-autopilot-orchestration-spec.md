@@ -86,7 +86,7 @@ workers:
     role: Builder
     specialty: full-stack implementation and UI/system integration
     model: GPT-5.5
-    mission: Ship focused product slices in Hermes Workspace with tests.
+    mission: Ship focused product slices in Agorax with tests.
     skills: [swarm-ui-worker, swarm-worker-core]
     capabilities:
       - code-editing
@@ -204,7 +204,7 @@ Example:
 ```text
 ## Swarm Orchestrator Dispatch
 Worker: swarm5 — Builder
-Mission: Ship focused product slices in Hermes Workspace with tests.
+Mission: Ship focused product slices in Agorax with tests.
 Skills: swarm-ui-worker, swarm-worker-core
 
 ## Assigned Task

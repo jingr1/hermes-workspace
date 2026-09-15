@@ -1,6 +1,6 @@
-# Hermes Workspace v2.5.0 — Multi-Agent & Claude Code
+# Agorax v2.5.0 — Multi-Agent & Claude Code
 
-Hermes Workspace 2.5.0 ships the multi-agent control plane and first-class Claude Code chat as a managed runtime alongside Hermes.
+Agorax 2.5.0 ships the multi-agent control plane and first-class Claude Code chat as a managed runtime alongside Hermes.
 
 ## Highlights
 
@@ -25,7 +25,7 @@ Hermes Workspace 2.5.0 ships the multi-agent control plane and first-class Claud
 
 ## Suggested short release description
 
-Hermes Workspace 2.5.0 adds Multi-Agent Mission Control, room workspace dual-mode, and Claude Code as a managed chat runtime with streaming, session restore, and headless permission bypass.
+Agorax 2.5.0 adds Multi-Agent Mission Control, room workspace dual-mode, and Claude Code as a managed chat runtime with streaming, session restore, and headless permission bypass.
 
 ## Upgrade notes
 

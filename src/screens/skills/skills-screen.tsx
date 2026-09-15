@@ -644,7 +644,7 @@ export function SkillsScreen() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="space-y-1.5">
               <p className="text-xs font-medium uppercase text-primary-500 tabular-nums">
-                Hermes Workspace Marketplace
+                Agorax Marketplace
               </p>
               <h1 className="text-2xl font-medium text-ink text-balance sm:text-3xl">
                 Skills Browser
@@ -1124,7 +1124,7 @@ function SecurityScanCard({ security }: { security: SecurityRisk }) {
         <div className="space-y-1.5">
           <div className="flex items-center gap-2">
             <span className="text-primary-500 font-medium w-16 shrink-0">
-              Hermes Workspace
+              Agorax
             </span>
             <span
               className={cn(

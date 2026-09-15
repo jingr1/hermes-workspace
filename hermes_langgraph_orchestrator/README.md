@@ -605,7 +605,7 @@ curl -s "http://localhost:3000/api/swarm-missions?id=radw-real-001" | python3 -m
 
 ### 0. `Failed to fetch roster` / `Workspace timed out` / preflight failed
 
-Phase 2 真实执行依赖 **Hermes Workspace**（`:3000`）。常见根因：
+Phase 2 真实执行依赖 **Agorax**（`:3000`）。常见根因：
 
 1. **`pnpm dev` 刚启动**：Vite 首次编译 SSR API 路由可能 **>5s**，旧版 preflight 会误报 timeout。现已自动重试最多 6 次（读超时 12s/次）。
 2. **Workspace 未运行**：先 `pnpm dev`，等 Vite ready 后再跑 LangGraph。

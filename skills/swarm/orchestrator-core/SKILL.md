@@ -2,7 +2,7 @@
 name: orchestrator-core
 description: Swarm orchestrator base contract — mission decomposition, routing, greenlight gates, proof-bearing handoffs.
 version: 1.0.0
-author: Hermes Workspace
+author: Agorax
 metadata:
   hermes:
     tags: [swarm, orchestrator, routing, greenlight]

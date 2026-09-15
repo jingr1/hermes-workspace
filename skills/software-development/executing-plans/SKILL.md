@@ -2,7 +2,7 @@
 name: executing-plans
 description: Execute an approved architect implementation plan with tests and checkpoints (developer lane).
 version: 1.0.0
-author: Hermes Workspace (adapted from superpowers)
+author: Agorax (adapted from superpowers)
 metadata:
   hermes:
     tags: [swarm, developer, implementation, plans]

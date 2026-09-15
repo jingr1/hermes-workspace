@@ -1,4 +1,4 @@
-# Hermes Workspace Desktop Update System
+# Agorax Desktop Update System
 
 This branch introduces the update contract that the DMG/EXE packaging should use.
 
@@ -6,7 +6,7 @@ This branch introduces the update contract that the DMG/EXE packaging should use
 
 Hermes ships two separately updateable products:
 
-1. **Hermes Workspace**: the UI/server shell.
+1. **Agorax**: the UI/server shell.
 2. **Hermes Agent**: the local agent/gateway runtime.
 
 They must not be modeled as two remotes in the same git checkout. The Workspace updater updates Workspace. The Agent updater updates the installed/bundled Agent.

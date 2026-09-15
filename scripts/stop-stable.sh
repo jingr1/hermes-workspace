@@ -33,4 +33,4 @@ for pid in $(lsof -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null || true); do
   stop_pid "$pid"
 done
 
-echo "[stable] stopped Hermes Workspace on port $PORT"
+echo "[stable] stopped Agorax on port $PORT"

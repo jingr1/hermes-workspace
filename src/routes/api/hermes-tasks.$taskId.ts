@@ -165,7 +165,7 @@ export const Route = createFileRoute('/api/hermes-tasks/$taskId')({
 
           const hasPrior = Boolean(task.session_id && priorContext)
           const briefing = [
-            'You are picking up a task from the Hermes Workspace task board. Here is the full context:',
+            'You are picking up a task from the Agorax task board. Here is the full context:',
             '',
             `**Task:** ${task.title}`,
             `**Status:** ${task.column}  |  **Priority:** ${task.priority}  |  **Assignee:** ${task.assignee ?? 'Unassigned'}`,

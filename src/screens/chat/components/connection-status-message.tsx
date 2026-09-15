@@ -25,7 +25,7 @@ function classifyConnectionError(
   if (!normalizedError && !status) {
     return {
       title: 'Not connected',
-      description: "Hermes Workspace can't reach Hermes Agent.",
+      description: "Agorax can't reach the Hermes Agent runtime.",
       action: 'Check that Hermes is running, then try again.',
     }
   }

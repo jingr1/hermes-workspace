@@ -6,7 +6,7 @@ description: >-
   "写入 wiki" / "摄入知识库", manifest wikiIngest.status is pending, or orchestrator
   dispatches a retrospective with missionId. Requires missionId. Pairs with llm-wiki.
 version: 1.1.0
-author: Hermes Workspace
+author: Agorax
 metadata:
   hermes:
     tags: [swarm, learning, wiki, llm-wiki, ingest, mission]

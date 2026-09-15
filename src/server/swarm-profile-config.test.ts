@@ -108,7 +108,7 @@ describe('syncSwarmProfileIdentity', () => {
         name: 'Builder',
         role: 'Primary Builder',
         specialty:
-          'full-stack implementation across Hermes Workspace and Swarm2',
+          'full-stack implementation across Agorax and Swarm2',
         model: 'GPT-5.5',
         mission: 'Ship focused product slices with tests and clean diffs.',
         skills: ['swarm-ui-worker', 'swarm-worker-core'],

@@ -5,7 +5,7 @@ description: >
   Emit HARDEN_OUTCOME pass|fail with evidence before learning/publish.
   Use when review just approved, or when asked to harden / pre-ship / GO-NO-GO.
 version: 1.0.0
-author: Hermes Workspace
+author: Agorax
 metadata:
   hermes:
     tags: [swarm, harden, gate, checklist, review]

@@ -1,4 +1,4 @@
-# Hermes Workspace — Development Overlay
+# Agorax — Development Overlay
 #
 # Builds the Workspace image from local source instead of pulling the
 # pre-built GHCR image. Use when iterating on Workspace code (server,

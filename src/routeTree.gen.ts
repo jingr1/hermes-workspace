@@ -9,7 +9,6 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as WorldRouteImport } from './routes/world'
 import { Route as VtCapitalRouteImport } from './routes/vt-capital'
 import { Route as TerminalRouteImport } from './routes/terminal'
 import { Route as TasksRouteImport } from './routes/tasks'
@@ -19,17 +18,14 @@ import { Route as SkillsRouteImport } from './routes/skills'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ReserveRouteImport } from './routes/reserve'
 import { Route as ProfilesRouteImport } from './routes/profiles'
-import { Route as PlaygroundRouteImport } from './routes/playground'
 import { Route as OperationsRouteImport } from './routes/operations'
 import { Route as MissionControlRouteImport } from './routes/mission-control'
 import { Route as MemoryRouteImport } from './routes/memory'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as JobsRouteImport } from './routes/jobs'
-import { Route as HermesWorldRouteImport } from './routes/hermes-world'
 import { Route as GroupChatRouteImport } from './routes/group-chat'
 import { Route as FilesRouteImport } from './routes/files'
 import { Route as EchoStudioRouteImport } from './routes/echo-studio'
-import { Route as EarlyAccessRouteImport } from './routes/early-access'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ConductorRouteImport } from './routes/conductor'
 import { Route as SplatRouteImport } from './routes/$'
@@ -38,7 +34,6 @@ import { Route as SettingsIndexRouteImport } from './routes/settings/index'
 import { Route as GroupChatIndexRouteImport } from './routes/group-chat/index'
 import { Route as ChatIndexRouteImport } from './routes/chat/index'
 import { Route as SettingsProvidersRouteImport } from './routes/settings/providers'
-import { Route as ReserveConfirmRouteImport } from './routes/reserve/confirm'
 import { Route as GroupChatRoomIdRouteImport } from './routes/group-chat/$roomId'
 import { Route as ChatSessionKeyRouteImport } from './routes/chat/$sessionKey'
 import { Route as ApiWorkspaceRouteImport } from './routes/api/workspace'
@@ -83,8 +78,6 @@ import { Route as ApiRoomsRouteImport } from './routes/api/rooms'
 import { Route as ApiProviderUsageRouteImport } from './routes/api/provider-usage'
 import { Route as ApiPreviewFileRouteImport } from './routes/api/preview-file'
 import { Route as ApiPluginsRouteImport } from './routes/api/plugins'
-import { Route as ApiPlaygroundNpcRouteImport } from './routes/api/playground-npc'
-import { Route as ApiPlaygroundAdminRouteImport } from './routes/api/playground-admin'
 import { Route as ApiPipelinesRouteImport } from './routes/api/pipelines'
 import { Route as ApiPingRouteImport } from './routes/api/ping'
 import { Route as ApiPathsRouteImport } from './routes/api/paths'
@@ -197,7 +190,6 @@ import { Route as ApiKnowledgeReadRouteImport } from './routes/api/knowledge/rea
 import { Route as ApiKnowledgeListRouteImport } from './routes/api/knowledge/list'
 import { Route as ApiKnowledgeGraphRouteImport } from './routes/api/knowledge/graph'
 import { Route as ApiKnowledgeConfigRouteImport } from './routes/api/knowledge/config'
-import { Route as ApiHermesworldReservationsRouteImport } from './routes/api/hermesworld/reservations'
 import { Route as ApiHermesTasksTaskIdRouteImport } from './routes/api/hermes-tasks.$taskId'
 import { Route as ApiGitDiffRouteImport } from './routes/api/git/diff'
 import { Route as ApiExternalMemorySearchRouteImport } from './routes/api/external-memory/search'
@@ -223,7 +215,6 @@ import { Route as ApiRoomsRoomIdParticipantsRouteImport } from './routes/api/roo
 import { Route as ApiRoomsRoomIdMessagesRouteImport } from './routes/api/rooms/$roomId/messages'
 import { Route as ApiMcpHubSourcesIdRouteImport } from './routes/api/mcp/hub-sources.$id'
 import { Route as ApiMcpNameLogsRouteImport } from './routes/api/mcp/$name.logs'
-import { Route as ApiHermesworldReservationsConfirmRouteImport } from './routes/api/hermesworld/reservations/confirm'
 import { Route as ApiAgentsCodexImplModelsRouteImport } from './routes/api/agents/codex-impl/models'
 import { Route as ApiAgentsCodexImplConfigRouteImport } from './routes/api/agents/codex-impl/config'
 import { Route as ApiAgentsClaudeCodeModelsRouteImport } from './routes/api/agents/claude-code/models'
@@ -238,11 +229,6 @@ import { Route as ApiRoomsRoomIdPendingTurnsTurnIdDismissRouteImport } from './r
 import { Route as ApiRoomsRoomIdPendingTurnsTurnIdAnswerRouteImport } from './routes/api/rooms/$roomId/pending-turns/$turnId/answer'
 import { Route as ApiAgentsAgentIdRunsRunIdInterruptRouteImport } from './routes/api/agents/$agentId/runs/$runId/interrupt'
 
-const WorldRoute = WorldRouteImport.update({
-  id: '/world',
-  path: '/world',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const VtCapitalRoute = VtCapitalRouteImport.update({
   id: '/vt-capital',
   path: '/vt-capital',
@@ -288,11 +274,6 @@ const ProfilesRoute = ProfilesRouteImport.update({
   path: '/profiles',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PlaygroundRoute = PlaygroundRouteImport.update({
-  id: '/playground',
-  path: '/playground',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const OperationsRoute = OperationsRouteImport.update({
   id: '/operations',
   path: '/operations',
@@ -318,11 +299,6 @@ const JobsRoute = JobsRouteImport.update({
   path: '/jobs',
   getParentRoute: () => rootRouteImport,
 } as any)
-const HermesWorldRoute = HermesWorldRouteImport.update({
-  id: '/hermes-world',
-  path: '/hermes-world',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const GroupChatRoute = GroupChatRouteImport.update({
   id: '/group-chat',
   path: '/group-chat',
@@ -336,11 +312,6 @@ const FilesRoute = FilesRouteImport.update({
 const EchoStudioRoute = EchoStudioRouteImport.update({
   id: '/echo-studio',
   path: '/echo-studio',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const EarlyAccessRoute = EarlyAccessRouteImport.update({
-  id: '/early-access',
-  path: '/early-access',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardRoute = DashboardRouteImport.update({
@@ -382,11 +353,6 @@ const SettingsProvidersRoute = SettingsProvidersRouteImport.update({
   id: '/providers',
   path: '/providers',
   getParentRoute: () => SettingsRoute,
-} as any)
-const ReserveConfirmRoute = ReserveConfirmRouteImport.update({
-  id: '/confirm',
-  path: '/confirm',
-  getParentRoute: () => ReserveRoute,
 } as any)
 const GroupChatRoomIdRoute = GroupChatRoomIdRouteImport.update({
   id: '/$roomId',
@@ -608,16 +574,6 @@ const ApiPreviewFileRoute = ApiPreviewFileRouteImport.update({
 const ApiPluginsRoute = ApiPluginsRouteImport.update({
   id: '/api/plugins',
   path: '/api/plugins',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiPlaygroundNpcRoute = ApiPlaygroundNpcRouteImport.update({
-  id: '/api/playground-npc',
-  path: '/api/playground-npc',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiPlaygroundAdminRoute = ApiPlaygroundAdminRouteImport.update({
-  id: '/api/playground-admin',
-  path: '/api/playground-admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPipelinesRoute = ApiPipelinesRouteImport.update({
@@ -1184,12 +1140,6 @@ const ApiKnowledgeConfigRoute = ApiKnowledgeConfigRouteImport.update({
   path: '/api/knowledge/config',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiHermesworldReservationsRoute =
-  ApiHermesworldReservationsRouteImport.update({
-    id: '/api/hermesworld/reservations',
-    path: '/api/hermesworld/reservations',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 const ApiHermesTasksTaskIdRoute = ApiHermesTasksTaskIdRouteImport.update({
   id: '/$taskId',
   path: '/$taskId',
@@ -1323,12 +1273,6 @@ const ApiMcpNameLogsRoute = ApiMcpNameLogsRouteImport.update({
   path: '/logs',
   getParentRoute: () => ApiMcpNameRoute,
 } as any)
-const ApiHermesworldReservationsConfirmRoute =
-  ApiHermesworldReservationsConfirmRouteImport.update({
-    id: '/confirm',
-    path: '/confirm',
-    getParentRoute: () => ApiHermesworldReservationsRoute,
-  } as any)
 const ApiAgentsCodexImplModelsRoute =
   ApiAgentsCodexImplModelsRouteImport.update({
     id: '/api/agents/codex-impl/models',
@@ -1412,19 +1356,16 @@ export interface FileRoutesByFullPath {
   '/$': typeof SplatRoute
   '/conductor': typeof ConductorRoute
   '/dashboard': typeof DashboardRoute
-  '/early-access': typeof EarlyAccessRoute
   '/echo-studio': typeof EchoStudioRoute
   '/files': typeof FilesRoute
   '/group-chat': typeof GroupChatRouteWithChildren
-  '/hermes-world': typeof HermesWorldRoute
   '/jobs': typeof JobsRoute
   '/mcp': typeof McpRoute
   '/memory': typeof MemoryRoute
   '/mission-control': typeof MissionControlRoute
   '/operations': typeof OperationsRoute
-  '/playground': typeof PlaygroundRoute
   '/profiles': typeof ProfilesRoute
-  '/reserve': typeof ReserveRouteWithChildren
+  '/reserve': typeof ReserveRoute
   '/settings': typeof SettingsRouteWithChildren
   '/skills': typeof SkillsRoute
   '/swarm': typeof SwarmRoute
@@ -1432,7 +1373,6 @@ export interface FileRoutesByFullPath {
   '/tasks': typeof TasksRoute
   '/terminal': typeof TerminalRoute
   '/vt-capital': typeof VtCapitalRoute
-  '/world': typeof WorldRoute
   '/api/agent-bus': typeof ApiAgentBusRoute
   '/api/artifacts': typeof ApiArtifactsRouteWithChildren
   '/api/auth': typeof ApiAuthRouteWithChildren
@@ -1478,8 +1418,6 @@ export interface FileRoutesByFullPath {
   '/api/paths': typeof ApiPathsRoute
   '/api/ping': typeof ApiPingRoute
   '/api/pipelines': typeof ApiPipelinesRoute
-  '/api/playground-admin': typeof ApiPlaygroundAdminRoute
-  '/api/playground-npc': typeof ApiPlaygroundNpcRoute
   '/api/plugins': typeof ApiPluginsRoute
   '/api/preview-file': typeof ApiPreviewFileRoute
   '/api/provider-usage': typeof ApiProviderUsageRoute
@@ -1524,7 +1462,6 @@ export interface FileRoutesByFullPath {
   '/api/workspace': typeof ApiWorkspaceRouteWithChildren
   '/chat/$sessionKey': typeof ChatSessionKeyRoute
   '/group-chat/$roomId': typeof GroupChatRoomIdRoute
-  '/reserve/confirm': typeof ReserveConfirmRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/chat/': typeof ChatIndexRoute
   '/group-chat/': typeof GroupChatIndexRoute
@@ -1544,7 +1481,6 @@ export interface FileRoutesByFullPath {
   '/api/external-memory/search': typeof ApiExternalMemorySearchRoute
   '/api/git/diff': typeof ApiGitDiffRoute
   '/api/hermes-tasks/$taskId': typeof ApiHermesTasksTaskIdRoute
-  '/api/hermesworld/reservations': typeof ApiHermesworldReservationsRouteWithChildren
   '/api/knowledge/config': typeof ApiKnowledgeConfigRoute
   '/api/knowledge/graph': typeof ApiKnowledgeGraphRoute
   '/api/knowledge/list': typeof ApiKnowledgeListRoute
@@ -1619,7 +1555,6 @@ export interface FileRoutesByFullPath {
   '/api/agents/claude-code/models': typeof ApiAgentsClaudeCodeModelsRoute
   '/api/agents/codex-impl/config': typeof ApiAgentsCodexImplConfigRoute
   '/api/agents/codex-impl/models': typeof ApiAgentsCodexImplModelsRoute
-  '/api/hermesworld/reservations/confirm': typeof ApiHermesworldReservationsConfirmRoute
   '/api/mcp/$name/logs': typeof ApiMcpNameLogsRoute
   '/api/mcp/hub-sources/$id': typeof ApiMcpHubSourcesIdRoute
   '/api/rooms/$roomId/messages': typeof ApiRoomsRoomIdMessagesRoute
@@ -1642,25 +1577,21 @@ export interface FileRoutesByTo {
   '/$': typeof SplatRoute
   '/conductor': typeof ConductorRoute
   '/dashboard': typeof DashboardRoute
-  '/early-access': typeof EarlyAccessRoute
   '/echo-studio': typeof EchoStudioRoute
   '/files': typeof FilesRoute
-  '/hermes-world': typeof HermesWorldRoute
   '/jobs': typeof JobsRoute
   '/mcp': typeof McpRoute
   '/memory': typeof MemoryRoute
   '/mission-control': typeof MissionControlRoute
   '/operations': typeof OperationsRoute
-  '/playground': typeof PlaygroundRoute
   '/profiles': typeof ProfilesRoute
-  '/reserve': typeof ReserveRouteWithChildren
+  '/reserve': typeof ReserveRoute
   '/skills': typeof SkillsRoute
   '/swarm': typeof SwarmRoute
   '/swarm2': typeof Swarm2Route
   '/tasks': typeof TasksRoute
   '/terminal': typeof TerminalRoute
   '/vt-capital': typeof VtCapitalRoute
-  '/world': typeof WorldRoute
   '/api/agent-bus': typeof ApiAgentBusRoute
   '/api/artifacts': typeof ApiArtifactsRouteWithChildren
   '/api/auth': typeof ApiAuthRouteWithChildren
@@ -1706,8 +1637,6 @@ export interface FileRoutesByTo {
   '/api/paths': typeof ApiPathsRoute
   '/api/ping': typeof ApiPingRoute
   '/api/pipelines': typeof ApiPipelinesRoute
-  '/api/playground-admin': typeof ApiPlaygroundAdminRoute
-  '/api/playground-npc': typeof ApiPlaygroundNpcRoute
   '/api/plugins': typeof ApiPluginsRoute
   '/api/preview-file': typeof ApiPreviewFileRoute
   '/api/provider-usage': typeof ApiProviderUsageRoute
@@ -1752,7 +1681,6 @@ export interface FileRoutesByTo {
   '/api/workspace': typeof ApiWorkspaceRouteWithChildren
   '/chat/$sessionKey': typeof ChatSessionKeyRoute
   '/group-chat/$roomId': typeof GroupChatRoomIdRoute
-  '/reserve/confirm': typeof ReserveConfirmRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/chat': typeof ChatIndexRoute
   '/group-chat': typeof GroupChatIndexRoute
@@ -1772,7 +1700,6 @@ export interface FileRoutesByTo {
   '/api/external-memory/search': typeof ApiExternalMemorySearchRoute
   '/api/git/diff': typeof ApiGitDiffRoute
   '/api/hermes-tasks/$taskId': typeof ApiHermesTasksTaskIdRoute
-  '/api/hermesworld/reservations': typeof ApiHermesworldReservationsRouteWithChildren
   '/api/knowledge/config': typeof ApiKnowledgeConfigRoute
   '/api/knowledge/graph': typeof ApiKnowledgeGraphRoute
   '/api/knowledge/list': typeof ApiKnowledgeListRoute
@@ -1847,7 +1774,6 @@ export interface FileRoutesByTo {
   '/api/agents/claude-code/models': typeof ApiAgentsClaudeCodeModelsRoute
   '/api/agents/codex-impl/config': typeof ApiAgentsCodexImplConfigRoute
   '/api/agents/codex-impl/models': typeof ApiAgentsCodexImplModelsRoute
-  '/api/hermesworld/reservations/confirm': typeof ApiHermesworldReservationsConfirmRoute
   '/api/mcp/$name/logs': typeof ApiMcpNameLogsRoute
   '/api/mcp/hub-sources/$id': typeof ApiMcpHubSourcesIdRoute
   '/api/rooms/$roomId/messages': typeof ApiRoomsRoomIdMessagesRoute
@@ -1871,19 +1797,16 @@ export interface FileRoutesById {
   '/$': typeof SplatRoute
   '/conductor': typeof ConductorRoute
   '/dashboard': typeof DashboardRoute
-  '/early-access': typeof EarlyAccessRoute
   '/echo-studio': typeof EchoStudioRoute
   '/files': typeof FilesRoute
   '/group-chat': typeof GroupChatRouteWithChildren
-  '/hermes-world': typeof HermesWorldRoute
   '/jobs': typeof JobsRoute
   '/mcp': typeof McpRoute
   '/memory': typeof MemoryRoute
   '/mission-control': typeof MissionControlRoute
   '/operations': typeof OperationsRoute
-  '/playground': typeof PlaygroundRoute
   '/profiles': typeof ProfilesRoute
-  '/reserve': typeof ReserveRouteWithChildren
+  '/reserve': typeof ReserveRoute
   '/settings': typeof SettingsRouteWithChildren
   '/skills': typeof SkillsRoute
   '/swarm': typeof SwarmRoute
@@ -1891,7 +1814,6 @@ export interface FileRoutesById {
   '/tasks': typeof TasksRoute
   '/terminal': typeof TerminalRoute
   '/vt-capital': typeof VtCapitalRoute
-  '/world': typeof WorldRoute
   '/api/agent-bus': typeof ApiAgentBusRoute
   '/api/artifacts': typeof ApiArtifactsRouteWithChildren
   '/api/auth': typeof ApiAuthRouteWithChildren
@@ -1937,8 +1859,6 @@ export interface FileRoutesById {
   '/api/paths': typeof ApiPathsRoute
   '/api/ping': typeof ApiPingRoute
   '/api/pipelines': typeof ApiPipelinesRoute
-  '/api/playground-admin': typeof ApiPlaygroundAdminRoute
-  '/api/playground-npc': typeof ApiPlaygroundNpcRoute
   '/api/plugins': typeof ApiPluginsRoute
   '/api/preview-file': typeof ApiPreviewFileRoute
   '/api/provider-usage': typeof ApiProviderUsageRoute
@@ -1983,7 +1903,6 @@ export interface FileRoutesById {
   '/api/workspace': typeof ApiWorkspaceRouteWithChildren
   '/chat/$sessionKey': typeof ChatSessionKeyRoute
   '/group-chat/$roomId': typeof GroupChatRoomIdRoute
-  '/reserve/confirm': typeof ReserveConfirmRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/chat/': typeof ChatIndexRoute
   '/group-chat/': typeof GroupChatIndexRoute
@@ -2003,7 +1922,6 @@ export interface FileRoutesById {
   '/api/external-memory/search': typeof ApiExternalMemorySearchRoute
   '/api/git/diff': typeof ApiGitDiffRoute
   '/api/hermes-tasks/$taskId': typeof ApiHermesTasksTaskIdRoute
-  '/api/hermesworld/reservations': typeof ApiHermesworldReservationsRouteWithChildren
   '/api/knowledge/config': typeof ApiKnowledgeConfigRoute
   '/api/knowledge/graph': typeof ApiKnowledgeGraphRoute
   '/api/knowledge/list': typeof ApiKnowledgeListRoute
@@ -2078,7 +1996,6 @@ export interface FileRoutesById {
   '/api/agents/claude-code/models': typeof ApiAgentsClaudeCodeModelsRoute
   '/api/agents/codex-impl/config': typeof ApiAgentsCodexImplConfigRoute
   '/api/agents/codex-impl/models': typeof ApiAgentsCodexImplModelsRoute
-  '/api/hermesworld/reservations/confirm': typeof ApiHermesworldReservationsConfirmRoute
   '/api/mcp/$name/logs': typeof ApiMcpNameLogsRoute
   '/api/mcp/hub-sources/$id': typeof ApiMcpHubSourcesIdRoute
   '/api/rooms/$roomId/messages': typeof ApiRoomsRoomIdMessagesRoute
@@ -2103,17 +2020,14 @@ export interface FileRouteTypes {
     | '/$'
     | '/conductor'
     | '/dashboard'
-    | '/early-access'
     | '/echo-studio'
     | '/files'
     | '/group-chat'
-    | '/hermes-world'
     | '/jobs'
     | '/mcp'
     | '/memory'
     | '/mission-control'
     | '/operations'
-    | '/playground'
     | '/profiles'
     | '/reserve'
     | '/settings'
@@ -2123,7 +2037,6 @@ export interface FileRouteTypes {
     | '/tasks'
     | '/terminal'
     | '/vt-capital'
-    | '/world'
     | '/api/agent-bus'
     | '/api/artifacts'
     | '/api/auth'
@@ -2169,8 +2082,6 @@ export interface FileRouteTypes {
     | '/api/paths'
     | '/api/ping'
     | '/api/pipelines'
-    | '/api/playground-admin'
-    | '/api/playground-npc'
     | '/api/plugins'
     | '/api/preview-file'
     | '/api/provider-usage'
@@ -2215,7 +2126,6 @@ export interface FileRouteTypes {
     | '/api/workspace'
     | '/chat/$sessionKey'
     | '/group-chat/$roomId'
-    | '/reserve/confirm'
     | '/settings/providers'
     | '/chat/'
     | '/group-chat/'
@@ -2235,7 +2145,6 @@ export interface FileRouteTypes {
     | '/api/external-memory/search'
     | '/api/git/diff'
     | '/api/hermes-tasks/$taskId'
-    | '/api/hermesworld/reservations'
     | '/api/knowledge/config'
     | '/api/knowledge/graph'
     | '/api/knowledge/list'
@@ -2310,7 +2219,6 @@ export interface FileRouteTypes {
     | '/api/agents/claude-code/models'
     | '/api/agents/codex-impl/config'
     | '/api/agents/codex-impl/models'
-    | '/api/hermesworld/reservations/confirm'
     | '/api/mcp/$name/logs'
     | '/api/mcp/hub-sources/$id'
     | '/api/rooms/$roomId/messages'
@@ -2333,16 +2241,13 @@ export interface FileRouteTypes {
     | '/$'
     | '/conductor'
     | '/dashboard'
-    | '/early-access'
     | '/echo-studio'
     | '/files'
-    | '/hermes-world'
     | '/jobs'
     | '/mcp'
     | '/memory'
     | '/mission-control'
     | '/operations'
-    | '/playground'
     | '/profiles'
     | '/reserve'
     | '/skills'
@@ -2351,7 +2256,6 @@ export interface FileRouteTypes {
     | '/tasks'
     | '/terminal'
     | '/vt-capital'
-    | '/world'
     | '/api/agent-bus'
     | '/api/artifacts'
     | '/api/auth'
@@ -2397,8 +2301,6 @@ export interface FileRouteTypes {
     | '/api/paths'
     | '/api/ping'
     | '/api/pipelines'
-    | '/api/playground-admin'
-    | '/api/playground-npc'
     | '/api/plugins'
     | '/api/preview-file'
     | '/api/provider-usage'
@@ -2443,7 +2345,6 @@ export interface FileRouteTypes {
     | '/api/workspace'
     | '/chat/$sessionKey'
     | '/group-chat/$roomId'
-    | '/reserve/confirm'
     | '/settings/providers'
     | '/chat'
     | '/group-chat'
@@ -2463,7 +2364,6 @@ export interface FileRouteTypes {
     | '/api/external-memory/search'
     | '/api/git/diff'
     | '/api/hermes-tasks/$taskId'
-    | '/api/hermesworld/reservations'
     | '/api/knowledge/config'
     | '/api/knowledge/graph'
     | '/api/knowledge/list'
@@ -2538,7 +2438,6 @@ export interface FileRouteTypes {
     | '/api/agents/claude-code/models'
     | '/api/agents/codex-impl/config'
     | '/api/agents/codex-impl/models'
-    | '/api/hermesworld/reservations/confirm'
     | '/api/mcp/$name/logs'
     | '/api/mcp/hub-sources/$id'
     | '/api/rooms/$roomId/messages'
@@ -2561,17 +2460,14 @@ export interface FileRouteTypes {
     | '/$'
     | '/conductor'
     | '/dashboard'
-    | '/early-access'
     | '/echo-studio'
     | '/files'
     | '/group-chat'
-    | '/hermes-world'
     | '/jobs'
     | '/mcp'
     | '/memory'
     | '/mission-control'
     | '/operations'
-    | '/playground'
     | '/profiles'
     | '/reserve'
     | '/settings'
@@ -2581,7 +2477,6 @@ export interface FileRouteTypes {
     | '/tasks'
     | '/terminal'
     | '/vt-capital'
-    | '/world'
     | '/api/agent-bus'
     | '/api/artifacts'
     | '/api/auth'
@@ -2627,8 +2522,6 @@ export interface FileRouteTypes {
     | '/api/paths'
     | '/api/ping'
     | '/api/pipelines'
-    | '/api/playground-admin'
-    | '/api/playground-npc'
     | '/api/plugins'
     | '/api/preview-file'
     | '/api/provider-usage'
@@ -2673,7 +2566,6 @@ export interface FileRouteTypes {
     | '/api/workspace'
     | '/chat/$sessionKey'
     | '/group-chat/$roomId'
-    | '/reserve/confirm'
     | '/settings/providers'
     | '/chat/'
     | '/group-chat/'
@@ -2693,7 +2585,6 @@ export interface FileRouteTypes {
     | '/api/external-memory/search'
     | '/api/git/diff'
     | '/api/hermes-tasks/$taskId'
-    | '/api/hermesworld/reservations'
     | '/api/knowledge/config'
     | '/api/knowledge/graph'
     | '/api/knowledge/list'
@@ -2768,7 +2659,6 @@ export interface FileRouteTypes {
     | '/api/agents/claude-code/models'
     | '/api/agents/codex-impl/config'
     | '/api/agents/codex-impl/models'
-    | '/api/hermesworld/reservations/confirm'
     | '/api/mcp/$name/logs'
     | '/api/mcp/hub-sources/$id'
     | '/api/rooms/$roomId/messages'
@@ -2792,19 +2682,16 @@ export interface RootRouteChildren {
   SplatRoute: typeof SplatRoute
   ConductorRoute: typeof ConductorRoute
   DashboardRoute: typeof DashboardRoute
-  EarlyAccessRoute: typeof EarlyAccessRoute
   EchoStudioRoute: typeof EchoStudioRoute
   FilesRoute: typeof FilesRoute
   GroupChatRoute: typeof GroupChatRouteWithChildren
-  HermesWorldRoute: typeof HermesWorldRoute
   JobsRoute: typeof JobsRoute
   McpRoute: typeof McpRoute
   MemoryRoute: typeof MemoryRoute
   MissionControlRoute: typeof MissionControlRoute
   OperationsRoute: typeof OperationsRoute
-  PlaygroundRoute: typeof PlaygroundRoute
   ProfilesRoute: typeof ProfilesRoute
-  ReserveRoute: typeof ReserveRouteWithChildren
+  ReserveRoute: typeof ReserveRoute
   SettingsRoute: typeof SettingsRouteWithChildren
   SkillsRoute: typeof SkillsRoute
   SwarmRoute: typeof SwarmRoute
@@ -2812,7 +2699,6 @@ export interface RootRouteChildren {
   TasksRoute: typeof TasksRoute
   TerminalRoute: typeof TerminalRoute
   VtCapitalRoute: typeof VtCapitalRoute
-  WorldRoute: typeof WorldRoute
   ApiAgentBusRoute: typeof ApiAgentBusRoute
   ApiArtifactsRoute: typeof ApiArtifactsRouteWithChildren
   ApiAuthRoute: typeof ApiAuthRouteWithChildren
@@ -2858,8 +2744,6 @@ export interface RootRouteChildren {
   ApiPathsRoute: typeof ApiPathsRoute
   ApiPingRoute: typeof ApiPingRoute
   ApiPipelinesRoute: typeof ApiPipelinesRoute
-  ApiPlaygroundAdminRoute: typeof ApiPlaygroundAdminRoute
-  ApiPlaygroundNpcRoute: typeof ApiPlaygroundNpcRoute
   ApiPluginsRoute: typeof ApiPluginsRoute
   ApiPreviewFileRoute: typeof ApiPreviewFileRoute
   ApiProviderUsageRoute: typeof ApiProviderUsageRoute
@@ -2913,7 +2797,6 @@ export interface RootRouteChildren {
   ApiExternalMemoryProvidersRoute: typeof ApiExternalMemoryProvidersRoute
   ApiExternalMemorySearchRoute: typeof ApiExternalMemorySearchRoute
   ApiGitDiffRoute: typeof ApiGitDiffRoute
-  ApiHermesworldReservationsRoute: typeof ApiHermesworldReservationsRouteWithChildren
   ApiKnowledgeConfigRoute: typeof ApiKnowledgeConfigRoute
   ApiKnowledgeGraphRoute: typeof ApiKnowledgeGraphRoute
   ApiKnowledgeListRoute: typeof ApiKnowledgeListRoute
@@ -2972,13 +2855,6 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/world': {
-      id: '/world'
-      path: '/world'
-      fullPath: '/world'
-      preLoaderRoute: typeof WorldRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/vt-capital': {
       id: '/vt-capital'
       path: '/vt-capital'
@@ -3042,13 +2918,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProfilesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/playground': {
-      id: '/playground'
-      path: '/playground'
-      fullPath: '/playground'
-      preLoaderRoute: typeof PlaygroundRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/operations': {
       id: '/operations'
       path: '/operations'
@@ -3084,13 +2953,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof JobsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/hermes-world': {
-      id: '/hermes-world'
-      path: '/hermes-world'
-      fullPath: '/hermes-world'
-      preLoaderRoute: typeof HermesWorldRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/group-chat': {
       id: '/group-chat'
       path: '/group-chat'
@@ -3110,13 +2972,6 @@ declare module '@tanstack/react-router' {
       path: '/echo-studio'
       fullPath: '/echo-studio'
       preLoaderRoute: typeof EchoStudioRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/early-access': {
-      id: '/early-access'
-      path: '/early-access'
-      fullPath: '/early-access'
-      preLoaderRoute: typeof EarlyAccessRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard': {
@@ -3174,13 +3029,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/settings/providers'
       preLoaderRoute: typeof SettingsProvidersRouteImport
       parentRoute: typeof SettingsRoute
-    }
-    '/reserve/confirm': {
-      id: '/reserve/confirm'
-      path: '/confirm'
-      fullPath: '/reserve/confirm'
-      preLoaderRoute: typeof ReserveConfirmRouteImport
-      parentRoute: typeof ReserveRoute
     }
     '/group-chat/$roomId': {
       id: '/group-chat/$roomId'
@@ -3488,20 +3336,6 @@ declare module '@tanstack/react-router' {
       path: '/api/plugins'
       fullPath: '/api/plugins'
       preLoaderRoute: typeof ApiPluginsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/playground-npc': {
-      id: '/api/playground-npc'
-      path: '/api/playground-npc'
-      fullPath: '/api/playground-npc'
-      preLoaderRoute: typeof ApiPlaygroundNpcRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/playground-admin': {
-      id: '/api/playground-admin'
-      path: '/api/playground-admin'
-      fullPath: '/api/playground-admin'
-      preLoaderRoute: typeof ApiPlaygroundAdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/pipelines': {
@@ -4288,13 +4122,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiKnowledgeConfigRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/hermesworld/reservations': {
-      id: '/api/hermesworld/reservations'
-      path: '/api/hermesworld/reservations'
-      fullPath: '/api/hermesworld/reservations'
-      preLoaderRoute: typeof ApiHermesworldReservationsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/hermes-tasks/$taskId': {
       id: '/api/hermes-tasks/$taskId'
       path: '/$taskId'
@@ -4470,13 +4297,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMcpNameLogsRouteImport
       parentRoute: typeof ApiMcpNameRoute
     }
-    '/api/hermesworld/reservations/confirm': {
-      id: '/api/hermesworld/reservations/confirm'
-      path: '/confirm'
-      fullPath: '/api/hermesworld/reservations/confirm'
-      preLoaderRoute: typeof ApiHermesworldReservationsConfirmRouteImport
-      parentRoute: typeof ApiHermesworldReservationsRoute
-    }
     '/api/agents/codex-impl/models': {
       id: '/api/agents/codex-impl/models'
       path: '/api/agents/codex-impl/models'
@@ -4584,17 +4404,6 @@ const GroupChatRouteChildren: GroupChatRouteChildren = {
 const GroupChatRouteWithChildren = GroupChatRoute._addFileChildren(
   GroupChatRouteChildren,
 )
-
-interface ReserveRouteChildren {
-  ReserveConfirmRoute: typeof ReserveConfirmRoute
-}
-
-const ReserveRouteChildren: ReserveRouteChildren = {
-  ReserveConfirmRoute: ReserveConfirmRoute,
-}
-
-const ReserveRouteWithChildren =
-  ReserveRoute._addFileChildren(ReserveRouteChildren)
 
 interface SettingsRouteChildren {
   SettingsProvidersRoute: typeof SettingsProvidersRoute
@@ -4876,21 +4685,6 @@ const ApiWorkspaceRouteWithChildren = ApiWorkspaceRoute._addFileChildren(
   ApiWorkspaceRouteChildren,
 )
 
-interface ApiHermesworldReservationsRouteChildren {
-  ApiHermesworldReservationsConfirmRoute: typeof ApiHermesworldReservationsConfirmRoute
-}
-
-const ApiHermesworldReservationsRouteChildren: ApiHermesworldReservationsRouteChildren =
-  {
-    ApiHermesworldReservationsConfirmRoute:
-      ApiHermesworldReservationsConfirmRoute,
-  }
-
-const ApiHermesworldReservationsRouteWithChildren =
-  ApiHermesworldReservationsRoute._addFileChildren(
-    ApiHermesworldReservationsRouteChildren,
-  )
-
 interface ApiAgentsAgentIdSessionsRouteChildren {
   ApiAgentsAgentIdSessionsSessionIdRoute: typeof ApiAgentsAgentIdSessionsSessionIdRoute
 }
@@ -4911,19 +4705,16 @@ const rootRouteChildren: RootRouteChildren = {
   SplatRoute: SplatRoute,
   ConductorRoute: ConductorRoute,
   DashboardRoute: DashboardRoute,
-  EarlyAccessRoute: EarlyAccessRoute,
   EchoStudioRoute: EchoStudioRoute,
   FilesRoute: FilesRoute,
   GroupChatRoute: GroupChatRouteWithChildren,
-  HermesWorldRoute: HermesWorldRoute,
   JobsRoute: JobsRoute,
   McpRoute: McpRoute,
   MemoryRoute: MemoryRoute,
   MissionControlRoute: MissionControlRoute,
   OperationsRoute: OperationsRoute,
-  PlaygroundRoute: PlaygroundRoute,
   ProfilesRoute: ProfilesRoute,
-  ReserveRoute: ReserveRouteWithChildren,
+  ReserveRoute: ReserveRoute,
   SettingsRoute: SettingsRouteWithChildren,
   SkillsRoute: SkillsRoute,
   SwarmRoute: SwarmRoute,
@@ -4931,7 +4722,6 @@ const rootRouteChildren: RootRouteChildren = {
   TasksRoute: TasksRoute,
   TerminalRoute: TerminalRoute,
   VtCapitalRoute: VtCapitalRoute,
-  WorldRoute: WorldRoute,
   ApiAgentBusRoute: ApiAgentBusRoute,
   ApiArtifactsRoute: ApiArtifactsRouteWithChildren,
   ApiAuthRoute: ApiAuthRouteWithChildren,
@@ -4977,8 +4767,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPathsRoute: ApiPathsRoute,
   ApiPingRoute: ApiPingRoute,
   ApiPipelinesRoute: ApiPipelinesRoute,
-  ApiPlaygroundAdminRoute: ApiPlaygroundAdminRoute,
-  ApiPlaygroundNpcRoute: ApiPlaygroundNpcRoute,
   ApiPluginsRoute: ApiPluginsRoute,
   ApiPreviewFileRoute: ApiPreviewFileRoute,
   ApiProviderUsageRoute: ApiProviderUsageRoute,
@@ -5032,7 +4820,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiExternalMemoryProvidersRoute: ApiExternalMemoryProvidersRoute,
   ApiExternalMemorySearchRoute: ApiExternalMemorySearchRoute,
   ApiGitDiffRoute: ApiGitDiffRoute,
-  ApiHermesworldReservationsRoute: ApiHermesworldReservationsRouteWithChildren,
   ApiKnowledgeConfigRoute: ApiKnowledgeConfigRoute,
   ApiKnowledgeGraphRoute: ApiKnowledgeGraphRoute,
   ApiKnowledgeListRoute: ApiKnowledgeListRoute,

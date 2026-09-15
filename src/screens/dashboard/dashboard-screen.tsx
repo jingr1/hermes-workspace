@@ -948,7 +948,7 @@ export function DashboardScreen() {
       <div className="px-4 pt-14 md:pt-4 py-4 md:px-8 md:py-6 lg:px-10 space-y-5 pb-28">
         {/* ── Header: brand lockup left, action cluster right.
            Iteration 010: dropped redundant "Dashboard" eyebrow (the
-           page IS the dashboard); promoted "Hermes Workspace" to
+           page IS the dashboard); promoted "Agorax" to
            the primary heading at a larger weight. Logo bumped from
            36px → 44px and gets a soft accent glow + ring so the
            lockup commands the left side instead of feeling like
@@ -973,7 +973,7 @@ export function DashboardScreen() {
             >
               <img
                 src="/claude-avatar.webp"
-                alt="Hermes Workspace logo"
+                alt="Agorax logo"
                 className="size-8 rounded-md"
                 style={{ background: 'transparent' }}
               />
@@ -993,7 +993,7 @@ export function DashboardScreen() {
                   lineHeight: 1.1,
                 }}
               >
-                Hermes Workspace
+                Agorax
               </h1>
             </div>
           </div>

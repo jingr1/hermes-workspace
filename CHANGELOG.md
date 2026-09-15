@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Hermes Workspace are documented here.
+All notable changes to Agorax are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
@@ -65,7 +65,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [2.0.0] — 2026-04-20
 
-**Zero-fork release.** Clone, don't fork. Hermes Workspace now runs on vanilla `pip install hermes-agent` with no patches, no drift, no custom gateway required.
+**Zero-fork release.** Clone, don't fork. Agorax now runs on vanilla `pip install hermes-agent` with no patches, no drift, no custom gateway required.
 
 ### Added
 

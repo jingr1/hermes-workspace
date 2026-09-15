@@ -40,7 +40,7 @@ export function isMicrophoneContextSecure(): boolean {
 }
 
 export const INSECURE_MICROPHONE_MESSAGE =
-  'Microphone requires HTTPS or localhost. Browsers block mic access on HTTP remote IPs (for example Tailscale). Open http://127.0.0.1:3000 on this Mac, or serve Hermes Workspace over HTTPS.'
+  'Microphone requires HTTPS or localhost. Browsers block mic access on HTTP remote IPs (for example Tailscale). Open http://127.0.0.1:3000 on this Mac, or serve Agorax over HTTPS.'
 
 type MicrophonePlatform = 'ios' | 'android' | 'macos' | 'desktop'
 

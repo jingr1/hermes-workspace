@@ -1,4 +1,4 @@
-# Windows Setup Guide — Hermes Workspace
+# Windows Setup Guide — Agorax
 
 Last updated: 2026-05-28
 

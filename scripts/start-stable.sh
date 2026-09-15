@@ -47,11 +47,11 @@ for pid in $(lsof -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null || true); do
   stop_pid "$pid"
 done
 
-echo "[stable] building Hermes Workspace..."
+echo "[stable] building Agorax..."
 rm -rf dist
 pnpm build >"$BUILD_LOG_FILE" 2>&1
 
-echo "[stable] starting Hermes Workspace on port $PORT..."
+echo "[stable] starting Agorax on port $PORT..."
 nohup env PORT="$PORT" NODE_OPTIONS="--max-old-space-size=2048" node server-entry.js >>"$LOG_FILE" 2>&1 &
 new_pid=$!
 echo "$new_pid" >"$PID_FILE"

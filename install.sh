@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Hermes Workspace — one-liner installer
+# Agorax — one-liner installer
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/outsourc-e/hermes-workspace/main/install.sh | bash
@@ -34,7 +34,7 @@ banner() {
   cat <<'EOF'
 
    ╭────────────────────────────────────────────╮
-   │  HERMES WORKSPACE — zero-fork installer   │
+   │  Agorax — zero-fork installer   │
    │  outsourc-e/hermes-workspace               │
    ╰────────────────────────────────────────────╯
 

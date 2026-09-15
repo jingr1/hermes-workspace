@@ -1,6 +1,6 @@
 import type { SlashCommandDefinition } from './types'
 
-/** Hermes Workspace slash catalog (gateway + UI commands). */
+/** Agorax slash catalog (gateway + UI commands). */
 export const HERMES_SLASH_COMMANDS: Array<SlashCommandDefinition> = [
   // Session control
   { command: '/new', description: 'Start new session' },

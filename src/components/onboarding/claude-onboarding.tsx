@@ -530,7 +530,7 @@ export function ClaudeOnboarding() {
                   filter: 'drop-shadow(0 8px 24px rgba(99,102,241,0.3))',
                 }}
               />
-              <h2 className="text-xl font-bold">Welcome to Hermes Workspace</h2>
+              <h2 className="text-xl font-bold">Welcome to Agorax</h2>
               <p className="text-sm" style={mutedStyle}>
                 Works with any OpenAI-compatible backend. Hermes Agent gateway
                 APIs unlock sessions, memory, skills, and other extras
@@ -556,7 +556,7 @@ export function ClaudeOnboarding() {
               <div className="text-4xl">🔌</div>
               <h2 className="text-lg font-bold">Connect Your Backend</h2>
               <p className="text-sm" style={mutedStyle}>
-                Start by verifying that Hermes Workspace can reach your
+                Start by verifying that Agorax can reach your
                 OpenAI-compatible backend.
               </p>
 
@@ -653,7 +653,7 @@ export function ClaudeOnboarding() {
               <p className="text-center text-xs" style={mutedStyle}>
                 {canEditConfig
                   ? 'Save provider settings here, then choose a model before testing chat.'
-                  : 'This backend manages provider settings outside Hermes Workspace. Confirm the model you expect to use, then test chat.'}
+                  : 'This backend manages provider settings outside Agorax. Confirm the model you expect to use, then test chat.'}
               </p>
 
               <div className="rounded-xl p-3 text-xs" style={cardStyle}>
@@ -1067,7 +1067,7 @@ export function ClaudeOnboarding() {
                     ) : (
                       <p className="mt-2 text-xs text-yellow-400">
                         Confirm the backend is running and still reachable from
-                        Hermes Workspace.
+                        Agorax.
                       </p>
                     )}
                   </div>

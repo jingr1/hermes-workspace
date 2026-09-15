@@ -2,7 +2,7 @@
 name: brainstorming
 description: Use before technical design work — explore requirements and produce an approved architecture spec (architect lane; no implementation).
 version: 1.0.0
-author: Hermes Workspace (adapted from superpowers)
+author: Agorax (adapted from superpowers)
 metadata:
   hermes:
     tags: [swarm, architect, design, brainstorming]

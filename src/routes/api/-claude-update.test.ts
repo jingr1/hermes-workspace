@@ -23,7 +23,7 @@ describe('claude update repo gating', () => {
   it('blocks update availability for wrong remote repos even when heads differ', () => {
     const status = createRemoteStatus({
       name: 'origin',
-      label: 'Hermes Workspace',
+      label: 'Agorax',
       expectedRepo: 'hermes-workspace',
       aliases: ['hermes-workspace'],
       url: 'https://github.com/example/not-workspace.git',

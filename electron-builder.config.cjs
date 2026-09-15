@@ -1,7 +1,7 @@
 module.exports = {
-  appId: 'com.hermesworkspace.app',
-  productName: 'hermes-workspace',
-  copyright: 'Copyright © 2026 hermes-workspace',
+  appId: 'com.agorax.app',
+  productName: 'Agorax',
+  copyright: 'Copyright © 2026 Agorax',
   icon: 'assets/icon.png',
   directories: {
     output: 'release',
@@ -30,7 +30,7 @@ module.exports = {
     gatekeeperAssess: false,
   },
   dmg: {
-    title: 'Hermes Workspace',
+    title: 'Agorax',
     iconSize: 80,
     contents: [
       { x: 130, y: 220 },
@@ -39,7 +39,7 @@ module.exports = {
   },
   win: {
     target: ['portable', 'nsis'],
-    executableName: 'hermes-workspace',
+    executableName: 'agorax',
   },
   nsis: {
     oneClick: true,

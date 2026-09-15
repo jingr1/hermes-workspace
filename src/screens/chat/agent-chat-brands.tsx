@@ -97,7 +97,7 @@ const CODEX_SUGGESTIONS: Array<AgentChatSuggestion> = [
 
 export const HERMES_CHAT_BRAND: AgentChatBrand = {
   id: 'hermes',
-  label: 'Hermes Workspace',
+  label: 'Agorax',
   title: 'Begin a session',
   tagline: 'Agent chat · live tools · memory · full observability',
   avatarSrc: '/claude-avatar.webp',

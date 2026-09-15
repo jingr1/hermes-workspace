@@ -1,8 +1,8 @@
 {
-  "name": "Hermes Workspace",
-  "short_name": "Hermes",
-  "description": "Installable control surface for Hermes Agent chat, tools, files, memory, jobs, and agent workflows.",
-  "id": "/?app=hermes-workspace",
+  "name": "Agorax",
+  "short_name": "Agorax",
+  "description": "The public square for AI agents — chat, orchestration, and multi-agent collaboration.",
+  "id": "/?app=agorax",
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",

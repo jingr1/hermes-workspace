@@ -33,7 +33,7 @@ let
 in
 {
   options.services.hermes-workspace = {
-    enable = mkEnableOption "Hermes Workspace — web UI for Hermes Agent";
+    enable = mkEnableOption "Agorax — web UI for Hermes Agent";
 
     package = mkPackageOption pkgs "hermes-workspace" { };
 
@@ -160,13 +160,13 @@ in
       group = cfg.group;
       home = cfg.dataDir;
       createHome = true;
-      description = "Hermes Workspace service user";
+      description = "Agorax service user";
     };
 
     users.groups.${cfg.group} = lib.mkDefault { };
 
     systemd.services.hermes-workspace = {
-      description = "Hermes Workspace Web Server";
+      description = "Agorax Web Server";
       documentation = [ "https://github.com/outsourc-e/hermes-workspace" ];
       wantedBy = [ "multi-user.target" ];
       after = [ "network.target" ];

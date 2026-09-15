@@ -1,6 +1,6 @@
-# Hermes Workspace Swarm 软件架构详解
+# Agorax Swarm 软件架构详解
 
-> **版本**: 基于 Hermes Workspace v2.3.0  
+> **版本**: 基于 Agorax v2.3.0  
 > **最后更新**: 2026-08-09  
 > **涵盖范围**: 整体架构、多 Agent 协同机制、Swarm Board 与 Hermes Kanban 关系
 >
@@ -26,7 +26,7 @@
 
 ## 1. 系统概览
 
-Hermes Workspace Swarm 是一个**持久化多 Agent 协同系统**，构建在 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 之上。它将工作区转变为一个实时控制平面：多个 Hermes Agent 以持久 tmux 会话运行，由 Orchestrator 统一调度，通过结构化 checkpoint 进行通信。
+Agorax Swarm 是一个**持久化多 Agent 协同系统**，构建在 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 之上。它将工作区转变为一个实时控制平面：多个 Hermes Agent 以持久 tmux 会话运行，由 Orchestrator 统一调度，通过结构化 checkpoint 进行通信。
 
 ### 核心设计原则
 
@@ -40,7 +40,7 @@ Hermes Workspace Swarm 是一个**持久化多 Agent 协同系统**，构建在 
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                    Hermes Workspace                       │
+│                    Agorax                       │
 │  React + TanStack Router + Vite + TypeScript (Web UI)    │
 │  Node.js 服务端 (API routes, tmux 管理, 通知路由)         │
 └──────────────────────┬───────────────────────────────────┘

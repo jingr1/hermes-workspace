@@ -1,6 +1,6 @@
 # Swarm Mode
 
-Swarm Mode is the Hermes Workspace control plane for Hermes Agents: persistent workers, a standing orchestrator, a review gate, and enough runtime visibility that the system is understandable instead of mystical.
+Swarm Mode is the Agorax control plane for Hermes Agents: persistent workers, a standing orchestrator, a review gate, and enough runtime visibility that the system is understandable instead of mystical.
 
 The release promise is simple:
 

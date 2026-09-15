@@ -2,7 +2,7 @@
 name: receiving-code-review
 description: Evaluate architect or reviewer feedback technically before changing code — verify, push back, implement one fix at a time.
 version: 1.0.0
-author: Hermes Workspace (adapted from superpowers)
+author: Agorax (adapted from superpowers)
 metadata:
   hermes:
     tags: [swarm, developer, code-review]
