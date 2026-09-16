@@ -7,6 +7,7 @@ import YAML from 'yaml'
 import { isAuthenticated } from '../../../server/auth-middleware'
 import { getHermesRoot } from '../../../server/claude-paths'
 import { getAgentRuntimeRouter } from '../../../server/agent-runtime/router'
+import type { AgentRuntimeKind } from '../../../server/agent-runtime/types'
 import { listProfilesLight } from '../../../server/profiles-browser'
 import {
   readClaudeCodeSettings,
@@ -21,7 +22,7 @@ import {
 export type OperationsAgentConfig = {
   id: string
   name: string
-  runtime: 'hermes' | 'claude-code' | 'codex' | 'deepseek-harness'
+  runtime: AgentRuntimeKind
   model: string
   provider: string
   workspace?: string

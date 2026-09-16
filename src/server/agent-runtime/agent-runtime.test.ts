@@ -243,6 +243,46 @@ agents:
     expect(codexProbe.detail).toMatch(/codex executable not found/)
   })
 
+  it('recognizes cursor and kimi as Agorax Managed Agent slots', async () => {
+    const router = new AgentRuntimeRouter({
+      rawYaml: `
+version: 1
+agents:
+  - id: cursor
+    runtime: cursor
+    command: cursor-agent
+  - id: kimi
+    runtime: kimi
+    command: kimi
+`,
+    })
+
+    expect(router.getAdapter('cursor')?.kind).toBe('cursor')
+    expect(router.getAdapter('kimi')?.kind).toBe('kimi')
+    await expect(router.getAdapter('cursor')!.probe()).resolves.toEqual({
+      available: false,
+      detail: 'Agorax Managed Agent transport is not configured',
+    })
+  })
+
+  it('does not route opencode through the local Claude adapter', async () => {
+    const router = new AgentRuntimeRouter({
+      rawYaml: `
+version: 1
+agents:
+  - id: opencode
+    runtime: opencode
+    command: opencode
+`,
+    })
+
+    expect(router.getAdapter('opencode')?.kind).toBe('opencode')
+    await expect(router.getAdapter('opencode')!.probe()).resolves.toEqual({
+      available: false,
+      detail: 'Agorax Managed Agent transport is not configured',
+    })
+  })
+
   it('hermes stub refuses startRun (existing dispatch path owns it)', async () => {
     const router = new AgentRuntimeRouter({
       rawYaml: `
@@ -313,6 +353,17 @@ describe('ClaudeCodeAdapter process management', () => {
       command: fakeBin,
       args: ['-p'],
       execution: 'local',
+      modes: [],
+      tools: [],
+      skills: [],
+      plugins: [],
+      pluginToolsets: [],
+      mcpServers: [],
+      preferredTaskTypes: [],
+      greenlightRequiredFor: [],
+      acceptsBroadcast: false,
+      reviewRequired: false,
+      dispatchable: true,
       capabilities: [],
     })
 
@@ -364,6 +415,17 @@ describe('ClaudeCodeAdapter process management', () => {
       runtime: 'claude-code',
       command: fakeBin,
       execution: 'local',
+      modes: [],
+      tools: [],
+      skills: [],
+      plugins: [],
+      pluginToolsets: [],
+      mcpServers: [],
+      preferredTaskTypes: [],
+      greenlightRequiredFor: [],
+      acceptsBroadcast: false,
+      reviewRequired: false,
+      dispatchable: true,
       capabilities: [],
     })
 

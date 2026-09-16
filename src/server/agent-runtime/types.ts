@@ -10,6 +10,8 @@ export type AgentRuntimeKind =
   | 'hermes'
   | 'claude-code'
   | 'codex'
+  | 'cursor'
+  | 'kimi'
   | 'deepseek-harness'
   | 'opencode'
 

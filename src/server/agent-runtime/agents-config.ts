@@ -63,6 +63,8 @@ const RUNTIMES: ReadonlyArray<AgentRuntimeKind> = [
   'hermes',
   'claude-code',
   'codex',
+  'cursor',
+  'kimi',
   'deepseek-harness',
   'opencode',
 ]

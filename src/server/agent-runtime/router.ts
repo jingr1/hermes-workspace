@@ -37,14 +37,17 @@ const UNSUPPORTED_RUNTIMES = new Set(['deepseek-harness'])
 
 /** Adapter slot for declared runtimes whose adapter ships in a later step. */
 class UnavailableAdapter implements AgentRuntimeAdapter {
-  constructor(private readonly decl: AgentDeclaration) {}
+  constructor(
+    private readonly decl: AgentDeclaration,
+    private readonly unavailableDetail = `adapter for ${decl.runtime} not yet delivered (P1 步骤 4)`,
+  ) {}
   get kind() {
     return this.decl.runtime
   }
   async probe(): Promise<AgentProbeResult> {
     return {
       available: false,
-      detail: `adapter for ${this.decl.runtime} not yet delivered (P1 步骤 4)`,
+      detail: this.unavailableDetail,
     }
   }
   async startRun(): Promise<{ runId: string }> {
@@ -72,10 +75,16 @@ export class AgentRuntimeRouter {
       case 'hermes':
         return new HermesAdapterStub(decl)
       case 'claude-code':
-      case 'opencode':
         return new ClaudeCodeAdapter(decl)
       case 'codex':
         return new CodexAdapter(decl)
+      case 'cursor':
+      case 'kimi':
+      case 'opencode':
+        return new UnavailableAdapter(
+          decl,
+          'Agorax Managed Agent transport is not configured',
+        )
       default:
         if (UNSUPPORTED_RUNTIMES.has(decl.runtime)) {
           return new UnavailableAdapter(decl)
