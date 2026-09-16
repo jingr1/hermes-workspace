@@ -1,45 +1,161 @@
-version: 1
-# Runtime declarations for managed agents (plan «运行时声明：agents.yaml»).
-# swarm.yaml stays the pipeline source of truth; this file only says HOW a
-# runtime is launched. capabilities are inherited from swarm.yaml when omitted.
+version: 2
 agents:
   - id: orchestrator
+    name: Orchestrator
     runtime: hermes
     profile: orchestrator
+    wrapper: orchestrator:plan
+    role: Swarm Orchestrator / Greenlight Gate
+    specialty: mission routing, task decomposition, handoffs, proof contracts, human approval gates
+    mission: Decompose missions into safe, proof-bearing work and route to the right specialist while preserving human greenlight control.
+    modes: [plan, autoresearch, autoresearch-dispatch]
+    tools: [todo, kanban, delegation, terminal, file, session_search, cronjob, skills, clarify, web]
+    skills: [orchestrator-core, mission-memory-layout, gstack-for-hermes, llm-wiki, kanban-orchestrator, writing-plans, autoresearch, autoresearch-plan, autoresearch-orchestrate]
+    plugins: []
+    pluginToolsets: []
+    mcpServers: []
+    capabilities: [orchestration, decomposition, routing, proof-contracts, greenlight-gate, autoresearch-dispatch]
+    preferredTaskTypes: [orchestration, planning, routing, coordination, handoff, autoresearch-dispatch]
+    greenlightRequiredFor: [merge, publish, destructive, external-send, credential-change, long-running-loop]
+    maxConcurrentTasks: 1
+    acceptsBroadcast: true
+    reviewRequired: false
+
   - id: researcher
+    name: Researcher
     runtime: hermes
     profile: researcher
+    wrapper: researcher:quick
+    role: Fact-Finding Research
+    specialty: establish facts, competitive analysis, data validation, source tracing, wiki-first lookup
+    mission: Produce evidence-backed factual research with external verification, explicit uncertainty, and full source trails.
+    modes: [quick]
+    tools: [web, browser, terminal, file, vision, session_search, skills, todo]
+    skills: [researcher-core, mission-memory-layout, llm-wiki, browser-harness, gstack-for-hermes, researcher-quick, arxiv, youtube-content, polymarket]
+    plugins: []
+    pluginToolsets: []
+    mcpServers: []
+    capabilities: [research, fact-establishment, source-verification, source-tracing, wiki-query]
+    preferredTaskTypes: [research, competitive-analysis, data-validation, source-review, source-tracing]
+    greenlightRequiredFor: [publish, external-send, long-running-loop]
+    maxConcurrentTasks: 1
+    acceptsBroadcast: true
+    reviewRequired: false
+
   - id: architect
+    name: Architect
     runtime: hermes
     profile: architect
+    wrapper: architect:design
+    role: System Architecture & Technical Specification Agent
+    specialty: architecture, data models, interfaces, technical direction, executor lane selection, implementation review
+    mission: Translate upstream strategy into decision-grade technical designs and choose exactly one build executor.
+    modes: [design, autoresearch]
+    tools: [terminal, file, web, session_search, skills, todo]
+    skills: [architect-core, harden-gate, mission-memory-layout, gstack-for-hermes, llm-wiki, writing-plans, requesting-code-review, codebase-inspection, architecture-diagram, brainstorming, autoresearch, autoresearch-execute]
+    plugins: []
+    pluginToolsets: []
+    mcpServers: []
+    capabilities: [architecture, technical-specification, technical-direction, executor-lane-selection, design-review, implementation-review, content-review, interface-contracts]
+    preferredTaskTypes: [design, architecture, technical-specification, tech-direction, executor-routing, implementation-review, content-review, research-challenge, autoresearch-execute]
+    greenlightRequiredFor: [publish, destructive, long-running-loop]
+    maxConcurrentTasks: 1
+    acceptsBroadcast: true
+    reviewRequired: true
+
   - id: developer
+    name: Developer
     runtime: hermes
     profile: developer
+    wrapper: developer:implement
+    role: Implementation & Testing Agent
+    specialty: implement approved designs, feature code, tests, and build verification
+    mission: Implement approved technical specifications with tests, evidence-bearing checkpoints, and verified builds.
+    modes: [implement, autoresearch]
+    tools: [terminal, file, browser, web, session_search, skills, todo]
+    skills: [gstack-for-hermes, mission-memory-layout, llm-wiki, test-driven-development, systematic-debugging, codebase-inspection, github-pr-workflow, requesting-code-review, receiving-code-review, executing-plans, autoresearch, autoresearch-execute]
+    plugins: []
+    pluginToolsets: []
+    mcpServers: []
+    capabilities: [implementation, testing, build-verification, debugging]
+    preferredTaskTypes: [implementation, testing, build-verification, bugfix, autoresearch-execute]
+    greenlightRequiredFor: [merge, destructive, long-running-loop]
+    maxConcurrentTasks: 1
+    acceptsBroadcast: true
+    reviewRequired: true
+
   - id: writer
+    name: Writer
     runtime: hermes
     profile: writer
+    wrapper: writer:author
+    role: Content & Visual Deliverables Agent
+    specialty: slides, HTML, video scripts, social copy, documents, visual deliverables
+    mission: Transform approved designs and research into polished, audience-ready deliverables.
+    modes: [author, autoresearch]
+    tools: [terminal, file, web, browser, session_search, skills, todo, vision]
+    skills: [gstack-for-hermes, mission-memory-layout, llm-wiki, powerpoint, docx, pdf, popular-web-designs, excalidraw, architecture-diagram, claude-design, songwriting-and-ai-music, media, writing-plans, autoresearch, autoresearch-execute]
+    plugins: []
+    pluginToolsets: []
+    mcpServers: []
+    capabilities: [content-authoring, slide-design, visual-design, narrative-design, html-presentation, document-production, social-media-copy]
+    preferredTaskTypes: [slide-deck, html-presentation, document, visual-design, video-script, social-copy, autoresearch-execute]
+    greenlightRequiredFor: [publish, external-send, destructive, long-running-loop]
+    maxConcurrentTasks: 1
+    acceptsBroadcast: true
+    reviewRequired: true
+
   - id: learning
+    name: Learning
     runtime: hermes
     profile: learning
+    wrapper: learning
+    role: Retrospective / Documentation
+    specialty: mission retrospectives, documentation, knowledge capture
+    mission: Capture mission outcomes, lessons learned, and durable documentation after implementation and review complete.
+    modes: []
+    tools: [file, session_search, skills, todo, web]
+    skills: [gstack-for-hermes, llm-wiki, obsidian, writing-plans, mission-memory-layout, learning-wiki-ingest]
+    plugins: []
+    pluginToolsets: []
+    mcpServers: []
+    capabilities: [documentation, retrospective, knowledge-capture]
+    preferredTaskTypes: [documentation, retrospective, synthesis]
+    greenlightRequiredFor: [publish]
+    maxConcurrentTasks: 1
+    acceptsBroadcast: true
+    reviewRequired: false
+
   - id: gpuserver
+    name: GPU Server
     runtime: hermes
     profile: gpuserver
     execution: ssh
     capabilities: [gpu, cuda, benchmark, training]
     mentionName: gpu
+    dispatchable: true
+
   - id: cc-impl
-    runtime: claude-code
+    name: Claude Code
     displayName: Claude Code
+    runtime: claude-code
     command: claude
-    # -p is non-interactive; skip-permissions required because Hermes has no
-    # Claude Code permission-dialog bridge (stdin is ignored).
-    args: ['--dangerously-skip-permissions', '-p']
+    args: [--dangerously-skip-permissions, -p]
     mentionName: claude
+    dispatchable: true
+
   - id: codex-impl
+    name: Codex
+    displayName: Codex
     runtime: codex
     command: codex
     mentionName: codex
+    dispatchable: true
+
   - id: ds-harness
+    name: DeepSeek Harness
+    displayName: DeepSeek Harness
     runtime: deepseek-harness
     command: deepseek-harness
     mentionName: deepseek
+    dispatchable: false

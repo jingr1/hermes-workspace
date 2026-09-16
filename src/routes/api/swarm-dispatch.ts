@@ -34,8 +34,7 @@ import { isSwarmDispatchWorkerId } from '../../lib/swarm-workers'
 import { ensureSwarmProfileConfig } from '../../server/swarm-profile-config'
 import {
   buildHermesChatQueryArgs,
-  resolveWorkerRuntimeModel,
-} from '../../server/swarm-runtime-model'
+} from '../../server/swarm-chat-command'
 import { buildHandoff, writeHandoff } from '../../server/handoff'
 import { harvestSwarmWorkers } from '../../server/swarm-harvest'
 import {
@@ -56,7 +55,7 @@ import {
   type TmuxTransportMode,
 } from '../../server/swarm-tmux-delivery'
 
-export { buildHermesChatQueryArgs } from '../../server/swarm-runtime-model'
+export { buildHermesChatQueryArgs } from '../../server/swarm-chat-command'
 
 const HERMES_BIN_CANDIDATES = [
   process.env.HERMES_CLI_BIN,
@@ -1084,21 +1083,18 @@ async function startHermesTmuxSession(input: {
   transport: TmuxTransportMode
   workerId: string
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const runtimeModel = resolveWorkerRuntimeModel(input.workerId)
   const execCommand =
     input.transport === 'cli'
       ? buildHermesTmuxShellCommand({
           profilePath: input.profilePath,
           hermesBin: input.hermesBin,
           ghToken: input.ghToken,
-          runtimeModel,
         })
       : buildHermesTmuxTuiCommand({
           profilePath: input.profilePath,
           hermesBin: input.hermesBin,
           ghToken: input.ghToken,
           useExec: true,
-          runtimeModel,
         })
   const started = await execFileAsync(input.tmuxBin, [
     'new-session',
@@ -1333,10 +1329,8 @@ function buildSwarmRunScript(
   profilePath: string,
   hermesBin: string,
   instruction: string,
-  workerId: string,
 ): string {
-  const runtimeModel = resolveWorkerRuntimeModel(workerId)
-  const args = buildHermesChatQueryArgs(instruction, runtimeModel)
+  const args = buildHermesChatQueryArgs(instruction)
   const quotedArgs = args.map((arg) => {
     if (/^[a-zA-Z0-9_./:@=-]+$/.test(arg)) return arg
     return `'${shellEscapeSingle(arg)}'`
@@ -1393,7 +1387,7 @@ async function sendPromptToCliSession(
   try {
     writeFileSync(
       runScriptPath,
-      buildSwarmRunScript(profilePath, hermesBin, instruction, workerId),
+      buildSwarmRunScript(profilePath, hermesBin, instruction),
       'utf8',
     )
   } catch (err) {
@@ -1622,10 +1616,7 @@ function runWorker(
 
     const useWrapper = existsSync(wrapperPath)
     const cmd = useWrapper ? wrapperPath : resolveHermesBin()
-    const args = buildHermesChatQueryArgs(
-      prompt,
-      resolveWorkerRuntimeModel(workerId),
-    )
+    const args = buildHermesChatQueryArgs(prompt)
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       HERMES_HOME: profilePath,

@@ -1,6 +1,3 @@
-import type { ResolvedSwarmModel } from './swarm-model-resolver'
-import { buildSwarmModelEnvAssignments } from './swarm-runtime-model'
-
 /**
  * Shared tmux transport helpers for Swarm worker sessions.
  *
@@ -25,16 +22,12 @@ export function buildHermesTmuxTuiCommand(input: {
   hermesBin: string
   ghToken?: string | null
   useExec?: boolean
-  runtimeModel?: ResolvedSwarmModel | null
 }): string {
   const launchPrefix = [
     `HERMES_HOME='${shellEscapeSingle(input.profilePath)}'`,
     `HERMES_CLI_BIN='${shellEscapeSingle(input.hermesBin)}'`,
     input.ghToken ? `GH_TOKEN='${shellEscapeSingle(input.ghToken)}'` : '',
     input.ghToken ? `GITHUB_TOKEN='${shellEscapeSingle(input.ghToken)}'` : '',
-    ...(input.runtimeModel
-      ? buildSwarmModelEnvAssignments(input.runtimeModel)
-      : []),
   ]
     .filter(Boolean)
     .join(' ')
@@ -47,16 +40,12 @@ export function buildHermesTmuxShellCommand(input: {
   profilePath: string
   hermesBin: string
   ghToken?: string | null
-  runtimeModel?: ResolvedSwarmModel | null
 }): string {
   const launchPrefix = [
     `HERMES_HOME='${shellEscapeSingle(input.profilePath)}'`,
     `HERMES_CLI_BIN='${shellEscapeSingle(input.hermesBin)}'`,
     input.ghToken ? `GH_TOKEN='${shellEscapeSingle(input.ghToken)}'` : '',
     input.ghToken ? `GITHUB_TOKEN='${shellEscapeSingle(input.ghToken)}'` : '',
-    ...(input.runtimeModel
-      ? buildSwarmModelEnvAssignments(input.runtimeModel)
-      : []),
   ]
     .filter(Boolean)
     .join(' ')

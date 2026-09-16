@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Sync ~/.hermes/profiles/<workerId>/ from swarm.yaml roster fields.
+ * Sync ~/.hermes/profiles/<workerId>/ from agents.yaml roster fields.
  * Updates config.yaml (toolsets only), SOUL.md, and memory/IDENTITY.md.
  *
- * Does NOT write model.provider/model.default — Swarm model comes from
- * swarm.yaml at dispatch/tmux-start via runtime injection (see swarm-runtime-model.ts).
+ * Does NOT write model.provider/model.default — the profile config owns the
+ * default model; an explicit runtime override may still be injected at dispatch.
  *
  * learning profile: preserves agents/learning/SOUL.md base persona and appends
  * swarm role extension; toolsets are merged (union), not replaced.
@@ -19,7 +19,7 @@ const PROFILES = path.join(os.homedir(), '.hermes', 'profiles')
 const LOCAL_BIN = path.join(os.homedir(), '.local', 'bin')
 const SWARM_SOUL_BEGIN = '<!-- SWARM_ROLE_EXTENSION -->'
 const SWARM_SOUL_END = '<!-- /SWARM_ROLE_EXTENSION -->'
-const swarm = yaml.parse(fs.readFileSync(path.join(WS, 'swarm.yaml'), 'utf8'))
+const swarm = yaml.parse(fs.readFileSync(path.join(WS, 'agents.yaml'), 'utf8'))
 
 function installWorkerWrappers(workers) {
   fs.mkdirSync(LOCAL_BIN, { recursive: true })
@@ -197,7 +197,7 @@ function renderSoul(w) {
     '',
     '## Communication Style',
     '- Structured checkpoints: STATE, FILES_CHANGED, COMMANDS_RUN, RESULT, BLOCKER, NEXT_ACTION',
-    '- Stay within role boundaries defined in swarm.yaml and profile skills',
+    '- Stay within role boundaries defined in agents.yaml and profile skills',
     '',
   ].join('\n')
 }
@@ -265,7 +265,7 @@ function syncGlobalSwarmSkills(swarmWorkers) {
 }
 
 const results = []
-for (const w of swarm.workers) {
+for (const w of swarm.agents) {
   const profileDir = path.join(PROFILES, w.id)
   if (!fs.existsSync(profileDir)) {
     results.push(`${w.id}: profile dir missing, skipped`)
@@ -322,12 +322,12 @@ for (const w of swarm.workers) {
   )
 }
 
-const globalSynced = syncGlobalSwarmSkills(swarm.workers)
+const globalSynced = syncGlobalSwarmSkills(swarm.agents)
 results.push(
   `global: ${globalSynced} swarm skills → ~/.hermes/skills/swarm/ (for /slash commands)`,
 )
 
-const wrappers = installWorkerWrappers(swarm.workers)
+const wrappers = installWorkerWrappers(swarm.agents)
 results.push(
   `wrappers: ${wrappers.length} → ~/.local/bin/ (${wrappers.join(', ')})`,
 )

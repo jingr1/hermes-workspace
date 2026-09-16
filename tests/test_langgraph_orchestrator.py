@@ -290,10 +290,10 @@ def test_swarm_roster_has_worker_wrappers():
     import yaml
     from pathlib import Path
 
-    swarm_path = Path(__file__).parent.parent / "swarm.yaml"
+    swarm_path = Path(__file__).parent.parent / "agents.yaml"
     with open(swarm_path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
-    workers = {w["id"]: w for w in data.get("workers", [])}
+    workers = {w["id"]: w for w in data.get("agents", [])}
     for wid in ("architect", "developer", "writer", "learning", "researcher", "orchestrator"):
         assert wid in workers, f"missing worker {wid}"
         assert workers[wid].get("wrapper"), f"{wid} missing wrapper"

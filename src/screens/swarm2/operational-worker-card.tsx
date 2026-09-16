@@ -23,11 +23,6 @@ import { Swarm2TaskQueue } from './swarm2-task-queue'
 import type { CrewMember } from '@/hooks/use-crew-status'
 import { getOnlineStatus } from '@/hooks/use-crew-status'
 import { cn } from '@/lib/utils'
-import {
-  resolveSwarmModelKey,
-  swarmModelKeyFromOption,
-  type SwarmModelOption,
-} from '@/server/swarm-model-resolver'
 
 type WorkerState =
   | 'active'
@@ -215,22 +210,9 @@ function colorForWorker(workerId: string) {
   return WORKER_COLORS[0]
 }
 
-function formatAssignedModel(
-  model?: string | null,
-  provider?: string | null,
-  availableModels?: Array<SwarmModelOption>,
-): string {
-  const resolved = resolveSwarmModelKey(model, provider, availableModels)
-  if (resolved) return resolved
-  if (provider && provider !== 'unknown')
-    return provider.replace(/^custom:/, '').replace(/[-_]/g, ' ')
-  return 'Worker'
-}
-
 type WorkerCardSettings = {
   displayName?: string
   role?: string
-  modelLabel?: string
   avatarGlyph?: string
 }
 
@@ -280,7 +262,6 @@ export type OperationalWorkerCardProps = {
   onOpenTui: () => void
   onOpenTasks: () => void
   cardRef?: (node: HTMLElement | null) => void
-  availableModels?: Array<{ id: string; name: string; provider: string }>
 }
 
 export function OperationalWorkerCard({
@@ -299,14 +280,12 @@ export function OperationalWorkerCard({
   onOpenTui,
   onOpenTasks,
   cardRef,
-  availableModels = [],
 }: OperationalWorkerCardProps) {
   const chatAnchorRef = useRef<HTMLDivElement | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settings, setSettings] = useState<WorkerCardSettings>({})
   const [draftName, setDraftName] = useState('')
   const [draftRole, setDraftRole] = useState('')
-  const [draftModel, setDraftModel] = useState('')
   const [draftAvatar, setDraftAvatar] = useState('')
   const [settingsError, setSettingsError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -339,12 +318,6 @@ export function OperationalWorkerCard({
   const hasPreview = Boolean(previewUrl)
   const progressValue =
     state === 'idle' || state === 'offline' ? 8 : state === 'waiting' ? 38 : 68
-  const baseModelLabel = formatAssignedModel(
-    member.model,
-    member.provider,
-    availableModels,
-  )
-  const modelLabel = settings.modelLabel || baseModelLabel
   const avatarGlyph = settings.avatarGlyph || ''
   const outputFreshness = relativeOutputTime(recentOutputAt)
   const focusPanels = useMemo(() => {
@@ -419,13 +392,6 @@ export function OperationalWorkerCard({
     setSettingsError(null)
     setDraftName(settings.displayName || member.displayName || '')
     setDraftRole(settings.role || member.role || roleFromId(member.id))
-    setDraftModel(
-      resolveSwarmModelKey(
-        settings.modelLabel || member.model,
-        member.provider,
-        availableModels,
-      ) || baseModelLabel,
-    )
     setDraftAvatar(settings.avatarGlyph || '')
   }, [
     settingsOpen,
@@ -433,10 +399,6 @@ export function OperationalWorkerCard({
     member.displayName,
     member.role,
     member.id,
-    member.model,
-    member.provider,
-    baseModelLabel,
-    availableModels,
   ])
 
   useEffect(() => {
@@ -474,9 +436,6 @@ export function OperationalWorkerCard({
           can claim 19rem). */}
           <div className="relative flex min-h-8 flex-wrap items-center gap-y-1 md:flex-nowrap">
             <div className="order-2 flex max-w-[10rem] flex-wrap items-center gap-1 text-[10px] text-[var(--theme-muted)]/85 md:absolute md:left-0 md:order-none">
-              <span className="rounded-full border border-[var(--theme-border)] bg-[var(--theme-bg)] px-1.5 py-0.5">
-                {modelLabel}
-              </span>
               <span className="rounded-full border border-[var(--theme-border)] bg-[var(--theme-bg)] px-1.5 py-0.5">
                 {projectBranch ||
                   projectName ||
@@ -791,26 +750,6 @@ export function OperationalWorkerCard({
                   ))}
                 </select>
               </label>
-              <label className="block">
-                <span className="mb-1 block text-[var(--theme-muted)]">
-                  Model
-                </span>
-                <select
-                  value={draftModel}
-                  onChange={(event) => setDraftModel(event.target.value)}
-                  className="w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-[var(--theme-text)] outline-none"
-                >
-                  <option value="">—</option>
-                  {availableModels.map((m) => (
-                    <option
-                      key={swarmModelKeyFromOption(m)}
-                      value={swarmModelKeyFromOption(m)}
-                    >
-                      {m.provider} / {m.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
               {settingsError ? (
                 <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-[11px] text-red-200">
                   Save failed: {settingsError}
@@ -857,7 +796,6 @@ export function OperationalWorkerCard({
                       displayName: draftName.trim() || undefined,
                       avatarGlyph: draftAvatar.trim() || undefined,
                       role: draftRole.trim() || undefined,
-                      modelLabel: draftModel.trim() || undefined,
                     }
                     setSettings(next)
                     try {
@@ -868,52 +806,7 @@ export function OperationalWorkerCard({
                     } catch {
                       /* noop */
                     }
-                    // Persist model to swarm.yaml via PATCH API
-                    if (draftModel.trim()) {
-                      setSaving(true)
-                      try {
-                        const res = await fetch('/api/swarm-roster', {
-                          method: 'PATCH',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            workerId: member.id,
-                            patch: { model: draftModel.trim() },
-                          }),
-                        })
-                        if (!res.ok)
-                          throw new Error(
-                            `HTTP ${res.status}: ${res.statusText}`,
-                          )
-                        // Use text()+parse instead of res.json() — TanStack Start SSR dev middleware
-                        // can hang res.json() (Promise never resolves) even when the HTTP response
-                        // is complete and valid. text() bypasses this issue.
-                        let data: {
-                          ok?: boolean
-                          path?: string
-                          savedAt?: number
-                          error?: string
-                        }
-                        try {
-                          const text = await res.text()
-                          data = JSON.parse(text)
-                        } catch {
-                          throw new Error('Invalid response from server')
-                        }
-                        // Zod validation failures return 200 with {ok: false} — catch them here.
-                        if (data?.ok === false)
-                          throw new Error(data?.error || 'Save failed')
-                        setSettingsOpen(false)
-                      } catch (err) {
-                        console.error('[swarm] PATCH error:', err)
-                        setSettingsError(
-                          err instanceof Error ? err.message : String(err),
-                        )
-                      } finally {
-                        setSaving(false)
-                      }
-                    } else {
-                      setSettingsOpen(false)
-                    }
+                    setSettingsOpen(false)
                   }}
                 >
                   {saving ? 'Saving…' : 'Save'}

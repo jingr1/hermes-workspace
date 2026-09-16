@@ -254,7 +254,6 @@ type RolePreset = {
   mission: string
   systemPrompt: string
   skills: Array<string>
-  defaultModel?: string
 }
 
 const ROLE_PRESETS: ReadonlyArray<RolePreset> = [
@@ -271,7 +270,6 @@ const ROLE_PRESETS: ReadonlyArray<RolePreset> = [
       'swarm-review-learning-loop',
       'self-improvement',
     ],
-    defaultModel: 'GPT-5.4',
   },
   {
     role: 'Builder',
@@ -281,7 +279,6 @@ const ROLE_PRESETS: ReadonlyArray<RolePreset> = [
     systemPrompt:
       'You are a senior builder. Ship working code. Always read the brief, plan smallest landed artifact, implement, run tests + build + smoke, commit (not push), checkpoint with proof.',
     skills: ['swarm-worker-core', 'byte-verified-code-review'],
-    defaultModel: 'GPT-5.5',
   },
   {
     role: 'Reviewer',
@@ -295,7 +292,6 @@ const ROLE_PRESETS: ReadonlyArray<RolePreset> = [
       'byte-verified-code-review',
       'swarm-review-learning-loop',
     ],
-    defaultModel: 'GPT-5.4',
   },
   {
     role: 'Triage',
@@ -309,7 +305,6 @@ const ROLE_PRESETS: ReadonlyArray<RolePreset> = [
       'byte-verified-code-review',
       'swarm-review-learning-loop',
     ],
-    defaultModel: 'GPT-5.5',
   },
   {
     role: 'Lab',
@@ -323,7 +318,6 @@ const ROLE_PRESETS: ReadonlyArray<RolePreset> = [
       'pc1-ollama-gguf-bench',
       'swarm-bench-worker',
     ],
-    defaultModel: 'GPT-5.4',
   },
   {
     role: 'Sage',
@@ -333,7 +327,6 @@ const ROLE_PRESETS: ReadonlyArray<RolePreset> = [
     systemPrompt:
       'You are the research/content scout. Find angles, write scripts and drafts, always cite sources. Never post X/Discord/blog without main-agent ack — always draft + escalate.',
     skills: ['swarm-worker-core', 'last30days', 'pdf-and-paper-deep-reading'],
-    defaultModel: 'GPT-5.5',
   },
   {
     role: 'Scribe',
@@ -343,7 +336,6 @@ const ROLE_PRESETS: ReadonlyArray<RolePreset> = [
     systemPrompt:
       'You are the source-of-truth keeper. Audit /skills/ every 12h, flag stale/unused/poorly-documented. Maintain SWARM_SPEC and worker specs as system evolves. Draft READMEs and changelogs.',
     skills: ['swarm-worker-core', 'last30days', 'creative-writing'],
-    defaultModel: 'GPT-5.5',
   },
   {
     role: 'Foundation',
@@ -353,7 +345,6 @@ const ROLE_PRESETS: ReadonlyArray<RolePreset> = [
     systemPrompt:
       'You are infrastructure. Maintain /swarm-specs/playbooks/auto-repair.yaml. Health-check tmux sessions, autopilot tick, dev server. Apply known fixes; escalate novel failures.',
     skills: ['swarm-worker-core'],
-    defaultModel: 'GPT-5.4',
   },
   {
     role: 'QA',
@@ -362,7 +353,6 @@ const ROLE_PRESETS: ReadonlyArray<RolePreset> = [
     systemPrompt:
       'You are QA. On commit: full test suite. On render: ffprobe + tone consistency + pacing. Verdict PASS/FAIL/FLAKY with evidence.',
     skills: ['swarm-worker-core', 'byte-verified-code-review'],
-    defaultModel: 'GPT-5.4',
   },
   {
     role: 'Mirror Integrations',
@@ -371,7 +361,6 @@ const ROLE_PRESETS: ReadonlyArray<RolePreset> = [
     systemPrompt:
       'You produce assets and watch upstream. Generate art/audio per Lane A. Every 12h diff upstream Hermes Agent main, surface portable items. Never cross-org PR without ack.',
     skills: ['swarm-worker-core', 'claude-promo', 'songwriting-and-ai-music'],
-    defaultModel: 'GPT-5.4',
   },
   {
     role: 'Custom',
@@ -383,20 +372,6 @@ const ROLE_PRESETS: ReadonlyArray<RolePreset> = [
 ] as const
 
 const ROLE_NAMES = ROLE_PRESETS.map((p) => p.role)
-
-async function fetchAvailableModels(): Promise<
-  Array<{ id: string; name: string; provider: string }>
-> {
-  try {
-    const res = await fetch('/api/models')
-    if (!res.ok) return []
-    const data = await res.json()
-    if (!data?.ok || !Array.isArray(data?.data)) return []
-    return data.data
-  } catch {
-    return []
-  }
-}
 
 type RuntimeResponse = {
   entries: Array<RuntimeEntry>
@@ -752,17 +727,6 @@ function displayTaskTitle(
   )
 }
 
-function formatAssignedModel(
-  model?: string | null,
-  provider?: string | null,
-): string {
-  // model is now "provider/model-id" format from swarm.yaml
-  if (model && model !== 'unknown') return model
-  if (provider && provider !== 'unknown')
-    return provider.replace(/^custom:/, '').replace(/[-_]/g, ' ')
-  return 'Worker'
-}
-
 type ControlPlaneStageProps = {
   members: Array<CrewMember>
   selectedId: string | null
@@ -830,7 +794,6 @@ type ControlPlaneStageProps = {
     direction: 'up' | 'down',
     session?: string | null,
   ) => void
-  availableModels: Array<{ id: string; name: string; provider: string }>
 }
 
 function ControlPlaneStage({
@@ -872,7 +835,6 @@ function ControlPlaneStage({
   onClearFocusedRuntimeWorker,
   onStartAgentSession,
   onScrollTmuxSession,
-  availableModels,
 }: ControlPlaneStageProps) {
   const stageRef = useRef<HTMLDivElement | null>(null)
   const anchorRef = useRef<HTMLDivElement | null>(null)
@@ -1021,7 +983,6 @@ function ControlPlaneStage({
                       onToggleRoom={() => onToggleRoom(member.id)}
                       onOpenTui={() => onOpenTui(member.id)}
                       onOpenTasks={() => onOpenTasks(member.id)}
-                      availableModels={availableModels}
                     />
                   )
                 })
@@ -1097,10 +1058,6 @@ function ControlPlaneStage({
                         ? 'border-[var(--theme-warning-border)] bg-[var(--theme-warning-soft)] text-[var(--theme-warning)]'
                         : 'border-[var(--theme-border)] bg-[var(--theme-card2)] text-[var(--theme-muted)]'
                   const titleLabel = member.displayName || member.id
-                  const modelLabel = formatAssignedModel(
-                    member.model,
-                    member.provider,
-                  )
                   return (
                     <div
                       key={member.id}
@@ -1110,9 +1067,6 @@ function ControlPlaneStage({
                         <span className="inline-flex items-center gap-2 font-semibold text-[var(--theme-text)]">
                           <HugeiconsIcon icon={CpuIcon} size={13} />
                           <span>{titleLabel}</span>
-                          <span className="text-[10px] font-medium text-[var(--theme-muted)]">
-                            · {modelLabel}
-                          </span>
                         </span>
                         <div className="ml-auto flex items-center gap-1">
                           {runtime?.tmuxAttachable ? (
@@ -1288,18 +1242,10 @@ export function Swarm2Screen() {
   const [addSwarmOpen, setAddSwarmOpen] = useState(false)
   const [addSwarmSaving, setAddSwarmSaving] = useState(false)
   const [addSwarmError, setAddSwarmError] = useState<string | null>(null)
-  const modelsQuery = useQuery({
-    queryKey: ['swarm2', 'available-models'],
-    queryFn: fetchAvailableModels,
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
-  })
-  const availableModels = modelsQuery.data ?? []
   const [newWorkerId, setNewWorkerId] = useState('')
   const [newWorkerName, setNewWorkerName] = useState('')
   const [newWorkerRole, setNewWorkerRole] = useState('Builder')
   const [newWorkerSpecialty, setNewWorkerSpecialty] = useState('')
-  const [newWorkerModel, setNewWorkerModel] = useState('')
   const [newWorkerMission, setNewWorkerMission] = useState('')
   // Worker IDs whose tmux session is currently being started/stopped via API.
   const [pendingTmux, setPendingTmux] = useState<Set<string>>(new Set())
@@ -1822,7 +1768,6 @@ export function Swarm2Screen() {
     setNewWorkerName(`Swarm${next}`)
     setNewWorkerRole('Builder')
     setNewWorkerSpecialty('')
-    setNewWorkerModel('')
     setNewWorkerMission('')
     setAddSwarmError(null)
     setAddSwarmOpen(true)
@@ -1841,7 +1786,6 @@ export function Swarm2Screen() {
           name: newWorkerName.trim(),
           role: newWorkerRole.trim(),
           specialty: newWorkerSpecialty.trim() || preset?.specialty || '',
-          model: newWorkerModel.trim(),
           mission:
             newWorkerMission.trim() ||
             preset?.mission ||
@@ -2106,7 +2050,6 @@ export function Swarm2Screen() {
             onScrollTmuxSession={(workerId, direction, session) => {
               void scrollTmuxSession(workerId, direction, session)
             }}
-            availableModels={availableModels}
           />
         </div>
 
@@ -2156,8 +2099,6 @@ export function Swarm2Screen() {
                         setNewWorkerSpecialty(preset.specialty)
                       if (!newWorkerMission.trim())
                         setNewWorkerMission(preset.mission)
-                      if (preset.defaultModel && !newWorkerModel.trim())
-                        setNewWorkerModel(preset.defaultModel)
                     }
                   }}
                   className="w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-[var(--theme-text)] outline-none"
@@ -2194,45 +2135,6 @@ export function Swarm2Screen() {
                   className="w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-[var(--theme-text)] outline-none"
                   placeholder="e.g. Mirror, Builder"
                 />
-              </label>
-              <label className="block text-sm md:col-span-2">
-                <span className="mb-1 flex items-center justify-between text-[var(--theme-muted)]">
-                  <span>Model</span>
-                  <span className="text-[10px] text-[var(--theme-muted-2)]">
-                    {availableModels.length > 0
-                      ? `${availableModels.length} available`
-                      : modelsQuery.isLoading
-                        ? 'loading…'
-                        : '0 found'}
-                  </span>
-                </span>
-                <input
-                  value={newWorkerModel}
-                  onChange={(e) => setNewWorkerModel(e.target.value)}
-                  list="swarm-add-models"
-                  placeholder={
-                    availableModels.length
-                      ? 'Search or pick a detected model…'
-                      : modelsQuery.isLoading
-                        ? 'Loading detected models…'
-                        : 'No models detected'
-                  }
-                  className="w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-[var(--theme-text)] outline-none"
-                />
-                <datalist id="swarm-add-models">
-                  {availableModels.map((m) => (
-                    <option key={m.id} value={m.name}>
-                      {m.provider}
-                    </option>
-                  ))}
-                </datalist>
-                <p className="mt-1 text-xs text-[var(--theme-muted-2)]">
-                  Searchable picker backed by /api/models, the same source as
-                  chat.{' '}
-                  {modelsQuery.isError
-                    ? 'Model discovery errored, so this is empty until refresh.'
-                    : 'Start typing to see every detected model from the user’s Hermes config and local providers.'}
-                </p>
               </label>
               <label className="block text-sm md:col-span-2">
                 <span className="mb-1 block text-[var(--theme-muted)]">

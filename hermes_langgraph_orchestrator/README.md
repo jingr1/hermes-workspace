@@ -84,20 +84,20 @@ PYTHONPATH=~/hermes-workspace \
 
 ## 同步 Hermes Profiles
 
-`swarm.yaml` 是 roster **真源**（worker id、model、tools、skills、mission 等）。LangGraph dispatch / tmux 启动时，Hermes 实际读的是 `~/.hermes/profiles/<workerId>/` 下的运行时配置。改完 `swarm.yaml` 后需同步 profile，否则 roster 上的 model / toolsets 只是展示，worker 仍用旧配置。
+`agents.yaml` 是 agent/roster **真源**（agent id、tools、skills、mission 和 runtime 等）。每个 Hermes agent 的默认模型由 `~/.hermes/profiles/<agentId>/config.yaml` 提供。改完 profile 模型后重启对应 worker；`agents.yaml` 中的 `model` 仅用于显式 override。
 
 ### 三层对齐关系
 
 ```text
-swarm.yaml                    ~/.hermes/profiles/<id>/           ~/.local/bin/
+agents.yaml                   ~/.hermes/profiles/<id>/           ~/.local/bin/
 (roster 真源)            →    config.yaml / SOUL.md / skills   →   orchestrator:plan 等 wrapper
-  model: provider/model-id     toolsets (Settings 管 model 默认)     hermes -p <profile>
+  runtime / role / tools       model + toolsets (profile 默认)       hermes -p <profile>
   tools: [...]                 toolsets: [...]
   skills: [...]                skills/<skill>/SKILL.md
   mission / role               SOUL.md + memory/IDENTITY.md
 ```
 
-运行时由 dispatch / tmux-start 通过 `swarm-runtime-model` 注入 roster **model**（不写 profile `config.yaml`）；toolsets、SOUL、IDENTITY、swarm skills 由 `sync-swarm-profiles.mjs` 同步。
+默认情况下 dispatch / tmux-start 不注入模型参数，Hermes 使用 profile 默认模型；只有 `agents.yaml` 或任务请求显式提供 model 时才通过 `swarm-runtime-model` 覆盖。toolsets、SOUL、IDENTITY、agent skills 由 `sync-swarm-profiles.mjs` 同步。
 
 ### 一键同步
 
@@ -108,14 +108,14 @@ cd ~/hermes-workspace
 
 # 1. 同步 config.yaml（toolsets）、SOUL.md、memory/IDENTITY.md、skills/swarm/ 下的角色技能
 #    以及 ~/.local/bin/<wrapper> 启动脚本（缺 wrapper 时 LangGraph 会卡在 ensure_sessions）
-#    注意：不写 config.yaml 的 model — Swarm model 由 swarm.yaml 运行时注入
+#    注意：脚本不覆盖 config.yaml 的 model — 默认模型由 profile 管理
 node scripts/sync-swarm-profiles.mjs
 
 # 2. 同步 autoresearch 技能与 wrapper（orchestrator:autoresearch-dispatch 等）
 bash scripts/sync-autoresearch-skills.sh
 ```
 
-`sync-swarm-profiles.mjs` 对每个 `swarm.yaml` worker 写入：
+`sync-swarm-profiles.mjs` 对每个 `agents.yaml` agent 写入：
 
 | 文件                                          | 来源字段                                     | 备注                                                                      |
 | --------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------- |
@@ -138,11 +138,11 @@ Hub / bundled 技能（`gstack-for-hermes`、`llm-wiki`、`obsidian` 等）不�
 | `writer`       | `writer:author`       | author, autoresearch                             |
 | `learning`     | `learning`            | tutor + swarm retrospective（SOUL 合并，不覆盖） |
 
-**Model：** 以根目录 [`swarm.yaml`](../swarm.yaml) 的 `model` 字段为准（勿在文档中硬编码）。改完后跑 `node scripts/sync-swarm-profiles.mjs`。角色/技能合同见 [`AGENTS.md`](../AGENTS.md)。
+**Model：** 以对应 profile 的 `config.yaml` 为准。修改默认模型后重启对应 worker；角色/技能合同见 [`AGENTS.md`](../AGENTS.md)。
 
 ### 何时需要同步
 
-- 修改 `swarm.yaml` 中的 `model`、`tools`、`skills`、`mission`、`role` 后
+- 修改 profile `config.yaml` 中的默认模型后重启对应 worker；修改 `agents.yaml` 中的 `tools`、`skills`、`mission`、`role` 后
 - 新增 worker 并创建 `~/.hermes/profiles/<id>/` 目录后
 - 更新 `skills/swarm/` 下角色技能（`orchestrator-core`、`researcher-core` 等）后
 - 启动 LangGraph 真实编排前，确认 profile 与 roster 一致
@@ -216,7 +216,7 @@ curl -s -X POST http://localhost:3000/api/swarm-tmux-start \
 LangGraph **图结构是固定的**（init → dispatch → wait → classify → route → human gate）；**编排逻辑由 workflow YAML 声明**。换任务类型时：
 
 1. 在 `hermes_langgraph_orchestrator/workflows/` 新建或复制一份 YAML
-2. 确保 `entry` / `transitions` 里引用的 worker 都在 `swarm.yaml` roster 中
+2. 确保 `entry` / `transitions` 里引用的 worker 都在 `agents.yaml` roster 中
 3. 启动 mission 时用 `--workflow <path|id>`（或 API 的 `workflowId`）指向该文件
 
 > 未传 `--workflow` 时默认 `workflows/radw.yaml`（Research → Architect → Developer|Writer + Gate C/H）。编排逻辑完全由 workflow YAML 决定。
@@ -224,7 +224,7 @@ LangGraph **图结构是固定的**（init → dispatch → wait → classify �
 ### 架构关系
 
 ```text
-swarm.yaml          workflow.yaml              LangGraph 图
+agents.yaml         workflow.yaml              LangGraph 图
 (roster 真源)   →   (状态机 / 路由规则)   →   (固定节点，读 YAML 做 route)
   researcher          entry: researcher          init_mission 校验 roster
   architect           transitions[]              route_workflow 匹配 verdict
@@ -233,7 +233,7 @@ swarm.yaml          workflow.yaml              LangGraph 图
   orchestrator
 ```
 
-当前 roster（`swarm.yaml`）：`orchestrator`、`researcher`、`architect`、`developer`、`writer`、`learning`。workflow 里出现的每个 worker id 必须在此列表中。
+当前 roster（`agents.yaml`）：`orchestrator`、`researcher`、`architect`、`developer`、`writer`、`learning`。workflow 里出现的每个 worker id 必须在此列表中。
 
 ### 内置 workflow 示例
 
@@ -356,7 +356,7 @@ curl -s -X POST http://127.0.0.1:3000/api/swarm-langgraph/run \
 
 若 workflow 需要 roster 里没有的角色（例如 `qa`、`builder`）：
 
-1. 在 `swarm.yaml` 增加 worker 定义（wrapper / profile / skills 与 `AGENTS.md` 对齐）
+1. 在 `agents.yaml` 增加 agent 定义（wrapper / profile / skills 与 `AGENTS.md` 对齐）
 2. 创建 `~/.hermes/profiles/<id>/` 并运行 [同步 Hermes Profiles](#同步-hermes-profiles)
 3. 重启 Workspace（`pnpm dev`）让 roster API 生效
 4. 在 workflow YAML 中引用新 `id`

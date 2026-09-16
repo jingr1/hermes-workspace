@@ -4,7 +4,7 @@ import * as yaml from 'yaml'
 import { z } from 'zod'
 import { SWARM_CANONICAL_REPO } from './swarm-environment'
 
-export const SWARM_ROSTER_PATH = join(SWARM_CANONICAL_REPO, 'swarm.yaml')
+export const SWARM_ROSTER_PATH = join(SWARM_CANONICAL_REPO, 'agents.yaml')
 
 const WORKER_ID_PATTERN = /^(swarm\d+|[a-z][a-z0-9]*(?:-[a-z0-9]+)*)$/i
 
@@ -42,12 +42,26 @@ export const SwarmRosterWorkerSchema = z.object({
   maxConcurrentTasks: z.number().int().positive().default(1),
   acceptsBroadcast: z.boolean().default(true),
   reviewRequired: z.boolean().default(false),
+  runtime: z
+    .enum(['hermes', 'claude-code', 'codex', 'deepseek-harness', 'opencode'])
+    .default('hermes'),
+  command: z.string().optional(),
+  args: z.array(z.string()).optional(),
+  execution: z.enum(['local', 'ssh']).default('local'),
+  mentionName: z.string().optional(),
+  displayName: z.string().optional(),
+  dispatchable: z.boolean().default(true),
+  enabled: z.boolean().default(true),
 })
 
 export const SwarmRosterSchema = z.object({
   version: z.number().int().positive().default(1),
-  workers: z.array(SwarmRosterWorkerSchema).default([]),
-})
+  agents: z.array(SwarmRosterWorkerSchema).optional(),
+  workers: z.array(SwarmRosterWorkerSchema).optional(),
+}).transform((value) => ({
+  version: value.version,
+  workers: value.agents ?? value.workers ?? [],
+}))
 
 export type SwarmRosterWorker = z.infer<typeof SwarmRosterWorkerSchema>
 export type SwarmRoster = z.infer<typeof SwarmRosterSchema>
@@ -118,6 +132,14 @@ export function fallbackRoster(ids: Array<string> = []): SwarmRoster {
       maxConcurrentTasks: 1,
       acceptsBroadcast: true,
       reviewRequired: false,
+      runtime: 'hermes',
+      command: undefined,
+      args: undefined,
+      execution: 'local',
+      mentionName: undefined,
+      displayName: undefined,
+      dispatchable: true,
+      enabled: true,
     })),
   }
 }
@@ -140,7 +162,10 @@ export function readSwarmRoster(ids: Array<string> = []): SwarmRoster {
 export function writeSwarmRoster(roster: SwarmRoster): void {
   const parsed = SwarmRosterSchema.parse(roster)
   const doc = yaml.stringify(parsed, { lineWidth: 0 })
-  writeFileSync(SWARM_ROSTER_PATH, doc)
+  writeFileSync(SWARM_ROSTER_PATH, yaml.stringify({
+    version: parsed.version,
+    agents: parsed.workers,
+  }, { lineWidth: 0 }))
 }
 
 export function upsertSwarmRosterWorker(

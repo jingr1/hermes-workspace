@@ -3,7 +3,7 @@
 > **产品名**：**Agorax** — AI Agent 的公共广场（2026-09 由 Agorax 更名；运行时仍由 Hermes Agent 提供，命名合同见 [`docs/agorax-naming-contract.md`](agorax-naming-contract.md)）
 > **版本基线**：v2.5.0（以当前代码为准）
 > **适用范围**：整个仓库（前端、服务端、Swarm 多智能体系统、LangGraph 编排器、群聊、部署设施）
-> **关系说明**：`docs/swarm/SWARM_ARCHITECTURE_OVERVIEW.md` 只覆盖 Swarm 子系统且基线为 v2.3.0，本文是全仓总览；Swarm 的合同细节（roster、handoff、escalation）仍以 [`AGENTS.md`](../AGENTS.md) 和 [`swarm.yaml`](../swarm.yaml) 为真相源。
+> **关系说明**：`docs/swarm/SWARM_ARCHITECTURE_OVERVIEW.md` 只覆盖 Swarm 子系统且基线为 v2.3.0，本文是全仓总览；Agent/Swarm 的合同细节（roster、runtime、handoff、escalation）以 [`AGENTS.md`](../AGENTS.md) 和 [`agents.yaml`](../agents.yaml) 为真相源。
 
 ---
 
@@ -14,7 +14,7 @@ Agorax 是 AI agent 的**公共广场 / 多智能体协作控制面**：把聊�
 - **Hermes worker**：本机 tmux 长驻的语义化专家（orchestrator / researcher / architect / developer / writer / learning）
 - **Managed 运行时**：外部 CLI agent（Claude Code、Codex、opencode，经统一 adapter 接入；deepseek-harness 为占位）
 
-编排层分两代：**Phase 1 持久 orchestrator**（Node 侧 swarm 控制循环，swarm.yaml 语义 roster + tmux 分发）和 **Phase 2 LangGraph 编排器**（Python，workflow YAML 声明状态机，Human Gate 暂停/恢复）。
+编排层分两代：**Phase 1 持久 orchestrator**（Node 侧 swarm 控制循环，agents.yaml 统一 roster + tmux 分发）和 **Phase 2 LangGraph 编排器**（Python，workflow YAML 声明状态机，Human Gate 暂停/恢复）。
 
 ---
 
@@ -56,7 +56,7 @@ Agorax 是 AI agent 的**公共广场 / 多智能体协作控制面**：把聊�
 | 前端 | `src/screens/` `src/components/` `src/stores/` | 页面（chat、group-chat、swarm2、mission-control、tasks…）、~70 共享组件、zustand stores |
 | API 路由 | `src/routes/api/` | ~90 个 TanStack Start 文件路由（server handlers） |
 | 服务端逻辑 | `src/server/` | ~120 个平铺模块 + 6 个子系统目录（`agent-runtime/` `group-chat/` `task-pipeline/` `mcp/`+`mcp-hub/` `oauth/` `usage/`） |
-| Swarm 合同 | `swarm.yaml` `agents.yaml` `agents/` `skills/` | roster、运行时声明、角色 SOUL 源、角色 skills |
+| Agent/Swarm 合同 | `agents.yaml` `agents/` `skills/` | roster、运行时声明、角色 SOUL 源、角色 skills |
 | LangGraph | `hermes_langgraph_orchestrator/` | Python 编排器（workflows/*.yaml） |
 | 记忆 | `memory/` | swarm 三层记忆（missions / handoffs / worker 草稿） |
 | 运行时状态 | `.runtime/` | `swarm-missions.json`、`local-sessions.json`、`tool-artifacts/` |
@@ -97,8 +97,8 @@ Agorax 是 AI agent 的**公共广场 / 多智能体协作控制面**：把聊�
 | Dev 自动拉起 | Hermes gateway（`src/server/gateway-pool.ts`，可用 `AGORAX_AUTO_START_AGENT=false` 禁用）；workspace-daemon（指数重试 ≤20 次 + 健康检查） |
 | 代理表 | `/ws-claude`→:18789；`/api/claude-proxy`、`/claude-ui`→`$CLAUDE_API_URL`（默认 :8642）；`/workspace-api`→:3099 |
 | 安全头 | 全量 CSP / X-Content-Type-Options / Referrer-Policy（与 `src/lib/csp.ts`、`__root.tsx` meta 三处保持同步） |
-| Watch ignore | `.runtime/**`、`.tanstack/**` `swarm.yaml`、`*.log` 等，防止运行时文件触发 HMR |
-| Dev 特例 | `PATCH /api/swarm-roster` 在 dev middleware 直写 `swarm.yaml`（绕开 dev 模式 SSR PATCH 挂起） |
+| Watch ignore | `.runtime/**`、`.tanstack/**` `agents.yaml`、`*.log` 等，防止运行时文件触发 HMR |
+| Dev 特例 | `PATCH /api/swarm-roster` 在 dev middleware 直写 `agents.yaml`（绕开 dev 模式 SSR PATCH 挂起） |
 
 ### 4.3 实时性模型
 
@@ -116,16 +116,15 @@ Agorax 是 AI agent 的**公共广场 / 多智能体协作控制面**：把聊�
 
 ### 5.1 Swarm 多智能体系统（Phase 1 控制面）
 
-**真相源分层**：`swarm.yaml`（语义 roster）→ `~/.hermes/profiles/<worker-id>/`（运行时 profile）→ `~/.local/bin/`（wrapper）。
+**真相源分层**：`agents.yaml`（统一 agent roster/runtime）→ `~/.hermes/profiles/<agent-id>/`（运行时 profile）→ `~/.local/bin/`（wrapper）。
 
-- **roster**（`swarm.yaml`，`version: 1` + `workers:`）：6 个 worker（orchestrator / researcher / architect / developer / writer / learning）。每 worker 字段：`id/name/role/specialty/mission`（自然语言合同）、`model: provider/model-id`（当前统一 `tokenx/Kimi-K2.7-Code`，派发时 env 注入，**不写** profile config）、`profile/modes/wrapper`、`tools/skills/plugins/mcpServers`、`greenlightRequiredFor`、`maxConcurrentTasks`、`reviewRequired` 等调度元数据。schema 读写见 `src/server/swarm-roster.ts`。
-- **运行时声明**（`agents.yaml`）：只声明"怎么启动"。`runtime ∈ hermes | claude-code | codex | deepseek-harness | opencode`；非 hermes + `execution: ssh` 为硬错误（SSH 本地性仅限 Hermes）；managed runtime 写 `command/args`（如 cc-impl = `claude --dangerously-skip-permissions -p`）；`mentionName` 供群聊 @（gpu/claude/codex/deepseek）。加载器 `src/server/agent-runtime/agents-config.ts`。
+- **统一 agent registry**（`agents.yaml`，`version: 2` + `agents:`）：每个 agent 同时包含角色、模型、tools/skills/capabilities、Swarm 门控和 runtime 启动字段。`runtime ∈ hermes | claude-code | codex | deepseek-harness | opencode`；非 hermes + `execution: ssh` 为硬错误（SSH 本地性仅限 Hermes）；managed runtime 写 `command/args`。schema 读写见 `src/server/swarm-roster.ts` 和 `src/server/agent-runtime/agents-config.ts`。
 - **分发**（`src/routes/api/swarm-dispatch.ts` + `src/server/swarm-tmux-delivery.ts`）：
   - Session：`tmux new-session -d -s swarm-<workerId>`；存在且健康则复用，退化成 bare shell/zombie 则 kill 重建；TUI 用 capture-pane markers 检测 ready，CLI 检测 `~$` prompt。
   - `HERMES_SWARM_TMUX_MODE`：**tui（默认/推荐）** session 内 `exec hermes chat --tui`，完整 prompt 先写 `<profile>/swarm-task.md`，再 bracketed-paste（`\x1b[200~…\x1b[201~`）一行短指令，500ms 后 `C-m` 提交（明确不用 C-c，会杀 TUI）；**cli** session 内 `bash -l`，每轮 `send-keys` 跑 `hermes chat -q`。
   - oneshot：`HERMES_SWARM_FORCE_ONESHOT=1` 或 tmux 不可用时 fallback；`HERMES_SWARM_MOCK_BIN=<dir>` 让 wrapper 优先找 mock（测试路由）。
   - Checkpoint 等待：派发前记 runtime.json + state.db 最新 checkpoint 为 baseline，`waitForFreshCheckpoint` 轮询新 checkpoint 后 attach。
-- **Profile 同步**（`scripts/sync-swarm-profiles.mjs`）：按 swarm.yaml 重写各 profile `config.yaml` 的 toolsets、生成 `SOUL.md`/`memory/IDENTITY.md`、复制 swarm skills 到 profile 和 `~/.hermes/skills/swarm/`、生成 `~/.local/bin/` wrapper。Profile 内容：`config.yaml`（完整 Hermes Agent 配置）、`SOUL.md`、`skills/`、`state.db`（聊天历史，WebUI 读取源）、`logs/`、`cron/` 等。
+- **Profile 同步**（`scripts/sync-swarm-profiles.mjs`）：按 agents.yaml 重写各 profile `config.yaml` 的 toolsets、生成 `SOUL.md`/`memory/IDENTITY.md`、复制 agent skills 到 profile 和 `~/.hermes/skills/swarm/`、生成 `~/.local/bin/` wrapper。Profile 内容：`config.yaml`（完整 Hermes Agent 配置）、`SOUL.md`、`skills/`、`state.db`（聊天历史，WebUI 读取源）、`logs/`、`cron/` 等。
 - **收割与记忆**：worker 产出结构化 checkpoint（STATE/RESULT/BLOCKER/NEXT_ACTION…，`src/server/swarm-checkpoints.ts`），`swarm-harvest.ts` / `swarm-background-harvest.ts` 主动/周期收割；共享记忆三层布局（`memory/swarm/missions/<id>/` 归档、`memory/handoffs/swarm/` 协作总线、`memory/swarm/<worker>/` 草稿，`src/server/swarm-memory.ts`），长期知识由 learning 经 `learning-wiki-ingest` 写入 `~/wiki`。
 - **Swarm2 UI**（`src/screens/swarm2/`，路由 `/swarm2`）：worker/orchestrator 卡片、kanban 看板、live chat（对 tmux 内 worker 直聊）、task queue、activity feed、wires 连线图、memory/artifacts/reports 面板、Human Gate 面板（阻塞详情 + 继续执行/中止/继续等待）、tmux attach 终端。
 - **控制面分层原则**（`src/server/gateway-capabilities.ts`）：控制平面 = 本地 profile 目录；运行时 = 当前 profile 的 gateway；Dashboard 只是可选外链。
@@ -269,7 +268,7 @@ POST /api/agents/:id/chat（SSE）
 1. **控制/展示通道分离**：MCP typed tool call 驱动状态机，AgentStreamEvent 只喂 UI 不落库（managed runtime 的核心约束）。
 2. **声明式编排**：workflow YAML 表达转移规则与门控上限（Gate C ≤3 / Gate H ≤2），图是通用循环而非 per-worker 节点。
 3. **Human Gate 一等公民**：LangGraph `interrupt_before` + SQLite checkpoint 持久化暂停态，Dashboard/CLI/API 三路恢复。
-4. **真相源单一化**：roster=swarm.yaml、mission 状态=swarm-missions.json、群聊=collab.db、长期知识=`~/wiki`；双写处均有 reconcile 兜底。
+4. **真相源单一化**：agent/roster=agents.yaml、mission 状态=swarm-missions.json、群聊=collab.db、长期知识=`~/wiki`；双写处均有 reconcile 兜底。
 5. **Profile 即控制平面**：能力由本地 profile 目录（config/skills/state.db）承载，gateway 只是运行时，dashboard 不做能力门控。
 6. **品牌/契约分层**：产品名（Agorax）与运行时契约（Hermes）分离——用户可见层随品牌走，wire 层（env vars、profile 路径、session 命名、wire identifiers）保持稳定，见命名合同。
 
@@ -279,7 +278,7 @@ POST /api/agents/:id/chat（SSE）
 - **deepseek-harness adapter 未交付**（`UnavailableAdapter` 占位）。
 - **Hermes adapter 仍走老路**：`HermesAdapterStub` 只 probe 不执行，1:1 群聊与 swarm 分发两套路径并存。
 - **GitHub 仓库未更名**：包名/镜像名已是 agorax，但仓库路径仍为 `outsourc-e/hermes-workspace`（更新器与命名合同中按 legacy 处理）；仓库更名后需同步 `claude-update.ts` 的 remote 定义与 compose 镜像引用。
-- 文档基线漂移：`docs/swarm/SWARM_ARCHITECTURE_OVERVIEW.md` 基于 v2.3.0，roster 真相已迁至 AGENTS.md + swarm.yaml。
+- 文档基线漂移：`docs/swarm/SWARM_ARCHITECTURE_OVERVIEW.md` 基于 v2.3.0，roster 真相已迁至 AGENTS.md + agents.yaml。
 
 ---
 
@@ -291,7 +290,7 @@ POST /api/agents/:id/chat（SSE）
 | Swarm 合同（roster/handoff/升级） | `swarm/HANDOFF-PROTOCOL.md`、`swarm/ESCALATION-GUIDE.md`、`swarm/DISPATCH-GUIDE.md` |
 | Swarm 架构详解（v2.3.0 基线） | `swarm/SWARM_ARCHITECTURE_OVERVIEW.md`、`swarm/ARCHITECTURE.md` |
 | 多 agent 控制面 ADR | `design/multi-agent_workspace_extension_28825236.plan.md` |
-| Provider / 模型统一 | `design/provider-catalog.md`、`design/swarm-model-unification.md`、`claude-openai-compat-spec.md` |
+| Provider / 模型配置 | `design/provider-catalog.md`、`claude-openai-compat-spec.md` |
 | Swarm2 子系统 spec | `swarm2-agent-ide-spec.md`、`swarm2-autopilot-orchestration-spec.md`、`swarm2-memory-framework-spec.md`、`swarm2-frankengpu-control-plane.md`、`swarm2-worker-lifecycle-compaction-spec.md` |
 | 版本演进 | `release-2.1.0.md`、`release-2.5.0.md` |
 | Managed runtime 接入 | `../skills/hermes-workspace-agents-integration/SKILL.md` |

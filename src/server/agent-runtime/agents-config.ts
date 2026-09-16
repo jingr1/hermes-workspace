@@ -1,10 +1,8 @@
 /**
  * agents.yaml loader — runtime declarations for managed agents.
  *
- * agents.yaml describes HOW an agent runtime is launched (command, args,
- * execution locality). swarm.yaml remains the pipeline source of truth
- * (roles, skills, capabilities). When an agent id also exists in swarm.yaml,
- * capabilities are inherited from there unless overridden.
+ * agents.yaml is the unified source of truth for agent identity, runtime
+ * launch, and Swarm orchestration metadata.
  *
  * Load-time validation (plan «ssh locality 仅限 runtime: hermes»):
  *   runtime !== 'hermes' && execution === 'ssh'  → hard error.
@@ -21,17 +19,29 @@ export type AgentExecution = 'local' | 'ssh'
 
 export type AgentDeclaration = {
   id: string
+  name?: string
+  role?: string
+  specialty?: string
+  mission?: string
   runtime: AgentRuntimeKind
   /** Hermes profile name (runtime: hermes). */
   profile?: string
   /** CLI command (non-hermes runtimes). */
   command?: string
   args?: Array<string>
-  /**
-   * Optional model override for CLI-based runtimes.
-   * For claude-code, prefer ~/.claude/settings.json; only set this to force
-   * a one-off model different from the user's Claude Code defaults.
-   */
+  modes: Array<string>
+  tools: Array<string>
+  skills: Array<string>
+  plugins: Array<string>
+  pluginToolsets: Array<string>
+  mcpServers: Array<string>
+  wrapper?: string
+  preferredTaskTypes: Array<string>
+  greenlightRequiredFor: Array<string>
+  acceptsBroadcast: boolean
+  reviewRequired: boolean
+  dispatchable: boolean
+  /** Optional model override for CLI-based runtimes. */
   model?: string
   execution: AgentExecution
   capabilities: Array<string>
@@ -136,7 +146,7 @@ function listHermesProfiles(): Array<string> {
 
 export function loadAgentsRegistry(input?: {
   repoRoot?: string
-  /** swarm.yaml-derived capabilities: agentId -> capabilities (inheritance). */
+  /** Legacy capability inheritance hook; unified entries should declare these directly. */
   swarmCapabilities?: Map<string, Array<string>>
   /** Existing file content override (tests). */
   rawYaml?: string
@@ -210,13 +220,37 @@ export function loadAgentsRegistry(input?: {
 
     agents.push({
       id,
+      name: entry.name ? String(entry.name) : undefined,
+      role: entry.role ? String(entry.role) : undefined,
+      specialty: entry.specialty ? String(entry.specialty) : undefined,
+      mission: entry.mission ? String(entry.mission) : undefined,
       runtime,
       profile: entry.profile ? String(entry.profile) : undefined,
       command: entry.command ? String(entry.command) : undefined,
       args: Array.isArray(entry.args) ? entry.args.map(String) : undefined,
+      modes: Array.isArray(entry.modes) ? entry.modes.map(String) : [],
+      tools: Array.isArray(entry.tools) ? entry.tools.map(String) : [],
+      skills: Array.isArray(entry.skills) ? entry.skills.map(String) : [],
+      plugins: Array.isArray(entry.plugins) ? entry.plugins.map(String) : [],
+      pluginToolsets: Array.isArray(entry.pluginToolsets)
+        ? entry.pluginToolsets.map(String)
+        : [],
+      mcpServers: Array.isArray(entry.mcpServers)
+        ? entry.mcpServers.map(String)
+        : [],
+      wrapper: entry.wrapper ? String(entry.wrapper) : undefined,
       model: entry.model ? String(entry.model) : undefined,
       execution,
       capabilities,
+      preferredTaskTypes: Array.isArray(entry.preferredTaskTypes)
+        ? entry.preferredTaskTypes.map(String)
+        : [],
+      greenlightRequiredFor: Array.isArray(entry.greenlightRequiredFor)
+        ? entry.greenlightRequiredFor.map(String)
+        : [],
+      acceptsBroadcast: entry.acceptsBroadcast !== false,
+      reviewRequired: entry.reviewRequired === true,
+      dispatchable: entry.dispatchable !== false,
       maxConcurrentTasks:
         typeof entry.maxConcurrentTasks === 'number'
           ? entry.maxConcurrentTasks

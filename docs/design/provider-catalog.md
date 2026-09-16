@@ -65,12 +65,12 @@ custom_providers:
 
 若用户对内置 provider 做了 **有意覆盖**（例如不同的 `base_url` 代理、inline `api_key`），Workspace **不会** 自动删除该块。仅当块内容与 preset 完全冗余时才 prune。
 
-## 与 swarm-model-unification 的关系
+## 与 profile 默认模型的关系
 
-- **Custom provider**（tokenx 等）：模型列表以 `config.yaml` `providers:` 为定义源 → 见 [swarm-model-unification.md](./swarm-model-unification.md)
-- **Builtin provider**：模型列表以 hermes-agent 内置目录 + live `/models` 为准；`config.yaml` 只需 `model.provider` + `model.default`
+- **Custom provider**（tokenx 等）：模型列表以对应 profile 的 `config.yaml` `providers:` 为定义源
+- **Builtin provider**：模型列表以 hermes-agent 内置目录 + live `/models` 为准；默认模型仍由对应 profile 的 `model.provider` + `model.default` 管理
 
-Swarm worker 引用 builtin 时使用 `provider/model-id` 格式：
+Swarm dispatch 不再从 roster 解析或注入 `provider/model-id`；它通过 `HERMES_HOME` 使用当前 profile 的默认模型。特殊模型直接修改 profile 配置后重启 worker。
 
 ```yaml
 model: deepseek/deepseek-v4-flash

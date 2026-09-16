@@ -7,7 +7,6 @@ import { createFileRoute } from '@tanstack/react-router'
 import { isAuthenticated } from '../../server/auth-middleware'
 import { getProfilesDir } from '../../server/claude-paths'
 import { rosterByWorkerId } from '../../server/swarm-roster'
-import { resolveWorkerRuntimeModel } from '../../server/swarm-runtime-model'
 import { handoffPath, readHandoff } from '../../server/handoff'
 import {
   buildHermesTmuxShellCommand,
@@ -177,11 +176,10 @@ function startSession(
     : ''
   const hermesBin = resolveHermesBin()
   const ghToken = resolveGithubToken()
-  const runtimeModel = resolveWorkerRuntimeModel(workerId)
   const startCommand =
     transport === 'cli'
-      ? `${handoffEnv}${buildHermesTmuxShellCommand({ profilePath, hermesBin, ghToken, runtimeModel })}`
-      : `${handoffEnv}${buildHermesTmuxTuiCommand({ profilePath, hermesBin, ghToken, runtimeModel })}`
+      ? `${handoffEnv}${buildHermesTmuxShellCommand({ profilePath, hermesBin, ghToken })}`
+      : `${handoffEnv}${buildHermesTmuxTuiCommand({ profilePath, hermesBin, ghToken })}`
   return new Promise((resolve) => {
     const child = execFile(
       tmuxBin,
@@ -356,22 +354,6 @@ export const Route = createFileRoute('/api/swarm-tmux-start')({
           )
         }
 
-        const runtimeModel = resolveWorkerRuntimeModel(workerId)
-        const runtimeModelInfo: {
-          target?: string
-          injected: boolean
-          error?: string
-        } = { injected: false }
-        if (runtimeModel) {
-          runtimeModelInfo.injected = true
-          runtimeModelInfo.target = `${runtimeModel.provider}/${runtimeModel.default}`
-        } else {
-          const roster = rosterByWorkerId([workerId]).get(workerId)
-          if (roster?.model?.trim()) {
-            runtimeModelInfo.error = `Unparseable swarm model label: ${roster.model}`
-          }
-        }
-
         const sessionName = `swarm-${workerId}`
         const transportMode = resolveTmuxTransportMode()
         const sessionExists = await tmuxHasSession(tmuxBin, sessionName)
@@ -390,7 +372,6 @@ export const Route = createFileRoute('/api/swarm-tmux-start')({
             started: false,
             tmuxBin,
             transportMode,
-            runtimeModel: runtimeModelInfo,
           })
         }
         if (sessionExists) {
@@ -421,7 +402,6 @@ export const Route = createFileRoute('/api/swarm-tmux-start')({
           tmuxBin,
           transportMode,
           cwd,
-          runtimeModel: runtimeModelInfo,
         })
       },
     },

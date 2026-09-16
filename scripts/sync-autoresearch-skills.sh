@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sync autoresearch skills + wrappers after swarm.yaml role split.
+# Sync autoresearch skills + wrappers after agents.yaml role split.
 set -euo pipefail
 WS="$(cd "$(dirname "$0")/.." && pwd)"
 BIN="${HOME}/.local/bin"

@@ -2,9 +2,9 @@
 
 > 产品名：**Agorax**（AI Agent 的公共广场）。运行时由 **Hermes Agent** 提供（gateway / profiles / `~/.hermes`），运行时术语保持 Hermes 命名不变，见 [`docs/agorax-naming-contract.md`](docs/agorax-naming-contract.md)。
 
-本仓库使用语义化 Hermes Swarm worker（不是纯编号 lane）。路由真相源是 [`swarm.yaml`](swarm.yaml)；每个 worker 在 `~/.hermes/profiles/<worker-id>/` 有对应 profile，角色 skill 见下表，wrapper 在 `~/.local/bin/`。
+本仓库使用语义化 Hermes agent/worker（不是纯编号 lane）。统一配置真相源是 [`agents.yaml`](agents.yaml)；每个 Hermes agent 在 `~/.hermes/profiles/<agent-id>/` 有对应 profile，角色 skill 见配置，wrapper 在 `~/.local/bin/`。
 
-**运行时声明**见 [`agents.yaml`](agents.yaml)：描述 agent **如何启动**（runtime / command / execution）。流水线角色、skills、能力仍以 `swarm.yaml` 为准；同 id 时 capabilities 默认从 swarm 继承。
+**统一 agent 声明**见 [`agents.yaml`](agents.yaml)：同时描述角色、skills、能力和 agent **如何启动**（runtime / command / execution）。一个 agent 条目既是可调度 worker，也是 runtime registry entry。
 
 当前版本：`2.4.0`。本地开发：`pnpm dev` 默认 `PORT=3001`（部分文档/Windows 示例仍写 `3000`，以实际 `PORT` 为准）。
 
@@ -14,7 +14,7 @@
 
 LangGraph workflow（默认 `radw.yaml`，以及 `rdi.yaml`、`research_only.yaml`、`design_implement.yaml`）**只能**引用下表中的 worker id。
 
-**模型真相源：** 每个 worker 的 `model` 只写在 [`swarm.yaml`](swarm.yaml)（`provider/model-id`）。**不要**在本文硬编码模型名——改模型用 Swarm UI 或编辑 `swarm.yaml`，然后执行 `node scripts/sync-swarm-profiles.mjs`。
+**模型真相源：** 每个 Hermes agent 的默认模型由对应 profile 配置提供。**不要**在本文硬编码模型名——改模型直接更新 `~/.hermes/profiles/<agent-id>/config.yaml`，然后重启对应 worker；`agents.yaml` 的可选 `model` 只用于显式 runtime override。
 
 | Worker         | Wrapper               | Modes                                     | Tools                                                                                   | Skills                                                                                                                                                                                                                                         | MCP | Plugins |
 | -------------- | --------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- | ------- |
@@ -54,7 +54,7 @@ orchestrator → researcher → architect → (developer | writer) → architect
 
 ## 二、运行时声明（`agents.yaml`）
 
-[`agents.yaml`](agents.yaml) 只声明启动方式；与 swarm 流水线 roster 正交。
+[`agents.yaml`](agents.yaml) 是统一 agent registry，同时声明启动方式与 Swarm 编排元数据。
 
 | id                          | runtime            | 说明                                                                              |
 | --------------------------- | ------------------ | --------------------------------------------------------------------------------- |
@@ -68,7 +68,7 @@ orchestrator → researcher → architect → (developer | writer) → architect
 
 - `runtime !== hermes` 且 `execution === ssh` → 硬错误（SSH 本地性仅限 Hermes）。
 - 未写 `execution` 时，可从 profile `terminal.backend` 自动检测；非 hermes + 检测为 ssh → 硬错误。
-- Claude Code 的 provider/model 优先 `~/.claude/settings.json`；`agents.yaml` 的 `model` 仅作一次性覆盖。
+- Claude Code 的 provider/model 优先 `~/.claude/settings.json`；`agents.yaml` 的可选 `model` 仅作显式覆盖。
 - Hermes 分发仍走现有 swarm-dispatch / tmux 路径；managed 运行时（当前主要是 claude-code）走 `src/server/agent-runtime/`。
 
 ---
@@ -99,12 +99,12 @@ API 要点：
 
 ## 四、操作规则
 
-- 改 worker 时保持 `swarm.yaml`（model / tools / skills / mission）与 profile toolset、skills、SOUL、wrapper 对齐。**不要**把 `swarm.yaml` 的 `model` 同步进 profile `config.yaml`——Swarm 用运行时注入（`swarm-runtime-model.ts`）；profile `model` 只给 Settings / Web Chat。
+- 改 agent 时保持 `agents.yaml`（tools / skills / mission）与 profile toolset、skills、SOUL、wrapper 对齐。模型默认值由 profile `config.yaml` 管理；只有需要显式覆盖时才在 `agents.yaml` 使用可选 `model`。
 - **GBrain ≡ llm-wiki**：本仓库未部署本地 `gbrain` skill/MCP。Brain-first 查询用 Hermes 内置 `llm-wiki`（`WIKI_PATH`，默认 `~/wiki`），外加 `memory/swarm/` 下的 mission 记忆。
 - **Brain-first 顺序**（先于 web 搜索）：① 读 `$WIKI_PATH/SCHEMA.md` + `index.md` + 近期 `log.md`；② grep `memory/swarm/` 与 dispatch handoff；③ `session_search` 查历史会话；④ 本地不足再用外部 `web` / `arxiv`。
 - **知识分层：** `~/wiki` = 长期领域知识；`memory/swarm/missions/<missionId>/` = 归档任务产物；`memory/swarm/<worker>/` = 进行中草稿；`memory/handoffs/swarm/` = 最新 checkpoint；任务结束后由 `learning` 把可复用结论 ingest 进 wiki（见 `docs/swarm/LEARNING-WIKI-INGEST.md`）。
 - **职责边界：** Researcher 只立事实；Architect 可质疑并握方向/规格/选道/评审/harden；Developer / Writer 只执行本道规格，缺口升给 architect（writer 事实缺口经 architect 回 researcher）；Learning 文档化与 wiki ingest；Orchestrator 路由与放行。质疑往返最多 3 轮，再按 `docs/swarm/ESCALATION-GUIDE.md` 升级。
-- 除非任务明确需要，不要全局启用可选 Hermes plugin；先在 `swarm.yaml` 记录 plugin/toolset 对齐。
+- 除非任务明确需要，不要全局启用可选 Hermes plugin；先在 `agents.yaml` 记录 plugin/toolset 对齐。
 - 本地 Workspace 配对/调试时，**一个 gateway 为规范实例**：`hermes gateway run` 监听 `:8642`。Dashboard（`:9119`）可选，仅分析。再起 gateway 前先 `curl http://127.0.0.1:<workspace-port>/api/sessions`（本机 `pnpm dev` 多为 `3001`）。Sessions 已有数据则刷新/重探测 UI，不要再起第二个 gateway。
 - 若默认模型走 `openai-codex` / Codex 族，聊天依赖本机 Codex CLI 已登录（`codex login`）。
 
@@ -183,7 +183,7 @@ set -g exit-unattached off
 
 | 区域                         | 路径                                                                         |
 | ---------------------------- | ---------------------------------------------------------------------------- |
-| Swarm 合同 / roster          | `swarm.yaml`、`AGENTS.md`、`docs/swarm/`                                     |
+| Agent / Swarm 合同与 roster  | `agents.yaml`、`AGENTS.md`、`docs/swarm/`                                    |
 | 运行时声明                   | `agents.yaml`、`src/server/agent-runtime/`                                   |
 | LangGraph                    | `hermes_langgraph_orchestrator/`                                             |
 | 群聊                         | `src/server/group-chat/`、`src/screens/group-chat/`、`src/routes/api/rooms*` |
@@ -192,4 +192,4 @@ set -g exit-unattached off
 | Profile 同步                 | `scripts/sync-swarm-profiles.mjs`                                            |
 | 项目 / worktree              | `projects.yaml`、`src/server/git-ops.ts`、`src/server/task-pipeline/`        |
 
-改 roster / skills / 门控时：先改 `swarm.yaml`（及必要时 workflow yaml），再 sync profiles，并同步更新本文，避免合同漂移。
+改 agent roster / skills / 门控时：先改 `agents.yaml`（及必要时 workflow yaml），再 sync profiles，并同步更新本文，避免合同漂移。
