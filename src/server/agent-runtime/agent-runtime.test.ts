@@ -284,6 +284,31 @@ agents:
     })
   })
 
+  it('uses the injected Agorax Managed Agent transport when configured', async () => {
+    const transport = {
+      probe: vi.fn(async () => ({ available: true })),
+      startRun: vi.fn(async () => ({ runId: 'run-1' })),
+      streamEvents: vi.fn(() => (async function* () {})()),
+      interrupt: vi.fn(async () => undefined),
+    }
+    const router = new AgentRuntimeRouter({
+      agoraxManagedTransport: transport,
+      rawYaml: `
+version: 1
+agents:
+  - id: cursor
+    runtime: cursor
+    command: cursor-agent
+`,
+    })
+
+    expect(router.getAdapter('cursor')?.kind).toBe('cursor')
+    await expect(router.getAdapter('cursor')!.probe()).resolves.toEqual({
+      available: true,
+    })
+    expect(transport.probe).toHaveBeenCalledWith('cursor')
+  })
+
   it('hermes stub refuses startRun (existing dispatch path owns it)', async () => {
     const router = new AgentRuntimeRouter({
       rawYaml: `

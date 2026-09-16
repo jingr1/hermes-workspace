@@ -43,7 +43,7 @@ describe('AgoraxManagedAgentBridge', () => {
     }
 
     await expect(bridge.probe()).resolves.toEqual({ available: true })
-    await expect(bridge.startRun(run, mcp)).resolves.toEqual({ runId: 'run-1' })
+    await expect(bridge.startRun({ ...run, mcp })).resolves.toEqual({ runId: 'run-1' })
     await expect([...await collect(bridge.streamEvents('run-1'))]).toEqual(events)
     await expect(bridge.interrupt('run-1', 'user_requested')).resolves.toBeUndefined()
 

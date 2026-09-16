@@ -11,6 +11,12 @@ import { loadAgentsRegistry } from './agents-config'
 import type { AgentDeclaration, AgentsRegistry } from './agents-config'
 import type { AgentProbeResult, AgentRuntimeAdapter } from './types'
 import { probeHermesProfileGateway } from './hermes-gateway-probe'
+import {
+  AgoraxManagedAgentBridge,
+  type AgoraxManagedAgentTransport,
+  isAgoraxManagedAgentBackend,
+} from './agorax-managed-agent-bridge'
+import { createAgoraxManagedAgentTransportFromEnv } from './agorax-managed-agent-transport'
 
 /** Read-only stand-in for hermes-runtime agents (they are not spawned here). */
 class HermesAdapterStub implements AgentRuntimeAdapter {
@@ -63,14 +69,28 @@ export class AgentRuntimeRouter {
   private readonly adapters = new Map<string, AgentRuntimeAdapter>()
   readonly registry: AgentsRegistry
 
-  constructor(input?: { repoRoot?: string; rawYaml?: string }) {
+  constructor(input?: {
+    repoRoot?: string
+    rawYaml?: string
+    agoraxManagedTransport?: AgoraxManagedAgentTransport
+  }) {
+    const agoraxManagedTransport =
+      input?.agoraxManagedTransport ??
+      createAgoraxManagedAgentTransportFromEnv() ??
+      undefined
     this.registry = loadAgentsRegistry(input)
     for (const decl of this.registry.agents) {
-      this.adapters.set(decl.id, this.buildAdapter(decl))
+      this.adapters.set(
+        decl.id,
+        this.buildAdapter(decl, agoraxManagedTransport),
+      )
     }
   }
 
-  private buildAdapter(decl: AgentDeclaration): AgentRuntimeAdapter {
+  private buildAdapter(
+    decl: AgentDeclaration,
+    agoraxManagedTransport?: AgoraxManagedAgentTransport,
+  ): AgentRuntimeAdapter {
     switch (decl.runtime) {
       case 'hermes':
         return new HermesAdapterStub(decl)
@@ -81,6 +101,15 @@ export class AgentRuntimeRouter {
       case 'cursor':
       case 'kimi':
       case 'opencode':
+        if (
+          agoraxManagedTransport &&
+          isAgoraxManagedAgentBackend(decl.runtime)
+        ) {
+          return new AgoraxManagedAgentBridge(
+            decl.runtime,
+            agoraxManagedTransport,
+          )
+        }
         return new UnavailableAdapter(
           decl,
           'Agorax Managed Agent transport is not configured',

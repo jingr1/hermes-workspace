@@ -43,26 +43,35 @@ export function isAgoraxManagedAgentBackend(
 }
 
 /**
- * Adapter boundary for the Agorax Managed Agent runtime backed by Tutti Host/tuttid.
+ * Adapter boundary for the Agorax Managed Agent runtime backed by the embedded
+ * Agorax Host/runtime implementation.
  *
  * This class deliberately owns no process, session, or turn state. The
  * transport must delegate those operations to Tutti's canonical Host runtime.
  */
 export class AgoraxManagedAgentBridge {
+  readonly kind: AgoraxManagedAgentBackend
+
   constructor(
     private readonly backend: AgoraxManagedAgentBackend,
     private readonly transport: AgoraxManagedAgentTransport,
-  ) {}
+  ) {
+    this.kind = backend
+  }
 
   probe(): Promise<AgentProbeResult> {
     return this.transport.probe(this.backend)
   }
 
   startRun(
-    run: AgentRunInput,
-    mcp: McpHandshake,
+    input: AgentRunInput & { mcp: McpHandshake },
   ): Promise<{ runId: string }> {
-    return this.transport.startRun({ backend: this.backend, run, mcp })
+    const { mcp, ...run } = input
+    return this.transport.startRun({
+      backend: this.backend,
+      run,
+      mcp,
+    })
   }
 
   streamEvents(runId: string): AsyncIterable<AgentStreamEvent> {

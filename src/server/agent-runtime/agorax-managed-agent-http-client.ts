@@ -61,7 +61,7 @@ export function agoraxAgentTargetIdForBackend(
 }
 
 /**
- * Thin Agorax transport client for the Tutti Host/tuttid managed runtime.
+ * Thin Agorax transport client for the embedded Managed Agent daemon API.
  *
  * It returns Tutti's canonical JSON projections without creating an Agorax
  * session store or translating them into the legacy managed-chat schema.
