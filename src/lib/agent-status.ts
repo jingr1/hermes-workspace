@@ -17,7 +17,7 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { existsSync } from 'node:fs'
-import { getHermesRoot, getProfilesDir } from '../server/claude-paths'
+import { getHermesRoot, getProfilesDir } from '../server/hermes-paths'
 import { getCollabDbPath } from '../server/collab-db'
 import { openSqliteDatabase } from '../server/sqlite-helper'
 import type { AgentStatus } from './agent-types'

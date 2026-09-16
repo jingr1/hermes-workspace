@@ -6,7 +6,7 @@ import {
   isActiveRunStatus,
   type ActiveRunStatus,
 } from '../lib/active-run-status'
-import { getHermesRoot } from './claude-paths'
+import { getHermesRoot } from './hermes-paths'
 
 export { ACTIVE_RUN_STATUSES, isActiveRunStatus }
 export type { ActiveRunStatus }

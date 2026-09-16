@@ -69,7 +69,7 @@ type RawProviderConfig = {
 }
 
 function getHermesHome(): string {
-  const envHome = (process.env.HERMES_HOME || process.env.CLAUDE_HOME)?.trim()
+  const envHome = process.env.HERMES_HOME?.trim()
   return path.resolve(envHome || path.join(os.homedir(), '.hermes'))
 }
 

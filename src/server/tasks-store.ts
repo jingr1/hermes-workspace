@@ -43,14 +43,14 @@ type UpdateTaskInput = Partial<
   Omit<TaskRecord, 'id' | 'created_at' | 'created_by'>
 >
 
-const CLAUDE_HOME =
+const HERMES_HOME =
   process.env.HERMES_HOME ??
-  process.env.CLAUDE_HOME ??
+  process.env.HERMES_HOME ??
   path.join(os.homedir(), '.hermes')
-const TASKS_FILE = path.join(CLAUDE_HOME, 'tasks.json')
+const TASKS_FILE = path.join(HERMES_HOME, 'tasks.json')
 
 function ensureTasksFile(): void {
-  fs.mkdirSync(CLAUDE_HOME, { recursive: true })
+  fs.mkdirSync(HERMES_HOME, { recursive: true })
   if (!fs.existsSync(TASKS_FILE)) {
     fs.writeFileSync(
       TASKS_FILE,

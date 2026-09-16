@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { getHermesRoot } from './claude-paths'
+import { getHermesRoot } from './hermes-paths'
 
 export type JobDeliveryTarget = {
   id: string

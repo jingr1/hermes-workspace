@@ -9,7 +9,7 @@
  */
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { getClaudeRoot } from '../claude-paths'
+import { getHermesRoot } from '../hermes-paths'
 
 export type PidRegistryEntry = {
   runId: string
@@ -23,7 +23,7 @@ export type PidRegistryEntry = {
 }
 
 function registryPath(root?: string): string {
-  return path.join(root ?? getClaudeRoot(), 'agent-pids.json')
+  return path.join(root ?? getHermesRoot(), 'agent-pids.json')
 }
 
 function readAll(root?: string): Array<PidRegistryEntry> {

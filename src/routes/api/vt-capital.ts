@@ -4,7 +4,7 @@ import * as path from 'node:path'
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../server/auth-middleware'
-import { getProfilesDir } from '../../server/claude-paths'
+import { getProfilesDir } from '../../server/hermes-paths'
 
 const VT_REPO_DIR = '/root/Code/vt-capital'
 const VT_QUEUES_DIR = path.join(VT_REPO_DIR, 'queues')

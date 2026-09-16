@@ -18,8 +18,8 @@ vi.mock('node:os', async (importOriginal) => {
   return {
     ...actual,
     homedir: vi.fn(() => {
-      // Tests that need a homedir create a temp dir and set TEST_CLAUDE_HOME.
-      const override = process.env.TEST_CLAUDE_HOME
+      // Tests that need a homedir create a temp dir and set TEST_HERMES_HOME.
+      const override = process.env.TEST_HERMES_HOME
       if (override) return override
       return actual.homedir()
     }),
@@ -32,7 +32,7 @@ async function importModule() {
 }
 
 beforeEach(() => {
-  delete process.env.TEST_CLAUDE_HOME
+  delete process.env.TEST_HERMES_HOME
 })
 
 afterEach(() => {
@@ -45,7 +45,7 @@ describe('claude-code-settings', () => {
   describe('readClaudeCodeSettings', () => {
     it('parses valid settings.json', async () => {
       const claudeDir = createTempClaudeDir()
-      process.env.TEST_CLAUDE_HOME = path.dirname(claudeDir)
+      process.env.TEST_HERMES_HOME = path.dirname(claudeDir)
       fs.writeFileSync(
         path.join(claudeDir, 'settings.json'),
         JSON.stringify({ model: 'claude-sonnet-4-6' }),
@@ -57,7 +57,7 @@ describe('claude-code-settings', () => {
 
     it('returns null when file is missing', async () => {
       const claudeDir = createTempClaudeDir()
-      process.env.TEST_CLAUDE_HOME = path.dirname(claudeDir)
+      process.env.TEST_HERMES_HOME = path.dirname(claudeDir)
       fs.rmSync(claudeDir, { recursive: true, force: true })
       const { readClaudeCodeSettings } = await importModule()
       expect(readClaudeCodeSettings()).toBeNull()
@@ -67,7 +67,7 @@ describe('claude-code-settings', () => {
   describe('writeClaudeCodeSettings', () => {
     it('creates the .claude directory if missing and writes formatted JSON', async () => {
       const claudeDir = createTempClaudeDir()
-      process.env.TEST_CLAUDE_HOME = path.dirname(claudeDir)
+      process.env.TEST_HERMES_HOME = path.dirname(claudeDir)
       fs.rmSync(claudeDir, { recursive: true, force: true })
       const { writeClaudeCodeSettings } = await importModule()
       writeClaudeCodeSettings({ model: 'claude-haiku-3-5' })
@@ -84,7 +84,7 @@ describe('claude-code-settings', () => {
   describe('patchClaudeCodeSettings', () => {
     it('merges model and env updates', async () => {
       const claudeDir = createTempClaudeDir()
-      process.env.TEST_CLAUDE_HOME = path.dirname(claudeDir)
+      process.env.TEST_HERMES_HOME = path.dirname(claudeDir)
       fs.writeFileSync(
         path.join(claudeDir, 'settings.json'),
         JSON.stringify({
@@ -106,7 +106,7 @@ describe('claude-code-settings', () => {
 
     it('merges env updates and removes null env entries', async () => {
       const claudeDir = createTempClaudeDir()
-      process.env.TEST_CLAUDE_HOME = path.dirname(claudeDir)
+      process.env.TEST_HERMES_HOME = path.dirname(claudeDir)
       fs.writeFileSync(
         path.join(claudeDir, 'settings.json'),
         JSON.stringify({
@@ -128,7 +128,7 @@ describe('claude-code-settings', () => {
 
     it('removes empty env object', async () => {
       const claudeDir = createTempClaudeDir()
-      process.env.TEST_CLAUDE_HOME = path.dirname(claudeDir)
+      process.env.TEST_HERMES_HOME = path.dirname(claudeDir)
       fs.writeFileSync(
         path.join(claudeDir, 'settings.json'),
         JSON.stringify({ env: { X: 'y' } }),
@@ -140,7 +140,7 @@ describe('claude-code-settings', () => {
 
     it('does not write a provider field', async () => {
       const claudeDir = createTempClaudeDir()
-      process.env.TEST_CLAUDE_HOME = path.dirname(claudeDir)
+      process.env.TEST_HERMES_HOME = path.dirname(claudeDir)
       fs.writeFileSync(path.join(claudeDir, 'settings.json'), JSON.stringify({}))
       const { patchClaudeCodeSettings } = await importModule()
       const result = patchClaudeCodeSettings({ model: 'opus' })
@@ -214,7 +214,7 @@ describe('claude-code-settings', () => {
   describe('listClaudeCodeModels', () => {
     it('lists default env slots and current model without duplicates', async () => {
       const claudeDir = createTempClaudeDir()
-      process.env.TEST_CLAUDE_HOME = path.dirname(claudeDir)
+      process.env.TEST_HERMES_HOME = path.dirname(claudeDir)
       fs.writeFileSync(
         path.join(claudeDir, 'settings.json'),
         JSON.stringify({
@@ -243,7 +243,7 @@ describe('claude-code-settings', () => {
 
     it('falls back to provider from ANTHROPIC_BASE_URL', async () => {
       const claudeDir = createTempClaudeDir()
-      process.env.TEST_CLAUDE_HOME = path.dirname(claudeDir)
+      process.env.TEST_HERMES_HOME = path.dirname(claudeDir)
       fs.writeFileSync(
         path.join(claudeDir, 'settings.json'),
         JSON.stringify({

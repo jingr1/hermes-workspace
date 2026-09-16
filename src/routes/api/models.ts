@@ -18,15 +18,15 @@ import {
 import { readHermesEnv } from '../../server/stt-transcription'
 import { BUILTIN_PROVIDER_PRESETS } from '../../server/provider-catalog'
 
-const CLAUDE_HOME =
+const HERMES_HOME =
   process.env.HERMES_HOME ??
-  process.env.CLAUDE_HOME ??
+  process.env.HERMES_HOME ??
   path.join(os.homedir(), '.hermes')
-const MODELS_PATH = path.join(CLAUDE_HOME, 'models.json')
-const CONFIG_PATH = path.join(CLAUDE_HOME, 'config.yaml')
-const AUTH_PATH = path.join(CLAUDE_HOME, 'auth.json')
+const MODELS_PATH = path.join(HERMES_HOME, 'models.json')
+const CONFIG_PATH = path.join(HERMES_HOME, 'config.yaml')
+const AUTH_PATH = path.join(HERMES_HOME, 'auth.json')
 const PROVIDER_MODELS_CACHE_PATH = path.join(
-  CLAUDE_HOME,
+  HERMES_HOME,
   'provider_models_cache.json',
 )
 
@@ -242,7 +242,7 @@ export function resolveProviderApiKey(block: Record<string, unknown>): string {
     readString(block.api_key_env) ||
     readString(block.apiKeyEnv)
   if (!envName) return ''
-  const hermesEnv = readHermesEnv(CLAUDE_HOME)
+  const hermesEnv = readHermesEnv(HERMES_HOME)
   return process.env[envName] ?? hermesEnv[envName] ?? ''
 }
 
@@ -265,7 +265,7 @@ export function resolveApiKeyFromAuthPool(providerId: string): string {
     if (!poolKey) return ''
     const entries = pool[poolKey]
     if (!Array.isArray(entries) || entries.length === 0) return ''
-    const hermesEnv = readHermesEnv(CLAUDE_HOME)
+    const hermesEnv = readHermesEnv(HERMES_HOME)
     for (const entry of entries) {
       const block = asRecord(entry)
       const source = readString(block.source)
@@ -324,7 +324,7 @@ export function listConfigReferencedProviders(
 
 /** Builtin Hermes providers with a configured API key in ~/.hermes/.env */
 export function listConfiguredBuiltinProviders(
-  env: Record<string, string> = readHermesEnv(CLAUDE_HOME),
+  env: Record<string, string> = readHermesEnv(HERMES_HOME),
 ): Array<string> {
   const out: Array<string> = []
   for (const [providerId, preset] of Object.entries(BUILTIN_PROVIDER_PRESETS)) {
@@ -338,7 +338,7 @@ export function listConfiguredBuiltinProviders(
 /** Config-referenced providers plus builtins that only need a .env API key. */
 export function listModelCatalogProviders(
   config: Record<string, unknown>,
-  env: Record<string, string> = readHermesEnv(CLAUDE_HOME),
+  env: Record<string, string> = readHermesEnv(HERMES_HOME),
 ): Array<string> {
   return Array.from(
     new Set([
@@ -409,7 +409,7 @@ function readCachedModelsForConfigProviders(): Array<ModelEntry> {
   try {
     if (!fs.existsSync(CONFIG_PATH)) return []
     const config = asRecord(YAML.parse(fs.readFileSync(CONFIG_PATH, 'utf-8')))
-    const env = readHermesEnv(CLAUDE_HOME)
+    const env = readHermesEnv(HERMES_HOME)
     const providerIds = listModelCatalogProviders(config, env)
     if (providerIds.length === 0) return []
 
@@ -510,7 +510,7 @@ function readConfiguredLiveModelEndpoints(): Array<LiveModelEndpoint> {
     }
 
     // Builtin providers only need ~/.hermes/.env keys — no providers: block.
-    const hermesEnv = readHermesEnv(CLAUDE_HOME)
+    const hermesEnv = readHermesEnv(HERMES_HOME)
     for (const providerId of listConfiguredBuiltinProviders(hermesEnv)) {
       const preset = BUILTIN_PROVIDER_PRESETS[providerId]
       if (!preset?.base_url) continue

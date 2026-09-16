@@ -223,7 +223,7 @@ const DEFAULT_TIMEOUT_S = 240
 const MAX_TIMEOUT_S = 600
 
 function getProfilesDir(): string {
-  const base = process.env.HERMES_HOME ?? process.env.CLAUDE_HOME
+  const base = process.env.HERMES_HOME
   if (base) {
     const parts = base.split('/').filter(Boolean)
     if (parts.length >= 2 && parts.at(-2) === 'profiles') {

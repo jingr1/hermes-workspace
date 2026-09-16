@@ -8,7 +8,7 @@
  */
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { getProfilesDir } from './claude-paths'
+import { getProfilesDir } from './hermes-paths'
 import { readSwarmRuntimeFile } from './swarm-foundation'
 import { publishChatEvent } from './chat-event-bus'
 import { getAgentRuntimeRouter } from './agent-runtime/router'

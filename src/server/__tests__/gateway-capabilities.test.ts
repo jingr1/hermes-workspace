@@ -36,7 +36,7 @@ beforeEach(() => {
   vi.unstubAllGlobals()
   fetchMock.mockReset()
   vi.stubGlobal('fetch', fetchMock)
-  delete process.env.CLAUDE_HOME
+  delete process.env.HERMES_HOME
   delete process.env.HERMES_HOME
   delete process.env.CLAUDE_API_URL
   delete process.env.HERMES_API_URL

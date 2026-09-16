@@ -567,7 +567,7 @@ function hasLocalControlPlane(): boolean {
   try {
     const home =
       process.env.HERMES_HOME ||
-      process.env.CLAUDE_HOME ||
+      process.env.HERMES_HOME ||
       path.join(os.homedir(), '.hermes')
     const activePath = path.join(home, 'active_profile')
     let profileHome = home

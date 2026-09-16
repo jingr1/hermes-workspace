@@ -14,7 +14,7 @@ import {
   AgentRuntimeRouter,
   setAgentRuntimeRouterForTests,
 } from './agent-runtime/router'
-import * as claudePaths from './claude-paths'
+import * as claudePaths from './hermes-paths'
 
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal()

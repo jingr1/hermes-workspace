@@ -60,7 +60,7 @@ export function resolveHermesConfigPaths(
 ): HermesConfigPaths {
   const root =
     process.env.HERMES_HOME ??
-    process.env.CLAUDE_HOME ??
+    process.env.HERMES_HOME ??
     path.join(os.homedir(), '.hermes')
   // Named profiles own their own config.yaml under ~/.hermes/profiles/<name>.
   // 'default' (or unset) resolves to the global Hermes root so the Settings UI

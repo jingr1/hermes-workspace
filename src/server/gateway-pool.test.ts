@@ -22,7 +22,6 @@ function makeHome(): string {
   mkdirSync(path.join(hermesHome, 'workspace'), { recursive: true })
   process.env.HERMES_HOME = hermesHome
   process.env.AGORAX_STATE_DIR = path.join(hermesHome, 'workspace')
-  delete process.env.CLAUDE_HOME
   delete process.env.HERMES_API_URL
   delete process.env.CLAUDE_API_URL
   delete process.env.HERMES_GATEWAY_POOL

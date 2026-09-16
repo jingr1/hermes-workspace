@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { resolveClaudeAgentDir } from './claude-agent'
+import { resolveHermesAgentDir } from './hermes-agent'
 
 const tempDirs: string[] = []
 
@@ -21,26 +21,14 @@ afterEach(() => {
   }
 })
 
-describe('resolveClaudeAgentDir', () => {
+describe('resolveHermesAgentDir', () => {
   it('prefers HERMES_AGENT_PATH when it points to a valid hermes-agent checkout', () => {
     const hermesAgentDir = createAgentDir('hermes-agent-')
-    const legacyAgentDir = createAgentDir('claude-agent-')
 
     expect(
-      resolveClaudeAgentDir({
+      resolveHermesAgentDir({
         HERMES_AGENT_PATH: hermesAgentDir,
-        CLAUDE_AGENT_PATH: legacyAgentDir,
       }),
     ).toBe(hermesAgentDir)
-  })
-
-  it('falls back to legacy CLAUDE_AGENT_PATH for backward compatibility', () => {
-    const legacyAgentDir = createAgentDir('claude-agent-')
-
-    expect(
-      resolveClaudeAgentDir({
-        CLAUDE_AGENT_PATH: legacyAgentDir,
-      }),
-    ).toBe(legacyAgentDir)
   })
 })

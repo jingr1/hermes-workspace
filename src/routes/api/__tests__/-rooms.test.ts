@@ -37,7 +37,7 @@ async function makeRoomIdHandlers() {
 beforeEach(() => {
   tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'rooms-route-test-'))
   vi.stubEnv('HERMES_HOME', tmpHome)
-  vi.stubEnv('CLAUDE_HOME', '')
+  vi.stubEnv('HERMES_HOME', '')
   vi.resetModules()
 })
 

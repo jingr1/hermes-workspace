@@ -19,7 +19,7 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import { promisify } from 'node:util'
 
-import { getHermesRoot } from '../claude-paths'
+import { getStateDir } from '../workspace-state-dir'
 import { readCodexConfig, type CodexConfig } from '../codex-settings'
 import { getCatalogProviderCredential } from '../provider-catalog'
 import { parseEnvFile } from '../hermes-config-store'
@@ -199,7 +199,7 @@ export class CodexAdapter implements AgentRuntimeAdapter {
       )
     }
 
-    const runRoot = path.join(getHermesRoot(), 'codex', 'agent-runs', input.runId)
+    const runRoot = path.join(getStateDir(), 'codex', 'agent-runs', input.runId)
     fs.mkdirSync(runRoot, { recursive: true })
 
     // NOTE: Codex 0.146+ does not accept a per-run MCP config file via CLI.

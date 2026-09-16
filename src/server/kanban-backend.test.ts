@@ -75,7 +75,7 @@ async function loadKanbanBackend(options?: {
 describe('kanban-backend', () => {
   it('auto-detect prefers Hermes backend when Hermes CLI and canonical storage are present', async () => {
     vi.stubEnv('HERMES_HOME', '/Users/aurora/.claude/profiles/swarm2')
-    vi.stubEnv('CLAUDE_HOME', '/Users/aurora/.claude/profiles/swarm2')
+    vi.stubEnv('HERMES_HOME', '/Users/aurora/.claude/profiles/swarm2')
     const sqliteCalls: Array<{ command: string; args?: string[] }> = []
     const mod = await loadKanbanBackend({
       existsSync: (target) =>
@@ -128,7 +128,7 @@ describe('kanban-backend', () => {
 
   it('auto-detect uses Hermes storage directly when the CLI is unavailable', async () => {
     vi.stubEnv('HERMES_HOME', '/Users/aurora/.claude/profiles/swarm2')
-    vi.stubEnv('CLAUDE_HOME', '/Users/aurora/.claude/profiles/swarm2')
+    vi.stubEnv('HERMES_HOME', '/Users/aurora/.claude/profiles/swarm2')
     const mod = await loadKanbanBackend({
       existsSync: (target) => target === '/Users/aurora/.claude/kanban.db',
       execFileSync: (command, args = []) => {
@@ -168,7 +168,7 @@ describe('kanban-backend', () => {
 
   it('resolves canonical Kanban paths from legacy profile-home env fallback too', async () => {
     vi.stubEnv('HERMES_HOME', '/Users/aurora/.claude/profiles/swarm5/home')
-    vi.stubEnv('CLAUDE_HOME', '/Users/aurora/.claude/profiles/swarm5/home')
+    vi.stubEnv('HERMES_HOME', '/Users/aurora/.claude/profiles/swarm5/home')
     const mod = await loadKanbanBackend({
       existsSync: (target) => target === '/Users/aurora/.claude/kanban.db',
       execFileSync: (command, args = []) => {
@@ -188,7 +188,7 @@ describe('kanban-backend', () => {
 
   it('auto-detect falls back to local when canonical Hermes storage is missing', async () => {
     vi.stubEnv('HERMES_HOME', '/Users/aurora/.claude/profiles/swarm2')
-    vi.stubEnv('CLAUDE_HOME', '/Users/aurora/.claude/profiles/swarm2')
+    vi.stubEnv('HERMES_HOME', '/Users/aurora/.claude/profiles/swarm2')
     const mod = await loadKanbanBackend({
       existsSync: () => false,
       execFileSync: (command, args = []) => {
@@ -214,7 +214,7 @@ describe('kanban-backend', () => {
 
   it('creates and updates Hermes tasks through canonical kanban.db path', async () => {
     vi.stubEnv('HERMES_HOME', '/Users/aurora/.claude/profiles/swarm2')
-    vi.stubEnv('CLAUDE_HOME', '/Users/aurora/.claude/profiles/swarm2')
+    vi.stubEnv('HERMES_HOME', '/Users/aurora/.claude/profiles/swarm2')
     const sqliteCalls: string[] = []
     let readCount = 0
     const mod = await loadKanbanBackend({
@@ -295,7 +295,7 @@ describe('kanban-backend', () => {
 
   it('projects native Kanban tasks without collapsing statuses or dependency/run metadata', async () => {
     vi.stubEnv('HERMES_HOME', '/Users/aurora/.claude/profiles/swarm2')
-    vi.stubEnv('CLAUDE_HOME', '/Users/aurora/.claude/profiles/swarm2')
+    vi.stubEnv('HERMES_HOME', '/Users/aurora/.claude/profiles/swarm2')
     vi.stubEnv('CLAUDE_KANBAN_BACKEND', 'claude')
     const mod = await loadKanbanBackend({
       existsSync: (target) => target === '/Users/aurora/.claude/kanban.db',
@@ -336,7 +336,7 @@ describe('kanban-backend', () => {
 
   it('creates native Kanban tasks with parent links and idempotency without using Workspace board files', async () => {
     vi.stubEnv('HERMES_HOME', '/Users/aurora/.claude/profiles/swarm2')
-    vi.stubEnv('CLAUDE_HOME', '/Users/aurora/.claude/profiles/swarm2')
+    vi.stubEnv('HERMES_HOME', '/Users/aurora/.claude/profiles/swarm2')
     vi.stubEnv('CLAUDE_KANBAN_BACKEND', 'claude')
     const sqliteCalls: string[] = []
     const mod = await loadKanbanBackend({

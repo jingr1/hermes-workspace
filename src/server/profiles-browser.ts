@@ -64,7 +64,6 @@ function getHermesRoot(): string {
   // active_profile + profiles/ listing still work.
   const raw =
     process.env.HERMES_HOME ??
-    process.env.CLAUDE_HOME ??
     path.join(os.homedir(), '.hermes')
   const normalized = path.resolve(raw)
   const marker = `${path.sep}profiles${path.sep}`
@@ -75,18 +74,14 @@ function getHermesRoot(): string {
   return normalized
 }
 
-function getClaudeRoot(): string {
-  return getHermesRoot()
-}
-
 export function getProfilesRoot(): string {
-  return path.join(getClaudeRoot(), 'profiles')
+  return path.join(getHermesRoot(), 'profiles')
 }
 
 /** Absolute HERMES_HOME path for a profile (`default` → Hermes root). */
 export function resolveProfileHermesHome(name: string): string {
   const trimmed = (name || 'default').trim() || 'default'
-  if (trimmed === 'default') return getClaudeRoot()
+  if (trimmed === 'default') return getHermesRoot()
   return path.join(getProfilesRoot(), trimmed)
 }
 
@@ -128,7 +123,7 @@ export function isLiveNamedProfile(name: string): boolean {
 }
 
 function getActiveProfilePath(): string {
-  return path.join(getClaudeRoot(), 'active_profile')
+  return path.join(getHermesRoot(), 'active_profile')
 }
 
 /**
@@ -379,7 +374,7 @@ async function fetchDashboardProfiles(): Promise<{
     const profiles: Array<ProfileSummary> = data.profiles.map((p) => ({
       name: p.name,
       path: p.is_default
-        ? getClaudeRoot()
+        ? getHermesRoot()
         : path.join(getProfilesRoot(), p.name),
       active: p.name === activeProfile,
       exists: true,
@@ -453,7 +448,7 @@ export async function readProfileWithFallback(
   const normalized = name.trim() || 'default'
   const profilePath =
     normalized === 'default'
-      ? getClaudeRoot()
+      ? getHermesRoot()
       : path.join(getProfilesRoot(), validateProfileIdentifier(normalized))
 
   if (fs.existsSync(profilePath)) {
@@ -491,7 +486,7 @@ export async function readProfileWithFallback(
           return {
             name: match.name,
             path: match.is_default
-              ? getClaudeRoot()
+              ? getHermesRoot()
               : path.join(getProfilesRoot(), match.name),
             active: match.name === active,
             config: {
@@ -515,7 +510,7 @@ export async function readProfileWithFallback(
 function profileStateDbPath(name: string): string {
   const normalized = name.trim() || 'default'
   return normalized === 'default'
-    ? path.join(getClaudeRoot(), 'state.db')
+    ? path.join(getHermesRoot(), 'state.db')
     : path.join(getProfilesRoot(), normalized, 'state.db')
 }
 
@@ -749,7 +744,7 @@ function profileConfigPath(name: string): {
   const normalized = name.trim() || 'default'
   const profilePath =
     normalized === 'default'
-      ? getClaudeRoot()
+      ? getHermesRoot()
       : path.join(getProfilesRoot(), validateProfileName(normalized))
   return {
     normalized,
@@ -843,7 +838,7 @@ export function listProfilesLight(): Array<ProfileSummary> {
     }
   }
 
-  const root = getClaudeRoot()
+  const root = getHermesRoot()
   const config = readYamlConfig(path.join(root, 'config.yaml'))
   const defaultModelProvider = readModelProviderFromConfig(config)
   results.unshift({
@@ -932,7 +927,7 @@ export function listProfiles(): Array<ProfileSummary> {
     }
   }
 
-  const root = getClaudeRoot()
+  const root = getHermesRoot()
   const config = readYamlConfig(path.join(root, 'config.yaml'))
   const defaultModelProvider = readModelProviderFromConfig(config)
   results.unshift({
@@ -969,7 +964,7 @@ export function readProfile(name: string): ProfileDetail {
   const normalized = name.trim() || 'default'
   const profilePath =
     normalized === 'default'
-      ? getClaudeRoot()
+      ? getHermesRoot()
       : path.join(getProfilesRoot(), validateProfileName(normalized))
   if (!fs.existsSync(profilePath)) throw new Error('Profile not found')
   const configPath = path.join(profilePath, 'config.yaml')
@@ -1010,7 +1005,7 @@ export function setActiveProfile(name: string): void {
     clearStickyActiveProfile()
     return
   }
-  fs.mkdirSync(getClaudeRoot(), { recursive: true })
+  fs.mkdirSync(getHermesRoot(), { recursive: true })
   fs.writeFileSync(getActiveProfilePath(), `${normalized}\n`, 'utf-8')
 }
 
@@ -1043,7 +1038,7 @@ export function createProfile(
     // The 'default' profile lives at ~/.hermes, not ~/.hermes/profiles/default
     const sourceRoot =
       sourceName === 'default'
-        ? getClaudeRoot()
+        ? getHermesRoot()
         : path.join(getProfilesRoot(), sourceName)
     const sourceConfigPath = path.join(sourceRoot, 'config.yaml')
     if (fs.existsSync(sourceConfigPath)) {
@@ -1094,10 +1089,10 @@ export function deleteProfile(name: string): void {
   // Stop the live gateway before rmtree; a dying process writing
   // .clean_shutdown / logs will otherwise resurrect an empty shell.
   try {
-    // Lazy require avoids a circular dependency with claude-agent → profiles-browser.
+    // Lazy require avoids a circular dependency with hermes-agent → profiles-browser.
     const { stopProfileGateway } = nodeRequire(
-      './claude-agent',
-    ) as typeof import('./claude-agent')
+      './hermes-agent',
+    ) as typeof import('./hermes-agent')
     stopProfileGateway(normalized)
   } catch {
     /* best-effort */
@@ -1107,7 +1102,7 @@ export function deleteProfile(name: string): void {
   markNamedProfileDeleted(normalized)
 
   if (fs.existsSync(profilePath)) {
-    const trashDir = path.join(getClaudeRoot(), 'trash')
+    const trashDir = path.join(getHermesRoot(), 'trash')
     fs.mkdirSync(trashDir, { recursive: true })
     const trashName = `${normalized}-${Date.now()}`
     try {
@@ -1125,7 +1120,7 @@ export function updateProfileConfig(
   const normalized = name.trim() || 'default'
   const profilePath =
     normalized === 'default'
-      ? getClaudeRoot()
+      ? getHermesRoot()
       : path.join(getProfilesRoot(), validateProfileName(normalized))
   if (!fs.existsSync(profilePath)) throw new Error('Profile not found')
   const configPath = path.join(profilePath, 'config.yaml')

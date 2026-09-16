@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   createRemoteStatus,
   remoteUrlMatchesExpectedRepo,
-} from './claude-update'
+} from './hermes-update'
 
 describe('claude update repo gating', () => {
   it('matches Claude workspace repo aliases', () => {

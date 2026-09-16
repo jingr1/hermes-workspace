@@ -24,7 +24,7 @@ function hermesRootFromProfile(pathValue: string): string | null {
 }
 
 export function getHermesRoot(): string {
-  const envHome = process.env.HERMES_HOME || process.env.CLAUDE_HOME
+  const envHome = process.env.HERMES_HOME
   if (envHome) {
     const profileRoot = hermesRootFromProfile(envHome)
     if (profileRoot) return profileRoot
@@ -59,8 +59,3 @@ export function getLocalBinDir(): string {
   return join(getUserHomeForHermesRoot(), '.local', 'bin')
 }
 
-// Legacy aliases for callers not yet renamed.
-export const getClaudeRoot = getHermesRoot
-export const getWorkspaceClaudeHome = getWorkspaceHermesHome
-export const getProfileClaudeHome = getProfileHermesHome
-export const getUserHomeForClaudeRoot = getUserHomeForHermesRoot

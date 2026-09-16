@@ -108,11 +108,11 @@ describe('workspace API catalog semantics', () => {
     ).rejects.toThrow('System directories cannot be used as workspaces')
   })
 
-  it('honors CLAUDE_HOME as the profile root when HERMES_HOME is unset', async () => {
+  it('honors HERMES_HOME as the profile root when HERMES_HOME is unset', async () => {
     const claudeHome = path.join(tempRoot, '.claude-home')
     const project = await makeDir(tempRoot, 'claude-workspace')
     delete process.env.HERMES_HOME
-    process.env.CLAUDE_HOME = claudeHome
+    process.env.HERMES_HOME = claudeHome
     await fs.mkdir(claudeHome, { recursive: true })
     await fs.writeFile(
       path.join(claudeHome, 'config.yaml'),

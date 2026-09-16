@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../server/auth-middleware'
-import { getProfilesDir } from '../../server/claude-paths'
+import { getProfilesDir } from '../../server/hermes-paths'
 import {
   newestCheckpointFromMessages,
   readRuntimeJson,

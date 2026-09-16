@@ -32,7 +32,7 @@ describe('listProfiles', () => {
       '.hermes',
       'workspace',
     )
-    delete process.env.CLAUDE_HOME
+    delete process.env.HERMES_HOME
     delete process.env.AGORAX_STICKY_PROFILE
   })
 
@@ -232,7 +232,7 @@ describe('getMessagesForProfile', () => {
     )
     vi.spyOn(os, 'homedir').mockReturnValue(tempHome)
     delete process.env.HERMES_HOME
-    delete process.env.CLAUDE_HOME
+    delete process.env.HERMES_HOME
   })
 
   afterEach(() => {
@@ -322,7 +322,7 @@ describe('profile model/provider updates', () => {
     )
     vi.spyOn(os, 'homedir').mockReturnValue(tempHome)
     delete process.env.HERMES_HOME
-    delete process.env.CLAUDE_HOME
+    delete process.env.HERMES_HOME
   })
 
   afterEach(() => {

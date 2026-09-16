@@ -26,7 +26,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { promisify } from 'node:util'
-import { getClaudeRoot } from '../claude-paths'
+import { getStateDir } from '../workspace-state-dir'
 import { publishChatEvent } from '../chat-event-bus'
 import {
   killProcessGroup,
@@ -307,7 +307,7 @@ export class ClaudeCodeAdapter implements AgentRuntimeAdapter {
         'claude executable not found; install @anthropic-ai/claude-code globally',
       )
     }
-    const runRoot = path.join(getClaudeRoot(), 'agent-runs', input.runId)
+    const runRoot = path.join(getStateDir(), 'agent-runs', input.runId)
     fs.mkdirSync(runRoot, { recursive: true })
 
     // Per-run MCP config: endpoint + token-from-env. Never written to the

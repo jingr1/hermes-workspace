@@ -114,7 +114,7 @@ function activeProfileHome(): string {
   } catch {
     return (
       process.env.HERMES_HOME ??
-      process.env.CLAUDE_HOME ??
+      process.env.HERMES_HOME ??
       path.join(os.homedir(), '.hermes')
     )
   }
@@ -140,7 +140,7 @@ function hermesStateRoots(): Array<string> {
     new Set(
       [
         process.env.HERMES_HOME,
-        process.env.CLAUDE_HOME,
+        process.env.HERMES_HOME,
         path.join(os.homedir(), '.hermes'),
         activeProfileHome(),
       ]

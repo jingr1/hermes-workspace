@@ -15,6 +15,7 @@ import {
   unregisterPid,
 } from './pid-registry'
 import { AgentRuntimeRouter } from './router'
+import { getStateDir } from '../workspace-state-dir'
 
 vi.mock('./hermes-gateway-probe', () => ({
   probeHermesProfileGateway: vi.fn(async (profile: string) => ({
@@ -384,8 +385,8 @@ describe('ClaudeCodeAdapter process management', () => {
     const argv = JSON.parse(
       readFileSync(
         join(
-          process.env.HOME || '/home/ramon.jing',
-          '.hermes/agent-runs',
+          getStateDir(),
+          'agent-runs',
           runId,
           'argv.txt',
         ),

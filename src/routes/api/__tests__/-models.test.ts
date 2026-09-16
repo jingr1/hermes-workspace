@@ -74,7 +74,7 @@ vi.mock('../../../server/stt-transcription', () => ({
 beforeEach(() => {
   vi.clearAllMocks()
   delete process.env.HERMES_HOME
-  delete process.env.CLAUDE_HOME
+  delete process.env.HERMES_HOME
 })
 
 describe('models route', () => {
@@ -101,9 +101,9 @@ describe('models route', () => {
     expect(json.data).toEqual([])
   })
 
-  it('reads default model from CLAUDE_HOME config using YAML.parse', async () => {
+  it('reads default model from HERMES_HOME config using YAML.parse', async () => {
     const envHome = '/mock/profiles/jarvis'
-    process.env.CLAUDE_HOME = envHome
+    process.env.HERMES_HOME = envHome
 
     const configYaml = 'model: jarvis-model\nprovider: nous\n'
     const modelsJson = '[{"model":"x","provider":"y"}]'
@@ -128,7 +128,7 @@ describe('models route', () => {
 
   it('indexes provider defaults and fallback_providers with Hermes provider keys', async () => {
     const envHome = '/mock/profiles/jarvis'
-    process.env.CLAUDE_HOME = envHome
+    process.env.HERMES_HOME = envHome
 
     const configYaml = [
       'providers:',
@@ -159,7 +159,7 @@ describe('models route', () => {
 
   it('reads nested model object syntax from config using YAML.parse', async () => {
     const envHome = '/mock/profiles/jarvis'
-    process.env.CLAUDE_HOME = envHome
+    process.env.HERMES_HOME = envHome
 
     const configYaml = 'model:\n  default: nest-model\n  provider: anthropic\n'
     existsSync.mockImplementation((p: string) => p === `${envHome}/config.yaml`)
@@ -180,7 +180,7 @@ describe('models route', () => {
 
   it('indexes provider default_model and fetches live models using key_env', async () => {
     const envHome = '/mock/profiles/jarvis'
-    process.env.CLAUDE_HOME = envHome
+    process.env.HERMES_HOME = envHome
     process.env.DEEPSEEK_API_KEY = 'test-key'
 
     const configYaml = [

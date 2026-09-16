@@ -7,9 +7,8 @@ describe('getStateDir', () => {
   beforeEach(() => {
     // Clear workspace-specific override for clean tests
     delete process.env.AGORAX_STATE_DIR
-    // Clear hermes home chain too
+    // Clear Hermes home override too
     delete process.env.HERMES_HOME
-    delete process.env.CLAUDE_HOME
   })
 
   afterEach(() => {
@@ -28,15 +27,8 @@ describe('getStateDir', () => {
     expect(result).toBe('/custom/hermes/workspace')
   })
 
-  it('falls back to CLAUDE_HOME/workspace when only CLAUDE_HOME is set', () => {
-    process.env.CLAUDE_HOME = '/claude/home'
-    const result = getStateDir()
-    expect(result).toBe('/claude/home/workspace')
-  })
-
-  it('prefers HERMES_HOME over CLAUDE_HOME', () => {
+  it('uses HERMES_HOME/workspace when HERMES_HOME is set', () => {
     process.env.HERMES_HOME = '/hermes/home'
-    process.env.CLAUDE_HOME = '/claude/home'
     const result = getStateDir()
     expect(result).toBe('/hermes/home/workspace')
   })

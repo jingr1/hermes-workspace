@@ -35,7 +35,7 @@ function allowedPrefixes(): string[] {
   const home = os.homedir()
   const claudeHome =
     process.env.HERMES_HOME ??
-    process.env.CLAUDE_HOME ??
+    process.env.HERMES_HOME ??
     resolvePath(home, '.hermes')
   return [
     '/tmp',

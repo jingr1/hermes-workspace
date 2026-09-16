@@ -9,10 +9,10 @@ import {
   resolveProfileHermesHome,
 } from './profiles-browser'
 import {
-  isClaudeAgentHealthy,
+  isHermesAgentHealthy,
   spawnProfileGateway,
-  type StartClaudeAgentResult,
-} from './claude-agent'
+  type StartHermesAgentResult,
+} from './hermes-agent'
 import {
   PINNED_GATEWAY_PROFILE,
   bindProfileToPort,
@@ -67,8 +67,8 @@ export type PooledGateway = {
   state: GatewayPoolState
 }
 
-export type EnsureGatewayResult = Omit<StartClaudeAgentResult, 'ok' | 'error'> &
-  StartClaudeAgentResult & {
+export type EnsureGatewayResult = Omit<StartHermesAgentResult, 'ok' | 'error'> &
+  StartHermesAgentResult & {
     port?: number
     url?: string
     started?: boolean
@@ -154,7 +154,7 @@ export async function probeProfileGateway(
   const port = resolveProfileGatewayPort(profileName)
   const name = (profileName || 'default').trim() || 'default'
   if (!profileOwnsPort(name, port)) return false
-  return isClaudeAgentHealthy(port, 250)
+  return isHermesAgentHealthy(port, 250)
 }
 
 export function getGatewayPoolSnapshot(): Array<PooledGateway> {
@@ -221,7 +221,7 @@ async function ensureProfileGatewayLocked(
   if (
     !options.forceReplace &&
     profileOwnsPort(name, port) &&
-    (await isClaudeAgentHealthy(port, 250))
+    (await isHermesAgentHealthy(port, 250))
   ) {
     const { touchGatewayLease } = await import('./gateway-lifecycle')
     touchGatewayLease(name)
@@ -256,12 +256,12 @@ async function ensureProfileGatewayLocked(
     }
   }
 
-  if (!profileOwnsPort(name, port) && (await isClaudeAgentHealthy(port, 200))) {
+  if (!profileOwnsPort(name, port) && (await isHermesAgentHealthy(port, 200))) {
     await vacateForeignOccupant(port, name)
   }
 
   const owned = profileOwnsPort(name, port)
-  const healthy = await isClaudeAgentHealthy(port, 250)
+  const healthy = await isHermesAgentHealthy(port, 250)
   const forceReplace = options.forceReplace === true || (healthy && !owned)
 
   const { evictBeforeGatewayStart } = await import('./gateway-lifecycle')
@@ -274,7 +274,7 @@ async function ensureProfileGatewayLocked(
   })
 
   const ownedHealthy = async () =>
-    profileOwnsPort(name, port) && (await isClaudeAgentHealthy(port, 200))
+    profileOwnsPort(name, port) && (await isHermesAgentHealthy(port, 200))
 
   if (spawned.ok) {
     for (let attempt = 0; attempt < 40; attempt += 1) {
@@ -377,8 +377,8 @@ export async function ensureActiveProfileGateway(options?: {
   forceReplace?: boolean
 }): Promise<EnsureGatewayResult> {
   if (!isGatewayPoolEnabled()) {
-    const { startClaudeAgent } = await import('./claude-agent')
-    const started = await startClaudeAgent({
+    const { startHermesAgent } = await import('./hermes-agent')
+    const started = await startHermesAgent({
       profileName: getActiveProfileName(),
       forceReplace: options?.forceReplace,
     })

@@ -184,7 +184,7 @@ export function detectHonchoIntegration(
   const claudeHome = expandHome(
     options.claudeHome ??
       env.HERMES_HOME ??
-      env.CLAUDE_HOME ??
+      env.HERMES_HOME ??
       path.join(homeDir, '.hermes'),
     homeDir,
   )
@@ -197,8 +197,8 @@ export function detectHonchoIntegration(
   const openClawConfigPath = path.join(openClawHome, 'config.yaml')
   const openClawConfigConfigured = configHasHoncho(readYaml(openClawConfigPath))
 
-  const claudeEnvPath = path.join(claudeHome, '.env')
-  const claudeEnvConfigured = envConfigured(readEnvFile(claudeEnvPath))
+  const hermesEnvPath = path.join(claudeHome, '.env')
+  const hermesEnvConfigured = envConfigured(readEnvFile(hermesEnvPath))
   const claudeConfigPath = path.join(claudeHome, 'config.yaml')
   const claudeConfigConfigured = configHasHoncho(readYaml(claudeConfigPath))
 
@@ -240,9 +240,9 @@ export function detectHonchoIntegration(
     fileSource(
       'claude-env',
       'Current .env compatibility',
-      claudeEnvPath,
-      claudeEnvConfigured,
-      claudeEnvConfigured
+      hermesEnvPath,
+      hermesEnvConfigured,
+      hermesEnvConfigured
         ? 'Honcho env var present in current .env.'
         : 'No Honcho env var in current .env.',
     ),
@@ -353,7 +353,7 @@ export function detectByteroverIntegration(
   const claudeHome = expandHome(
     options.claudeHome ??
       env.HERMES_HOME ??
-      env.CLAUDE_HOME ??
+      env.HERMES_HOME ??
       path.join(homeDir, '.hermes'),
     homeDir,
   )
@@ -370,8 +370,8 @@ export function detectByteroverIntegration(
     readYaml(openClawConfigPath),
   )
 
-  const claudeEnvPath = path.join(claudeHome, '.env')
-  const claudeEnvConfigured = byteroverEnvConfigured(readEnvFile(claudeEnvPath))
+  const hermesEnvPath = path.join(claudeHome, '.env')
+  const hermesEnvConfigured = byteroverEnvConfigured(readEnvFile(hermesEnvPath))
   const claudeConfigPath = path.join(claudeHome, 'config.yaml')
   const claudeConfigConfigured = configHasByterover(readYaml(claudeConfigPath))
 
@@ -413,9 +413,9 @@ export function detectByteroverIntegration(
     fileSource(
       'claude-env',
       'Current .env compatibility',
-      claudeEnvPath,
-      claudeEnvConfigured,
-      claudeEnvConfigured
+      hermesEnvPath,
+      hermesEnvConfigured,
+      hermesEnvConfigured
         ? 'Byterover env var present in current .env.'
         : 'No Byterover env var in current .env.',
     ),

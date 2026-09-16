@@ -25,7 +25,7 @@ interface SessionStore {
 
 const STORE_FILE = join(
   process.env.HERMES_HOME ??
-    process.env.CLAUDE_HOME ??
+    process.env.HERMES_HOME ??
     join(homedir(), '.hermes'),
   'workspace-sessions.json',
 )

@@ -55,7 +55,7 @@ const DISK_TTL_MS = 24 * 60 * 60 * 1_000 // 24 h
 function hermesHome(): string {
   return (
     process.env.HERMES_HOME?.trim() ||
-    process.env.CLAUDE_HOME?.trim() ||
+    process.env.HERMES_HOME?.trim() ||
     join(homedir(), '.hermes')
   )
 }

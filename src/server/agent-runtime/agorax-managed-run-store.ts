@@ -1,6 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { getHermesRoot } from '../claude-paths'
+import { getHermesRoot } from '../hermes-paths'
 import type { AgoraxManagedAgentBackend } from './agorax-managed-agent-bridge'
 
 export type AgoraxManagedRunBinding = {

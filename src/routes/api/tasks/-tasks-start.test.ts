@@ -44,7 +44,7 @@ beforeEach(() => {
   tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'tasks-start-route-test-'))
   process.chdir(tmpHome)
   vi.stubEnv('HERMES_HOME', tmpHome)
-  vi.stubEnv('CLAUDE_HOME', '')
+  vi.stubEnv('HERMES_HOME', '')
   vi.stubEnv('CLAUDE_KANBAN_BACKEND', 'local')
   vi.resetModules()
 })

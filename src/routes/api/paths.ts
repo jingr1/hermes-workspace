@@ -4,9 +4,9 @@ import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../server/auth-middleware'
 
-const CLAUDE_HOME =
+const HERMES_HOME =
   process.env.HERMES_HOME ||
-  process.env.CLAUDE_HOME ||
+  process.env.HERMES_HOME ||
   path.join(os.homedir(), '.hermes')
 
 export const Route = createFileRoute('/api/paths')({
@@ -18,9 +18,9 @@ export const Route = createFileRoute('/api/paths')({
         }
         return json({
           ok: true,
-          claudeHome: CLAUDE_HOME,
-          memoriesDir: path.join(CLAUDE_HOME, 'memories'),
-          skillsDir: path.join(CLAUDE_HOME, 'skills'),
+          claudeHome: HERMES_HOME,
+          memoriesDir: path.join(HERMES_HOME, 'memories'),
+          skillsDir: path.join(HERMES_HOME, 'skills'),
         })
       },
     },

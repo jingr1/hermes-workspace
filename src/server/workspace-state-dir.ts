@@ -7,7 +7,7 @@ import { join, resolve } from 'node:path'
  * Priority:
  * 1. `AGORAX_STATE_DIR` env var (explicit override)
  * 2. `join(HERMES_HOME, 'workspace')` where HERMES_HOME respects
- *    `HERMES_HOME` → `CLAUDE_HOME` → `~/.hermes` (standard chain)
+ *    `HERMES_HOME` → `~/.hermes`
  *
  * The returned path is absolute and resolved. Callers should create the
  * directory at startup if it doesn't exist.
@@ -18,7 +18,6 @@ export function getStateDir(): string {
 
   const hermesHome =
     process.env.HERMES_HOME?.trim() ??
-    process.env.CLAUDE_HOME?.trim() ??
     join(homedir(), '.hermes')
 
   return resolve(join(hermesHome, 'workspace'))

@@ -6,7 +6,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { join } from 'node:path'
-import { getProfilesDir } from './claude-paths'
+import { getProfilesDir } from './hermes-paths'
 import { listSwarmWorkerIds } from './swarm-foundation'
 
 export type SwarmRuntimeResetResult = {

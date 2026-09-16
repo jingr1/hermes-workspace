@@ -110,7 +110,7 @@ type GatewayState =
 
 ```typescript
 function spawnGateway(profileName: string, port: number): ChildProcess {
-  const profilePath = path.join(getClaudeRoot(), 'profiles', profileName)
+  const profilePath = path.join(getHermesRoot(), 'profiles', profileName)
   const env = {
     ...process.env,
     HERMES_HOME: profilePath,

@@ -37,7 +37,7 @@ vi.mock('node:fs', () => ({
 beforeEach(() => {
   vi.clearAllMocks()
   delete process.env.HERMES_HOME
-  delete process.env.CLAUDE_HOME
+  delete process.env.HERMES_HOME
 })
 
 async function loadMod() {
@@ -46,9 +46,9 @@ async function loadMod() {
 }
 
 describe('local-provider-discovery', () => {
-  it('isProviderConfigured uses YAML.parse and reads from CLAUDE_HOME', async () => {
+  it('isProviderConfigured uses YAML.parse and reads from HERMES_HOME', async () => {
     const activeHome = '/mock/profiles/jarvis'
-    process.env.CLAUDE_HOME = activeHome
+    process.env.HERMES_HOME = activeHome
     const configPath = `${activeHome}/config.yaml`
     existsSync.mockImplementation((p: string) => p === configPath)
     readFileSync.mockImplementation((p: string) => {
@@ -64,7 +64,7 @@ describe('local-provider-discovery', () => {
 
   it('isProviderConfigured returns false when custom_providers is missing', async () => {
     const activeHome = '/mock/profiles/default'
-    process.env.CLAUDE_HOME = activeHome
+    process.env.HERMES_HOME = activeHome
     const configPath = `${activeHome}/config.yaml`
     existsSync.mockImplementation((p: string) => p === configPath)
     readFileSync.mockImplementation((p: string) => {
@@ -78,7 +78,7 @@ describe('local-provider-discovery', () => {
 
   it('ensureProviderInConfig rate-limits warnings via loggedWarnings Set', async () => {
     const activeHome = '/mock/profiles/default'
-    process.env.CLAUDE_HOME = activeHome
+    process.env.HERMES_HOME = activeHome
     const configPath = `${activeHome}/config.yaml`
     existsSync.mockImplementation((p: string) => p === configPath)
     readFileSync.mockImplementation((p: string) => {

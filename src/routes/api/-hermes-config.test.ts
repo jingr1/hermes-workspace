@@ -34,7 +34,7 @@ function setEnv(key: string, value: string | undefined) {
 beforeEach(() => {
   tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-config-route-'))
   setEnv('HERMES_HOME', tmpHome)
-  setEnv('CLAUDE_HOME', undefined)
+  setEnv('HERMES_HOME', undefined)
   vi.resetModules()
 })
 

@@ -1,7 +1,7 @@
 import { json } from '@tanstack/react-start'
 import { createFileRoute } from '@tanstack/react-router'
 import { isAuthenticated } from '../../server/auth-middleware'
-import { startClaudeAgent } from '../../server/claude-agent'
+import { startHermesAgent } from '../../server/hermes-agent'
 
 export const Route = createFileRoute('/api/start-claude')({
   server: {
@@ -12,7 +12,7 @@ export const Route = createFileRoute('/api/start-claude')({
             return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
           }
 
-          const result = await startClaudeAgent()
+          const result = await startHermesAgent()
           return json(result, { status: result.ok ? 200 : 500 })
         } catch (err) {
           return json(

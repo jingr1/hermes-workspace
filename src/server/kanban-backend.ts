@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { getClaudeRoot, getWorkspaceClaudeHome } from './claude-paths'
+import { getHermesRoot, getWorkspaceHermesHome } from './hermes-paths'
 import { openSqliteDatabase, runSqlite, sqliteQuote } from './sqlite-helper'
 import {
   SWARM_KANBAN_FILE,
@@ -153,15 +153,15 @@ function env(name: string): string | null {
 }
 
 function claudeProfileRoot(): string {
-  return getWorkspaceClaudeHome()
+  return getWorkspaceHermesHome()
 }
 
 function claudeDbPath(): string {
-  return path.join(getClaudeRoot(), 'kanban.db')
+  return path.join(getHermesRoot(), 'kanban.db')
 }
 
 function claudeWorkspacePath(): string {
-  return path.join(getClaudeRoot(), 'kanban')
+  return path.join(getHermesRoot(), 'kanban')
 }
 
 function claudeCliPath(): string | null {
@@ -187,7 +187,7 @@ function checkClaudeCli(): {
     execFileSync(cli, ['--version'], {
       encoding: 'utf8',
       timeout: 10_000,
-      env: { ...process.env, CLAUDE_HOME: claudeProfileRoot() },
+      env: { ...process.env, HERMES_HOME: claudeProfileRoot() },
     })
     return { ok: true, path: cli }
   } catch (error) {

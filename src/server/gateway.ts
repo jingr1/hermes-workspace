@@ -98,7 +98,7 @@ function getDeviceIdentity(): DeviceIdentity {
   if (_identity) return _identity
   const idPath = path.join(
     process.env.HERMES_HOME ||
-      process.env.CLAUDE_HOME ||
+      process.env.HERMES_HOME ||
       path.join(os.homedir(), '.hermes'),
     'identity',
     'claude-device.json',

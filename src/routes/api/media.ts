@@ -34,7 +34,7 @@ const MIME_BY_EXT: Record<string, string> = {
 function hermesHome(): string {
   return (
     process.env.HERMES_HOME ??
-    process.env.CLAUDE_HOME ??
+    process.env.HERMES_HOME ??
     resolvePath(os.homedir(), '.hermes')
   )
 }

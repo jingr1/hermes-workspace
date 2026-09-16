@@ -68,7 +68,7 @@ export type UpdateSwarmKanbanCardInput = Partial<
 
 const HERMES_HOME =
   process.env.HERMES_HOME ??
-  process.env.CLAUDE_HOME ??
+  process.env.HERMES_HOME ??
   path.join(os.homedir(), '.hermes')
 export const SWARM_KANBAN_FILE = path.join(HERMES_HOME, 'swarm2-kanban.json')
 

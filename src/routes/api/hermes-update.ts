@@ -42,7 +42,7 @@ export const UPDATE_REMOTE_DEFINITIONS: Array<RemoteDefinition> = [
     name: 'upstream',
     label: 'Hermes Agent',
     expectedRepo: 'hermes-agent',
-    aliases: ['claude-agent', 'hermes-agent', 'NousResearch/hermes-agent'],
+    aliases: ['hermes-agent', 'hermes-agent', 'NousResearch/hermes-agent'],
   },
 ]
 
@@ -152,7 +152,7 @@ function remoteStatus(
   })
 }
 
-export const Route = createFileRoute('/api/claude-update')({
+export const Route = createFileRoute('/api/hermes-update')({
   server: {
     handlers: {
       GET: async ({ request }) => {

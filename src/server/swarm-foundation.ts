@@ -3,7 +3,7 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import * as YAML from 'yaml'
 import { z } from 'zod'
-import { getLocalBinDir, getProfilesDir } from './claude-paths'
+import { getLocalBinDir, getProfilesDir } from './hermes-paths'
 import { isSwarmWorkerId, rosterByWorkerId } from './swarm-roster'
 
 export const SwarmWorkerStateSchema = z.enum([
@@ -686,7 +686,7 @@ export function getWorkspacePluginRoots(workspaceRoot = process.cwd()): Array<{
 }> {
   const hermesHome =
     process.env.HERMES_HOME ||
-    process.env.CLAUDE_HOME ||
+    process.env.HERMES_HOME ||
     path.join(os.homedir(), '.hermes')
   return [
     { root: path.join(hermesHome, 'plugins'), source: 'user' },

@@ -34,7 +34,7 @@ void ensureActiveProfileGateway().catch((error) => {
 
 const CONFIG_PATH = path.join(
   process.env.HERMES_HOME ??
-    process.env.CLAUDE_HOME ??
+    process.env.HERMES_HOME ??
     path.join(os.homedir(), '.hermes'),
   'config.yaml',
 )

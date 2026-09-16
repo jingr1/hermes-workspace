@@ -10,7 +10,7 @@
  * opt back into time-based eviction.
  */
 import { getActiveProfileName } from './profiles-browser'
-import { stopProfileGateway } from './claude-agent'
+import { stopProfileGateway } from './hermes-agent'
 import {
   isGatewayPoolEnabled,
   listManagedProfileNames,
@@ -150,9 +150,9 @@ async function isProfileGatewayRunning(profileName: string): Promise<boolean> {
     const { probeProfileGateway } = await import('./gateway-pool')
     return await probeProfileGateway(profileName)
   } catch {
-    const { isClaudeAgentHealthy } = await import('./claude-agent')
+    const { isHermesAgentHealthy } = await import('./hermes-agent')
     const { resolveProfileGatewayPort } = await import('./gateway-ports')
-    return isClaudeAgentHealthy(resolveProfileGatewayPort(profileName), 250)
+    return isHermesAgentHealthy(resolveProfileGatewayPort(profileName), 250)
   }
 }
 
@@ -321,7 +321,7 @@ export async function reconcileRemovedProfileGateways(): Promise<string[]> {
   if (!isGatewayPoolEnabled()) return []
   const { listPersistedOrphanProfilePorts, resolveProfileGatewayPort } =
     await import('./gateway-ports')
-  const { stopProfileGateway } = await import('./claude-agent')
+  const { stopProfileGateway } = await import('./hermes-agent')
   const { pidListeningOnPort } = await import('./gateway-port-owner')
 
   const orphans = listPersistedOrphanProfilePorts()

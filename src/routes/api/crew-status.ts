@@ -11,10 +11,10 @@ import {
   ensureGatewayProbed,
 } from '../../server/gateway-capabilities'
 import {
-  getClaudeRoot,
-  getProfileClaudeHome,
-  getWorkspaceClaudeHome,
-} from '../../server/claude-paths'
+  getHermesRoot,
+  getProfileHermesHome,
+  getWorkspaceHermesHome,
+} from '../../server/hermes-paths'
 import {
   formatSwarmWorkerLabel,
   rosterByWorkerId,
@@ -73,7 +73,7 @@ function buildCrewDefinitionFromRoster(
 }
 
 function buildCrewDefinitions(): CrewDefinition[] {
-  const profilesDir = join(getClaudeRoot(), 'profiles')
+  const profilesDir = join(getHermesRoot(), 'profiles')
   const dynamicProfiles = existsSync(profilesDir)
     ? readdirSync(profilesDir, { withFileTypes: true })
         .filter((entry) => {
@@ -110,8 +110,8 @@ function buildCrewDefinitions(): CrewDefinition[] {
 
 function getClaudeHome(profilePath: string | null): string {
   return profilePath
-    ? getProfileClaudeHome(profilePath)
-    : getWorkspaceClaudeHome()
+    ? getProfileHermesHome(profilePath)
+    : getWorkspaceHermesHome()
 }
 
 function readGatewayState(claudeHome: string) {

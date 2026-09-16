@@ -65,7 +65,7 @@ export function resolveHermesHome(
 ): string {
   return (
     readString(runtimeEnv.HERMES_HOME) ||
-    readString(runtimeEnv.CLAUDE_HOME) ||
+    readString(runtimeEnv.HERMES_HOME) ||
     join(homedir(), '.hermes')
   )
 }

@@ -31,12 +31,12 @@ type TaskAssignee = {
   isHuman: boolean
 }
 
-const CLAUDE_HOME =
+const HERMES_HOME =
   process.env.HERMES_HOME ??
-  process.env.CLAUDE_HOME ??
+  process.env.HERMES_HOME ??
   path.join(os.homedir(), '.hermes')
-const CONFIG_PATH = path.join(CLAUDE_HOME, 'config.yaml')
-const PROFILES_PATH = path.join(CLAUDE_HOME, 'profiles')
+const CONFIG_PATH = path.join(HERMES_HOME, 'config.yaml')
+const PROFILES_PATH = path.join(HERMES_HOME, 'profiles')
 
 function readConfig(): Record<string, unknown> {
   try {

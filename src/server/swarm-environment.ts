@@ -1,7 +1,7 @@
 import { join, resolve } from 'node:path'
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { getHermesRoot, getProfilesDir, getLocalBinDir } from './claude-paths'
+import { getHermesRoot, getProfilesDir, getLocalBinDir } from './hermes-paths'
 
 export const SWARM_CANONICAL_REPO = resolve(process.cwd())
 export const SWARM_MEMORY_ROOT =

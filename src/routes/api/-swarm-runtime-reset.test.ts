@@ -37,7 +37,7 @@ function writeRuntime(workerId: string, runtime: Record<string, unknown>) {
 beforeEach(() => {
   tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'swarm-runtime-reset-'))
   setEnv('HERMES_HOME', tmpHome)
-  setEnv('CLAUDE_HOME', undefined)
+  setEnv('HERMES_HOME', undefined)
   vi.resetModules()
 })
 

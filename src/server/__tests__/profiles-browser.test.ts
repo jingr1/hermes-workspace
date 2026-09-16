@@ -58,7 +58,7 @@ vi.mock('node:os', () => ({
 beforeEach(() => {
   vi.clearAllMocks()
   delete process.env.HERMES_HOME
-  delete process.env.CLAUDE_HOME
+  delete process.env.HERMES_HOME
   delete process.env.AGORAX_STICKY_PROFILE
   delete process.env.AGORAX_STATE_DIR
 })

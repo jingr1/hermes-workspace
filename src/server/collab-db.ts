@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { openSqliteDatabase, runSqlite } from './sqlite-helper'
-import { getClaudeRoot } from './claude-paths'
+import { getHermesRoot } from './hermes-paths'
 
 /**
  * collab.db — collaboration database for multi-agent workspace extension.
@@ -19,7 +19,7 @@ import { getClaudeRoot } from './claude-paths'
  */
 
 export function getCollabDbPath(): string {
-  return path.join(getClaudeRoot(), 'collab.db')
+  return path.join(getHermesRoot(), 'collab.db')
 }
 
 const MIGRATIONS: Array<{ version: number; sql: string }> = [
