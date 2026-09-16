@@ -1,11 +1,20 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { mkdirSync, rmSync } from 'node:fs'
 import {
+  deleteSwarmRosterWorker,
   SwarmRosterSchema,
   SwarmRosterUpsertSchema,
   isSwarmWorkerId,
 } from './swarm-roster'
 
+vi.mock('./swarm-environment', () => ({
+  SWARM_CANONICAL_REPO: '/tmp/agorax-test-roster',
+}))
+
 describe('swarm roster semantic workers', () => {
+  beforeEach(() => mkdirSync('/tmp/agorax-test-roster', { recursive: true }))
+  afterEach(() => rmSync('/tmp/agorax-test-roster', { recursive: true, force: true }))
+
   it('accepts both legacy swarm ids and semantic profile ids for upsert', () => {
     const baseWorker = {
       name: 'Builder',
@@ -82,5 +91,10 @@ describe('swarm roster semantic workers', () => {
       wrapper: 'km:health',
       greenlightRequiredFor: ['delete', 'purge', 'publish'],
     })
+  })
+
+  it('removes a declared worker without affecting other declarations', () => {
+    const roster = deleteSwarmRosterWorker('builder', ['builder'])
+    expect(roster.workers.some((worker) => worker.id === 'builder')).toBe(false)
   })
 })

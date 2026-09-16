@@ -122,6 +122,7 @@ import { Route as ApiAvailableAgentsRouteImport } from './routes/api/available-a
 import { Route as ApiAuthCheckRouteImport } from './routes/api/auth-check'
 import { Route as ApiAuthRouteImport } from './routes/api/auth'
 import { Route as ApiArtifactsRouteImport } from './routes/api/artifacts'
+import { Route as ApiAgentRegistryRouteImport } from './routes/api/agent-registry'
 import { Route as ApiAgentBusRouteImport } from './routes/api/agent-bus'
 import { Route as ApiTasksIndexRouteImport } from './routes/api/tasks/index'
 import { Route as ApiAgentsIndexRouteImport } from './routes/api/agents/index'
@@ -797,6 +798,11 @@ const ApiArtifactsRoute = ApiArtifactsRouteImport.update({
   path: '/api/artifacts',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAgentRegistryRoute = ApiAgentRegistryRouteImport.update({
+  id: '/api/agent-registry',
+  path: '/api/agent-registry',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAgentBusRoute = ApiAgentBusRouteImport.update({
   id: '/api/agent-bus',
   path: '/api/agent-bus',
@@ -1374,6 +1380,7 @@ export interface FileRoutesByFullPath {
   '/terminal': typeof TerminalRoute
   '/vt-capital': typeof VtCapitalRoute
   '/api/agent-bus': typeof ApiAgentBusRoute
+  '/api/agent-registry': typeof ApiAgentRegistryRoute
   '/api/artifacts': typeof ApiArtifactsRouteWithChildren
   '/api/auth': typeof ApiAuthRouteWithChildren
   '/api/auth-check': typeof ApiAuthCheckRoute
@@ -1593,6 +1600,7 @@ export interface FileRoutesByTo {
   '/terminal': typeof TerminalRoute
   '/vt-capital': typeof VtCapitalRoute
   '/api/agent-bus': typeof ApiAgentBusRoute
+  '/api/agent-registry': typeof ApiAgentRegistryRoute
   '/api/artifacts': typeof ApiArtifactsRouteWithChildren
   '/api/auth': typeof ApiAuthRouteWithChildren
   '/api/auth-check': typeof ApiAuthCheckRoute
@@ -1815,6 +1823,7 @@ export interface FileRoutesById {
   '/terminal': typeof TerminalRoute
   '/vt-capital': typeof VtCapitalRoute
   '/api/agent-bus': typeof ApiAgentBusRoute
+  '/api/agent-registry': typeof ApiAgentRegistryRoute
   '/api/artifacts': typeof ApiArtifactsRouteWithChildren
   '/api/auth': typeof ApiAuthRouteWithChildren
   '/api/auth-check': typeof ApiAuthCheckRoute
@@ -2038,6 +2047,7 @@ export interface FileRouteTypes {
     | '/terminal'
     | '/vt-capital'
     | '/api/agent-bus'
+    | '/api/agent-registry'
     | '/api/artifacts'
     | '/api/auth'
     | '/api/auth-check'
@@ -2257,6 +2267,7 @@ export interface FileRouteTypes {
     | '/terminal'
     | '/vt-capital'
     | '/api/agent-bus'
+    | '/api/agent-registry'
     | '/api/artifacts'
     | '/api/auth'
     | '/api/auth-check'
@@ -2478,6 +2489,7 @@ export interface FileRouteTypes {
     | '/terminal'
     | '/vt-capital'
     | '/api/agent-bus'
+    | '/api/agent-registry'
     | '/api/artifacts'
     | '/api/auth'
     | '/api/auth-check'
@@ -2700,6 +2712,7 @@ export interface RootRouteChildren {
   TerminalRoute: typeof TerminalRoute
   VtCapitalRoute: typeof VtCapitalRoute
   ApiAgentBusRoute: typeof ApiAgentBusRoute
+  ApiAgentRegistryRoute: typeof ApiAgentRegistryRoute
   ApiArtifactsRoute: typeof ApiArtifactsRouteWithChildren
   ApiAuthRoute: typeof ApiAuthRouteWithChildren
   ApiAuthCheckRoute: typeof ApiAuthCheckRoute
@@ -3644,6 +3657,13 @@ declare module '@tanstack/react-router' {
       path: '/api/artifacts'
       fullPath: '/api/artifacts'
       preLoaderRoute: typeof ApiArtifactsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent-registry': {
+      id: '/api/agent-registry'
+      path: '/api/agent-registry'
+      fullPath: '/api/agent-registry'
+      preLoaderRoute: typeof ApiAgentRegistryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/agent-bus': {
@@ -4723,6 +4743,7 @@ const rootRouteChildren: RootRouteChildren = {
   TerminalRoute: TerminalRoute,
   VtCapitalRoute: VtCapitalRoute,
   ApiAgentBusRoute: ApiAgentBusRoute,
+  ApiAgentRegistryRoute: ApiAgentRegistryRoute,
   ApiArtifactsRoute: ApiArtifactsRouteWithChildren,
   ApiAuthRoute: ApiAuthRouteWithChildren,
   ApiAuthCheckRoute: ApiAuthCheckRoute,

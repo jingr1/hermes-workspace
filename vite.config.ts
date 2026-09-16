@@ -417,6 +417,9 @@ const config = defineConfig(({ mode, command }) => {
           // imported by the module graph, but file events still spam logs.
           '**/.omc/**',
           '**/.omx/**',
+          // Agent registry writes are runtime state, not module changes.
+          // Ignore them so Settings CRUD does not trigger a full dev reload.
+          '**/agents.yaml',
           // Build artifacts.
           '**/dist/**',
           '**/.output/**',

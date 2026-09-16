@@ -47,6 +47,7 @@ import { Input } from '@/components/ui/input'
 import { LogoLoader } from '@/components/logo-loader'
 import { BrailleSpinner } from '@/components/ui/braille-spinner'
 import { ThreeDotsSpinner } from '@/components/ui/three-dots-spinner'
+import { AgentRegistryManager } from '@/components/settings/agent-registry-manager'
 // useWorkspaceStore removed — hamburger eliminated on mobile
 
 const VALID_SECTION_IDS: ReadonlyArray<SettingsNavId> = SETTINGS_NAV_ITEMS.map(
@@ -502,6 +503,16 @@ function SettingsRoute() {
           )}
 
           {activeSection === 'profile' && <ProfileSection />}
+
+          {activeSection === 'agents' && (
+            <SettingsSection
+              title="Agents"
+              description="Create, edit, and remove Hermes or managed runtime agents."
+              icon={UserIcon}
+            >
+              <AgentRegistryManager />
+            </SettingsSection>
+          )}
 
           {/* ── Chat ────────────────────────────────────────────── */}
           {activeSection === 'chat' && <ChatDisplaySection />}

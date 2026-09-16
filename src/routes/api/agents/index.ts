@@ -50,7 +50,7 @@ function buildAgentPayload(
   )
   return {
     agentId: decl.id,
-    name: decl.displayName ?? decl.mentionName ?? decl.id,
+    name: decl.name ?? decl.displayName ?? decl.mentionName ?? decl.id,
     runtime: decl.runtime as AgentRuntime,
     status: toAgentStatus(unified),
     execution: decl.execution,
@@ -94,44 +94,36 @@ export const Route = createFileRoute('/api/agents/')({
           agents.push(buildAgentPayload(decl, probe, groupChatMap))
         }
 
-        // Orphan Hermes profiles are still usable as hermes-runtime agents.
-        const { probeHermesProfileGateway } =
-          await import('../../../server/agent-runtime/hermes-gateway-probe')
-        const orphanAgents = await Promise.all(
-          router.registry.orphanProfiles.map(async (profile) => {
-            const probe = await probeHermesProfileGateway(profile)
-            const snapshot = getAgentStatusSnapshot(profile)
-            const unified = deriveUnifiedStatusForAgent(
-              profile,
-              snapshot,
-              Boolean(probe.available),
+        if (!agents.some((agent) => agent.agentId === 'default')) {
+          const { probeHermesProfileGateway } =
+            await import('../../../server/agent-runtime/hermes-gateway-probe')
+          const probe = await probeHermesProfileGateway('default')
+          agents.unshift(
+            buildAgentPayload(
+              {
+                id: 'default',
+                name: 'Default',
+                runtime: 'hermes',
+                profile: 'default',
+                modes: [],
+                tools: [],
+                skills: [],
+                plugins: [],
+                pluginToolsets: [],
+                mcpServers: [],
+                preferredTaskTypes: [],
+                greenlightRequiredFor: [],
+                acceptsBroadcast: true,
+                reviewRequired: false,
+                dispatchable: false,
+                execution: 'local',
+                capabilities: [],
+              },
+              probe,
               groupChatMap,
-              profile,
-            )
-            return {
-              agentId: profile,
-              name: profile,
-              runtime: 'hermes' as const,
-              status: toAgentStatus(unified),
-              execution: 'local' as const,
-              currentTaskId: snapshot?.taskId ?? undefined,
-              currentMissionId: snapshot?.missionId ?? undefined,
-              runtimeConfig: {
-                profile,
-                capabilities: [] as string[],
-              },
-              probe: {
-                available: probe.available,
-                version: probe.version,
-                detail: probe.detail,
-              },
-              statusSnapshot: snapshot
-                ? buildStatusSnapshot(snapshot)
-                : undefined,
-            }
-          }),
-        )
-        agents.push(...orphanAgents)
+            ),
+          )
+        }
 
         return json({ agents, checkedAt: Date.now() })
       },

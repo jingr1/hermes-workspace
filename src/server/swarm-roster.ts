@@ -25,7 +25,6 @@ export const SwarmRosterWorkerSchema = z.object({
   name: z.string().default(''),
   role: z.string().default('Worker'),
   specialty: z.string().default(''),
-  model: z.string().default('Worker'),
   mission: z.string().default('Awaiting orchestrator dispatch.'),
   profile: WorkerIdSchema.optional(),
   modes: z.array(z.string()).default([]),
@@ -117,7 +116,6 @@ export function fallbackRoster(ids: Array<string> = []): SwarmRoster {
       name: id.replace(/^swarm/i, 'Swarm'),
       role: defaultRoleFromId(id),
       specialty: '',
-      model: 'Worker',
       mission: 'Awaiting orchestrator dispatch.',
       modes: [],
       tools: [],
@@ -188,10 +186,26 @@ export function upsertSwarmRosterWorker(
   return next
 }
 
+export function deleteSwarmRosterWorker(
+  workerId: string,
+  ids: Array<string> = [],
+): SwarmRoster {
+  const current = readSwarmRoster(ids)
+  const next: SwarmRoster = {
+    version: current.version || 1,
+    workers: current.workers.filter((worker) => worker.id !== workerId),
+  }
+  if (next.workers.length === current.workers.length) {
+    throw new Error(`Worker ${workerId} not found in swarm roster`)
+  }
+  writeSwarmRoster(next)
+  return next
+}
+
 export function patchSwarmRosterWorker(
   workerId: string,
   patch: Partial<
-    Pick<SwarmRosterWorker, 'model' | 'name' | 'role' | 'specialty' | 'mission'>
+    Pick<SwarmRosterWorker, 'name' | 'role' | 'specialty' | 'mission'>
   >,
   ids: Array<string> = [],
 ): SwarmRoster {
