@@ -268,6 +268,7 @@ async function drainManagedRun(
  * Caller owns response lifecycle; this does not apply group-chat timeouts.
  */
 export async function startManagedChatRun(input: {
+  runId?: string
   agentId: string
   task: string
   model?: string
@@ -312,7 +313,7 @@ export async function startManagedChatRun(input: {
     }
   }
 
-  const runId = createCollabId('run')
+  const runId = input.runId?.trim() || createCollabId('run')
   const chatSessionId = input.sessionId?.trim() || `cc-${Date.now()}`
   const toolAllowlist = ['task_start', 'task_complete']
   const { token } = issueRunToken({

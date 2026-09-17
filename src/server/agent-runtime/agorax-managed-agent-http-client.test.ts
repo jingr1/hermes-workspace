@@ -165,6 +165,24 @@ describe('AgoraxManagedAgentHttpClient', () => {
     )
   })
 
+  it('reads an authoritative activity snapshot for one canonical session', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ session: {}, turns: [], messages: [], interactions: [] }), { status: 200 }),
+    )
+    const client = new AgoraxManagedAgentHttpClient({
+      baseUrl: 'http://127.0.0.1:9120',
+      workspaceId: 'workspace/1',
+      fetchImpl,
+    })
+
+    await client.getActivitySnapshot('session-1')
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://127.0.0.1:9120/v1/workspaces/workspace%2F1/agent-sessions/session-1/activity',
+      expect.objectContaining({ method: 'GET' }),
+    )
+  })
+
   it('binds a display run to the canonical session returned by the daemon', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(

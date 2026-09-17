@@ -334,6 +334,28 @@ func (h *Host) ListSessionTurns(ctx context.Context, ref SessionRef, query Sessi
 	})
 }
 
+// ListCanonicalSessionTurns exposes complete durable Turn records for an
+// authoritative activity snapshot. It is read-only and never resumes a
+// provider runtime.
+func (h *Host) ListCanonicalSessionTurns(ctx context.Context, ref SessionRef) ([]storesqlite.Turn, error) {
+	ref = normalizedSessionRef(ref)
+	if h == nil || h.store == nil || ref.WorkspaceID == "" || ref.AgentSessionID == "" {
+		return nil, ErrInvalidArgument
+	}
+	if deleted, err := h.store.SessionDeleted(ctx, ref.WorkspaceID, ref.AgentSessionID); err != nil {
+		return nil, err
+	} else if deleted {
+		return nil, ErrSessionNotFound
+	}
+	reader, ok := h.store.(interface {
+		ListSessionTurns(context.Context, string, string) ([]storesqlite.Turn, error)
+	})
+	if !ok {
+		return nil, ErrInvalidArgument
+	}
+	return reader.ListSessionTurns(ctx, ref.WorkspaceID, ref.AgentSessionID)
+}
+
 // GetSessionInteractionSnapshot returns every interaction from the canonical
 // latest turn and derives the actionable subset from that same read. It does
 // not start or resume a provider runtime.

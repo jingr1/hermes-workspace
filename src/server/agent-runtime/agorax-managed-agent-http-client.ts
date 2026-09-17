@@ -168,6 +168,13 @@ export class AgoraxManagedAgentHttpClient {
     )
   }
 
+  getActivitySnapshot(agentSessionId: string): Promise<unknown> {
+    return this.requestJson(
+      `/v1/workspaces/${encodeURIComponent(this.workspaceId)}/agent-sessions/${encodeURIComponent(agentSessionId)}/activity`,
+      { method: 'GET' },
+    )
+  }
+
   listInteractions(agentSessionId: string): Promise<{
     workspaceId: string
     agentSessionId: string

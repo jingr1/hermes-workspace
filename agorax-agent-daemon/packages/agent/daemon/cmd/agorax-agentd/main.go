@@ -220,6 +220,37 @@ func routes(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.DB, hub 
 		}
 		writeJSON(response, http.StatusOK, map[string]any{"workspaceId": workspaceID, "agentSessionId": agentSessionID, "interactions": snapshot.Interactions})
 	})
+	mux.HandleFunc("GET /v1/workspaces/{workspaceID}/agent-sessions/{agentSessionID}/activity", func(response http.ResponseWriter, request *http.Request) {
+		workspaceID, agentSessionID := request.PathValue("workspaceID"), request.PathValue("agentSessionID")
+		ref := agenthost.SessionRef{WorkspaceID: workspaceID, AgentSessionID: agentSessionID}
+		session, err := host.GetSession(request.Context(), ref)
+		if err != nil {
+			writeJSON(response, http.StatusNotFound, map[string]string{"error": err.Error()})
+			return
+		}
+		turns, err := host.ListCanonicalSessionTurns(request.Context(), ref)
+		if err != nil {
+			writeJSON(response, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		messages, _, err := host.ListSessionMessages(request.Context(), ref, agenthost.SessionMessageQuery{Limit: 500, Order: storesqlite.MessageOrderAsc})
+		if err != nil {
+			writeJSON(response, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		interactions, err := host.GetSessionInteractionSnapshot(request.Context(), ref)
+		if err != nil {
+			writeJSON(response, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(response, http.StatusOK, map[string]any{
+			"workspaceId":  workspaceID,
+			"session":      session.Canonical,
+			"turns":        turns,
+			"messages":     messages.Messages,
+			"interactions": interactions.Interactions,
+		})
+	})
 	mux.HandleFunc("POST /v1/workspaces/{workspaceID}/agent-sessions/{agentSessionID}/turns/{turnID}/interactions/{requestID}/response", func(response http.ResponseWriter, request *http.Request) {
 		var input struct {
 			Action   string         `json:"action"`

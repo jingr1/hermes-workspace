@@ -53,7 +53,9 @@ export const Route = createFileRoute(
         try {
           const result = await new AgoraxManagedAgentHttpClient({ baseUrl, workspaceId })
             .respondToInteraction({ agentSessionId, turnId, requestId, ...(action ? { action } : {}), ...(optionId ? { optionId } : {}), ...(payload ? { payload } : {}) })
-          return json({ ok: true, result })
+          const activity = await new AgoraxManagedAgentHttpClient({ baseUrl, workspaceId })
+            .getActivitySnapshot(agentSessionId)
+          return json({ ok: true, result, activity })
         } catch (error) {
           return json(
             { ok: false, error: error instanceof Error ? error.message : String(error) },

@@ -227,10 +227,15 @@ import { Route as ApiRunsSessionKeyRunIdAbandonRouteImport } from './routes/api/
 import { Route as ApiRoomsRoomIdParticipantsParticipantIdRouteImport } from './routes/api/rooms/$roomId/participants/$participantId'
 import { Route as ApiAgentsAgentIdSessionsSessionIdRouteImport } from './routes/api/agents/$agentId/sessions/$sessionId'
 import { Route as ApiAgentsAgentIdInteractionsSessionIdRouteImport } from './routes/api/agents/$agentId/interactions/$sessionId'
+import { Route as ApiAgentsAgentIdEngineActivateRouteImport } from './routes/api/agents/$agentId/engine/activate'
+import { Route as ApiAgentsAgentIdActivitySessionIdRouteImport } from './routes/api/agents/$agentId/activity/$sessionId'
 import { Route as ApiRoomsRoomIdPendingTurnsTurnIdDismissRouteImport } from './routes/api/rooms/$roomId/pending-turns/$turnId/dismiss'
 import { Route as ApiRoomsRoomIdPendingTurnsTurnIdAnswerRouteImport } from './routes/api/rooms/$roomId/pending-turns/$turnId/answer'
 import { Route as ApiAgentsAgentIdRunsRunIdInterruptRouteImport } from './routes/api/agents/$agentId/runs/$runId/interrupt'
 import { Route as ApiAgentsAgentIdInteractionsSessionIdTurnIdRequestIdRouteImport } from './routes/api/agents/$agentId/interactions/$sessionId/$turnId/$requestId'
+import { Route as ApiAgentsAgentIdEngineSessionSessionIdInputRouteImport } from './routes/api/agents/$agentId/engine/session/$sessionId/input'
+import { Route as ApiAgentsAgentIdEngineSessionSessionIdEventsRouteImport } from './routes/api/agents/$agentId/engine/session/$sessionId/events'
+import { Route as ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdCancelRouteImport } from './routes/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/cancel'
 
 const VtCapitalRoute = VtCapitalRouteImport.update({
   id: '/vt-capital',
@@ -1346,6 +1351,18 @@ const ApiAgentsAgentIdInteractionsSessionIdRoute =
     path: '/api/agents/$agentId/interactions/$sessionId',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiAgentsAgentIdEngineActivateRoute =
+  ApiAgentsAgentIdEngineActivateRouteImport.update({
+    id: '/api/agents/$agentId/engine/activate',
+    path: '/api/agents/$agentId/engine/activate',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAgentsAgentIdActivitySessionIdRoute =
+  ApiAgentsAgentIdActivitySessionIdRouteImport.update({
+    id: '/api/agents/$agentId/activity/$sessionId',
+    path: '/api/agents/$agentId/activity/$sessionId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiRoomsRoomIdPendingTurnsTurnIdDismissRoute =
   ApiRoomsRoomIdPendingTurnsTurnIdDismissRouteImport.update({
     id: '/$turnId/dismiss',
@@ -1369,6 +1386,24 @@ const ApiAgentsAgentIdInteractionsSessionIdTurnIdRequestIdRoute =
     id: '/$turnId/$requestId',
     path: '/$turnId/$requestId',
     getParentRoute: () => ApiAgentsAgentIdInteractionsSessionIdRoute,
+  } as any)
+const ApiAgentsAgentIdEngineSessionSessionIdInputRoute =
+  ApiAgentsAgentIdEngineSessionSessionIdInputRouteImport.update({
+    id: '/api/agents/$agentId/engine/session/$sessionId/input',
+    path: '/api/agents/$agentId/engine/session/$sessionId/input',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAgentsAgentIdEngineSessionSessionIdEventsRoute =
+  ApiAgentsAgentIdEngineSessionSessionIdEventsRouteImport.update({
+    id: '/api/agents/$agentId/engine/session/$sessionId/events',
+    path: '/api/agents/$agentId/engine/session/$sessionId/events',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdCancelRoute =
+  ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdCancelRouteImport.update({
+    id: '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/cancel',
+    path: '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/cancel',
+    getParentRoute: () => rootRouteImport,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -1586,6 +1621,8 @@ export interface FileRoutesByFullPath {
   '/api/sessions/$sessionKey/compress': typeof ApiSessionsSessionKeyCompressRoute
   '/api/sessions/$sessionKey/status': typeof ApiSessionsSessionKeyStatusRoute
   '/api/sessions/$sessionKey/truncate': typeof ApiSessionsSessionKeyTruncateRoute
+  '/api/agents/$agentId/activity/$sessionId': typeof ApiAgentsAgentIdActivitySessionIdRoute
+  '/api/agents/$agentId/engine/activate': typeof ApiAgentsAgentIdEngineActivateRoute
   '/api/agents/$agentId/interactions/$sessionId': typeof ApiAgentsAgentIdInteractionsSessionIdRouteWithChildren
   '/api/agents/$agentId/sessions/$sessionId': typeof ApiAgentsAgentIdSessionsSessionIdRoute
   '/api/rooms/$roomId/participants/$participantId': typeof ApiRoomsRoomIdParticipantsParticipantIdRoute
@@ -1593,7 +1630,10 @@ export interface FileRoutesByFullPath {
   '/api/agents/$agentId/runs/$runId/interrupt': typeof ApiAgentsAgentIdRunsRunIdInterruptRoute
   '/api/rooms/$roomId/pending-turns/$turnId/answer': typeof ApiRoomsRoomIdPendingTurnsTurnIdAnswerRoute
   '/api/rooms/$roomId/pending-turns/$turnId/dismiss': typeof ApiRoomsRoomIdPendingTurnsTurnIdDismissRoute
+  '/api/agents/$agentId/engine/session/$sessionId/events': typeof ApiAgentsAgentIdEngineSessionSessionIdEventsRoute
+  '/api/agents/$agentId/engine/session/$sessionId/input': typeof ApiAgentsAgentIdEngineSessionSessionIdInputRoute
   '/api/agents/$agentId/interactions/$sessionId/$turnId/$requestId': typeof ApiAgentsAgentIdInteractionsSessionIdTurnIdRequestIdRoute
+  '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/cancel': typeof ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdCancelRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -1808,6 +1848,8 @@ export interface FileRoutesByTo {
   '/api/sessions/$sessionKey/compress': typeof ApiSessionsSessionKeyCompressRoute
   '/api/sessions/$sessionKey/status': typeof ApiSessionsSessionKeyStatusRoute
   '/api/sessions/$sessionKey/truncate': typeof ApiSessionsSessionKeyTruncateRoute
+  '/api/agents/$agentId/activity/$sessionId': typeof ApiAgentsAgentIdActivitySessionIdRoute
+  '/api/agents/$agentId/engine/activate': typeof ApiAgentsAgentIdEngineActivateRoute
   '/api/agents/$agentId/interactions/$sessionId': typeof ApiAgentsAgentIdInteractionsSessionIdRouteWithChildren
   '/api/agents/$agentId/sessions/$sessionId': typeof ApiAgentsAgentIdSessionsSessionIdRoute
   '/api/rooms/$roomId/participants/$participantId': typeof ApiRoomsRoomIdParticipantsParticipantIdRoute
@@ -1815,7 +1857,10 @@ export interface FileRoutesByTo {
   '/api/agents/$agentId/runs/$runId/interrupt': typeof ApiAgentsAgentIdRunsRunIdInterruptRoute
   '/api/rooms/$roomId/pending-turns/$turnId/answer': typeof ApiRoomsRoomIdPendingTurnsTurnIdAnswerRoute
   '/api/rooms/$roomId/pending-turns/$turnId/dismiss': typeof ApiRoomsRoomIdPendingTurnsTurnIdDismissRoute
+  '/api/agents/$agentId/engine/session/$sessionId/events': typeof ApiAgentsAgentIdEngineSessionSessionIdEventsRoute
+  '/api/agents/$agentId/engine/session/$sessionId/input': typeof ApiAgentsAgentIdEngineSessionSessionIdInputRoute
   '/api/agents/$agentId/interactions/$sessionId/$turnId/$requestId': typeof ApiAgentsAgentIdInteractionsSessionIdTurnIdRequestIdRoute
+  '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/cancel': typeof ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdCancelRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -2033,6 +2078,8 @@ export interface FileRoutesById {
   '/api/sessions/$sessionKey/compress': typeof ApiSessionsSessionKeyCompressRoute
   '/api/sessions/$sessionKey/status': typeof ApiSessionsSessionKeyStatusRoute
   '/api/sessions/$sessionKey/truncate': typeof ApiSessionsSessionKeyTruncateRoute
+  '/api/agents/$agentId/activity/$sessionId': typeof ApiAgentsAgentIdActivitySessionIdRoute
+  '/api/agents/$agentId/engine/activate': typeof ApiAgentsAgentIdEngineActivateRoute
   '/api/agents/$agentId/interactions/$sessionId': typeof ApiAgentsAgentIdInteractionsSessionIdRouteWithChildren
   '/api/agents/$agentId/sessions/$sessionId': typeof ApiAgentsAgentIdSessionsSessionIdRoute
   '/api/rooms/$roomId/participants/$participantId': typeof ApiRoomsRoomIdParticipantsParticipantIdRoute
@@ -2040,7 +2087,10 @@ export interface FileRoutesById {
   '/api/agents/$agentId/runs/$runId/interrupt': typeof ApiAgentsAgentIdRunsRunIdInterruptRoute
   '/api/rooms/$roomId/pending-turns/$turnId/answer': typeof ApiRoomsRoomIdPendingTurnsTurnIdAnswerRoute
   '/api/rooms/$roomId/pending-turns/$turnId/dismiss': typeof ApiRoomsRoomIdPendingTurnsTurnIdDismissRoute
+  '/api/agents/$agentId/engine/session/$sessionId/events': typeof ApiAgentsAgentIdEngineSessionSessionIdEventsRoute
+  '/api/agents/$agentId/engine/session/$sessionId/input': typeof ApiAgentsAgentIdEngineSessionSessionIdInputRoute
   '/api/agents/$agentId/interactions/$sessionId/$turnId/$requestId': typeof ApiAgentsAgentIdInteractionsSessionIdTurnIdRequestIdRoute
+  '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/cancel': typeof ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdCancelRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -2259,6 +2309,8 @@ export interface FileRouteTypes {
     | '/api/sessions/$sessionKey/compress'
     | '/api/sessions/$sessionKey/status'
     | '/api/sessions/$sessionKey/truncate'
+    | '/api/agents/$agentId/activity/$sessionId'
+    | '/api/agents/$agentId/engine/activate'
     | '/api/agents/$agentId/interactions/$sessionId'
     | '/api/agents/$agentId/sessions/$sessionId'
     | '/api/rooms/$roomId/participants/$participantId'
@@ -2266,7 +2318,10 @@ export interface FileRouteTypes {
     | '/api/agents/$agentId/runs/$runId/interrupt'
     | '/api/rooms/$roomId/pending-turns/$turnId/answer'
     | '/api/rooms/$roomId/pending-turns/$turnId/dismiss'
+    | '/api/agents/$agentId/engine/session/$sessionId/events'
+    | '/api/agents/$agentId/engine/session/$sessionId/input'
     | '/api/agents/$agentId/interactions/$sessionId/$turnId/$requestId'
+    | '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/cancel'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -2481,6 +2536,8 @@ export interface FileRouteTypes {
     | '/api/sessions/$sessionKey/compress'
     | '/api/sessions/$sessionKey/status'
     | '/api/sessions/$sessionKey/truncate'
+    | '/api/agents/$agentId/activity/$sessionId'
+    | '/api/agents/$agentId/engine/activate'
     | '/api/agents/$agentId/interactions/$sessionId'
     | '/api/agents/$agentId/sessions/$sessionId'
     | '/api/rooms/$roomId/participants/$participantId'
@@ -2488,7 +2545,10 @@ export interface FileRouteTypes {
     | '/api/agents/$agentId/runs/$runId/interrupt'
     | '/api/rooms/$roomId/pending-turns/$turnId/answer'
     | '/api/rooms/$roomId/pending-turns/$turnId/dismiss'
+    | '/api/agents/$agentId/engine/session/$sessionId/events'
+    | '/api/agents/$agentId/engine/session/$sessionId/input'
     | '/api/agents/$agentId/interactions/$sessionId/$turnId/$requestId'
+    | '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/cancel'
   id:
     | '__root__'
     | '/'
@@ -2705,6 +2765,8 @@ export interface FileRouteTypes {
     | '/api/sessions/$sessionKey/compress'
     | '/api/sessions/$sessionKey/status'
     | '/api/sessions/$sessionKey/truncate'
+    | '/api/agents/$agentId/activity/$sessionId'
+    | '/api/agents/$agentId/engine/activate'
     | '/api/agents/$agentId/interactions/$sessionId'
     | '/api/agents/$agentId/sessions/$sessionId'
     | '/api/rooms/$roomId/participants/$participantId'
@@ -2712,7 +2774,10 @@ export interface FileRouteTypes {
     | '/api/agents/$agentId/runs/$runId/interrupt'
     | '/api/rooms/$roomId/pending-turns/$turnId/answer'
     | '/api/rooms/$roomId/pending-turns/$turnId/dismiss'
+    | '/api/agents/$agentId/engine/session/$sessionId/events'
+    | '/api/agents/$agentId/engine/session/$sessionId/input'
     | '/api/agents/$agentId/interactions/$sessionId/$turnId/$requestId'
+    | '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/cancel'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -2888,9 +2953,14 @@ export interface RootRouteChildren {
   ApiAgentsCodexImplConfigRoute: typeof ApiAgentsCodexImplConfigRoute
   ApiAgentsCodexImplModelsRoute: typeof ApiAgentsCodexImplModelsRoute
   ApiRunsRunIdSteerRoute: typeof ApiRunsRunIdSteerRoute
+  ApiAgentsAgentIdActivitySessionIdRoute: typeof ApiAgentsAgentIdActivitySessionIdRoute
+  ApiAgentsAgentIdEngineActivateRoute: typeof ApiAgentsAgentIdEngineActivateRoute
   ApiAgentsAgentIdInteractionsSessionIdRoute: typeof ApiAgentsAgentIdInteractionsSessionIdRouteWithChildren
   ApiRunsSessionKeyRunIdAbandonRoute: typeof ApiRunsSessionKeyRunIdAbandonRoute
   ApiAgentsAgentIdRunsRunIdInterruptRoute: typeof ApiAgentsAgentIdRunsRunIdInterruptRoute
+  ApiAgentsAgentIdEngineSessionSessionIdEventsRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdEventsRoute
+  ApiAgentsAgentIdEngineSessionSessionIdInputRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdInputRoute
+  ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdCancelRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdCancelRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -4421,6 +4491,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentsAgentIdInteractionsSessionIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/agents/$agentId/engine/activate': {
+      id: '/api/agents/$agentId/engine/activate'
+      path: '/api/agents/$agentId/engine/activate'
+      fullPath: '/api/agents/$agentId/engine/activate'
+      preLoaderRoute: typeof ApiAgentsAgentIdEngineActivateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agents/$agentId/activity/$sessionId': {
+      id: '/api/agents/$agentId/activity/$sessionId'
+      path: '/api/agents/$agentId/activity/$sessionId'
+      fullPath: '/api/agents/$agentId/activity/$sessionId'
+      preLoaderRoute: typeof ApiAgentsAgentIdActivitySessionIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/rooms/$roomId/pending-turns/$turnId/dismiss': {
       id: '/api/rooms/$roomId/pending-turns/$turnId/dismiss'
       path: '/$turnId/dismiss'
@@ -4448,6 +4532,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/agents/$agentId/interactions/$sessionId/$turnId/$requestId'
       preLoaderRoute: typeof ApiAgentsAgentIdInteractionsSessionIdTurnIdRequestIdRouteImport
       parentRoute: typeof ApiAgentsAgentIdInteractionsSessionIdRoute
+    }
+    '/api/agents/$agentId/engine/session/$sessionId/input': {
+      id: '/api/agents/$agentId/engine/session/$sessionId/input'
+      path: '/api/agents/$agentId/engine/session/$sessionId/input'
+      fullPath: '/api/agents/$agentId/engine/session/$sessionId/input'
+      preLoaderRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdInputRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agents/$agentId/engine/session/$sessionId/events': {
+      id: '/api/agents/$agentId/engine/session/$sessionId/events'
+      path: '/api/agents/$agentId/engine/session/$sessionId/events'
+      fullPath: '/api/agents/$agentId/engine/session/$sessionId/events'
+      preLoaderRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdEventsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/cancel': {
+      id: '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/cancel'
+      path: '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/cancel'
+      fullPath: '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/cancel'
+      preLoaderRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdCancelRouteImport
+      parentRoute: typeof rootRouteImport
     }
   }
 }
@@ -4950,11 +5055,20 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentsCodexImplConfigRoute: ApiAgentsCodexImplConfigRoute,
   ApiAgentsCodexImplModelsRoute: ApiAgentsCodexImplModelsRoute,
   ApiRunsRunIdSteerRoute: ApiRunsRunIdSteerRoute,
+  ApiAgentsAgentIdActivitySessionIdRoute:
+    ApiAgentsAgentIdActivitySessionIdRoute,
+  ApiAgentsAgentIdEngineActivateRoute: ApiAgentsAgentIdEngineActivateRoute,
   ApiAgentsAgentIdInteractionsSessionIdRoute:
     ApiAgentsAgentIdInteractionsSessionIdRouteWithChildren,
   ApiRunsSessionKeyRunIdAbandonRoute: ApiRunsSessionKeyRunIdAbandonRoute,
   ApiAgentsAgentIdRunsRunIdInterruptRoute:
     ApiAgentsAgentIdRunsRunIdInterruptRoute,
+  ApiAgentsAgentIdEngineSessionSessionIdEventsRoute:
+    ApiAgentsAgentIdEngineSessionSessionIdEventsRoute,
+  ApiAgentsAgentIdEngineSessionSessionIdInputRoute:
+    ApiAgentsAgentIdEngineSessionSessionIdInputRoute,
+  ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdCancelRoute:
+    ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdCancelRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

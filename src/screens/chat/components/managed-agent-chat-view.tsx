@@ -209,7 +209,7 @@ export function ManagedAgentChatView({
             }
           >
             <ManagedAgentInteractionPanel
-              interactions={Object.values(chat.activitySnapshot?.interactionsById ?? {})}
+              interactions={chat.interactions}
               onRespond={chat.respondToInteraction}
             />
             <AgentChatMessagePane
