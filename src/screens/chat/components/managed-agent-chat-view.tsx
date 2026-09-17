@@ -5,6 +5,7 @@ import { toast } from '@/components/ui/toast'
 import { ChatScreen } from '../chat-screen'
 import { AgentChatFrame } from './agent-chat-frame'
 import { AgentChatMessagePane } from './agent-chat-message-pane'
+import { ManagedAgentInteractionPanel } from './managed-agent-interaction-panel'
 import { ChatEmptyState } from './chat-empty-state'
 import { CLAUDE_CODE_CHAT_BRAND, CODEX_CHAT_BRAND } from '../agent-chat-brands'
 import { createClaudeCodeSlashRuntime } from '../slash-commands/claude-code'
@@ -207,6 +208,10 @@ export function ManagedAgentChatView({
               ) : null
             }
           >
+            <ManagedAgentInteractionPanel
+              interactions={Object.values(chat.activitySnapshot?.interactionsById ?? {})}
+              onRespond={chat.respondToInteraction}
+            />
             <AgentChatMessagePane
               messages={chat.messages}
               waitingForResponse={chat.isStreaming}

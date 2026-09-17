@@ -3,6 +3,7 @@ import type {
   AgoraxManagedAgentBackend,
 } from './agorax-managed-agent-bridge'
 import { AgoraxManagedRunStore } from './agorax-managed-run-store'
+import type { AgoraxManagedPromptContentBlock } from './agorax-managed-prompt-content'
 
 export type AgoraxManagedAgentHttpClientOptions = {
   baseUrl: string
@@ -16,6 +17,7 @@ export type CreateAgoraxAgentSessionInput = {
   agentSessionId: string
   clientSubmitId: string
   content: string
+  promptContent?: Array<AgoraxManagedPromptContentBlock>
   cwd?: string
   model?: string
   title?: string
@@ -23,6 +25,7 @@ export type CreateAgoraxAgentSessionInput = {
 
 export type SendAgoraxAgentInput = {
   content: string
+  promptContent?: Array<AgoraxManagedPromptContentBlock>
   clientSubmitId: string
 }
 
@@ -63,7 +66,7 @@ export function agoraxAgentTargetIdForBackend(
 /**
  * Thin Agorax transport client for the embedded Managed Agent daemon API.
  *
- * It returns Tutti's canonical JSON projections without creating an Agorax
+ * It returns the embedded daemon's canonical JSON projections without creating an Agorax
  * session store or translating them into the legacy managed-chat schema.
  */
 export class AgoraxManagedAgentHttpClient {
@@ -116,7 +119,7 @@ export class AgoraxManagedAgentHttpClient {
           agentSessionId: input.agentSessionId,
           agentTargetId: agoraxAgentTargetIdForBackend(input.backend),
           clientSubmitId: input.clientSubmitId,
-          initialContent: [{ type: 'text', text: input.content }],
+          initialContent: input.promptContent ?? [{ type: 'text', text: input.content }],
           ...(input.cwd ? { cwd: input.cwd } : {}),
           ...(input.model ? { model: input.model, modelExplicit: true } : {}),
           ...(input.title ? { title: input.title } : {}),
@@ -135,7 +138,7 @@ export class AgoraxManagedAgentHttpClient {
         method: 'POST',
         body: JSON.stringify({
           clientSubmitId: input.clientSubmitId,
-          content: [{ type: 'text', text: input.content }],
+          content: input.promptContent ?? [{ type: 'text', text: input.content }],
         }),
       },
     )
@@ -165,10 +168,42 @@ export class AgoraxManagedAgentHttpClient {
     )
   }
 
+  listInteractions(agentSessionId: string): Promise<{
+    workspaceId: string
+    agentSessionId: string
+    interactions: Array<unknown>
+  }> {
+    return this.requestJson(
+      `/v1/workspaces/${encodeURIComponent(this.workspaceId)}/agent-sessions/${encodeURIComponent(agentSessionId)}/interactions`,
+      { method: 'GET' },
+    )
+  }
+
   cancelTurn(agentSessionId: string, turnId: string): Promise<unknown> {
     return this.requestJson(
       `/v1/workspaces/${encodeURIComponent(this.workspaceId)}/agent-sessions/${encodeURIComponent(agentSessionId)}/turns/${encodeURIComponent(turnId)}/cancel`,
       { method: 'POST' },
+    )
+  }
+
+  respondToInteraction(input: {
+    agentSessionId: string
+    turnId: string
+    requestId: string
+    action?: string
+    optionId?: string
+    payload?: Record<string, unknown>
+  }): Promise<unknown> {
+    return this.requestJson(
+      `/v1/workspaces/${encodeURIComponent(this.workspaceId)}/agent-sessions/${encodeURIComponent(input.agentSessionId)}/turns/${encodeURIComponent(input.turnId)}/interactions/${encodeURIComponent(input.requestId)}/response`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          ...(input.action ? { action: input.action } : {}),
+          ...(input.optionId ? { optionId: input.optionId } : {}),
+          ...(input.payload ? { payload: input.payload } : {}),
+        }),
+      },
     )
   }
 

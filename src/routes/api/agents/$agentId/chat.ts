@@ -9,6 +9,7 @@ import {
   resolveNativeSessionForRun,
 } from '../../../../server/agent-runtime/managed-chat-store'
 import { getAgentRuntimeRouter } from '../../../../server/agent-runtime/router'
+import { managedPromptContentFromAttachments } from '../../../../server/agent-runtime/agorax-managed-prompt-content'
 import type { AgentStreamEvent } from '../../../../server/agent-runtime/types'
 import { loadWorkspaceCatalog } from '../../workspace'
 import { buildWorkspaceScopedTextMessage } from '../../../../lib/workspace-message-scope'
@@ -87,6 +88,7 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
           typeof body.model === 'string' ? body.model.trim() : ''
         const requestedEffort =
           typeof body.effort === 'string' ? body.effort.trim() : ''
+        const attachments = Array.isArray(body.attachments) ? body.attachments : []
 
         const sessionId =
           typeof body.sessionId === 'string' && body.sessionId.trim()
@@ -124,10 +126,20 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
           `User: ${scopedUser}`,
           '直接回应用户，面向用户的叙述使用简体中文（代码、命令、技术标识保持英文）。如有需要可通过 MCP 使用 Hermes 工具。',
         ].join('\n')
+        let content
+        try {
+          content = managedPromptContentFromAttachments({ text: task, attachments })
+        } catch (error) {
+          return new Response(
+            JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
+            { status: 400, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
 
         const started = await startManagedChatRun({
           agentId,
           task,
+          content,
           ...(requestedModel ? { model: requestedModel } : {}),
           ...(requestedEffort ? { effort: requestedEffort } : {}),
           sessionId,
@@ -377,6 +389,14 @@ function relayEvent(
         type: 'error',
         runId: event.runId,
         message: event.message,
+      })
+      break
+    case 'activity':
+      send('activity', {
+        type: 'activity',
+        runId: event.runId,
+        workspaceId: event.workspaceId,
+        activity: event.activity,
       })
       break
   }

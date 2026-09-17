@@ -7,6 +7,7 @@ export type AgoraxManagedRunBinding = {
   runId: string
   backend: AgoraxManagedAgentBackend
   agentSessionId: string
+  displaySessionId?: string
   turnId?: string
   updatedAt: number
 }
@@ -19,6 +20,10 @@ const DEFAULT_ROOT = path.join(
 
 function bindingPath(root: string, runId: string): string {
   return path.join(root, `${encodeURIComponent(runId)}.json`)
+}
+
+function displaySessionPath(root: string, displaySessionId: string): string {
+  return path.join(root, `session-${encodeURIComponent(displaySessionId)}.json`)
 }
 
 /**
@@ -41,12 +46,32 @@ export class AgoraxManagedRunStore {
       mode: 0o600,
     })
     await rename(temporary, target)
+    if (binding.displaySessionId) {
+      const sessionTarget = displaySessionPath(this.root, binding.displaySessionId)
+      const sessionTemporary = `${sessionTarget}.${process.pid}.${Date.now()}.tmp`
+      await writeFile(sessionTemporary, `${JSON.stringify(binding, null, 2)}\n`, {
+        encoding: 'utf8',
+        mode: 0o600,
+      })
+      await rename(sessionTemporary, sessionTarget)
+    }
     return binding
   }
 
   async get(runId: string): Promise<AgoraxManagedRunBinding | null> {
     try {
       const raw = await readFile(bindingPath(this.root, runId), 'utf8')
+      return JSON.parse(raw) as AgoraxManagedRunBinding
+    } catch {
+      return null
+    }
+  }
+
+  async getByDisplaySession(
+    displaySessionId: string,
+  ): Promise<AgoraxManagedRunBinding | null> {
+    try {
+      const raw = await readFile(displaySessionPath(this.root, displaySessionId), 'utf8')
       return JSON.parse(raw) as AgoraxManagedRunBinding
     } catch {
       return null

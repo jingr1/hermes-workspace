@@ -55,6 +55,24 @@ describe('AgoraxManagedAgentActivityStream', () => {
     stream.connect()
     onMessage[0]!(frame)
     expect(onEvents).toHaveBeenCalledWith([
+      {
+        type: 'activity',
+        runId: 'run-1',
+        workspaceId: 'workspace-1',
+        activity: {
+          workspaceId: 'workspace-1',
+          agentSessionId: 'session-1',
+          eventType: 'message_delta',
+          data: {
+            agentSessionId: 'session-1',
+            messageId: 'message-1',
+            turnId: 'turn-1',
+            role: 'assistant',
+            kind: 'text',
+            content: { operation: 'append_text', text: 'hello' },
+          },
+        },
+      },
       { type: 'text_delta', runId: 'run-1', text: 'hello' },
     ])
     stream.close()

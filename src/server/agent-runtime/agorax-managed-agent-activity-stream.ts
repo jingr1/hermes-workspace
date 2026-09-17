@@ -81,7 +81,11 @@ export class AgoraxManagedAgentActivityStream {
         this.input.agentSessionId,
       )
       if (!activity) return
-      const events = agoraxEventsFromManagedActivity(this.input.runId, activity)
+      const events = agoraxEventsFromManagedActivity(
+        this.input.runId,
+        activity,
+        this.input.workspaceId,
+      )
       if (events.length > 0) this.input.onEvents(events)
     })
     socket.onError((error) => this.input.onError?.(error))

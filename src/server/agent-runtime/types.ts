@@ -1,3 +1,6 @@
+import type { AgentActivityEvent } from '@/lib/agent-activity-core'
+import type { AgoraxManagedPromptContentBlock } from './agorax-managed-prompt-content'
+
 /**
  * AgentRuntime type contracts — plan «AgentRuntime：控制通道与展示通道分离».
  *
@@ -35,6 +38,12 @@ export type AgentStreamEvent =
   | { type: 'run_exited'; runId: string; exitCode: number | null }
   | { type: 'error'; runId: string; message: string }
   | {
+      type: 'activity'
+      runId: string
+      workspaceId: string
+      activity: AgentActivityEvent
+    }
+  | {
       type: 'native_session'
       runId: string
       sessionId: string
@@ -53,6 +62,8 @@ export type AgentRunInput = {
   agentId: string
   /** The rendered instruction text for this stage/run. */
   task: string
+  /** Canonical structured prompt content for runtimes that support it. */
+  content?: Array<AgoraxManagedPromptContentBlock>
   /** Working directory (per-mission worktree in P2b; repo cwd today). */
   cwd?: string
   roomId?: string | null

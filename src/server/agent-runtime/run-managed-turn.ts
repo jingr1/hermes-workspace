@@ -120,6 +120,7 @@ export async function runManagedTurn(
       runId,
       agentId: input.agentId,
       task: input.task,
+      taskId: chatSessionId,
       ...(input.model ? { model: input.model } : {}),
       ...(input.effort ? { effort: input.effort } : {}),
       ...(input.cwd ? { cwd: input.cwd } : {}),
@@ -271,6 +272,7 @@ export async function startManagedChatRun(input: {
   task: string
   model?: string
   effort?: string
+  content?: AgentRunInput['content']
   sessionId?: string | null
   roomId?: string | null
   cwd?: string | null
@@ -328,6 +330,7 @@ export async function startManagedChatRun(input: {
       runId,
       agentId: input.agentId,
       task: input.task,
+      ...(input.content ? { content: input.content } : {}),
       ...(input.model ? { model: input.model } : {}),
       ...(input.effort ? { effort: input.effort } : {}),
       ...(input.cwd ? { cwd: input.cwd } : {}),

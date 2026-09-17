@@ -28,11 +28,23 @@ export type AgentActivityTurn = {
   outcome: AgentActivityTurnOutcome | null
 }
 
+export type AgentActivityInteraction = {
+  requestId: string
+  turnId: string
+  kind: 'approval' | 'question' | 'plan'
+  status: 'pending' | 'answered' | 'superseded'
+  toolName?: string
+  input?: Record<string, unknown>
+  output?: Record<string, unknown>
+  metadata?: Record<string, unknown>
+}
+
 export type AgentActivitySnapshot = {
   workspaceId: string
   agentSessionId: string
   messagesById: Record<string, AgentActivityMessage>
   turnsById: Record<string, AgentActivityTurn>
+  interactionsById: Record<string, AgentActivityInteraction>
 }
 
 export type AgentActivityEvent =
@@ -60,12 +72,19 @@ export type AgentActivityEvent =
         turn: AgentActivityTurn
       }
     }
+  | {
+      eventType: 'interaction_update'
+      data: {
+        agentSessionId: string
+        interaction: AgentActivityInteraction
+      }
+    }
 
 export function createAgentActivitySnapshot(input: {
   workspaceId: string
   agentSessionId: string
 }): AgentActivitySnapshot {
-  return { ...input, messagesById: {}, turnsById: {} }
+  return { ...input, messagesById: {}, turnsById: {}, interactionsById: {} }
 }
 
 export function applyAgentActivityEvent(
@@ -88,6 +107,16 @@ export function applyAgentActivityEvent(
           kind: event.data.kind,
           content: event.data.payloadSet ?? content,
         },
+      },
+    }
+  }
+
+  if (event.eventType === 'interaction_update') {
+    return {
+      ...snapshot,
+      interactionsById: {
+        ...snapshot.interactionsById,
+        [event.data.interaction.requestId]: event.data.interaction,
       },
     }
   }

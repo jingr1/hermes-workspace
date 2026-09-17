@@ -116,6 +116,26 @@ export function createAgoraxManagedAgentTransport(
     probe: (backend: AgoraxManagedAgentBackend): Promise<AgentProbeResult> =>
       client.probe(backend),
     startRun: async ({ backend, run }: { backend: AgoraxManagedAgentBackend; run: AgentRunInput; mcp: McpHandshake }) => {
+      const displaySessionId = run.taskId?.trim()
+      const existing = displaySessionId
+        ? await runStore.getByDisplaySession(displaySessionId)
+        : null
+      if (existing && existing.backend === backend) {
+        const response = await client.sendInput(existing.agentSessionId, {
+          clientSubmitId: run.runId,
+          content: run.task,
+          ...(run.content ? { promptContent: run.content } : {}),
+        })
+        await runStore.bind({
+          runId: run.runId,
+          backend,
+          agentSessionId: existing.agentSessionId,
+          ...(displaySessionId ? { displaySessionId } : {}),
+          turnId: response.turnId,
+        })
+        ensureQueue(run.runId, { agentSessionId: existing.agentSessionId })
+        return { runId: run.runId }
+      }
       const response = await client.createSessionForRun({
         runId: run.runId,
         runStore,
@@ -124,10 +144,20 @@ export function createAgoraxManagedAgentTransport(
           agentSessionId: run.runId,
           clientSubmitId: run.runId,
           content: run.task,
+          ...(run.content ? { promptContent: run.content } : {}),
           ...(run.cwd ? { cwd: run.cwd } : {}),
           ...(run.model ? { model: run.model } : {}),
         },
       })
+      if (displaySessionId) {
+        await runStore.bind({
+          runId: run.runId,
+          backend,
+          agentSessionId: response.session.id,
+          displaySessionId,
+          ...(response.session.activeTurnId ? { turnId: response.session.activeTurnId } : {}),
+        })
+      }
       ensureQueue(run.runId, { agentSessionId: response.session.id })
       return { runId: run.runId }
     },

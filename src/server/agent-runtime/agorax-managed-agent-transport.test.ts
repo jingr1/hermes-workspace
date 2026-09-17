@@ -36,6 +36,48 @@ describe('createAgoraxManagedAgentTransport', () => {
         },
       },
     })
-    await expect(events.next()).resolves.toEqual({ value: { type: 'text_delta', runId: 'run-1', text: 'hi' }, done: false })
+    await expect(events.next()).resolves.toEqual({
+      value: expect.objectContaining({
+        type: 'activity',
+        runId: 'run-1',
+        workspaceId: 'workspace-1',
+      }),
+      done: false,
+    })
+    await expect(events.next()).resolves.toEqual({
+      value: { type: 'text_delta', runId: 'run-1', text: 'hi' },
+      done: false,
+    })
+  })
+
+  it('reuses the canonical session for a later display-session turn', async () => {
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ session: { id: 'session-1', activeTurnId: 'turn-1' } }), { status: 201 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ kind: 'turn', turnId: 'turn-2' }), { status: 200 }))
+    const root = `/tmp/agorax-transport-${Date.now()}-resume`
+    const transport = createAgoraxManagedAgentTransport({
+      baseUrl: 'http://managed-agent.test',
+      workspaceId: 'workspace-1',
+      fetchImpl,
+      runStore: new AgoraxManagedRunStore(root),
+      socketFactory: () => ({ onMessage: () => undefined, onError: () => undefined, close: () => undefined }),
+    })
+
+    await transport.startRun({
+      backend: 'codex',
+      run: { runId: 'run-1', agentId: 'codex', task: 'first', taskId: 'display-1' },
+      mcp: { endpoint: 'unused', runToken: 'unused', toolAllowlist: [] },
+    })
+    await transport.startRun({
+      backend: 'codex',
+      run: { runId: 'run-2', agentId: 'codex', task: 'second', taskId: 'display-1' },
+      mcp: { endpoint: 'unused', runToken: 'unused', toolAllowlist: [] },
+    })
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      'http://managed-agent.test/v1/workspaces/workspace-1/agent-sessions/session-1/input',
+      expect.objectContaining({ method: 'POST' }),
+    )
   })
 })

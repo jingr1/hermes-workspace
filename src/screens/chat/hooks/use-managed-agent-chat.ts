@@ -11,6 +11,12 @@ import {
   PENDING_SESSION_MODEL_KEY,
   useSessionModelStore,
 } from '@/stores/session-model-store'
+import {
+  applyAgentActivityEvent,
+  createAgentActivitySnapshot,
+  type AgentActivityEvent,
+  type AgentActivitySnapshot,
+} from '@/lib/agent-activity-core'
 import { writeLastSession } from '../last-session'
 import type { ChatMessage, ChatAttachment } from '../types'
 
@@ -37,6 +43,12 @@ type ExternalChatEvent =
     }
   | { type: 'run_exited'; runId: string; exitCode: number | null }
   | { type: 'error'; runId: string; message: string }
+  | {
+      type: 'activity'
+      runId: string
+      workspaceId: string
+      activity: AgentActivityEvent
+    }
   | { type: 'heartbeat'; timestamp: number }
   | { type: 'run_started'; runId: string; agentId: string }
   | { type: 'native_session'; runId: string; sessionId: string }
@@ -140,6 +152,17 @@ function parseSSEDataLine(
           runId: String(parsed.runId ?? ''),
           message: String(parsed.message ?? ''),
         }
+      case 'activity': {
+        const activity = parsed.activity
+        const workspaceId = String(parsed.workspaceId ?? '')
+        if (!activity || typeof activity !== 'object' || !workspaceId) return null
+        return {
+          type: 'activity',
+          runId: String(parsed.runId ?? ''),
+          workspaceId,
+          activity: activity as AgentActivityEvent,
+        }
+      }
       case 'heartbeat':
         return {
           type: 'heartbeat',
@@ -168,6 +191,7 @@ export type ManagedAgentChat = {
   /** Live tool calls for ThinkingBubble — not written into the message bubble. */
   activeToolCalls: Array<{ id: string; name: string; phase: string; args?: unknown }>
   error: string | null
+  activitySnapshot: AgentActivitySnapshot | null
   activeTitle: string
   submit: (
     text: string,
@@ -177,6 +201,11 @@ export type ManagedAgentChat = {
   abort: () => void
   clearMessages: () => void
   startNewSession: () => void
+  respondToInteraction: (input: {
+    turnId: string
+    requestId: string
+    optionId: string
+  }) => Promise<void>
 }
 
 /**
@@ -207,6 +236,8 @@ export function useManagedAgentChat({
     Array<{ id: string; name: string; phase: string; args?: unknown }>
   >([])
   const [error, setError] = useState<string | null>(null)
+  const [activitySnapshot, setActivitySnapshot] =
+    useState<AgentActivitySnapshot | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const activeRunIdRef = useRef<string | null>(null)
   const streamingMessageRef = useRef<ChatMessage | null>(null)
@@ -241,6 +272,7 @@ export function useManagedAgentChat({
     setIsStreaming(false)
     setActiveToolCalls([])
     setError(null)
+    setActivitySnapshot(null)
 
     if (activeSessionId.startsWith('new-')) {
       setMessages([])
@@ -259,6 +291,53 @@ export function useManagedAgentChat({
         if (loadGenerationRef.current !== generation) return
         setMessages([])
       })
+    void fetch(
+      `/api/agents/${encodeURIComponent(agentId)}/interactions/${encodeURIComponent(activeSessionId)}`,
+    )
+      .then(async (response) => {
+        if (!response.ok) return null
+        return (await response.json()) as {
+          workspaceId?: unknown
+          agentSessionId?: unknown
+          interactions?: unknown
+        }
+      })
+      .then((payload) => {
+        if (loadGenerationRef.current !== generation || !payload) return
+        const workspaceId = typeof payload.workspaceId === 'string' ? payload.workspaceId : ''
+        const agentSessionId = typeof payload.agentSessionId === 'string' ? payload.agentSessionId : ''
+        if (!workspaceId || !agentSessionId || !Array.isArray(payload.interactions)) return
+        setActivitySnapshot(() => {
+          let snapshot = createAgentActivitySnapshot({ workspaceId, agentSessionId })
+          for (const interaction of payload.interactions) {
+            if (!interaction || typeof interaction !== 'object') continue
+            const record = interaction as Record<string, unknown>
+            const requestId = typeof record.RequestID === 'string' ? record.RequestID : ''
+            const turnId = typeof record.TurnID === 'string' ? record.TurnID : ''
+            const kind = typeof record.Kind === 'string' ? record.Kind : ''
+            const status = typeof record.Status === 'string' ? record.Status : ''
+            if (!requestId || !turnId || (kind !== 'approval' && kind !== 'question' && kind !== 'plan') || (status !== 'pending' && status !== 'answered' && status !== 'superseded')) continue
+            snapshot = applyAgentActivityEvent(snapshot, {
+              eventType: 'interaction_update',
+              data: {
+                agentSessionId,
+                interaction: {
+                  requestId,
+                  turnId,
+                  kind,
+                  status,
+                  ...(typeof record.ToolName === 'string' ? { toolName: record.ToolName } : {}),
+                  ...(record.Input && typeof record.Input === 'object' ? { input: record.Input as Record<string, unknown> } : {}),
+                  ...(record.Output && typeof record.Output === 'object' ? { output: record.Output as Record<string, unknown> } : {}),
+                  ...(record.Metadata && typeof record.Metadata === 'object' ? { metadata: record.Metadata as Record<string, unknown> } : {}),
+                },
+              },
+            })
+          }
+          return snapshot
+        })
+      })
+      .catch(() => undefined)
   }, [agentId, activeSessionId, upsertSession])
 
   useEffect(() => {
@@ -311,6 +390,7 @@ export function useManagedAgentChat({
       resolvedAgentId: string,
       resolvedSessionId: string,
       text: string,
+      attachments: Array<ComposerAttachment>,
       model?: string,
       effort?: string,
     ) => {
@@ -335,6 +415,7 @@ export function useManagedAgentChat({
             body: JSON.stringify({
               message: text,
               sessionId: resolvedSessionId,
+              attachments,
               ...(model ? { model } : {}),
               ...(effort ? { effort } : {}),
             }),
@@ -378,6 +459,19 @@ export function useManagedAgentChat({
             currentEventName = ''
             if (event.type === 'connected') {
               activeRunIdRef.current = event.runId
+            } else if (event.type === 'activity') {
+              setActivitySnapshot((current) => {
+                const snapshot =
+                  current &&
+                  current.workspaceId === event.workspaceId &&
+                  current.agentSessionId === event.activity.data.agentSessionId
+                    ? current
+                    : createAgentActivitySnapshot({
+                        workspaceId: event.workspaceId,
+                        agentSessionId: event.activity.data.agentSessionId,
+                      })
+                return applyAgentActivityEvent(snapshot, event.activity)
+              })
             } else if (event.type === 'text_delta') {
               appendStreamingText(event.text)
             } else if (event.type === 'thinking') {
@@ -499,6 +593,7 @@ export function useManagedAgentChat({
           agentId,
           resolvedSessionId,
           text,
+          attachments,
           modelForRun,
           effortForRun,
         )
@@ -509,6 +604,8 @@ export function useManagedAgentChat({
         agentId,
         resolvedSessionId,
         text,
+          attachments,
+        attachments,
         modelForRun || getStoredModel(resolvedSessionId),
         effortForRun,
       )
@@ -549,6 +646,28 @@ export function useManagedAgentChat({
     }
   }, [abort, agentId, activeSessionId])
 
+  const respondToInteraction = useCallback(
+    async ({ turnId, requestId, optionId }: { turnId: string; requestId: string; optionId: string }) => {
+      const agentSessionId = activitySnapshot?.agentSessionId
+      if (!agentSessionId) {
+        throw new Error('Interaction session is not available')
+      }
+      const response = await fetch(
+        `/api/agents/${encodeURIComponent(agentId)}/interactions/${encodeURIComponent(agentSessionId)}/${encodeURIComponent(turnId)}/${encodeURIComponent(requestId)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ optionId }),
+        },
+      )
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: string } | null
+        throw new Error(body?.error || `Interaction response failed: ${response.status}`)
+      }
+    },
+    [activitySnapshot?.agentSessionId, agentId],
+  )
+
   const startNewSession = useCallback(() => {
     // New chat: detach UI only; leave any background run to finish+persist.
     abortControllerRef.current?.abort()
@@ -576,10 +695,12 @@ export function useManagedAgentChat({
     isStreaming,
     activeToolCalls,
     error,
+    activitySnapshot,
     activeTitle,
     submit,
     abort,
     clearMessages: clearSessionMessages,
     startNewSession,
+    respondToInteraction,
   }
 }

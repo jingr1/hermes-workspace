@@ -9,7 +9,7 @@ import {
 import { AgoraxManagedRunStore } from './agorax-managed-run-store'
 
 describe('AgoraxManagedAgentHttpClient', () => {
-  it('maps the selected backends to Tutti target ids', () => {
+  it('maps the selected backends to canonical target ids', () => {
     expect(agoraxAgentTargetIdForBackend('claude-code')).toBe('local:claude-code')
     expect(agoraxAgentTargetIdForBackend('codex')).toBe('local:codex')
     expect(agoraxAgentTargetIdForBackend('cursor')).toBe('local:cursor')
@@ -82,6 +82,16 @@ describe('AgoraxManagedAgentHttpClient', () => {
     await client.sendInput('session-1', {
       clientSubmitId: 'submit-2',
       content: 'continue',
+      promptContent: [
+        { type: 'text', text: 'continue' },
+        {
+          type: 'image',
+          mimeType: 'image/png',
+          data: 'aGVsbG8=',
+          attachmentId: 'image-1',
+          name: 'diagram.png',
+        },
+      ],
     })
 
     expect(fetchImpl).toHaveBeenNthCalledWith(
@@ -94,9 +104,68 @@ describe('AgoraxManagedAgentHttpClient', () => {
       'http://127.0.0.1:9120/v1/workspaces/workspace%2F1/agent-sessions/session-1/input',
       expect.objectContaining({ method: 'POST' }),
     )
+    expect(fetchImpl.mock.calls[1]?.[1]).toMatchObject({
+      body: JSON.stringify({
+        clientSubmitId: 'submit-2',
+        content: [
+          { type: 'text', text: 'continue' },
+          {
+            type: 'image',
+            mimeType: 'image/png',
+            data: 'aGVsbG8=',
+            attachmentId: 'image-1',
+            name: 'diagram.png',
+          },
+        ],
+      }),
+    })
   })
 
-  it('binds a display run to the canonical session returned by Tutti', async () => {
+  it('responds to an interaction using its complete canonical identity', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    )
+    const client = new AgoraxManagedAgentHttpClient({
+      baseUrl: 'http://127.0.0.1:9120',
+      workspaceId: 'workspace/1',
+      fetchImpl,
+    })
+
+    await client.respondToInteraction({
+      agentSessionId: 'session-1',
+      turnId: 'turn-1',
+      requestId: 'request-1',
+      optionId: 'allow',
+    })
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://127.0.0.1:9120/v1/workspaces/workspace%2F1/agent-sessions/session-1/turns/turn-1/interactions/request-1/response',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ optionId: 'allow' }),
+      }),
+    )
+  })
+
+  it('reads interactions from the canonical session endpoint', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ interactions: [] }), { status: 200 }),
+    )
+    const client = new AgoraxManagedAgentHttpClient({
+      baseUrl: 'http://127.0.0.1:9120',
+      workspaceId: 'workspace/1',
+      fetchImpl,
+    })
+
+    await client.listInteractions('session-1')
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://127.0.0.1:9120/v1/workspaces/workspace%2F1/agent-sessions/session-1/interactions',
+      expect.objectContaining({ method: 'GET' }),
+    )
+  })
+
+  it('binds a display run to the canonical session returned by the daemon', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(
         JSON.stringify({

@@ -45,4 +45,29 @@ describe('agent activity core', () => {
       outcome: 'completed',
     })
   })
+
+  it('projects a pending interaction by its canonical request identity', () => {
+    const snapshot = createAgentActivitySnapshot({
+      workspaceId: 'workspace-1',
+      agentSessionId: 'session-1',
+    })
+    const updated = applyAgentActivityEvent(snapshot, {
+      eventType: 'interaction_update',
+      data: {
+        agentSessionId: 'session-1',
+        interaction: {
+          requestId: 'request-1',
+          turnId: 'turn-1',
+          kind: 'approval',
+          status: 'pending',
+          input: { title: 'Apply changes?' },
+        },
+      },
+    })
+
+    expect(updated.interactionsById['request-1']).toMatchObject({
+      turnId: 'turn-1',
+      status: 'pending',
+    })
+  })
 })

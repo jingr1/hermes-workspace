@@ -15,7 +15,25 @@ describe('agoraxEventsFromManagedActivity', () => {
           content: { operation: 'append_text', text: 'hello' },
         },
       }),
-    ).toEqual([{ type: 'text_delta', runId: 'run-1', text: 'hello' }])
+    ).toEqual([
+      {
+        type: 'activity',
+        runId: 'run-1',
+        workspaceId: 'default',
+        activity: {
+          eventType: 'message_delta',
+          data: {
+            agentSessionId: 'session-1',
+            messageId: 'message-1',
+            turnId: 'turn-1',
+            role: 'assistant',
+            kind: 'text',
+            content: { operation: 'append_text', text: 'hello' },
+          },
+        },
+      },
+      { type: 'text_delta', runId: 'run-1', text: 'hello' },
+    ])
   })
 
   it('does not expose user or empty message deltas', () => {
@@ -31,7 +49,13 @@ describe('agoraxEventsFromManagedActivity', () => {
           content: { operation: 'append_text', text: 'prompt' },
         },
       }),
-    ).toEqual([])
+    ).toEqual([
+      expect.objectContaining({
+        type: 'activity',
+        runId: 'run-1',
+        workspaceId: 'default',
+      }),
+    ])
   })
 
   it('only projects a settled canonical turn as terminal', () => {
@@ -52,7 +76,12 @@ describe('agoraxEventsFromManagedActivity', () => {
       },
     })
 
-    expect(running).toEqual([])
-    expect(failed).toEqual([{ type: 'run_exited', runId: 'run-1', exitCode: 1 }])
+    expect(running).toEqual([
+      expect.objectContaining({ type: 'activity', runId: 'run-1' }),
+    ])
+    expect(failed).toEqual([
+      expect.objectContaining({ type: 'activity', runId: 'run-1' }),
+      { type: 'run_exited', runId: 'run-1', exitCode: 1 },
+    ])
   })
 })
