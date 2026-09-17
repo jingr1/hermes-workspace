@@ -1,38 +1,7 @@
 import type { AgentStreamEvent } from './types'
+import type { AgentActivityEvent } from '@/lib/agent-activity-core'
 
-type ActivityMessageDelta = {
-  eventType: 'message_delta'
-  data: {
-    agentSessionId: string
-    messageId: string
-    turnId: string
-    role: string
-    kind: string
-    content?: {
-      operation: 'append_text' | 'set'
-      text?: string
-      value?: unknown
-    }
-    payloadSet?: Record<string, unknown>
-  }
-}
-
-type ActivityTurnUpdate = {
-  eventType: 'turn_update'
-  data: {
-    agentSessionId: string
-    activeTurnId: string | null
-    turn: {
-      turnId: string
-      phase: 'submitted' | 'running' | 'waiting' | 'settling' | 'settled'
-      outcome: null | 'completed' | 'failed' | 'canceled' | 'interrupted'
-    }
-  }
-}
-
-export type AgoraxManagedAgentActivity =
-  | ActivityMessageDelta
-  | ActivityTurnUpdate
+export type AgoraxManagedAgentActivity = AgentActivityEvent
 
 /**
  * Converts only canonical Tutti activity facts into the legacy stream shape
