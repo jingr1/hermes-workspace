@@ -95,8 +95,14 @@ export class AgentRuntimeRouter {
       case 'hermes':
         return new HermesAdapterStub(decl)
       case 'claude-code':
+        if (agoraxManagedTransport) {
+          return new AgoraxManagedAgentBridge('claude-code', agoraxManagedTransport)
+        }
         return new ClaudeCodeAdapter(decl)
       case 'codex':
+        if (agoraxManagedTransport) {
+          return new AgoraxManagedAgentBridge('codex', agoraxManagedTransport)
+        }
         return new CodexAdapter(decl)
       case 'cursor':
       case 'kimi':

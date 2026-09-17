@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
-import { usageHandler } from './handler'
+import { usageHandler } from './-handler'
 import { getUsageTrends } from '../../../server/usage/usage-aggregator'
 import type { UsageFilters } from '../../../server/usage/usage-types'
 
