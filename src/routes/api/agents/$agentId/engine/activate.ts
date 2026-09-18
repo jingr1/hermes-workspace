@@ -6,6 +6,9 @@ import { isAgoraxManagedAgentBackend } from '../../../../../server/agent-runtime
 import { AgoraxManagedRunStore } from '../../../../../server/agent-runtime/agorax-managed-run-store'
 import { startManagedChatRun } from '../../../../../server/agent-runtime/run-managed-turn'
 import { getAgentRuntimeRouter } from '../../../../../server/agent-runtime/router'
+import { ensureManagedChatSession } from '../../../../../server/agent-runtime/managed-chat-store'
+import { managedPromptContentBlocksFromUnknown, type AgoraxManagedPromptContentBlock } from '@/lib/managed-agent-runtime/prompt-content'
+import type { ManagedAgentActivateResponseDto } from '@/lib/managed-agent-runtime/command-dtos'
 
 export const Route = createFileRoute('/api/agents/$agentId/engine/activate')({
   server: {
@@ -25,26 +28,49 @@ export const Route = createFileRoute('/api/agents/$agentId/engine/activate')({
           return json({ error: 'Managed Agent is unavailable' }, { status: 404 })
         }
         const model = typeof body?.model === 'string' ? body.model.trim() : ''
-        const promptContent = Array.isArray(body?.promptContent) ? body.promptContent : undefined
+        let promptContent: Array<AgoraxManagedPromptContentBlock>
+        try {
+          promptContent = managedPromptContentBlocksFromUnknown(body?.promptContent)
+        } catch (error) {
+          return json({ error: error instanceof Error ? error.message : String(error) }, { status: 400 })
+        }
+        ensureManagedChatSession({
+          id: displaySessionId,
+          agentId,
+          runtime: declaration.runtime,
+          ...(model ? { model } : {}),
+        })
         const started = await startManagedChatRun({
           agentId,
           runId: agentSessionId,
           sessionId: displaySessionId,
           task: message,
-          ...(promptContent ? { content: promptContent as never } : {}),
+          ...(promptContent.length ? { content: promptContent } : {}),
           ...(model ? { model } : {}),
         })
         if (!started.ok) return json({ error: started.error }, { status: started.status })
-        const binding = await new AgoraxManagedRunStore().get(agentSessionId)
+        const runStore = new AgoraxManagedRunStore()
+        const binding = await runStore.get(agentSessionId)
         const baseUrl = process.env.AGORAX_MANAGED_AGENT_URL?.trim()
         const workspaceId = process.env.AGORAX_WORKSPACE_ID?.trim()
         if (!binding || !baseUrl || !workspaceId) {
           return json({ error: 'Managed Agent canonical binding is unavailable' }, { status: 503 })
         }
+        await runStore.bind({
+          runId: binding.runId,
+          backend: binding.backend,
+          agentSessionId: binding.agentSessionId,
+          displaySessionId,
+          ...(binding.turnId ? { turnId: binding.turnId } : {}),
+        })
         try {
           const activity = await new AgoraxManagedAgentHttpClient({ baseUrl, workspaceId })
             .getActivitySnapshot(binding.agentSessionId)
-          return json({ runId: started.runId, activity })
+          const response: ManagedAgentActivateResponseDto = {
+            runId: started.runId,
+            activity,
+          }
+          return json(response)
         } catch (error) {
           return json({ error: error instanceof Error ? error.message : String(error) }, { status: 502 })
         }

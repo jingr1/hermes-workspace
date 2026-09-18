@@ -17,19 +17,33 @@ export const Route = createFileRoute('/api/agents/$agentId/activity/$sessionId')
         if (!declaration || !isAgoraxManagedAgentBackend(declaration.runtime)) {
           return json({ error: 'Managed Agent is unavailable' }, { status: 404 })
         }
-        const binding = await new AgoraxManagedRunStore().getByDisplaySession(displaySessionId)
-        if (!binding || binding.backend !== declaration.runtime) {
-          return json({ error: 'Canonical session is unavailable' }, { status: 404 })
-        }
+        const runStore = new AgoraxManagedRunStore()
+        const displayBinding = await runStore.getByDisplaySession(displaySessionId)
+        const binding = displayBinding?.backend === declaration.runtime
+          ? displayBinding
+          : await runStore.get(displaySessionId)
         const baseUrl = process.env.AGORAX_MANAGED_AGENT_URL?.trim()
         const workspaceId = process.env.AGORAX_WORKSPACE_ID?.trim()
         if (!baseUrl || !workspaceId) {
           return json({ error: 'Managed Agent transport is not configured' }, { status: 503 })
         }
         try {
-          return json(await new AgoraxManagedAgentHttpClient({ baseUrl, workspaceId })
-            .getActivitySnapshot(binding.agentSessionId))
+          const client = new AgoraxManagedAgentHttpClient({ baseUrl, workspaceId })
+          const agentSessionId = binding?.backend === declaration.runtime
+            ? binding.agentSessionId
+            : displaySessionId
+          const activity = await client.getActivitySnapshot(agentSessionId)
+          if (!binding) {
+            await runStore.bind({
+              runId: agentSessionId,
+              backend: declaration.runtime,
+              agentSessionId,
+              displaySessionId,
+            })
+          }
+          return json(activity)
         } catch (error) {
+          if (!binding) return json({ error: 'Canonical session is unavailable' }, { status: 404 })
           return json(
             { error: error instanceof Error ? error.message : String(error) },
             { status: 502 },

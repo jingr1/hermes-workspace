@@ -221,4 +221,16 @@ describe('AgoraxManagedAgentHttpClient', () => {
       await rm(root, { recursive: true, force: true })
     }
   })
+
+  it('normalizes the embedded daemon Go response shape', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      new Response(JSON.stringify({ Canonical: { ID: 'session-1', ActiveTurnID: 'turn-1' }, TurnID: 'turn-1' }), { status: 201 }),
+    ).mockResolvedValueOnce(
+      new Response(JSON.stringify({ Canonical: { ID: 'session-1', ActiveTurnID: 'turn-2' }, TurnID: 'turn-2', Turn: { TurnID: 'turn-2' } }), { status: 200 }),
+    )
+    const client = new AgoraxManagedAgentHttpClient({ baseUrl: 'http://127.0.0.1:9120', workspaceId: 'workspace-1', fetchImpl })
+
+    await expect(client.createSession({ backend: 'codex', agentSessionId: 'session-1', clientSubmitId: 'submit-1', content: 'hello' })).resolves.toEqual({ session: { id: 'session-1', activeTurnId: 'turn-1' } })
+    await expect(client.sendInput('session-1', { clientSubmitId: 'submit-2', content: 'next' })).resolves.toMatchObject({ turnId: 'turn-2', session: { id: 'session-1' } })
+  })
 })

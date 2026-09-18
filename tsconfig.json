@@ -28,7 +28,9 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@agorax/agent-activity-core": ["./packages/agent-activity-core/src/index.ts"],
+      "@agorax/agent-activity-daemon-adapter": ["./packages/agent-activity-daemon-adapter/src/index.ts"]
     }
   }
 }

@@ -25,6 +25,7 @@ import {
   resolveNativeSessionForRun,
   roomManagedSessionId,
 } from '../agent-runtime/managed-chat-store'
+import { upsertManagedInteractionCard } from './managed-interaction-cards'
 import {
   GROUP_TURN_HARD_CAP_MS,
   GROUP_TURN_POLL_MS,
@@ -92,6 +93,11 @@ async function executeManagedMemberTurn(
   })
   const native = resolveNativeSessionForRun({ sessionId })
 
+  // Set while the canonical stream reports this turn's interaction as pending:
+  // the drain loop then waits past the soft deadline (hard cap still bounds)
+  // so a human can answer the room card without the run being interrupted.
+  let awaitingInteraction = false
+
   const result = await runManagedTurn({
     agentId: opts.member.participantId,
     task: opts.prompt,
@@ -100,6 +106,7 @@ async function executeManagedMemberTurn(
     cwd: opts.cwd,
     nativeSessionId: native.nativeSessionId,
     nativeResume: native.resume,
+    whileInteractionPending: () => awaitingInteraction,
     onEvent: (event) => {
       if (event.type === 'text_delta') {
         opts.onEvent?.('assistant.delta', { delta: event.text })
@@ -112,6 +119,27 @@ async function executeManagedMemberTurn(
           sessionId,
           nativeSessionId: event.sessionId,
         })
+      } else if (
+        event.type === 'activity' &&
+        event.activity.eventType === 'interaction_update'
+      ) {
+        // Canonical interaction projection: persist/refresh the room card.
+        // Card status is the daemon canonical status — no local pending state.
+        const interaction = event.activity.data.interaction
+        upsertManagedInteractionCard({
+          roomId: opts.roomId,
+          member: opts.member,
+          runId: event.runId,
+          interaction,
+        })
+        if (interaction.status === 'pending') {
+          awaitingInteraction = true
+        } else if (
+          interaction.status === 'answered' ||
+          interaction.status === 'superseded'
+        ) {
+          awaitingInteraction = false
+        }
       }
     },
   })

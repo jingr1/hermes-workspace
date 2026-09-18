@@ -159,6 +159,21 @@ export function ManagedAgentChatView({
     }
   }, [agent, brand])
 
+  // Capability display comes from the engine session snapshot (canonical),
+  // never fabricated: null means the runtime has not reported capabilities.
+  const capabilityHint = useMemo(() => {
+    const capabilities = chat.composer.capabilities
+    if (!capabilities) return 'Capabilities unknown'
+    const enabled = [
+      capabilities.imageInput ? 'images' : null,
+      capabilities.modelSwitch ? 'model switch' : null,
+      capabilities.interrupt ? 'interrupt' : null,
+      capabilities.planMode ? 'plan mode' : null,
+      capabilities.compact ? 'compact' : null,
+    ].filter((label): label is string => label !== null)
+    return enabled.length > 0 ? `Capabilities: ${enabled.join(' · ')}` : 'No optional capabilities reported'
+  }, [chat.composer.capabilities])
+
   return (
     <AssistantAvatarProvider
       value={{
@@ -187,7 +202,10 @@ export function ManagedAgentChatView({
               // primary control becomes the red Stop button (via isLoading).
               // No onQueue/onSteer → resolveComposerBusyUi keeps Stop (not Queue).
               isLoading: chat.isStreaming,
-              disabled: false,
+              // Engine-owned submit admission: blocked while the runtime
+              // reports unavailable or a pending interaction holds the turn.
+              disabled: chat.composer.availability === 'blocked',
+              queuedCount: chat.composer.queuedCount,
               onAbort: chat.abort,
               sessionKey: chat.activeSessionId,
               embedded: true,
@@ -198,7 +216,7 @@ export function ManagedAgentChatView({
               thinkingLevel,
               onThinkingLevelChange: handleThinkingLevelChange,
               runtimeLabel: composerBrand.label,
-              runtimeConfigHint: composerBrand.hint,
+              runtimeConfigHint: `${composerBrand.hint} · ${capabilityHint}`,
             }}
             topNotices={
               chat.error ? (
@@ -210,6 +228,7 @@ export function ManagedAgentChatView({
           >
             <ManagedAgentInteractionPanel
               interactions={chat.interactions}
+              responses={chat.interactionResponses}
               onRespond={chat.respondToInteraction}
             />
             <AgentChatMessagePane

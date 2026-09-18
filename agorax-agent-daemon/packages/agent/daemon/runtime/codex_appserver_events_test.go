@@ -226,7 +226,6 @@ func TestCodexAppServerCommandOutputDeltaUsesToolOutputFastLane(t *testing.T) {
 	session.ProviderSessionID = "thread-1"
 	normalizer := newACPTurnNormalizer()
 	reducer := newCodexAppServerReducer(&CodexAppServerAdapter{})
-
 	started := reducer.ReduceNotification(
 		nil,
 		session,
@@ -326,6 +325,53 @@ func TestCodexAppServerCommandOutputDeltaUsesToolOutputFastLane(t *testing.T) {
 			completedReport.MessageUpdates[0].MessageID,
 			startReport.MessageUpdates[0].MessageID,
 		)
+	}
+}
+
+func TestCodexAppServerFailedTurnProjectsCanonicalProviderError(t *testing.T) {
+	t.Parallel()
+	session := reportTestSession()
+	events := appServerTurnTerminalEvents(
+		session,
+		"turn-1",
+		map[string]any{
+			"id":     "provider-turn-1",
+			"status": "failed",
+			"error": map[string]any{
+				"message": "Token-X quota exhausted",
+				"code":    "insufficient_quota",
+			},
+		},
+		newACPTurnNormalizer(),
+	)
+
+	if len(events) < 2 || events[len(events)-2].Type != activityshared.EventTurnFailed {
+		t.Fatalf("terminal events = %#v, want canonical TurnFailed before provider alias", events)
+	}
+	failed := events[len(events)-2]
+	if failed.Payload.Metadata["error"] != "Token-X quota exhausted" ||
+		failed.Payload.Metadata["code"] != "provider_error" {
+		t.Fatalf("canonical failure metadata = %#v", failed.Payload.Metadata)
+	}
+}
+
+func TestCodexAppServerEmptyCompletedTurnProjectsProviderEmptyResponse(t *testing.T) {
+	t.Parallel()
+	session := reportTestSession()
+	events := appServerTurnTerminalEvents(
+		session,
+		"turn-1",
+		map[string]any{"id": "provider-turn-1", "status": "completed", "items": []any{}},
+		newACPTurnNormalizer(),
+	)
+
+	if len(events) < 2 || events[len(events)-2].Type != activityshared.EventTurnFailed {
+		t.Fatalf("terminal events = %#v, want provider_empty_response TurnFailed", events)
+	}
+	failed := events[len(events)-2]
+	if failed.Payload.Metadata["code"] != "provider_empty_response" ||
+		failed.Payload.Metadata["providerStatus"] != "completed" {
+		t.Fatalf("empty response metadata = %#v", failed.Payload.Metadata)
 	}
 }
 

@@ -35,6 +35,12 @@ vi.mock('../../agent-runtime/run-managed-turn', () => ({
   runManagedTurn,
 }))
 
+const upsertManagedInteractionCard = vi.fn()
+
+vi.mock('../managed-interaction-cards', () => ({
+  upsertManagedInteractionCard,
+}))
+
 vi.mock('../../agent-runtime/managed-chat-store', () => ({
   roomManagedSessionId: (roomId: string, participantId: string) =>
     `gc:${roomId}:${participantId}`,
@@ -66,6 +72,7 @@ describe('executeMemberTurn timeout / stranded', () => {
     forgetSession.mockReset()
     ensureProfileGateway.mockClear()
     runManagedTurn.mockReset()
+    upsertManagedInteractionCard.mockReset()
   })
 
   it('returns timeout without treating early ack as reply when soft deadline elapses', async () => {
@@ -288,6 +295,105 @@ describe('executeMemberTurn timeout / stranded', () => {
       prompt: 'nothing for me',
     })
     expect(result).toEqual({ kind: 'pass' })
+  })
+
+  it('projects canonical interaction_update events to room cards and tracks turn liveness', async () => {
+    runManagedTurn.mockImplementation(
+      async (input: {
+        onEvent?: (event: unknown) => void
+        whileInteractionPending?: () => boolean
+      }) => {
+        const interaction = {
+          agentSessionId: 'agent-session-1',
+          turnId: 'turn-1',
+          requestId: 'request-1',
+          kind: 'approval' as const,
+          status: 'pending' as const,
+          toolName: 'shell',
+          input: {},
+          metadata: {},
+          output: null,
+          createdAtUnixMs: 1,
+          updatedAtUnixMs: 1,
+        }
+        input.onEvent?.({
+          type: 'activity',
+          runId: 'run_cc',
+          workspaceId: 'default',
+          activity: {
+            workspaceId: 'default',
+            agentSessionId: 'agent-session-1',
+            eventType: 'interaction_update',
+            data: {
+              workspaceId: 'default',
+              agentSessionId: 'agent-session-1',
+              eventType: 'interaction_update',
+              occurredAtUnixMs: 1,
+              interaction,
+            },
+          },
+        })
+        // Turn stays alive while the canonical interaction is pending.
+        expect(input.whileInteractionPending?.()).toBe(true)
+
+        input.onEvent?.({
+          type: 'activity',
+          runId: 'run_cc',
+          workspaceId: 'default',
+          activity: {
+            workspaceId: 'default',
+            agentSessionId: 'agent-session-1',
+            eventType: 'interaction_update',
+            data: {
+              workspaceId: 'default',
+              agentSessionId: 'agent-session-1',
+              eventType: 'interaction_update',
+              occurredAtUnixMs: 2,
+              interaction: { ...interaction, status: 'answered' },
+            },
+          },
+        })
+        expect(input.whileInteractionPending?.()).toBe(false)
+        return {
+          kind: 'completed',
+          runId: 'run_cc',
+          text: 'done',
+          exitCode: 0,
+          events: [],
+        }
+      },
+    )
+
+    const { executeMemberTurn } = await import('../turn-executor')
+    const result = await executeMemberTurn({
+      roomId: 'room1',
+      roomTitle: 'test',
+      member: {
+        id: 'row',
+        kind: 'agent',
+        participantId: 'cc-impl',
+        displayName: 'Claude Code',
+        name: 'Claude Code',
+        mentionName: 'claude',
+        runtime: 'claude-code',
+        isBot: true,
+        profile: null,
+      },
+      prompt: 'group prompt',
+    })
+
+    expect(result).toEqual({ kind: 'reply', text: 'done', runId: 'run_cc' })
+    expect(upsertManagedInteractionCard).toHaveBeenCalledTimes(2)
+    expect(upsertManagedInteractionCard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        roomId: 'room1',
+        runId: 'run_cc',
+        interaction: expect.objectContaining({
+          requestId: 'request-1',
+          status: 'pending',
+        }),
+      }),
+    )
   })
 
   it('maps Hermes infra failure assistant text to failed (not room reply)', async () => {

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -70,6 +71,9 @@ func run() error {
 		return fmt.Errorf("create Agorax agent runtime with reporter: %w", err)
 	}
 	defer runtime.Close()
+	// Project the precommit runtime stream (message_delta text/toolOutput/
+	// payload operations and loss signals) into the public activity WS.
+	runtime.Controller().SetStreamEventObserver(&agentActivityEventBridge{hub: hub})
 	hostRuntime := &hostadapter.RuntimeController{Backend: runtime.Controller()}
 	host := agenthost.New(agenthost.Config{
 		CanonicalStore: workspaceStore, TurnSubmissions: store,
@@ -81,7 +85,7 @@ func run() error {
 
 	server := &http.Server{
 		Addr:              listenAddress(),
-		Handler:           routes(runtime, host, db, hub),
+		Handler:           routes(runtime, host, db, store, hub),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() {
@@ -113,7 +117,7 @@ func agentDBPath() string {
 	return "agorax-agent.db"
 }
 
-func routes(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.DB, hub *eventHub) http.Handler {
+func routes(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.DB, store *storesqlite.Store, hub *eventHub) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(response http.ResponseWriter, _ *http.Request) {
 		writeJSON(response, http.StatusOK, map[string]any{
@@ -143,6 +147,21 @@ func routes(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.DB, hub 
 			}
 		}
 	}))
+	mux.HandleFunc("GET /v1/workspaces/{workspaceID}/agent-sessions", func(response http.ResponseWriter, request *http.Request) {
+		workspaceID := request.PathValue("workspaceID")
+		sessions, found, err := store.ListSessions(request.Context(), workspaceID)
+		if err != nil {
+			writeJSON(response, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		if !found {
+			sessions = []storesqlite.Session{}
+		}
+		// Thin read adapter over the canonical store: the session row already
+		// carries the MessageVersion high-water cursor (authoritative 0 for a
+		// session with no accepted message changes).
+		writeJSON(response, http.StatusOK, map[string]any{"workspaceId": workspaceID, "sessions": sessions})
+	})
 	mux.HandleFunc("POST /v1/workspaces/{workspaceID}/agent-sessions", func(response http.ResponseWriter, request *http.Request) {
 		workspaceID := request.PathValue("workspaceID")
 		now := time.Now().UnixMilli()
@@ -233,7 +252,14 @@ func routes(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.DB, hub 
 			writeJSON(response, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
-		messages, _, err := host.ListSessionMessages(request.Context(), ref, agenthost.SessionMessageQuery{Limit: 500, Order: storesqlite.MessageOrderAsc})
+		afterVersion, limit, err := activityMessagePageQuery(request)
+		if err != nil {
+			writeJSON(response, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		messages, _, err := host.ListSessionMessages(request.Context(), ref, agenthost.SessionMessageQuery{
+			AfterVersion: afterVersion, Limit: limit, Order: storesqlite.MessageOrderAsc,
+		})
 		if err != nil {
 			writeJSON(response, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
@@ -244,11 +270,13 @@ func routes(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.DB, hub 
 			return
 		}
 		writeJSON(response, http.StatusOK, map[string]any{
-			"workspaceId":  workspaceID,
-			"session":      session.Canonical,
-			"turns":        turns,
-			"messages":     messages.Messages,
-			"interactions": interactions.Interactions,
+			"workspaceId":     workspaceID,
+			"session":         session.Canonical,
+			"turns":           turns,
+			"messages":        messages.Messages,
+			"interactions":    interactions.Interactions,
+			"messageVersion":  messages.LatestVersion,
+			"hasMoreMessages": messages.HasMore,
 		})
 	})
 	mux.HandleFunc("POST /v1/workspaces/{workspaceID}/agent-sessions/{agentSessionID}/turns/{turnID}/interactions/{requestID}/response", func(response http.ResponseWriter, request *http.Request) {
@@ -273,14 +301,41 @@ func routes(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.DB, hub 
 			return
 		}
 		if found && hub != nil {
-			hub.publish(map[string]any{"topic": "agent.activity.updated", "payload": map[string]any{
-				"workspaceId": workspaceID, "agentSessionId": agentSessionID, "eventType": "interaction_update",
-				"data": map[string]any{"agentSessionId": agentSessionID, "interaction": interaction},
-			}})
+			hub.publishActivity(workspaceID, agentSessionID, activityEventInteractionUpdate, interactionUpdateEventData(interaction, time.Now().UnixMilli()))
 		}
 		writeJSON(response, http.StatusOK, result)
 	})
 	return mux
+}
+
+const (
+	defaultActivityMessageLimit = 500
+	maxActivityMessageLimit     = 1000
+)
+
+// activityMessagePageQuery parses the version-cursor pagination contract for
+// the activity read surface: ascending pages keyed by afterVersion with a
+// bounded page size.
+func activityMessagePageQuery(request *http.Request) (afterVersion uint64, limit int, err error) {
+	if raw := strings.TrimSpace(request.URL.Query().Get("afterVersion")); raw != "" {
+		parsed, parseErr := strconv.ParseUint(raw, 10, 64)
+		if parseErr != nil {
+			return 0, 0, fmt.Errorf("invalid afterVersion %q: %w", raw, parseErr)
+		}
+		afterVersion = parsed
+	}
+	limit = defaultActivityMessageLimit
+	if raw := strings.TrimSpace(request.URL.Query().Get("limit")); raw != "" {
+		parsed, parseErr := strconv.Atoi(raw)
+		if parseErr != nil || parsed <= 0 {
+			return 0, 0, fmt.Errorf("invalid limit %q: must be a positive integer", raw)
+		}
+		if parsed > maxActivityMessageLimit {
+			return 0, 0, fmt.Errorf("invalid limit %q: exceeds maximum %d", raw, maxActivityMessageLimit)
+		}
+		limit = parsed
+	}
+	return afterVersion, limit, nil
 }
 
 func promptText(raw json.RawMessage) []agenthost.PromptContentBlock {
@@ -363,10 +418,8 @@ func (r *localCanonicalReporter) ReportSessionState(ctx context.Context, input c
 		return canonical.ReportSessionStateReply{}, err
 	}
 	if r.hub != nil && s.Turn != nil {
-		r.hub.publish(map[string]any{"topic": "agent.activity.updated", "payload": map[string]any{
-			"workspaceId": input.WorkspaceID, "agentSessionId": input.AgentSessionID, "eventType": "turn_update",
-			"data": map[string]any{"workspaceId": input.WorkspaceID, "agentSessionId": input.AgentSessionID, "eventType": "turn_update", "occurredAtUnixMs": s.OccurredAtUnixMS, "activeTurnId": s.Turn.ActiveTurnID, "turn": s.Turn},
-		}})
+		r.hub.publishActivity(input.WorkspaceID, input.AgentSessionID, activityEventTurnUpdate,
+			turnUpdateEventData(input.AgentSessionID, s.Turn, s.OccurredAtUnixMS))
 	}
 	if r.hub != nil && result.InteractionResult == storesqlite.InteractionTransitionApplied {
 		r.publishInteraction(input.WorkspaceID, input.AgentSessionID, result.Interaction)
@@ -383,16 +436,28 @@ func (r *localCanonicalReporter) ReportSessionMessages(ctx context.Context, inpu
 	if err != nil {
 		return canonical.ReportSessionMessagesReply{}, err
 	}
-	if r.hub != nil {
-		for _, message := range input.Updates {
-			text, _ := message.Payload["text"].(string)
-			if text == "" {
-				continue
+	if r.hub != nil && result.AcceptedCount > 0 {
+		// Full committed snapshots with version cursors; optimistic runtime
+		// text/tool-output snapshots were already streamed as message_delta.
+		published := canonicalMessagesForRealtimePublish(input.SessionOrigin, result.Messages)
+		if len(published) > 0 {
+			latestVersion := result.LatestVersion
+			if latestVersion == 0 {
+				for _, message := range published {
+					if message.Version > latestVersion {
+						latestVersion = message.Version
+					}
+				}
 			}
-			r.hub.publish(map[string]any{"topic": "agent.activity.updated", "payload": map[string]any{
-				"workspaceId": input.WorkspaceID, "agentSessionId": input.AgentSessionID, "eventType": "message_delta",
-				"data": map[string]any{"workspaceId": input.WorkspaceID, "agentSessionId": input.AgentSessionID, "eventType": "message_delta", "messageId": message.MessageID, "turnId": message.TurnID, "role": message.Role, "kind": message.Kind, "occurredAtUnixMs": message.OccurredAtUnixMS, "content": map[string]any{"operation": "append_text", "text": text}},
-			}})
+			agentSessionID := input.AgentSessionID
+			for _, message := range published {
+				if message.AgentSessionID != "" {
+					agentSessionID = message.AgentSessionID
+					break
+				}
+			}
+			r.hub.publishActivity(input.WorkspaceID, agentSessionID, activityEventMessageUpdate,
+				messageUpdateEventData(published, result.AcceptedCount, latestVersion))
 		}
 	}
 	return canonical.ReportSessionMessagesReply{AcceptedCount: result.AcceptedCount, LatestVersion: result.LatestVersion}, nil
@@ -403,6 +468,9 @@ type localActivityReporter struct {
 	hub   *eventHub
 }
 
+// localActivityReporter is retained as the direct ReportActivityInput adapter;
+// message deltas now flow through the runtime stream bridge and durable
+// snapshots through localCanonicalReporter, so this path only persists state.
 func (r *localActivityReporter) Report(ctx context.Context, input activity.ReportActivityInput) error {
 	for _, patch := range input.StatePatches {
 		session := storesqlite.SessionStateReport{
@@ -430,44 +498,13 @@ func (r *localActivityReporter) Report(ctx context.Context, input activity.Repor
 		if patch.InteractionTransition != nil {
 			state.Interaction = interactionUpsert(input.WorkspaceID, patch.AgentSessionID, patch.InteractionTransition, patch.OccurredAtUnixMS)
 		}
-		result, err := r.store.ReportActivityState(ctx, state)
-		if err != nil {
+		if _, err := r.store.ReportActivityState(ctx, state); err != nil {
 			return err
 		}
 		if r.hub != nil && patch.Turn != nil {
-			r.hub.publish(map[string]any{"topic": "agent.activity.updated", "payload": map[string]any{
-				"workspaceId": input.WorkspaceID, "agentSessionId": patch.AgentSessionID,
-				"eventType": "turn_update", "data": map[string]any{
-					"workspaceId": input.WorkspaceID, "agentSessionId": patch.AgentSessionID,
-					"eventType": "turn_update", "occurredAtUnixMs": patch.OccurredAtUnixMS,
-					"activeTurnId": patch.Turn.ActiveTurnID, "turn": patch.Turn,
-				},
-			}})
+			r.hub.publishActivity(input.WorkspaceID, patch.AgentSessionID, activityEventTurnUpdate,
+				turnUpdateEventData(patch.AgentSessionID, patch.Turn, patch.OccurredAtUnixMS))
 		}
-		if r.hub != nil && result.InteractionResult == storesqlite.InteractionTransitionApplied {
-			r.hub.publish(map[string]any{"topic": "agent.activity.updated", "payload": map[string]any{
-				"workspaceId": input.WorkspaceID, "agentSessionId": patch.AgentSessionID, "eventType": "interaction_update",
-				"data": map[string]any{"agentSessionId": patch.AgentSessionID, "interaction": result.Interaction},
-			}})
-		}
-	}
-	for _, message := range input.MessageUpdates {
-		if r.hub == nil {
-			continue
-		}
-		text, _ := message.Payload["text"].(string)
-		if text == "" {
-			continue
-		}
-		r.hub.publish(map[string]any{"topic": "agent.activity.updated", "payload": map[string]any{
-			"workspaceId": input.WorkspaceID, "agentSessionId": message.AgentSessionID,
-			"eventType": "message_delta", "data": map[string]any{
-				"workspaceId": input.WorkspaceID, "agentSessionId": message.AgentSessionID,
-				"eventType": "message_delta", "messageId": message.MessageID, "turnId": message.TurnID,
-				"role": message.Role, "kind": message.Kind, "occurredAtUnixMs": message.OccurredAtUnixMS,
-				"content": map[string]any{"operation": "append_text", "text": text},
-			},
-		}})
 	}
 	return nil
 }

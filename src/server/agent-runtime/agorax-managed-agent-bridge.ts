@@ -4,17 +4,17 @@ import type {
   AgentStreamEvent,
   McpHandshake,
 } from './types'
+import {
+  AGORAX_MANAGED_AGENT_BACKENDS,
+  isAgoraxManagedAgentBackend,
+  type AgoraxManagedAgentBackend,
+} from '@/lib/managed-agent-runtime/agent-targets'
 
-export const AGORAX_MANAGED_AGENT_BACKENDS = [
-  'claude-code',
-  'codex',
-  'cursor',
-  'opencode',
-  'kimi',
-] as const
-
-export type AgoraxManagedAgentBackend =
-  (typeof AGORAX_MANAGED_AGENT_BACKENDS)[number]
+export {
+  AGORAX_MANAGED_AGENT_BACKENDS,
+  isAgoraxManagedAgentBackend,
+  type AgoraxManagedAgentBackend,
+}
 
 export type AgoraxManagedAgentTransport = {
   probe: (
@@ -34,12 +34,6 @@ export type AgoraxManagedAgentTransport = {
     runId: string
     reason: string
   }) => Promise<void>
-}
-
-export function isAgoraxManagedAgentBackend(
-  value: string,
-): value is AgoraxManagedAgentBackend {
-  return (AGORAX_MANAGED_AGENT_BACKENDS as readonly string[]).includes(value)
 }
 
 /**

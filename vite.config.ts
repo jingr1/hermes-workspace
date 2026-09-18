@@ -340,6 +340,12 @@ const config = defineConfig(({ mode, command }) => {
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
+        '@agorax/agent-activity-core': fileURLToPath(
+          new URL('./packages/agent-activity-core/src/index.ts', import.meta.url),
+        ),
+        '@agorax/agent-activity-daemon-adapter': fileURLToPath(
+          new URL('./packages/agent-activity-daemon-adapter/src/index.ts', import.meta.url),
+        ),
       },
       // Single React instance for ESM + CJS interop (vitest inline comment applies here too).
       // Without dedupe, react-dom may bind the dispatcher on a different copy than hooks use
@@ -411,6 +417,9 @@ const config = defineConfig(({ mode, command }) => {
           // Without this, the watcher fires on every message → spurious
           // server-side reload events / test churn during development.
           '**/.runtime/**',
+          // Embedded managed-agent SQLite state is also rewritten on every
+          // message and is not part of the module graph.
+          '**/.agorax/**',
           // Internal TanStack Start state cache.
           '**/.tanstack/**',
           // Local plan/notes/scratch state used by OMC tooling — never

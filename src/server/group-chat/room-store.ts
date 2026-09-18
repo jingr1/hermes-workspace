@@ -690,6 +690,45 @@ export function getLatestMessages(
   }
 }
 
+export function getMessage(
+  messageId: string,
+  input?: { dbPath?: string },
+): RoomMessage | null {
+  ensureDb(input)
+  const d = openSqliteDatabase(dbPath(input), true)
+  try {
+    const rows = d
+      .prepare(
+        `SELECT id, room_id, sender_kind, sender_participant_id, sender_name, content, mentions, mention_depth, auto_handoff, task_refs, answers_pending_turn_id, run_id, task_id, created_at
+         FROM room_messages WHERE id = ?`,
+      )
+      .all(messageId)
+    return rows.length > 0 ? rowToMessage(rows[0]) : null
+  } finally {
+    d.close()
+  }
+}
+
+/** Content-only update for system-maintained card messages (e.g. managed
+ *  interaction cards whose status is refreshed from canonical daemon reads). */
+export function updateMessageContent(
+  messageId: string,
+  content: string,
+  input?: { dbPath?: string },
+): RoomMessage | null {
+  ensureDb(input)
+  const d = openSqliteDatabase(dbPath(input), false)
+  try {
+    d.prepare('UPDATE room_messages SET content = ? WHERE id = ?').run(
+      content,
+      messageId,
+    )
+  } finally {
+    d.close()
+  }
+  return getMessage(messageId, input)
+}
+
 function rowToMessage(r: Record<string, unknown>): RoomMessage {
   return {
     id: String(r.id),

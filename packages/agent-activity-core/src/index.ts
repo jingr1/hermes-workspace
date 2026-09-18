@@ -31,6 +31,11 @@ export {
 export type { AgentActivitySessionMessageWindow } from "./messageWindow.types.ts";
 export { parseInlineActivityMessages } from "./inlineActivityMessages.ts";
 export {
+  agentActivityEventEnvelopeIsConsistent,
+  type AgentActivityEventObservation,
+  type InlineMessageVersionContinuity
+} from "./activityEventObservation.ts";
+export {
   agentActivitySessionMessageWindowFromDescendingPage,
   loadAllAgentSessionMessages,
   type AgentActivityMessagePageLike,
@@ -461,6 +466,8 @@ export type {
   AgentActivitySubmitSettingsPatch,
   AgentActivityTurn,
   AgentActivityTurnOrigin,
+  AgentActivityTurnPhase,
+  AgentActivityTurnOutcome,
   AgentActivityTurnCancelResponse,
   AgentActivityTransientMessage,
   AgentActivityInteraction,

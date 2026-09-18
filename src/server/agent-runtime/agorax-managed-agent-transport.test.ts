@@ -26,6 +26,7 @@ describe('createAgoraxManagedAgentTransport', () => {
       mcp: { endpoint: 'unused', runToken: 'unused', toolAllowlist: [] },
     })
     const events = transport.streamEvents({ backend: 'codex', runId: 'run-1' })
+    const iterator = events[Symbol.asyncIterator]()
     listeners[0]!({
       kind: 'event',
       event: {
@@ -36,7 +37,7 @@ describe('createAgoraxManagedAgentTransport', () => {
         },
       },
     })
-    await expect(events.next()).resolves.toEqual({
+    await expect(iterator.next()).resolves.toEqual({
       value: expect.objectContaining({
         type: 'activity',
         runId: 'run-1',
@@ -44,7 +45,7 @@ describe('createAgoraxManagedAgentTransport', () => {
       }),
       done: false,
     })
-    await expect(events.next()).resolves.toEqual({
+    await expect(iterator.next()).resolves.toEqual({
       value: { type: 'text_delta', runId: 'run-1', text: 'hi' },
       done: false,
     })

@@ -1,7 +1,7 @@
 import type { AgentStreamEvent } from './types'
-import type { AgentActivityEvent } from '@/lib/agent-activity-core'
+import type { AgentActivityUpdatedEvent } from '@agorax/agent-activity-core'
 
-export type AgoraxManagedAgentActivity = AgentActivityEvent
+export type AgoraxManagedAgentActivity = AgentActivityUpdatedEvent
 
 /**
  * Converts only canonical Managed Agent activity facts into the legacy stream shape
@@ -20,13 +20,15 @@ export function agoraxEventsFromManagedActivity(
     activity,
   }
   if (activity.eventType === 'message_delta') {
-    const text = activity.data.content?.text ?? ''
+    const content = activity.data.content
+    const text = content?.operation === 'append_text' ? content.text : ''
     if (activity.data.role === 'assistant' && text) {
       return [canonicalEvent, { type: 'text_delta', runId, text }]
     }
     return [canonicalEvent]
   }
 
+  if (activity.eventType !== 'turn_update') return [canonicalEvent]
   if (activity.data.turn.phase !== 'settled') return [canonicalEvent]
   const outcome = activity.data.turn.outcome
   if (!outcome) return [canonicalEvent]

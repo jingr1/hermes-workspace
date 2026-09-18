@@ -8,6 +8,7 @@ import {
   isAgoraxManagedAgentBackend,
 } from '../../../../../../../server/agent-runtime/agorax-managed-agent-bridge'
 import { getAgentRuntimeRouter } from '../../../../../../../server/agent-runtime/router'
+import type { ManagedAgentInteractionResponseDto } from '@/lib/managed-agent-runtime/command-dtos'
 
 export const Route = createFileRoute(
   '/api/agents/$agentId/interactions/$sessionId/$turnId/$requestId',
@@ -51,11 +52,13 @@ export const Route = createFileRoute(
         }
 
         try {
-          const result = await new AgoraxManagedAgentHttpClient({ baseUrl, workspaceId })
-            .respondToInteraction({ agentSessionId, turnId, requestId, ...(action ? { action } : {}), ...(optionId ? { optionId } : {}), ...(payload ? { payload } : {}) })
-          const activity = await new AgoraxManagedAgentHttpClient({ baseUrl, workspaceId })
-            .getActivitySnapshot(agentSessionId)
-          return json({ ok: true, result, activity })
+          const client = new AgoraxManagedAgentHttpClient({ baseUrl, workspaceId })
+          const result = await client.respondToInteraction({ agentSessionId, turnId, requestId, ...(action ? { action } : {}), ...(optionId ? { optionId } : {}), ...(payload ? { payload } : {}) })
+          const response: ManagedAgentInteractionResponseDto = {
+            result,
+            activity: await client.getActivitySnapshot(agentSessionId),
+          }
+          return json({ ok: true, ...response })
         } catch (error) {
           return json(
             { ok: false, error: error instanceof Error ? error.message : String(error) },

@@ -195,6 +195,14 @@ func (n *acpTurnNormalizer) CurrentAssistantText() string {
 	return n.assistantContent.String()
 }
 
+// HasAssistantOutput keeps terminal classification from treating a completed
+// streamed assistant segment as an empty provider response.
+func (n *acpTurnNormalizer) HasAssistantOutput() bool {
+	return n != nil &&
+		n.assistantMessageID != "" &&
+		strings.TrimSpace(n.assistantContent.String()) != ""
+}
+
 // SeenToolCallCount returns how many distinct tool calls this turn has
 // observed. Auto-continue uses it (with CurrentAssistantText) to decide
 // whether the failed attempt made useful progress.

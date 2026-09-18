@@ -524,6 +524,18 @@ func (s *SQLiteWorkspaceStore) ListSessionTurnSummaries(ctx context.Context, inp
 	return store.ListSessionTurnSummaries(ctx, input)
 }
 
+func (s *SQLiteWorkspaceStore) ListSessionTurns(
+	ctx context.Context,
+	workspaceID string,
+	sessionID string,
+) ([]storesqlite.Turn, error) {
+	store, err := s.store(workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	return store.ListSessionTurns(ctx, workspaceID, sessionID)
+}
+
 func (s *SQLiteWorkspaceStore) GetProviderSessionResumeEvidence(
 	ctx context.Context,
 	workspaceID string,

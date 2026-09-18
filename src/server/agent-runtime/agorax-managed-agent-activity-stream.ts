@@ -9,15 +9,50 @@ type SocketLike = {
   close: () => void
 }
 
+/**
+ * One daemon WS frame envelope (`{"kind":"event","event":{...}}`). The daemon
+ * assigns every frame a monotonic `version`, an `emittedAt` unix-ms timestamp
+ * and a workspace `scope`; `payload` is the canonical activity event.
+ */
+export type AgoraxManagedAgentActivityEnvelope = {
+  id: string
+  topic: 'agent.activity.updated'
+  version: number
+  emittedAt: number
+  scope: { workspaceId: string }
+  payload: AgoraxManagedAgentActivity & {
+    workspaceId: string
+    agentSessionId: string
+  }
+}
+
 type ActivityFrame = {
   kind: 'event'
   event: {
     topic: 'agent.activity.updated'
-    payload: AgoraxManagedAgentActivity & {
-      workspaceId: string
-      agentSessionId: string
-    }
+    payload: AgoraxManagedAgentActivityEnvelope['payload']
   }
+}
+
+/**
+ * Validates one raw daemon WS frame and returns the full envelope when it
+ * belongs to the requested workspace. Only `kind`, the activity topic and the
+ * payload workspace identity are enforced; envelope metadata fields
+ * (`id`/`version`/`emittedAt`/`scope`) are passed through verbatim so SSE
+ * clients receive exactly what the daemon emitted.
+ */
+export function parseAgoraxManagedActivityEnvelope(
+  raw: unknown,
+  workspaceId: string,
+): AgoraxManagedAgentActivityEnvelope | null {
+  if (!raw || typeof raw !== 'object') return null
+  const frame = raw as Partial<ActivityFrame>
+  if (frame.kind !== 'event' || frame.event?.topic !== 'agent.activity.updated') {
+    return null
+  }
+  const payload = frame.event.payload
+  if (!payload || payload.workspaceId !== workspaceId) return null
+  return frame.event as AgoraxManagedAgentActivityEnvelope
 }
 
 export function parseAgoraxManagedActivityFrame(
@@ -25,20 +60,9 @@ export function parseAgoraxManagedActivityFrame(
   workspaceId: string,
   agentSessionId: string,
 ): AgoraxManagedAgentActivity | null {
-  if (!raw || typeof raw !== 'object') return null
-  const frame = raw as Partial<ActivityFrame>
-  if (frame.kind !== 'event' || frame.event?.topic !== 'agent.activity.updated') {
-    return null
-  }
-  const payload = frame.event.payload
-  if (
-    !payload ||
-    payload.workspaceId !== workspaceId ||
-    payload.agentSessionId !== agentSessionId
-  ) {
-    return null
-  }
-  return payload
+  const envelope = parseAgoraxManagedActivityEnvelope(raw, workspaceId)
+  if (!envelope || envelope.payload.agentSessionId !== agentSessionId) return null
+  return envelope.payload
 }
 
 export type AgoraxManagedAgentActivitySocket = {

@@ -1,4 +1,4 @@
-import type { AgentActivityEvent } from '@/lib/agent-activity-core'
+import type { AgentActivityUpdatedEvent } from '@agorax/agent-activity-core'
 import type { AgoraxManagedPromptContentBlock } from './agorax-managed-prompt-content'
 
 /**
@@ -41,7 +41,7 @@ export type AgentStreamEvent =
       type: 'activity'
       runId: string
       workspaceId: string
-      activity: AgentActivityEvent
+      activity: AgentActivityUpdatedEvent
     }
   | {
       type: 'native_session'

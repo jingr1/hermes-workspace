@@ -63,6 +63,7 @@ src-tauri/WixTools
 count.txt
 todos.json
 releases/
+.agorax/
 
 # Wrangler (Cloudflare Workers)
 .wrangler

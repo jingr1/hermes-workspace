@@ -188,9 +188,44 @@ func appServerTurnTerminalEvents(
 				metadata["codexErrorInfo"] = clonePayloadValue(codexErrorInfo)
 			}
 		}
+		// The provider terminal status is the authoritative failure fact. Emit
+		// the canonical Turn failure as well as the root-provider alias so Host
+		// persists the raw provider error and the GUI can project agent_visible_error.
+		events = append(events, newTurnActivityEvent(
+			session,
+			EventTurnFailed,
+			turnID,
+			messageStreamStateFailed,
+			"",
+			"",
+			metadata,
+		))
 		terminal := appServerRootProviderTurnCompletedEvent(session, turnID, providerTurnID, activityshared.TurnOutcomeFailed, metadata)
 		return append(events, terminal)
 	default:
+		finalText := appServerTurnFinalAssistantText(turn)
+		if strings.TrimSpace(finalText) == "" && !normalizer.HasAssistantOutput() {
+			metadata := map[string]any{
+				"code":           "provider_empty_response",
+				"error":          "Codex app-server returned no assistant message",
+				"errorMessage":   "Codex app-server returned no assistant message",
+				"origin":         providerFailureOriginProvider,
+				"providerStatus": strings.TrimSpace(status),
+				"stopReason":     "empty_response",
+			}
+			events := normalizer.FinishFailed(session, turnID)
+			events = append(events, newTurnActivityEvent(
+				session,
+				EventTurnFailed,
+				turnID,
+				messageStreamStateFailed,
+				"",
+				"",
+				metadata,
+			))
+			terminal := appServerRootProviderTurnCompletedEvent(session, turnID, providerTurnID, activityshared.TurnOutcomeFailed, metadata)
+			return append(events, terminal)
+		}
 		events := normalizer.FinishCompleted(session, turnID)
 		terminal := appServerRootProviderTurnCompletedEvent(session, turnID, providerTurnID, activityshared.TurnOutcomeCompleted, map[string]any{"stopReason": "end_turn"})
 		return append(events, terminal)

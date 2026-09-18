@@ -11,6 +11,7 @@ const nodeRequire = _createRequire(import.meta.url)
 export type SqliteDatabase = {
   prepare: (sql: string) => {
     all: (...params: Array<unknown>) => Array<Record<string, unknown>>
+    get: (...params: Array<unknown>) => Record<string, unknown> | undefined
     run: (...params: Array<unknown>) => { changes: number }
   }
   exec: (sql: string) => void

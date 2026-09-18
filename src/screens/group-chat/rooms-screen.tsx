@@ -4,6 +4,7 @@ import { MemberAvatar } from './components/member-avatar'
 import { MemberRoster } from './components/member-roster'
 import { MentionPicker } from './components/mention-picker'
 import { PendingTurnCard } from './components/pending-turn-card'
+import { ManagedInteractionRoomCard } from './components/managed-interaction-card'
 import { getMemberColor } from './lib/avatar-utils'
 import type {
   PendingTurn,
@@ -417,6 +418,7 @@ export function RoomsScreen() {
                   key={msg.id}
                   message={msg}
                   participants={participants}
+                  roomId={roomId}
                 />
               ))
             )}
@@ -483,9 +485,11 @@ export function RoomsScreen() {
 function MessageBubble({
   message,
   participants,
+  roomId,
 }: {
   message: RoomMessage
   participants: Array<RoomParticipant>
+  roomId: string
 }) {
   const sender = useMemo(
     () =>
@@ -498,6 +502,9 @@ function MessageBubble({
       ? '#64748b'
       : '#1A2340'
   const isHuman = message.senderKind === 'human'
+  const isInteractionCard = message.content.includes(
+    'agorax:managed-interaction:v1',
+  )
 
   return (
     <div
@@ -529,9 +536,17 @@ function MessageBubble({
             {formatTime(message.createdAt)}
           </span>
         </div>
-        <div className="whitespace-pre-wrap text-sm leading-relaxed">
-          {message.content}
-        </div>
+        {isInteractionCard ? (
+          <ManagedInteractionRoomCard
+            roomId={roomId}
+            messageId={message.id}
+            content={message.content}
+          />
+        ) : (
+          <div className="whitespace-pre-wrap text-sm leading-relaxed">
+            {message.content}
+          </div>
+        )}
       </div>
     </div>
   )

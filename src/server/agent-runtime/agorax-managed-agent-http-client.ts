@@ -1,9 +1,34 @@
 import type { AgentProbeResult } from './types'
-import type {
-  AgoraxManagedAgentBackend,
-} from './agorax-managed-agent-bridge'
 import { AgoraxManagedRunStore } from './agorax-managed-run-store'
 import type { AgoraxManagedPromptContentBlock } from './agorax-managed-prompt-content'
+import {
+  agoraxAgentTargetIdForBackend,
+  type AgoraxManagedAgentBackend,
+} from '@/lib/managed-agent-runtime/agent-targets'
+import type {
+  AgentActivityDurableMessage,
+  AgentActivitySession,
+} from '@agorax/agent-activity-core'
+import {
+  agentActivityMessageFromDaemonMessage,
+  agentActivitySessionDetailFromDaemon,
+  agentActivitySessionFromDaemonSession,
+  type AgentActivityDaemonActivityDetail,
+  type DaemonAgentSessionsListResponse,
+  type DaemonCreateAgentSessionRequest,
+  type DaemonCreateSessionResponse,
+  type DaemonSendAgentSessionInputRequest,
+  type DaemonSendInputResponse,
+  type DaemonSessionActivityResponse,
+  type DaemonSubmitInteractiveResponse,
+} from '@agorax/agent-activity-daemon-adapter'
+
+/**
+ * Fallback user identity for canonical session mapping. The daemon owns real
+ * session user ids; this value is only used when a canonical session row
+ * carries an empty UserID.
+ */
+export const AGORAX_MANAGED_AGENT_USER_ID = 'agorax-local-user'
 
 export type AgoraxManagedAgentHttpClientOptions = {
   baseUrl: string
@@ -49,18 +74,9 @@ type SendInputResponse = {
   turn: CanonicalTurnProjection
 }
 
-const BACKEND_TARGET_IDS: Record<AgoraxManagedAgentBackend, string> = {
-  'claude-code': 'local:claude-code',
-  codex: 'local:codex',
-  cursor: 'local:cursor',
-  opencode: 'local:opencode',
-  kimi: 'extension:kimi-code',
-}
-
-export function agoraxAgentTargetIdForBackend(
-  backend: AgoraxManagedAgentBackend,
-): string {
-  return BACKEND_TARGET_IDS[backend]
+export {
+  agoraxAgentTargetIdForBackend,
+  type AgoraxManagedAgentBackend,
 }
 
 /**
@@ -111,36 +127,84 @@ export class AgoraxManagedAgentHttpClient {
   async createSession(
     input: CreateAgoraxAgentSessionInput,
   ): Promise<CreateSessionResponse> {
-    return this.requestJson<CreateSessionResponse>(
+    return normalizeCreateSessionResponse(await this.createSessionRaw(input))
+  }
+
+  createSessionRaw(
+    input: CreateAgoraxAgentSessionInput,
+    options?: { signal?: AbortSignal },
+  ): Promise<DaemonCreateSessionResponse> {
+    return this.createAgentSessionRequest(
+      {
+        agentSessionId: input.agentSessionId,
+        agentTargetId: agoraxAgentTargetIdForBackend(input.backend),
+        clientSubmitId: input.clientSubmitId,
+        initialContent: input.promptContent ?? [{ type: 'text', text: input.content }],
+        ...(input.cwd ? { cwd: input.cwd } : {}),
+        ...(input.model ? { model: input.model } : {}),
+      },
+      options,
+    )
+  }
+
+  /**
+   * POST .../agent-sessions with a pre-built daemon request DTO, returning
+   * the daemon response in its wire DTO shape (`DaemonCreateSessionResponse`).
+   * Canonical mapping happens in the activity adapter, which owns the core
+   * projection.
+   */
+  createAgentSessionRequest(
+    request: DaemonCreateAgentSessionRequest,
+    options?: { signal?: AbortSignal },
+  ): Promise<DaemonCreateSessionResponse> {
+    return this.requestJson<DaemonCreateSessionResponse>(
       `/v1/workspaces/${encodeURIComponent(this.workspaceId)}/agent-sessions`,
       {
         method: 'POST',
-        body: JSON.stringify({
-          agentSessionId: input.agentSessionId,
-          agentTargetId: agoraxAgentTargetIdForBackend(input.backend),
-          clientSubmitId: input.clientSubmitId,
-          initialContent: input.promptContent ?? [{ type: 'text', text: input.content }],
-          ...(input.cwd ? { cwd: input.cwd } : {}),
-          ...(input.model ? { model: input.model, modelExplicit: true } : {}),
-          ...(input.title ? { title: input.title } : {}),
-        }),
+        body: JSON.stringify(request),
       },
+      options?.signal,
     )
   }
 
   sendInput(
     agentSessionId: string,
     input: SendAgoraxAgentInput,
+    options?: { signal?: AbortSignal },
   ): Promise<SendInputResponse> {
-    return this.requestJson<SendInputResponse>(
+    return this.sendInputRaw(agentSessionId, input, options).then((response) =>
+      normalizeSendInputResponse(response, agentSessionId),
+    )
+  }
+
+  sendInputRaw(
+    agentSessionId: string,
+    input: SendAgoraxAgentInput,
+    options?: { signal?: AbortSignal },
+  ): Promise<DaemonSendInputResponse> {
+    return this.sendAgentSessionInputRequest(
+      agentSessionId,
+      {
+        clientSubmitId: input.clientSubmitId,
+        content: input.promptContent ?? [{ type: 'text', text: input.content }],
+      },
+      options,
+    )
+  }
+
+  /** POST .../input with a pre-built daemon request DTO, un-normalized. */
+  sendAgentSessionInputRequest(
+    agentSessionId: string,
+    request: DaemonSendAgentSessionInputRequest,
+    options?: { signal?: AbortSignal },
+  ): Promise<DaemonSendInputResponse> {
+    return this.requestJson<DaemonSendInputResponse>(
       `/v1/workspaces/${encodeURIComponent(this.workspaceId)}/agent-sessions/${encodeURIComponent(agentSessionId)}/input`,
       {
         method: 'POST',
-        body: JSON.stringify({
-          clientSubmitId: input.clientSubmitId,
-          content: input.promptContent ?? [{ type: 'text', text: input.content }],
-        }),
+        body: JSON.stringify(request),
       },
+      options?.signal,
     )
   }
 
@@ -161,11 +225,92 @@ export class AgoraxManagedAgentHttpClient {
     return response
   }
 
-  getSessionDetail(agentSessionId: string): Promise<unknown> {
-    return this.requestJson(
-      `/v1/workspaces/${encodeURIComponent(this.workspaceId)}/agent-sessions/${encodeURIComponent(agentSessionId)}`,
+  /**
+   * Canonical activity detail for one session: the daemon's GET .../activity
+   * aggregate mapped through the daemon-adapter into a core detail snapshot
+   * (with messages and interactions). The daemon exposes no standalone
+   * session-get route; the activity aggregate is the authoritative read.
+   */
+  async getSessionDetail(
+    agentSessionId: string,
+    options?: { signal?: AbortSignal },
+  ): Promise<AgentActivityDaemonActivityDetail> {
+    const activity = await this.requestJson<DaemonSessionActivityResponse>(
+      `/v1/workspaces/${encodeURIComponent(this.workspaceId)}/agent-sessions/${encodeURIComponent(agentSessionId)}/activity`,
       { method: 'GET' },
+      options?.signal,
     )
+    return agentActivitySessionDetailFromDaemon(
+      this.workspaceId,
+      agentSessionId,
+      activity,
+      { currentUserId: AGORAX_MANAGED_AGENT_USER_ID },
+    )
+  }
+
+  /**
+   * Canonical session list for this client's workspace (empty list when the
+   * workspace has no sessions). PascalCase daemon rows are mapped through the
+   * daemon-adapter; the response never exposes wire field names.
+   */
+  async listSessions(options?: {
+    signal?: AbortSignal
+  }): Promise<AgentActivitySession[]> {
+    const response = await this.requestJson<DaemonAgentSessionsListResponse>(
+      `/v1/workspaces/${encodeURIComponent(this.workspaceId)}/agent-sessions`,
+      { method: 'GET' },
+      options?.signal,
+    )
+    const sessions = Array.isArray(response.sessions) ? response.sessions : []
+    return sessions.map((session) =>
+      agentActivitySessionFromDaemonSession(this.workspaceId, session, {
+        currentUserId: AGORAX_MANAGED_AGENT_USER_ID,
+      }),
+    )
+  }
+
+  /**
+   * One page of canonical durable messages plus the messageVersion
+   * high-water cursor. Reads ascend from `afterVersion` (daemon activity
+   * paging; default page size and hard cap are owned by the daemon).
+   */
+  async listSessionMessages(
+    agentSessionId: string,
+    options?: { afterVersion?: number; limit?: number; signal?: AbortSignal },
+  ): Promise<{
+    messages: AgentActivityDurableMessage[]
+    latestVersion: number
+    hasMore: boolean
+  }> {
+    const query = new URLSearchParams()
+    if (options?.afterVersion !== undefined) {
+      query.set('afterVersion', String(options.afterVersion))
+    }
+    if (options?.limit !== undefined) query.set('limit', String(options.limit))
+    const suffix = query.size > 0 ? `?${query.toString()}` : ''
+    const activity = await this.requestJson<DaemonSessionActivityResponse>(
+      `/v1/workspaces/${encodeURIComponent(this.workspaceId)}/agent-sessions/${encodeURIComponent(agentSessionId)}/activity${suffix}`,
+      { method: 'GET' },
+      options?.signal,
+    )
+    if (
+      typeof activity.messageVersion !== 'number' ||
+      !Number.isSafeInteger(activity.messageVersion) ||
+      activity.messageVersion < 0 ||
+      typeof activity.hasMoreMessages !== 'boolean'
+    ) {
+      throw new Error(
+        'Agorax Managed Agent activity response is missing the messageVersion/hasMoreMessages paging cursor',
+      )
+    }
+    const messages = Array.isArray(activity.messages) ? activity.messages : []
+    return {
+      messages: messages.map((message) =>
+        agentActivityMessageFromDaemonMessage(this.workspaceId, message),
+      ),
+      latestVersion: activity.messageVersion,
+      hasMore: activity.hasMoreMessages,
+    }
   }
 
   getActivitySnapshot(agentSessionId: string): Promise<unknown> {
@@ -201,7 +346,22 @@ export class AgoraxManagedAgentHttpClient {
     optionId?: string
     payload?: Record<string, unknown>
   }): Promise<unknown> {
-    return this.requestJson(
+    return this.respondToInteractionRaw(input)
+  }
+
+  /** POST .../interactions/{requestId}/response, un-normalized wire DTO. */
+  respondToInteractionRaw(
+    input: {
+      agentSessionId: string
+      turnId: string
+      requestId: string
+      action?: string
+      optionId?: string
+      payload?: Record<string, unknown>
+    },
+    options?: { signal?: AbortSignal },
+  ): Promise<DaemonSubmitInteractiveResponse> {
+    return this.requestJson<DaemonSubmitInteractiveResponse>(
       `/v1/workspaces/${encodeURIComponent(this.workspaceId)}/agent-sessions/${encodeURIComponent(input.agentSessionId)}/turns/${encodeURIComponent(input.turnId)}/interactions/${encodeURIComponent(input.requestId)}/response`,
       {
         method: 'POST',
@@ -211,12 +371,14 @@ export class AgoraxManagedAgentHttpClient {
           ...(input.payload ? { payload: input.payload } : {}),
         }),
       },
+      options?.signal,
     )
   }
 
-  private async requestJson<T>(path: string, init: RequestInit): Promise<T> {
+  private async requestJson<T>(path: string, init: RequestInit, signal?: AbortSignal): Promise<T> {
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
       ...init,
+      ...(signal ? { signal } : {}),
       headers: {
         ...this.headers,
         ...(init.headers ?? {}),
@@ -227,4 +389,47 @@ export class AgoraxManagedAgentHttpClient {
     }
     return (await response.json()) as T
   }
+}
+
+function normalizeCreateSessionResponse(value: unknown): CreateSessionResponse {
+  const record = asRecord(value)
+  const canonical = asRecord(record?.Canonical) ?? asRecord(record?.session)
+  const id = stringValue(canonical?.ID) || stringValue(canonical?.id)
+  const activeTurnId =
+    stringValue(canonical?.ActiveTurnID) ||
+    stringValue(canonical?.activeTurnId) ||
+    stringValue(record?.TurnID)
+  if (!id) throw new Error('Agorax Managed Agent create response has no canonical session id')
+  return { session: { id, activeTurnId: activeTurnId || null } }
+}
+
+function normalizeSendInputResponse(
+  value: unknown,
+  requestedSessionId: string,
+): SendInputResponse {
+  const record = asRecord(value)
+  const canonical = asRecord(record?.Canonical) ?? asRecord(record?.session)
+  const turn = asRecord(record?.Turn) ?? asRecord(record?.turn)
+  const id =
+    stringValue(canonical?.ID) ||
+    stringValue(canonical?.id) ||
+    requestedSessionId.trim()
+  const turnId = stringValue(record?.TurnID) || stringValue(record?.turnId) || stringValue(turn?.TurnID) || stringValue(turn?.turnId)
+  if (!id || !turnId) throw new Error('Agorax Managed Agent send response has incomplete canonical identity')
+  return {
+    kind: 'turn',
+    session: { id, activeTurnId: stringValue(canonical?.ActiveTurnID) || null },
+    turnId,
+    turn: { turnId },
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
 }

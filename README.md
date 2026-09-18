@@ -353,10 +353,16 @@ Workspace is the UI. **Hermes Agent** is the brain. They talk over two HTTP serv
 ```bash
 hermes gateway run     # terminal 1 · :8642 · chat, models, streaming, jobs, sessions, skills, config
 hermes dashboard       # (optional) terminal 2 · :9119 · analytics dashboard
-cd ~/hermes-workspace && pnpm dev   # terminal 2 (or 3) · :3000 · the UI
+cd ~/hermes-workspace
+pnpm dev:managed-agent # terminal 3 · :8788 · Claude Code, Codex, Cursor, OpenCode, Kimi
+pnpm dev               # terminal 4 · :3000 · the UI
 ```
 
-> **Tip:** `pnpm start:all` starts gateway + dashboard + workspace in one shot if you've installed via the one-liner.
+Managed Agent Chat requires `AGORAX_MANAGED_AGENT_URL=http://127.0.0.1:8788` and
+`AGORAX_WORKSPACE_ID=default` in `.env`; both local defaults are included in
+`.env.example`.
+
+> **Tip:** `pnpm start:all` starts the gateway, Managed Agent daemon, and workspace with these local defaults.
 
 ### Windows (PowerShell + WSL) one-command startup
 

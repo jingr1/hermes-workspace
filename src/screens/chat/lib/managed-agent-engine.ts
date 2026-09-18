@@ -1,16 +1,32 @@
 import {
   createAgentSessionEngine,
   selectEngineActiveTurn,
+  selectEngineLatestTurn,
   selectEngineInteractionsForSession,
   selectSessionMessages,
+  type AgentActivitySendInputResult,
+  type AgentActivitySessionDetailSnapshot,
+  type AgentActivitySubmitInteractiveResult,
+  type AgentActivityTurnCancelResponse,
+  type AgentSessionActivateEffectResult,
   type AgentSessionEngine,
   type AgentSessionEngineState,
+  type EngineEffectOptions,
+  type EngineExtensionCommand,
   type EngineTypedCommandPort,
-} from '../../../../packages/agent-activity-core/src/index'
+} from '@agorax/agent-activity-core'
 import {
   mapManagedAgentActivitySnapshot,
   type ManagedAgentActivityDetail,
 } from './managed-agent-activity-mapper'
+import {
+  managedAgentActivateResponseFromJson,
+  managedAgentCancelResponseFromJson,
+  managedAgentDaemonCancelStateFromResult,
+  managedAgentErrorMessageFromResponse,
+  managedAgentInputResponseFromJson,
+  managedAgentInteractionResponseFromJson,
+} from '@/lib/managed-agent-runtime/command-dtos'
 import type { ChatMessage } from '../types'
 
 export function createManagedAgentEngine(input: {
@@ -40,6 +56,11 @@ export function createManagedAgentCommandPort(
   options?: {
     displaySessionId?: () => string
     onRunStarted?: (runId: string, detail: ManagedAgentActivityDetail) => void
+    /** Host-owned extension commands (session/reconcile, engine/reconcileWorkspace). */
+    executeExtensionCommand?: (
+      command: EngineExtensionCommand,
+      options?: EngineEffectOptions,
+    ) => Promise<unknown>
   },
 ): EngineTypedCommandPort {
   const request = async (path: string, body?: unknown): Promise<unknown> => {
@@ -48,30 +69,40 @@ export function createManagedAgentCommandPort(
       headers: { 'Content-Type': 'application/json' },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     })
-    if (!response.ok) throw new Error(`Managed Agent request failed: ${response.status}`)
-    return response.json()
+    const payload: unknown = await response.json().catch(() => null)
+    if (!response.ok) {
+      throw new Error(
+        managedAgentErrorMessageFromResponse(payload) ??
+          `Managed Agent request failed: ${response.status}`,
+      )
+    }
+    return payload
   }
   const unavailable = async (): Promise<never> => { throw new Error('Unsupported Managed Agent command') }
   return {
     kind: 'typed',
     effects: {
-      activateSession: async (input) => {
-        const response = await request(
-          `/api/agents/${encodeURIComponent(agentId)}/engine/activate`,
-          {
+      activateSession: async (input): Promise<AgentSessionActivateEffectResult> => {
+        if (input.mode !== 'new') {
+          // The workspace activate route only creates sessions; attaching to an
+          // existing session is a read-side hydrate (detail + reconcile).
+          throw new Error('Managed Agent activation supports mode "new" only')
+        }
+        const response = managedAgentActivateResponseFromJson(
+          await request(`/api/agents/${encodeURIComponent(agentId)}/engine/activate`, {
             displaySessionId: options?.displaySessionId?.() ?? input.agentSessionId,
             agentSessionId: input.agentSessionId,
             message: input.initialDisplayPrompt ?? '',
             promptContent: input.initialContent,
             ...(input.settings?.model ? { model: input.settings.model } : {}),
-          },
-        ) as { activity?: unknown; runId?: string }
+          }),
+        )
         const detail = mapManagedAgentActivitySnapshot(response.activity)
         if (!detail) throw new Error('Managed Agent activation returned an invalid snapshot')
         onActivity(detail)
-        if (response.runId) options?.onRunStarted?.(response.runId, detail)
+        options?.onRunStarted?.(response.runId, detail)
         return {
-          activation: { mode: 'new' as const, status: 'attached' as const },
+          activation: { mode: 'new', status: 'attached' },
           session: detail.session,
         }
       },
@@ -79,15 +110,14 @@ export function createManagedAgentCommandPort(
       renameSession: unavailable,
       setSessionPinned: unavailable,
       updateSessionSettings: unavailable,
-      sendInput: async (input) => {
-        const response = await request(
-          `/api/agents/${encodeURIComponent(agentId)}/engine/session/${encodeURIComponent(input.agentSessionId)}/input`,
-          {
+      sendInput: async (input): Promise<AgentActivitySendInputResult> => {
+        const response = managedAgentInputResponseFromJson(
+          await request(`/api/agents/${encodeURIComponent(agentId)}/engine/session/${encodeURIComponent(input.agentSessionId)}/input`, {
             clientSubmitId: input.clientSubmitId,
             content: input.displayPrompt ?? '',
             promptContent: input.content,
-          },
-        ) as { result?: unknown; activity?: unknown }
+          }),
+        )
         const detail = mapManagedAgentActivitySnapshot(response.activity)
         if (!detail) throw new Error('Managed Agent send returned an invalid snapshot')
         onActivity(detail)
@@ -96,51 +126,73 @@ export function createManagedAgentCommandPort(
         if (!turn) throw new Error('Managed Agent send returned no canonical turn')
         return { kind: 'turn', session: detail.session, turnId: turn.turnId, turn }
       },
-      cancelTurn: async (input) => {
-        const response = await request(
-          `/api/agents/${encodeURIComponent(agentId)}/engine/session/${encodeURIComponent(input.agentSessionId)}/turns/${encodeURIComponent(input.turnId)}/cancel`,
-        ) as { result?: unknown; activity?: unknown }
+      cancelTurn: async (input): Promise<AgentActivityTurnCancelResponse> => {
+        const response = managedAgentCancelResponseFromJson(
+          await request(`/api/agents/${encodeURIComponent(agentId)}/engine/session/${encodeURIComponent(input.agentSessionId)}/turns/${encodeURIComponent(input.turnId)}/cancel`),
+        )
         const detail = mapManagedAgentActivitySnapshot(response.activity)
         if (!detail) throw new Error('Managed Agent cancel returned an invalid snapshot')
         onActivity(detail)
         const turn = detail.turns.find((candidate) => candidate.turnId === input.turnId) ?? null
+        const state = managedAgentDaemonCancelStateFromResult(response.result)
+        if (state === 'not_found') {
+          return { cancel: { canceled: false, reason: 'not_found' } }
+        }
+        if (state === 'settled') {
+          // The provider already confirmed the canceled terminal; the snapshot
+          // may lag, so project the canonical settlement explicitly.
+          return {
+            cancel: { canceled: true, reason: 'turn_canceled' },
+            ...(turn ? { turn: { ...turn, phase: 'settled', outcome: 'canceled' as const } } : {}),
+          }
+        }
+        if (state === 'already_settled') {
+          return {
+            cancel: { canceled: false, reason: 'already_settled' },
+            ...(turn ? { turn } : {}),
+          }
+        }
+        if (state === 'requested') {
+          // Durable intent accepted; canonical settlement arrives via events /
+          // reconcile, so the turn projects as settling, never as canceled.
+          return {
+            cancel: { canceled: false, reason: 'cancel_requested' },
+            ...(turn ? { turn: { ...turn, phase: 'settling' as const, outcome: null } } : {}),
+          }
+        }
+        // Daemon result carried no usable state: derive the response from the
+        // snapshot, keeping the same canonical projections.
+        if (!turn) return { cancel: { canceled: false, reason: 'not_found' } }
+        if (turn.phase === 'settled') {
+          return turn.outcome === 'canceled'
+            ? { cancel: { canceled: true, reason: 'turn_canceled' }, turn }
+            : { cancel: { canceled: false, reason: 'already_settled' }, turn }
+        }
         return {
-          cancel: turn?.phase === 'settled' && turn.outcome === 'canceled'
-            ? { canceled: true, reason: 'turn_canceled' }
-            : { canceled: false, reason: turn?.phase === 'settled' ? 'already_settled' : 'cancel_requested' },
-          turn,
+          cancel: { canceled: false, reason: 'cancel_requested' },
+          turn: { ...turn, phase: 'settling' as const, outcome: null },
         }
       },
-      respondToInteraction: async (input) => {
-        const response = await request(
-          `/api/agents/${encodeURIComponent(agentId)}/interactions/${encodeURIComponent(input.agentSessionId)}/${encodeURIComponent(input.turnId)}/${encodeURIComponent(input.requestId)}`,
-          { ...(input.action ? { action: input.action } : {}), ...(input.optionId ? { optionId: input.optionId } : {}), ...(input.payload ? { payload: input.payload } : {}) },
-        ) as { activity?: unknown }
+      respondToInteraction: async (input): Promise<AgentActivitySubmitInteractiveResult> => {
+        const response = managedAgentInteractionResponseFromJson(
+          await request(`/api/agents/${encodeURIComponent(agentId)}/interactions/${encodeURIComponent(input.agentSessionId)}/${encodeURIComponent(input.turnId)}/${encodeURIComponent(input.requestId)}`,
+          { ...(input.action ? { action: input.action } : {}), ...(input.optionId ? { optionId: input.optionId } : {}), ...(input.payload ? { payload: input.payload } : {}) }),
+        )
         const detail = mapManagedAgentActivitySnapshot(response.activity)
         if (!detail) throw new Error('Managed Agent interaction returned an invalid snapshot')
         onActivity(detail)
         return { session: detail.session }
       },
     },
-    execute: unavailable,
+    execute: options?.executeExtensionCommand
+      ? (command, effectOptions) => options.executeExtensionCommand!(command, effectOptions)
+      : unavailable,
   }
 }
 
-export function managedAgentTargetId(agentId: string): string {
-  switch (agentId) {
-    case 'codex-impl':
-    case 'codex':
-      return 'local:codex'
-    case 'cursor':
-      return 'local:cursor'
-    case 'opencode':
-      return 'local:opencode'
-    case 'kimi':
-      return 'extension:kimi-code'
-    default:
-      return 'local:claude-code'
-  }
-}
+export {
+  managedAgentTargetId,
+} from '@/lib/managed-agent-runtime/agent-targets'
 
 export function hydrateManagedAgentEngine(
   engine: AgentSessionEngine,
@@ -160,6 +212,26 @@ export function hydrateManagedAgentEngine(
   }
 }
 
+/**
+ * Hydrates one projection-qualified core detail snapshot (the
+ * `session/detail` route payload) without message history; the reconcile
+ * executor owns message hydration via `afterVersion` pagination.
+ */
+export function hydrateManagedAgentSessionDetail(
+  engine: AgentSessionEngine,
+  detail: AgentActivitySessionDetailSnapshot,
+): void {
+  engine.dispatch({
+    type: 'session/detailSnapshotReceived',
+    workspaceId: detail.session.workspaceId,
+    session: detail.session,
+    childSessions: [...detail.childSessions],
+    editRetry: detail.editRetry,
+    turns: [...detail.turns],
+    observedAtUnixMs: detail.session.updatedAtUnixMs,
+  })
+}
+
 export function subscribeManagedAgentEngine(
   engine: AgentSessionEngine,
   listener: () => void,
@@ -171,14 +243,43 @@ export function selectManagedAgentChatState(
   state: AgentSessionEngineState,
   agentSessionId: string | null,
 ) {
-  const messages = agentSessionId
-    ? selectSessionMessages(state, agentSessionId).map(toChatMessage)
+  const sessionMessages = agentSessionId
+    ? selectSessionMessages(state, agentSessionId)
     : []
-  const activeTurn = selectEngineActiveTurn(state, agentSessionId)
+  const messages = sessionMessages.map(toChatMessage)
+  const latestTurn = selectEngineLatestTurn(state, agentSessionId)
+  const projectedActiveTurn = selectEngineActiveTurn(state, agentSessionId)
+  const activeTurn = projectedActiveTurn &&
+    latestTurn?.turnId === projectedActiveTurn.turnId &&
+    latestTurn.phase === 'settled'
+    ? null
+    : projectedActiveTurn
+  const terminalTurn = activeTurn ?? latestTurn
+  const visibleError = sessionMessages.find((message) =>
+    message.role === 'assistant' &&
+    message.kind === 'text' &&
+    message.payload.kind === 'agent_visible_error' &&
+    visibleErrorText(message.payload).length > 0,
+  )
+  const providerNotice = sessionMessages.find((message) =>
+    message.role === 'assistant' &&
+    message.kind === 'text' &&
+    message.payload.kind === 'agent_system_notice' &&
+    systemNoticeText(message.payload).length > 0,
+  )
+  const terminalError = terminalTurn?.phase === 'settled' && terminalTurn.outcome === 'failed'
+    ? terminalTurn.error?.message ?? null
+    : null
   return {
     messages,
     activeTurn,
     isStreaming: activeTurn !== null && activeTurn.phase !== 'settled',
+    error: terminalError ??
+      (visibleError
+        ? visibleErrorText(visibleError.payload)
+        : providerNotice && terminalTurn?.phase === 'settled'
+          ? systemNoticeText(providerNotice.payload)
+        : null),
     interactions: selectEngineInteractionsForSession(state, agentSessionId),
     activeToolCalls: agentSessionId
       ? selectSessionMessages(state, agentSessionId)
@@ -200,7 +301,11 @@ function toChatMessage(message: {
   occurredAtUnixMs: number
   status?: string | null
 }): ChatMessage {
-  const text = typeof message.payload.text === 'string' ? message.payload.text : ''
+  const text = message.kind === 'text'
+    ? visibleErrorText(message.payload)
+    : typeof message.payload.text === 'string'
+      ? message.payload.text
+      : ''
   if (message.kind === 'tool') {
     return {
       role: message.role,
@@ -218,6 +323,28 @@ function toChatMessage(message: {
     timestamp: message.occurredAtUnixMs,
     ...(message.status === 'failed' ? { isError: true } : {}),
   }
+}
+
+function visibleErrorText(payload: Record<string, unknown>): string {
+  if (payload.kind !== 'agent_visible_error') {
+    return typeof payload.text === 'string' ? payload.text : ''
+  }
+  const origin = typeof payload.origin === 'string' ? payload.origin : ''
+  const detail = typeof payload.detail === 'string' ? payload.detail.trim() : ''
+  if (origin === 'provider' && detail) return detail
+  for (const key of ['text', 'content', 'detail', 'errorMessage', 'error']) {
+    const value = payload[key]
+    if (typeof value === 'string' && value.trim()) return value
+  }
+  return ''
+}
+
+function systemNoticeText(payload: Record<string, unknown>): string {
+  for (const key of ['detail', 'content', 'errorMessage', 'error', 'text']) {
+    const value = payload[key]
+    if (typeof value === 'string' && value.trim()) return value
+  }
+  return ''
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {

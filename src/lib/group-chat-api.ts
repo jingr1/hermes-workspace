@@ -156,6 +156,27 @@ export function dismissPendingTurn(
   })
 }
 
+export type RespondToManagedInteractionRequest = {
+  action?: string
+  optionId?: string
+  payload?: Record<string, unknown>
+}
+
+/** Writeback for a managed-agent interaction card posted in a room. */
+export function respondToManagedInteraction(
+  roomId: string,
+  messageId: string,
+  req: RespondToManagedInteractionRequest,
+): Promise<{ ok: boolean; status?: string; error?: string }> {
+  return apiFetch(
+    `/api/rooms/${roomId}/messages/${messageId}/interaction-response`,
+    {
+      method: 'POST',
+      body: JSON.stringify(req),
+    },
+  )
+}
+
 export function listAvailableAgents(): Promise<{
   ok: boolean
   agents: Array<{

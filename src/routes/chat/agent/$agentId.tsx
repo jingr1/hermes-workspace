@@ -3,7 +3,7 @@ import { Suspense, lazy, useEffect, useState } from 'react'
 import { z } from 'zod'
 import { ChatRouteLoading } from '../../../screens/chat/chat-route-loading'
 import { useAgentStore } from '../../../stores/agent-store'
-import { fetchAgents } from '../../../lib/agent-api'
+import { fetchAgents, fetchSessionsForAgent } from '../../../lib/agent-api'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { resolveSessionForProfile } from '../../../screens/chat/last-session'
 import { chatQueryKeys } from '../../../screens/chat/chat-queries'
@@ -69,7 +69,6 @@ function ChatAgentRoute() {
 
     const resolveSessionForAgent = (id: string): string | null => {
       const fromUrl = search.session?.trim()
-      if (fromUrl && fromUrl !== 'new') return fromUrl
 
       const agent = useAgentStore
         .getState()
@@ -77,6 +76,7 @@ function ChatAgentRoute() {
       if (!agent) return null
 
       if (agent.runtime === 'hermes') {
+        if (fromUrl && fromUrl !== 'new') return fromUrl
         const profile = agent.runtimeConfig.profile ?? agent.agentId
         const cached = queryClient.getQueryData<Array<SessionMeta>>(
           chatQueryKeys.sessionsForProfile(profile),
@@ -89,6 +89,8 @@ function ChatAgentRoute() {
 
       // Claude Code / managed: restore from store (SQLite-backed list) or last-session.
       const cached = useAgentStore.getState().sessionsByAgentId.get(id) ?? []
+      const knownIds = new Set(cached.map((session) => session.sessionId))
+      if (fromUrl && fromUrl !== 'new' && knownIds.has(fromUrl)) return fromUrl
       const local = cached.map((session) => ({
         friendlyId: session.sessionId,
       }))
@@ -98,8 +100,22 @@ function ChatAgentRoute() {
       return resolved === 'new' ? null : resolved
     }
 
-    const applyAgent = () => {
+    const applyAgent = async () => {
       if (cancelled) return
+      const agent = useAgentStore
+        .getState()
+        .agents.find((entry) => entry.agentId === agentId)
+      if (agent && agent.runtime !== 'hermes' &&
+          !useAgentStore.getState().sessionsByAgentId.has(agentId)) {
+        try {
+          const data = await fetchSessionsForAgent(agentId)
+          if (cancelled) return
+          useAgentStore.getState().setSessions(agentId, data.sessions)
+        } catch {
+          if (cancelled) return
+          useAgentStore.getState().setSessions(agentId, [])
+        }
+      }
       const sessionId = resolveSessionForAgent(agentId)
       setActiveAgentId(agentId || null, { sessionId })
       setSeeded(true)
@@ -110,11 +126,11 @@ function ChatAgentRoute() {
         .then((data) => {
           if (cancelled) return
           useAgentStore.getState().setAgents(data.agents)
-          applyAgent()
+          void applyAgent()
         })
-        .catch(() => applyAgent())
+        .catch(() => void applyAgent())
     } else {
-      applyAgent()
+      void applyAgent()
     }
 
     return () => {

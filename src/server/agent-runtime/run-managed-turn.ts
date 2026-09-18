@@ -17,7 +17,7 @@ import {
 } from '../group-chat/constants'
 import { getMcpEndpoint } from './dispatch'
 import { getAgentRuntimeRouter } from './router'
-import type { AgentRuntimeAdapter, AgentStreamEvent } from './types'
+import type { AgentRuntimeAdapter, AgentRunInput, AgentStreamEvent } from './types'
 
 export type ManagedTurnEvent = AgentStreamEvent
 
@@ -40,6 +40,12 @@ export type RunManagedTurnInput = {
   onEvent?: (event: AgentStreamEvent) => void
   /** Abort / client disconnect — interrupt the run. */
   signal?: AbortSignal
+  /**
+   * Interaction liveness: while a canonical pending interaction blocks the
+   * turn (human answering a card), the drain loop waits past the soft
+   * deadline. The hard cap still bounds the wait.
+   */
+  whileInteractionPending?: () => boolean
   /** Claude native session UUID (--session-id / --resume). */
   nativeSessionId?: string
   /** When true, spawn with `--resume` instead of `--session-id`. */
@@ -120,7 +126,7 @@ export async function runManagedTurn(
       runId,
       agentId: input.agentId,
       task: input.task,
-      taskId: chatSessionId,
+      taskId: input.taskId?.trim() || runId,
       ...(input.model ? { model: input.model } : {}),
       ...(input.effort ? { effort: input.effort } : {}),
       ...(input.cwd ? { cwd: input.cwd } : {}),
@@ -152,6 +158,7 @@ export async function runManagedTurn(
     pollMs,
     onEvent: input.onEvent,
     signal: input.signal,
+    whileInteractionPending: input.whileInteractionPending,
     events,
   })
 }
@@ -165,6 +172,7 @@ async function drainManagedRun(
     pollMs: number
     onEvent?: (event: AgentStreamEvent) => void
     signal?: AbortSignal
+    whileInteractionPending?: () => boolean
     events: Array<AgentStreamEvent>
   },
 ): Promise<RunManagedTurnResult> {
@@ -197,6 +205,15 @@ async function drainManagedRun(
 
       const remaining = deadline - Date.now()
       if (remaining <= 0) {
+        // A canonical pending interaction blocks the turn until a human
+        // answers the card. Keep waiting, bounded by the hard cap.
+        if (
+          opts.whileInteractionPending?.() &&
+          Date.now() < startedAt + opts.hardMs
+        ) {
+          deadline = startedAt + opts.hardMs
+          continue
+        }
         await adapter.interrupt(runId, 'group turn hard timeout').catch(() => undefined)
         const trimmed = text.trim()
         return trimmed
