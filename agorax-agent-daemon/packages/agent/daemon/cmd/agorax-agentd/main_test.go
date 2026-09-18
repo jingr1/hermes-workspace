@@ -346,6 +346,10 @@ func (fakeRuntimeController) GoalControl(context.Context, agenthost.RuntimeGoalC
 }
 
 func newTestServer(t *testing.T) (*httptest.Server, *storesqlite.Store) {
+	return newTestServerWithOps(t, defaultProviderOps(nil))
+}
+
+func newTestServerWithOps(t *testing.T, ops *providerOps) (*httptest.Server, *storesqlite.Store) {
 	t.Helper()
 	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "agent-daemon-test.db"))
 	if err != nil {
@@ -370,7 +374,7 @@ func newTestServer(t *testing.T) (*httptest.Server, *storesqlite.Store) {
 		HistoryRuntime: fakeRuntimeController{}, GoalRuntime: fakeRuntimeController{},
 		OperationOwner: "agorax-agentd-test", EditRetryDisabled: true,
 	})
-	handler := routes(nil, host, db, store, newEventHub())
+	handler := routesWithOps(nil, host, db, store, newEventHub(), ops)
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 	return server, store

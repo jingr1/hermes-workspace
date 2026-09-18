@@ -1,4 +1,8 @@
 import type { AgentProbeResult } from './types'
+import {
+  type AgentProviderInstallResultDto,
+  type AgentProviderStatusListDto,
+} from '@/lib/managed-agent-runtime/provider-status'
 import { AgoraxManagedRunStore } from './agorax-managed-run-store'
 import type { AgoraxManagedPromptContentBlock } from './agorax-managed-prompt-content'
 import {
@@ -41,12 +45,19 @@ export type AgoraxManagedAgentHttpClientOptions = {
 export class AgoraxManagedAgentHttpError extends Error {
   readonly status: number
   readonly path: string
+  /** Daemon-reported error detail (the response body's `error` field). */
+  readonly detail: string
 
-  constructor(status: number, path: string) {
-    super(`Agorax Managed Agent request failed: ${status} ${path}`)
+  constructor(status: number, path: string, detail = '') {
+    super(
+      detail
+        ? `Agorax Managed Agent request failed: ${status} ${path}: ${detail}`
+        : `Agorax Managed Agent request failed: ${status} ${path}`,
+    )
     this.name = 'AgoraxManagedAgentHttpError'
     this.status = status
     this.path = path
+    this.detail = detail
   }
 }
 
@@ -135,6 +146,28 @@ export class AgoraxManagedAgentHttpClient {
       }
     }
     return { available: true, detail: `Agorax managed target ${targetId} is ready` }
+  }
+
+  /** GET /v1/provider-status — the daemon's provider runtime aggregate. */
+  async getProviderStatus(): Promise<AgentProviderStatusListDto> {
+    return this.requestJson<AgentProviderStatusListDto>('/v1/provider-status', {
+      method: 'GET',
+    })
+  }
+
+  /** POST /v1/providers/{provider}/install — managed npm install/upgrade. */
+  async installProvider(
+    provider: string,
+    options?: { version?: string },
+  ): Promise<AgentProviderInstallResultDto> {
+    const version = options?.version?.trim() ?? ''
+    return this.requestJson<AgentProviderInstallResultDto>(
+      `/v1/providers/${encodeURIComponent(provider)}/install`,
+      {
+        method: 'POST',
+        body: JSON.stringify(version ? { version } : {}),
+      },
+    )
   }
 
   async createSession(
@@ -398,10 +431,28 @@ export class AgoraxManagedAgentHttpClient {
       },
     })
     if (!response.ok) {
-      throw new AgoraxManagedAgentHttpError(response.status, path)
+      throw new AgoraxManagedAgentHttpError(
+        response.status,
+        path,
+        await readDaemonErrorDetail(response),
+      )
     }
     return (await response.json()) as T
   }
+}
+
+/** Best-effort extraction of the daemon JSON error body's `error` field. */
+async function readDaemonErrorDetail(response: Response): Promise<string> {
+  try {
+    const body: unknown = await response.json()
+    if (body && typeof body === 'object' && 'error' in body) {
+      const detail = (body as { error?: unknown }).error
+      if (typeof detail === 'string' && detail.trim()) return detail.trim()
+    }
+  } catch {
+    // Non-JSON or unreadable error bodies keep the generic status message.
+  }
+  return ''
 }
 
 function normalizeCreateSessionResponse(value: unknown): CreateSessionResponse {

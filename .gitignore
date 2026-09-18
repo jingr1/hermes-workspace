@@ -20,6 +20,9 @@ build
 .tanstack
 .vite
 
+# Go build artifacts (agorax-agent-daemon)
+/agorax-agent-daemon/packages/agent/daemon/agorax-agentd
+
 # Environment variables
 .env
 .env.local

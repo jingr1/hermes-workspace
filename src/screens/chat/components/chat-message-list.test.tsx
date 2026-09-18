@@ -47,6 +47,46 @@ describe('buildDisplayEntries', () => {
     expect(entries.map((entry) => entry.message.id)).toEqual(['u1', 'a1'])
     expect(entries[1].attachedToolMessages).toHaveLength(0)
   })
+
+  it('attaches managed tool_call messages to the following assistant text entry', () => {
+    const managedToolCall = {
+      id: 'tool-1',
+      role: 'assistant',
+      content: [
+        {
+          type: 'toolCall',
+          id: 'msg-tool-1',
+          name: 'bash',
+          arguments: { command: 'ls' },
+        },
+      ],
+      timestamp: 2,
+      toolName: 'bash',
+      details: { input: { command: 'ls' }, output: 'README.md' },
+    } as unknown as ChatMessage
+    const reasoning = {
+      id: 'r1',
+      role: 'assistant',
+      content: [{ type: 'thinking', thinking: 'Let me list the files.' }],
+      timestamp: 1,
+    } as unknown as ChatMessage
+
+    const entries = buildDisplayEntries([
+      textMessage('u1', 'user', 'list files'),
+      reasoning,
+      managedToolCall,
+      textMessage('a1', 'assistant', 'Here you go.'),
+    ])
+
+    // Reasoning keeps its own entry; the tool-only message is deferred and
+    // attaches to the next text reply instead of rendering standalone.
+    expect(entries.map((entry) => entry.message.id)).toEqual(['u1', 'r1', 'a1'])
+    expect(entries[2].attachedToolMessages).toHaveLength(1)
+    expect(entries[2].attachedToolMessages[0]).toMatchObject({
+      toolName: 'bash',
+      details: { input: { command: 'ls' }, output: 'README.md' },
+    })
+  })
 })
 
 describe('getTrailingToolOnlyTurnSummary', () => {

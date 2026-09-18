@@ -206,6 +206,8 @@ import { Route as ApiAuthAnthropicRouteImport } from './routes/api/auth.anthropi
 import { Route as ApiArtifactsArtifactIdRouteImport } from './routes/api/artifacts.$artifactId'
 import { Route as ApiAgentsStatusRouteImport } from './routes/api/agents/status'
 import { Route as ApiAgentsOperationsRouteImport } from './routes/api/agents/operations'
+import { Route as ApiAgentRuntimeStatusRouteImport } from './routes/api/agent-runtime/status'
+import { Route as ApiAgentRuntimeInstallRouteImport } from './routes/api/agent-runtime/install'
 import { Route as ApiSessionsSessionKeyTruncateRouteImport } from './routes/api/sessions/$sessionKey.truncate'
 import { Route as ApiSessionsSessionKeyStatusRouteImport } from './routes/api/sessions/$sessionKey.status'
 import { Route as ApiSessionsSessionKeyCompressRouteImport } from './routes/api/sessions/$sessionKey.compress'
@@ -1234,6 +1236,16 @@ const ApiAgentsOperationsRoute = ApiAgentsOperationsRouteImport.update({
   path: '/api/agents/operations',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAgentRuntimeStatusRoute = ApiAgentRuntimeStatusRouteImport.update({
+  id: '/api/agent-runtime/status',
+  path: '/api/agent-runtime/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAgentRuntimeInstallRoute = ApiAgentRuntimeInstallRouteImport.update({
+  id: '/api/agent-runtime/install',
+  path: '/api/agent-runtime/install',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSessionsSessionKeyTruncateRoute =
   ApiSessionsSessionKeyTruncateRouteImport.update({
     id: '/$sessionKey/truncate',
@@ -1550,6 +1562,8 @@ export interface FileRoutesByFullPath {
   '/chat/': typeof ChatIndexRoute
   '/group-chat/': typeof GroupChatIndexRoute
   '/settings/': typeof SettingsIndexRoute
+  '/api/agent-runtime/install': typeof ApiAgentRuntimeInstallRoute
+  '/api/agent-runtime/status': typeof ApiAgentRuntimeStatusRoute
   '/api/agents/operations': typeof ApiAgentsOperationsRoute
   '/api/agents/status': typeof ApiAgentsStatusRoute
   '/api/artifacts/$artifactId': typeof ApiArtifactsArtifactIdRoute
@@ -1781,6 +1795,8 @@ export interface FileRoutesByTo {
   '/chat': typeof ChatIndexRoute
   '/group-chat': typeof GroupChatIndexRoute
   '/settings': typeof SettingsIndexRoute
+  '/api/agent-runtime/install': typeof ApiAgentRuntimeInstallRoute
+  '/api/agent-runtime/status': typeof ApiAgentRuntimeStatusRoute
   '/api/agents/operations': typeof ApiAgentsOperationsRoute
   '/api/agents/status': typeof ApiAgentsStatusRoute
   '/api/artifacts/$artifactId': typeof ApiArtifactsArtifactIdRoute
@@ -2015,6 +2031,8 @@ export interface FileRoutesById {
   '/chat/': typeof ChatIndexRoute
   '/group-chat/': typeof GroupChatIndexRoute
   '/settings/': typeof SettingsIndexRoute
+  '/api/agent-runtime/install': typeof ApiAgentRuntimeInstallRoute
+  '/api/agent-runtime/status': typeof ApiAgentRuntimeStatusRoute
   '/api/agents/operations': typeof ApiAgentsOperationsRoute
   '/api/agents/status': typeof ApiAgentsStatusRoute
   '/api/artifacts/$artifactId': typeof ApiArtifactsArtifactIdRoute
@@ -2250,6 +2268,8 @@ export interface FileRouteTypes {
     | '/chat/'
     | '/group-chat/'
     | '/settings/'
+    | '/api/agent-runtime/install'
+    | '/api/agent-runtime/status'
     | '/api/agents/operations'
     | '/api/agents/status'
     | '/api/artifacts/$artifactId'
@@ -2481,6 +2501,8 @@ export interface FileRouteTypes {
     | '/chat'
     | '/group-chat'
     | '/settings'
+    | '/api/agent-runtime/install'
+    | '/api/agent-runtime/status'
     | '/api/agents/operations'
     | '/api/agents/status'
     | '/api/artifacts/$artifactId'
@@ -2714,6 +2736,8 @@ export interface FileRouteTypes {
     | '/chat/'
     | '/group-chat/'
     | '/settings/'
+    | '/api/agent-runtime/install'
+    | '/api/agent-runtime/status'
     | '/api/agents/operations'
     | '/api/agents/status'
     | '/api/artifacts/$artifactId'
@@ -2944,6 +2968,8 @@ export interface RootRouteChildren {
   ApiWorkspaceRoute: typeof ApiWorkspaceRouteWithChildren
   ChatSessionKeyRoute: typeof ChatSessionKeyRoute
   ChatIndexRoute: typeof ChatIndexRoute
+  ApiAgentRuntimeInstallRoute: typeof ApiAgentRuntimeInstallRoute
+  ApiAgentRuntimeStatusRoute: typeof ApiAgentRuntimeStatusRoute
   ApiAgentsOperationsRoute: typeof ApiAgentsOperationsRoute
   ApiAgentsStatusRoute: typeof ApiAgentsStatusRoute
   ApiClaudeCodeSettingsRoute: typeof ApiClaudeCodeSettingsRoute
@@ -4399,6 +4425,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentsOperationsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/agent-runtime/status': {
+      id: '/api/agent-runtime/status'
+      path: '/api/agent-runtime/status'
+      fullPath: '/api/agent-runtime/status'
+      preLoaderRoute: typeof ApiAgentRuntimeStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent-runtime/install': {
+      id: '/api/agent-runtime/install'
+      path: '/api/agent-runtime/install'
+      fullPath: '/api/agent-runtime/install'
+      preLoaderRoute: typeof ApiAgentRuntimeInstallRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/sessions/$sessionKey/truncate': {
       id: '/api/sessions/$sessionKey/truncate'
       path: '/$sessionKey/truncate'
@@ -5091,6 +5131,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiWorkspaceRoute: ApiWorkspaceRouteWithChildren,
   ChatSessionKeyRoute: ChatSessionKeyRoute,
   ChatIndexRoute: ChatIndexRoute,
+  ApiAgentRuntimeInstallRoute: ApiAgentRuntimeInstallRoute,
+  ApiAgentRuntimeStatusRoute: ApiAgentRuntimeStatusRoute,
   ApiAgentsOperationsRoute: ApiAgentsOperationsRoute,
   ApiAgentsStatusRoute: ApiAgentsStatusRoute,
   ApiClaudeCodeSettingsRoute: ApiClaudeCodeSettingsRoute,

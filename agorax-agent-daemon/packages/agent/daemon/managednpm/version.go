@@ -43,6 +43,22 @@ func ExtractVersion(output string) (string, bool) {
 	return strconv.FormatUint(version[0], 10) + "." + strconv.FormatUint(version[1], 10) + "." + strconv.FormatUint(version[2], 10), true
 }
 
+// CompareStableVersions compares two stable x.y.z versions (a leading "v" is
+// accepted). The bool is false when either value is not a stable version, in
+// which case the comparison result is meaningless; callers must treat that as
+// "cannot compare" rather than as equality.
+func CompareStableVersions(left string, right string) (int, bool) {
+	leftVersion, ok := parseStableVersion(left)
+	if !ok {
+		return 0, false
+	}
+	rightVersion, ok := parseStableVersion(right)
+	if !ok {
+		return 0, false
+	}
+	return compareVersions(leftVersion, rightVersion), true
+}
+
 func parseStableVersion(value string) (stableVersion, bool) {
 	matches := stableVersionPattern.FindStringSubmatch(strings.TrimSpace(value))
 	return versionFromMatches(matches)

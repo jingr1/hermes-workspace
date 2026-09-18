@@ -283,46 +283,109 @@ export function selectManagedAgentChatState(
     interactions: selectEngineInteractionsForSession(state, agentSessionId),
     activeToolCalls: agentSessionId
       ? selectSessionMessages(state, agentSessionId)
-          .filter((message) => message.kind === 'tool' && message.status !== 'completed')
+          .filter((message) =>
+            isToolCallKind(message.kind) &&
+            !isTerminalToolStatus(message.status)
+          )
           .map((message) => ({
             id: message.messageId,
-            name: typeof message.payload.name === 'string' ? message.payload.name : 'Tool',
+            name: toolNameFromPayload(message.payload),
             phase: message.status ?? 'running',
-            args: message.payload.arguments,
+            args: record(message.payload.input ?? message.payload.arguments),
           }))
       : [],
   }
 }
 
 function toChatMessage(message: {
+  messageId: string
   role: string
   kind: string
   payload: Record<string, unknown>
   occurredAtUnixMs: number
   status?: string | null
 }): ChatMessage {
+  if (isToolCallKind(message.kind)) {
+    const error = firstNonEmptyString(
+      message.payload.error,
+      message.payload.errorMessage,
+    )
+    const rawOutput = message.payload.output
+    return {
+      role: message.role,
+      content: [{
+        type: 'toolCall',
+        id: message.messageId,
+        name: toolNameFromPayload(message.payload),
+        arguments: record(message.payload.input ?? message.payload.arguments),
+      }],
+      timestamp: message.occurredAtUnixMs,
+      // Legacy top-level contract consumed by the chat list's attached-tool
+      // rendering (toolName/type resolution and readToolArgs(details)).
+      toolName: toolNameFromPayload(message.payload),
+      details: {
+        input: record(message.payload.input ?? message.payload.arguments),
+        ...(rawOutput != null ? { output: rawOutput } : {}),
+        ...(error ? { error } : {}),
+      },
+      ...(message.status === 'failed' || error ? { isError: true } : {}),
+    }
+  }
+  if (message.kind === 'reasoning') {
+    return {
+      role: message.role,
+      content: [{ type: 'thinking', thinking: reasoningTextFromPayload(message.payload) }],
+      timestamp: message.occurredAtUnixMs,
+      ...(message.status === 'failed' ? { isError: true } : {}),
+    }
+  }
   const text = message.kind === 'text'
     ? visibleErrorText(message.payload)
     : typeof message.payload.text === 'string'
       ? message.payload.text
       : ''
-  if (message.kind === 'tool') {
-    return {
-      role: message.role,
-      content: [{
-        type: 'toolCall',
-        name: typeof message.payload.name === 'string' ? message.payload.name : 'Tool',
-        arguments: record(message.payload.arguments),
-      }],
-      timestamp: message.occurredAtUnixMs,
-    }
-  }
   return {
     role: message.role,
     content: [{ type: 'text', text }],
     timestamp: message.occurredAtUnixMs,
     ...(message.status === 'failed' ? { isError: true } : {}),
   }
+}
+
+// Daemon canonical kinds: "tool_call" (payload toolName/input); "tool" with
+// name/arguments is the legacy shim shape kept for replayed durable rows.
+function isToolCallKind(kind: string): boolean {
+  return kind === 'tool_call' || kind === 'tool'
+}
+
+function isTerminalToolStatus(status: string | null | undefined): boolean {
+  return status === 'completed' || status === 'failed' ||
+    status === 'canceled' || status === 'error'
+}
+
+function toolNameFromPayload(payload: Record<string, unknown>): string {
+  const toolName = firstNonEmptyString(payload.toolName, payload.name)
+  return toolName ?? 'Tool'
+}
+
+function reasoningTextFromPayload(payload: Record<string, unknown>): string {
+  return firstNonEmptyString(
+    payload.text,
+    payload.content,
+    payload.message,
+    payload.body,
+    payload.displayPrompt,
+    payload.title,
+  ) ?? ''
+}
+
+function firstNonEmptyString(...values: Array<unknown>): string | null {
+  for (const value of values) {
+    if (typeof value !== 'string') continue
+    const trimmed = value.trim()
+    if (trimmed) return trimmed
+  }
+  return null
 }
 
 function visibleErrorText(payload: Record<string, unknown>): string {

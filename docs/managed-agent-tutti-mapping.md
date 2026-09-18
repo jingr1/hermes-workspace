@@ -184,3 +184,68 @@ node --test --experimental-strip-types \
 - vitest jsdom 已从 27 降到 25（修 `html-encoding-sniffer ERR_REQUIRE_ESM`）。
 - 仓库 `.env` 配置 `AGORAX_MANAGED_AGENT_URL` 时，router 测试用 `vi.stubEnv` 钉空，
   断言的是「transport 未配置」回退路径。
+
+## 前端 canonical-kind 映射修复（2026-09-18）
+
+**问题**：daemon 已按 canonical 合同输出 `tool_call`（payload `toolName`/`input`/`output`/`error`）
+与 `reasoning`（payload `text`/`content`）消息（见
+`agorax-agent-daemon/packages/agent/daemon/runtime/reporter_message.go`），但
+`src/screens/chat/lib/managed-agent-engine.ts` 只识别旧 shim kind `tool` 且读
+`payload.name`/`payload.arguments`。后果：工具调用不进活动工具区、不按工具卡片渲染；
+reasoning 被当普通文本，无折叠思考块。
+
+**修复**（仅 adapter 层，UI 组件零改动——`MessageItem`/`TuiActivityCard` 的
+thinking 折叠块与工具卡片本就已消费这些 content part）：
+
+| canonical | ChatMessage 投影 | UI 路径 |
+| --- | --- | --- |
+| `tool_call`（兼容 legacy `tool`） | `content:[{type:'toolCall',id: messageId, name: toolName, arguments: input}]` + 顶层 `toolName`/`details:{input,output?,error?}`/`isError?` | tool-only 消息经 `buildDisplayEntries` 挂到下一条 assistant 文本 entry 的 `attachedToolMessages`，工具卡片由 `attachedToolSections` 渲染（`toolName` 定型、`readToolArgs(details)` 取参、output/error 进卡片） |
+| `reasoning` | `content:[{type:'thinking', thinking: text}]`（payload 按 `text→content→message→body→displayPrompt→title` 回退取值） | 独立 entry → `TuiActivityCard` 思考折叠区（默认收起、streaming 时显示计时与状态） |
+| `activeToolCalls` | kind ∈ {`tool_call`,`tool`} 且 status 未终结（`completed/failed/canceled/error` 剔除） | `ThinkingBubble` "Using: X" 与流式活动区 |
+
+**payload key 合同**（与 tutti `workspaceAgentMessageProjection.ts` 对齐）：tool_call 用
+`payload.{toolName|name, input|arguments, output, error|errorMessage}`；reasoning 用
+`payload.{text|content|message|body|displayPrompt|title}`。
+
+**回归测试**：`managed-agent-engine.test.ts`（canonical tool_call active 列表、legacy kind
+兼容、reasoning→thinking、settled output/error 字段）；`chat-message-list.test.tsx`
+（managed 消息形状经 `buildDisplayEntries` 挂到后续文本 entry 的集成契约）。
+
+**已知限制**：turn 以 tool-only 消息收尾且无后续 assistant 文本时，工具卡片不进时间线
+（`buildDisplayEntries` 尾挂规则 + `getTrailingToolOnlyTurnSummary` 未接线，属常规
+chat 路径的既有行为，非本次引入）。settled 工具卡片的输出经 `details` JSON 兜底展示，
+输入输出同卡，后续可参照 tutti `AgentExpandedToolContent` 的 rendererKind 分工具类型精修。
+
+## 前端未接入能力审计（2026-09-18，待评审）
+
+> 状态：只读审计完成，供评审排期。结论三类：**纯前端缺口**（数据已映射，接 UI 即可）、
+> **双端缺口**（daemon 无 REST 端点，需先补合同）、**前端假象**（UI 给了选项但不生效）。
+
+| 能力 | 后端状态 | 前端现状 | 接法 | 优先级 |
+| --- | --- | --- | --- | --- |
+| reasoning effort 静默丢弃（**前端假象**） | daemon create/input 请求体无 effort 字段（`daemonDtos.ts:416-431`）；`activate` 路由只收 model（`src/routes/api/agents/$agentId/engine/activate.ts:53`） | thinkingLevel 选择器存在并随 `submit` 传 `options.effort`（`managed-agent-chat-view.tsx:82-100`），但 `activateSession`/`sendInput` body 未转发 | daemon 请求契约加 `reasoningEffort` → 路由转发 → engine 补发 | **P0**（唯一"选项无效"假象） |
+| turn fileChanges（diff 统计） | Go 已从 provider payload 归一化并持久化（`runtime/tool_file_changes.go`、`cmd/agorax-agentd/main.go:464`）；adapter 已映射（`mappers.ts:110`） | `selectManagedAgentChatState` 不暴露；`src/screens/chat` 0 引用 | chat state 加 `latestTurn.fileChanges`，消息列表底部渲染文件数/增删行统计条 | P1 |
+| noticeCommand 语义（compact/review/undo/goal） | daemon 写入 message Semantics（`runtime/reporter.go:330-390`）；adapter 已映射（`mappers.ts:158-164`） | `toChatMessage` 忽略 `semantics`，进行中/完成无渲染 | mapper 识别 `semantics.noticeCommand(+Status)` 输出轻量系统行（如 "Compacting context…"） | P1 |
+| 消息增量 toolOutput 流式展示 | daemon WS 发 `message_delta`（`toolOutput set/append_text`）；core coordinator 应用到 optimistic overlay（`workspaceEventCoordinator.ts:319-366`） | hook 直读 `engine.getSnapshot()`，从不调用 `coordinator.project()`，optimistic 增量被丢弃，要等 reconcile 折叠 | hook 订阅 coordinator 投影（或把 optimistic message dispatch 进 engine） | P1 |
+| session usage / token 用量 | daemon `SessionMetadata.usage`；adapter 映射 `session.usage`；core `resolveAgentActivityUsage`（`usage.ts`）现成 | 聊天视图无用量展示（现有 usage-meter 是 Hermes gateway 形状，非 canonical） | composer/hint 区挂 context 百分比 + quota 条 | P1 |
+| session 列表 / resumable | `/api/agents/:id/engine/sessions` 路由已返回 canonical sessions 但**无前端调用方**；Go `Resumable`（`runtime/types.go:399`）未投影，adapter 硬编码 `resumable:false`（`mappers.ts:85`，有 TODO） | sidebar 只走 collab.db display 会话（`use-external-agent-sessions.ts`），canonical 独有会话不可见 | 短期 sidebar 合并 canonical 列表；daemon 投影 `Resumable` 后做真 resume 标识 | P1 |
+| session rename/delete（canonical 侧，数据一致性） | daemon 无端点；server adapter 显式 throw（`agorax-managed-agent-activity-adapter.ts:166-180`）；engine effect unavailable | sidebar rename/delete 只改 collab.db display 行（`agent-sessions-service.ts:81-99`），canonical 会话两侧漂移 | daemon 补 DELETE/PATCH 端点接 engine effect；或 UI 明示仅本地 | P1 |
+| session pin | daemon JSON 有 `PinnedAtUnixMS`（`daemonDtos.ts:102`），adapter 已映射（`mappers.ts:90`） | 无 pin UI、effect unavailable | daemon 补 pin 端点 + sidebar 置顶排序 | P2 |
+| composerOptions（模型目录/reasoning 选项/权限模式） | adapter 保留完整映射等 daemon 端点（`composerOptions.ts`）；Go `modelcatalog.ProjectComposerCatalog` 无 REST 出口；`permissionConfig` 恒 `{configurable:false}` | 前端用 legacy `/models` 路由 + 本地存储；`loadComposerOptions` 无人调用 | daemon 加 composer-options 端点 → engine `loadComposerOptions` → composer 换 canonical 数据源（可拆分） | P2 |
+| goal 控制 | codex adapter 维护 goal（`codex_appserver_event_info.go:257`）；session `goal` 已映射；core engine 有全套 goalControl reducer/selector | 前端从不调用 `engine.goalControl`，无 goal UI；server adapter throw；daemon 无 goal 路由 | 可先消费 `session.goal` 做只读展示（成本低）；控制面等 daemon 端点 | P2 |
+| session fork | core 有完整 fork 类型 + `providerForkBindingAllowsAttempt`；turn `ProviderForkBindingAvailable` 已映射；daemon 无端点 | 无 fork 入口 | 等 daemon fork 端点 → 接 engine fork 命令 | P2 |
+| childSessions（subagent 投影） | canonical 有 root/child 血缘（`mappers.ts:37-43`）；daemon activity 聚合**不含 childSessions 数组**；adapter 与前端 hydrate 均硬编码 `[]`（`sessionDetail.ts:86`、`managed-agent-engine.ts:205`） | 无 subagent 面板 | daemon 先投影 child 会话 → 前端做 subagent 视图 | P2 |
+| session.title（daemon 自动标题） | daemon 有 Title + 自动生成 | `activeTitle` 取首条用户消息截 40 字（`use-managed-agent-chat.ts:583-587`） | 直接用 `selectEngineSession(...).title`，fallback 现有逻辑 | P2 |
+| capabilities 展示 | daemon 有快照，但 adapter 映射 `capabilities: null`（`mappers.ts:63-66`，CapabilitySnapshot 未展开） | view hint 恒显 "Capabilities unknown" | mapper 用 core helper `agentActivitySessionCapabilitiesFromIds`（`capabilities.ts:40`）展开 values | P2 |
+
+**已对齐良好的能力**（不需动）：activate/sendInput/cancelTurn/respondToInteraction 四
+effect + cancel 状态机投影；SSE→WS 桥与重连 reconcile；message_update 内联折叠 +
+afterVersion 分页；interactions approval/question 卡片与 settlement 状态机；tool_call /
+reasoning 消息映射（本次修复）；错误上浮（agent_visible_error/agent_system_notice/
+terminalTurn failed）；turn phase → isStreaming；activeToolCalls；engine 提交准入与
+prompt 队列计数；promptContent 附件块；provider-status / provider install。
+
+**评审建议**：P0 的 reasoning effort 是唯一"给了选项不生效"的假象，建议最先修（改动小：
+daemon DTO + 两条路由转发 + engine body 字段）。P1 里 fileChanges / usage /
+noticeCommand 三个都是"数据已在前端手里，只差展示"，可合并成一个"turn 元数据展示"
+小迭代。其余 P2 多数卡在 daemon REST 端点，需先排 daemon 侧合同。

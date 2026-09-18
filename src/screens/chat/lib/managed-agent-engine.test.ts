@@ -24,7 +24,7 @@ describe('Managed Agent Engine adapter', () => {
     engine.dispose()
   })
 
-  it('derives active tool calls from canonical messages', () => {
+  it('derives active tool calls from canonical tool_call messages', () => {
     const engine = createManagedAgentEngine({
       workspaceId: 'workspace-1',
       commandPort: { kind: 'typed', effects: unsupportedEffects(), execute: async () => undefined },
@@ -34,12 +34,101 @@ describe('Managed Agent Engine adapter', () => {
       workspaceId: 'workspace-1',
       session: session(),
       turns: [turn()],
-      messages: [{ workspaceId: 'workspace-1', agentSessionId: 'session-1', messageId: 'tool-1', turnId: 'turn-1', role: 'assistant', kind: 'tool', payload: { name: 'read_file', arguments: { path: 'README.md' } }, version: 1, sequence: 1, occurredAtUnixMs: 1 }],
+      messages: [{ workspaceId: 'workspace-1', agentSessionId: 'session-1', messageId: 'tool-1', turnId: 'turn-1', role: 'assistant', kind: 'tool_call', payload: { toolName: 'read_file', input: { path: 'README.md' } }, version: 1, sequence: 1, occurredAtUnixMs: 1 }],
       interactions: [],
     })
 
     expect(selectManagedAgentChatState(engine.getSnapshot(), 'session-1').activeToolCalls).toEqual([
       { id: 'tool-1', name: 'read_file', phase: 'running', args: { path: 'README.md' } },
+    ])
+    expect(selectManagedAgentChatState(engine.getSnapshot(), 'session-1').messages).toEqual([
+      {
+        role: 'assistant',
+        content: [{ type: 'toolCall', id: 'tool-1', name: 'read_file', arguments: { path: 'README.md' } }],
+        timestamp: 1,
+        toolName: 'read_file',
+        details: { input: { path: 'README.md' } },
+      },
+    ])
+    engine.dispose()
+  })
+
+  it('still admits the legacy tool kind with name/arguments payload', () => {
+    const engine = createManagedAgentEngine({
+      workspaceId: 'workspace-1',
+      commandPort: { kind: 'typed', effects: unsupportedEffects(), execute: async () => undefined },
+    })
+    hydrateManagedAgentEngine(engine, {
+      ...detailDefaults,
+      workspaceId: 'workspace-1',
+      session: session(),
+      turns: [turn()],
+      messages: [{ workspaceId: 'workspace-1', agentSessionId: 'session-1', messageId: 'tool-legacy', turnId: 'turn-1', role: 'assistant', kind: 'tool', payload: { name: 'read_file', arguments: { path: 'README.md' } }, version: 1, sequence: 1, occurredAtUnixMs: 1 }],
+      interactions: [],
+    })
+
+    expect(selectManagedAgentChatState(engine.getSnapshot(), 'session-1').activeToolCalls).toEqual([
+      { id: 'tool-legacy', name: 'read_file', phase: 'running', args: { path: 'README.md' } },
+    ])
+    engine.dispose()
+  })
+
+  it('projects reasoning messages as thinking content', () => {
+    const engine = createManagedAgentEngine({
+      workspaceId: 'workspace-1',
+      commandPort: { kind: 'typed', effects: unsupportedEffects(), execute: async () => undefined },
+    })
+    hydrateManagedAgentEngine(engine, {
+      ...detailDefaults,
+      workspaceId: 'workspace-1',
+      session: session(),
+      turns: [turn()],
+      messages: [{ workspaceId: 'workspace-1', agentSessionId: 'session-1', messageId: 'reasoning-1', turnId: 'turn-1', role: 'assistant', kind: 'reasoning', payload: { text: 'Let me check the config first.', source: 'runtime' }, version: 1, sequence: 1, occurredAtUnixMs: 1 }],
+      interactions: [],
+    })
+
+    expect(selectManagedAgentChatState(engine.getSnapshot(), 'session-1').messages).toEqual([
+      { role: 'assistant', content: [{ type: 'thinking', thinking: 'Let me check the config first.' }], timestamp: 1 },
+    ])
+    engine.dispose()
+  })
+
+  it('projects settled tool_call output/error onto the tool card fields', () => {
+    const engine = createManagedAgentEngine({
+      workspaceId: 'workspace-1',
+      commandPort: { kind: 'typed', effects: unsupportedEffects(), execute: async () => undefined },
+    })
+    hydrateManagedAgentEngine(engine, {
+      ...detailDefaults,
+      workspaceId: 'workspace-1',
+      session: session(),
+      turns: [turn()],
+      messages: [
+        { workspaceId: 'workspace-1', agentSessionId: 'session-1', messageId: 'tool-1', turnId: 'turn-1', role: 'assistant', kind: 'tool_call', status: 'completed', payload: { toolName: 'bash', input: { command: 'ls' }, output: 'README.md\nsrc' }, version: 2, sequence: 1, occurredAtUnixMs: 1 },
+        { workspaceId: 'workspace-1', agentSessionId: 'session-1', messageId: 'tool-2', turnId: 'turn-1', role: 'assistant', kind: 'tool_call', status: 'failed', payload: { toolName: 'bash', input: { command: 'false' }, error: 'command exited 1' }, version: 2, sequence: 2, occurredAtUnixMs: 2 },
+      ],
+      interactions: [],
+    })
+
+    const state = selectManagedAgentChatState(engine.getSnapshot(), 'session-1')
+    // Terminal tool calls leave the active list.
+    expect(state.activeToolCalls).toEqual([])
+    expect(state.messages).toEqual([
+      {
+        role: 'assistant',
+        content: [{ type: 'toolCall', id: 'tool-1', name: 'bash', arguments: { command: 'ls' } }],
+        timestamp: 1,
+        toolName: 'bash',
+        details: { input: { command: 'ls' }, output: 'README.md\nsrc' },
+      },
+      {
+        role: 'assistant',
+        content: [{ type: 'toolCall', id: 'tool-2', name: 'bash', arguments: { command: 'false' } }],
+        timestamp: 2,
+        toolName: 'bash',
+        details: { input: { command: 'false' }, error: 'command exited 1' },
+        isError: true,
+      },
     ])
     engine.dispose()
   })

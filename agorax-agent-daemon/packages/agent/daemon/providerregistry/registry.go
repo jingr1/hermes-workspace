@@ -384,9 +384,14 @@ func Validate(descriptor ProviderDescriptor) error {
 		if strings.TrimSpace(descriptor.Status.Install.PackageName) == "" || strings.TrimSpace(descriptor.Status.Install.BinaryName) == "" {
 			return fmt.Errorf("provider %q managed npm installer package and binary are required", providerID)
 		}
-		managedDescriptor, _ := descriptor.ManagedNPMDescriptor()
-		if err := managedDescriptor.Validate(); err != nil {
-			return fmt.Errorf("provider %q managed npm installer: %w", providerID, err)
+		// Version-pinned managed npm installers must carry stable floors. A
+		// descriptor without pins installs `@latest` and leaves version
+		// validation to install/update time discovery.
+		if strings.TrimSpace(descriptor.Status.MinVersion) != "" || strings.TrimSpace(descriptor.Status.Install.RecommendedVersion) != "" {
+			managedDescriptor, _ := descriptor.ManagedNPMDescriptor()
+			if err := managedDescriptor.Validate(); err != nil {
+				return fmt.Errorf("provider %q managed npm installer: %w", providerID, err)
+			}
 		}
 	case InstallerKindShellCommand:
 		if strings.TrimSpace(descriptor.Status.Install.ShellCommand) == "" {

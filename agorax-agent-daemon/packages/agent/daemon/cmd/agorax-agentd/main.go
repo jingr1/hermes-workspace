@@ -118,6 +118,19 @@ func agentDBPath() string {
 }
 
 func routes(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.DB, store *storesqlite.Store, hub *eventHub) http.Handler {
+	ops := defaultProviderOps(func() map[string]bool {
+		registered := map[string]bool{}
+		if runtime != nil {
+			for _, provider := range runtime.Controller().RegisteredProviders() {
+				registered[provider] = true
+			}
+		}
+		return registered
+	})
+	return routesWithOps(runtime, host, db, store, hub, ops)
+}
+
+func routesWithOps(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.DB, store *storesqlite.Store, hub *eventHub, ops *providerOps) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(response http.ResponseWriter, _ *http.Request) {
 		writeJSON(response, http.StatusOK, map[string]any{
@@ -151,6 +164,8 @@ func routes(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.DB, stor
 			"runtimeReady": runtime != nil,
 		})
 	})
+	mux.HandleFunc("GET /v1/provider-status", ops.handleProviderStatus)
+	mux.HandleFunc("POST /v1/providers/{provider}/install", ops.handleProviderInstall)
 	mux.Handle("GET /v1/events/ws", websocket.Server{
 		// The default websocket.Handler handshake rejects requests without an
 		// Origin header ("null origin"), which breaks non-browser clients
