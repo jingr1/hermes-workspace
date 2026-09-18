@@ -444,3 +444,47 @@ agents:
     execution: local
     dispatchable: true
     enabled: true
+  - id: dev
+    name: dev
+    role: Worker
+    specialty: ""
+    mission: Awaiting orchestrator dispatch.
+    modes: []
+    tools: []
+    skills: []
+    plugins: []
+    pluginToolsets: []
+    mcpServers: []
+    capabilities: []
+    preferredTaskTypes: []
+    greenlightRequiredFor: []
+    maxConcurrentTasks: 1
+    acceptsBroadcast: true
+    reviewRequired: false
+    runtime: hermes
+    execution: local
+    dispatchable: true
+    enabled: true
+  - id: kimi
+    name: kimi
+    role: Worker
+    specialty: ""
+    mission: Awaiting orchestrator dispatch.
+    modes: []
+    tools: []
+    skills: []
+    plugins: []
+    pluginToolsets: []
+    mcpServers: []
+    capabilities: []
+    preferredTaskTypes: []
+    greenlightRequiredFor: []
+    maxConcurrentTasks: 1
+    acceptsBroadcast: true
+    reviewRequired: false
+    runtime: kimi
+    command: kimi
+    args: []
+    execution: local
+    dispatchable: true
+    enabled: true

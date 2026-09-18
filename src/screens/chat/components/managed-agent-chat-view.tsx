@@ -51,9 +51,12 @@ function getBrand(agent: AgentWithStatus) {
   return CLAUDE_CODE_CHAT_BRAND
 }
 
-function getModelsEndpoint(agentId: string, runtime: string): string {
+function getModelsEndpoint(agentId: string, runtime: string): string | undefined {
   if (runtime === 'codex') return `/api/agents/${encodeURIComponent(agentId)}/models`
-  return '/api/agents/claude-code/models'
+  if (runtime === 'claude-code') return '/api/agents/claude-code/models'
+  // Other managed runtimes have no legacy models route yet; the composer
+  // falls back to its default endpoint and the stored model selection.
+  return undefined
 }
 
 /**

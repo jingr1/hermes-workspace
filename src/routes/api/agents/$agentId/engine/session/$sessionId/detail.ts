@@ -1,7 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../../../../../server/auth-middleware'
-import { AgoraxManagedAgentHttpClient } from '../../../../../../../server/agent-runtime/agorax-managed-agent-http-client'
+import {
+  AgoraxManagedAgentHttpClient,
+  AgoraxManagedAgentHttpError,
+} from '../../../../../../../server/agent-runtime/agorax-managed-agent-http-client'
 import { resolveAgoraxManagedSessionIdentity } from '../../../../../../../server/agent-runtime/agorax-managed-agent-session-identity'
 
 export const Route = createFileRoute('/api/agents/$agentId/engine/session/$sessionId/detail')({
@@ -24,9 +27,14 @@ export const Route = createFileRoute('/api/agents/$agentId/engine/session/$sessi
           const detail = await client.getSessionDetail(identity.agentSessionId)
           return json({ detail })
         } catch (error) {
+          // A daemon 404 means the canonical session is gone (stale binding or
+          // pruned daemon db) — surface it as 404 so the client can fall back
+          // to re-activation instead of a misleading gateway error.
+          const status =
+            error instanceof AgoraxManagedAgentHttpError && error.status === 404 ? 404 : 502
           return json(
             { error: error instanceof Error ? error.message : String(error) },
-            { status: 502 },
+            { status },
           )
         }
       },

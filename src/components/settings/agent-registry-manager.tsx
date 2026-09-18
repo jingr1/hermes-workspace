@@ -6,8 +6,12 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { Delete02Icon, PencilEdit02Icon, PlusSignIcon } from '@hugeicons/core-free-icons'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { AGORAX_MANAGED_AGENT_BACKENDS } from '@/lib/managed-agent-runtime/agent-targets'
 
-type Runtime = 'hermes' | 'codex' | 'claude-code'
+// Runtime vocabulary derives from AGORAX_MANAGED_AGENT_BACKENDS — add a new
+// managed runtime in `@/lib/managed-agent-runtime/agent-targets` and it shows
+// up here automatically. Labels fall back to the raw runtime name.
+type Runtime = 'hermes' | (typeof AGORAX_MANAGED_AGENT_BACKENDS)[number]
 type Agent = {
   id: string
   name: string
@@ -41,10 +45,19 @@ const EMPTY_FORM: FormState = {
   specialty: '',
 }
 
-const RUNTIME_LABELS: Record<Runtime, string> = {
+// Display labels only — unknown runtimes fall back to the raw name, so a new
+// backend works end-to-end before anyone adds a pretty label here.
+const RUNTIME_LABELS: Partial<Record<Runtime, string>> = {
   hermes: 'Hermes Agent',
   codex: 'Codex',
   'claude-code': 'Claude Code',
+  cursor: 'Cursor',
+  opencode: 'OpenCode',
+  kimi: 'Kimi',
+}
+
+function runtimeLabel(runtime: Runtime): string {
+  return RUNTIME_LABELS[runtime] ?? runtime
 }
 
 function formFromAgent(agent: Agent): FormState {
@@ -161,8 +174,9 @@ export function AgentRegistryManager() {
             Runtime
             <select value={form.runtime} disabled={!!editingId} onChange={(event) => updateField('runtime', event.target.value as Runtime)} className="mt-1 h-9 w-full rounded-lg border border-primary-200 bg-surface px-3 text-sm">
               <option value="hermes">Hermes Agent</option>
-              <option value="codex">Codex</option>
-              <option value="claude-code">Claude Code</option>
+              {AGORAX_MANAGED_AGENT_BACKENDS.map((runtime) => (
+                <option key={runtime} value={runtime}>{runtimeLabel(runtime)}</option>
+              ))}
             </select>
           </label>
           {form.runtime === 'hermes' ? (
@@ -173,7 +187,7 @@ export function AgentRegistryManager() {
           ) : (
             <label className="text-sm text-primary-800">
               Command
-              <Input value={form.command} onChange={(event) => updateField('command', event.target.value)} placeholder={form.runtime === 'codex' ? 'codex' : 'claude'} />
+              <Input value={form.command} onChange={(event) => updateField('command', event.target.value)} placeholder={runtimeLabel(form.runtime)} />
             </label>
           )}
           <label className="text-sm text-primary-800">
@@ -210,7 +224,7 @@ export function AgentRegistryManager() {
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-primary-900">{agent.name}</p>
-                <p className="truncate text-xs text-primary-600">{agent.id} · {RUNTIME_LABELS[agent.runtime]}</p>
+                <p className="truncate text-xs text-primary-600">{agent.id} · {runtimeLabel(agent.runtime)}</p>
                 {agent.runtime === 'hermes' ? <p className="truncate text-xs text-primary-500">Profile: {agent.profile ?? agent.id}</p> : null}
               </div>
               <div className="flex shrink-0 gap-1">

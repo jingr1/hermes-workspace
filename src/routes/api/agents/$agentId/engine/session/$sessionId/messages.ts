@@ -1,7 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../../../../../server/auth-middleware'
-import { AgoraxManagedAgentHttpClient } from '../../../../../../../server/agent-runtime/agorax-managed-agent-http-client'
+import {
+  AgoraxManagedAgentHttpClient,
+  AgoraxManagedAgentHttpError,
+} from '../../../../../../../server/agent-runtime/agorax-managed-agent-http-client'
 import { resolveAgoraxManagedSessionIdentity } from '../../../../../../../server/agent-runtime/agorax-managed-agent-session-identity'
 
 const MAX_MESSAGE_PAGE_LIMIT = 1000
@@ -54,9 +57,11 @@ export const Route = createFileRoute('/api/agents/$agentId/engine/session/$sessi
             hasMore: page.hasMore,
           })
         } catch (error) {
+          const status =
+            error instanceof AgoraxManagedAgentHttpError && error.status === 404 ? 404 : 502
           return json(
             { error: error instanceof Error ? error.message : String(error) },
-            { status: 502 },
+            { status },
           )
         }
       },

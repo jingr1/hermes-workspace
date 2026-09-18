@@ -23,7 +23,16 @@ import WebSocket from 'ws'
  */
 
 type ActivitySubscriber = {
+  /**
+   * Canonical daemon session id used for frame matching. The activate route
+   * binds the display→canonical mapping, so a client that attaches its stream
+   * before that bind lands resolves to the raw display id; `reresolve` lets
+   * the bridge recover lazily once the binding exists.
+   */
   agentSessionId: string
+  /** Re-resolve the display session id; returns the canonical id or null. */
+  reresolve: () => Promise<string | null>
+  lastReresolveAt: number
   send: (event: string, data: unknown) => void
 }
 
@@ -40,7 +49,23 @@ type WorkspaceActivitySubscription = {
   subscribers: Set<ActivitySubscriber>
 }
 
-const subscriptions = new Map<string, WorkspaceActivitySubscription>()
+// Registry lives on globalThis: Vite dev can evaluate this server-route module
+// more than once (server handler bundle vs route manifest), and each evaluation
+// would otherwise own a private subscription map — a client served by instance
+// A then never sees frames arriving on instance B's socket.
+const SUBSCRIPTIONS_REGISTRY_KEY = '__agorax_managed_activity_subscriptions__'
+
+type SubscriptionsRegistry = Map<string, WorkspaceActivitySubscription>
+
+function subscriptionsRegistry(): SubscriptionsRegistry {
+  const holder = globalThis as unknown as {
+    [SUBSCRIPTIONS_REGISTRY_KEY]?: SubscriptionsRegistry
+  }
+  if (!holder[SUBSCRIPTIONS_REGISTRY_KEY]) {
+    holder[SUBSCRIPTIONS_REGISTRY_KEY] = new Map()
+  }
+  return holder[SUBSCRIPTIONS_REGISTRY_KEY]
+}
 
 const RECONNECT_BASE_DELAY_MS = 1000
 const RECONNECT_MAX_DELAY_MS = 15000
@@ -81,9 +106,22 @@ function connectDaemonSocket(subscription: WorkspaceActivitySubscription): void 
     }
     const envelope: AgoraxManagedAgentActivityEnvelope | null =
       parseAgoraxManagedActivityEnvelope(parsed, subscription.workspaceId)
-    if (!envelope) return
+    if (!envelope) {
+      return
+    }
+    const frameSessionId = envelope.payload.agentSessionId
     for (const subscriber of subscription.subscribers) {
-      if (subscriber.agentSessionId !== envelope.payload.agentSessionId) continue
+      if (subscriber.agentSessionId !== frameSessionId) {
+        // Attach-before-activate: re-resolve once per second so the stream
+        // starts flowing as soon as the activate route writes the binding.
+        const now = Date.now()
+        if (now - subscriber.lastReresolveAt < 1000) continue
+        subscriber.lastReresolveAt = now
+        void subscriber.reresolve().then((resolved) => {
+          if (resolved) subscriber.agentSessionId = resolved
+        })
+        continue
+      }
       try {
         subscriber.send('activity', envelope)
       } catch {
@@ -136,7 +174,8 @@ function acquireWorkspaceActivitySubscription(input: {
   subscriber: ActivitySubscriber
 }): () => void {
   const key = subscriptionKey(input.baseUrl, input.workspaceId)
-  let subscription = subscriptions.get(key)
+  const registry = subscriptionsRegistry()
+  let subscription = registry.get(key)
   if (!subscription) {
     subscription = {
       key,
@@ -149,7 +188,7 @@ function acquireWorkspaceActivitySubscription(input: {
       stopped: false,
       subscribers: new Set(),
     }
-    subscriptions.set(key, subscription)
+    registry.set(key, subscription)
     connectDaemonSocket(subscription)
   }
   subscription.subscribers.add(input.subscriber)
@@ -168,7 +207,7 @@ function stopWorkspaceActivitySubscription(
 ): void {
   if (subscription.stopped) return
   subscription.stopped = true
-  subscriptions.delete(subscription.key)
+  subscriptionsRegistry().delete(subscription.key)
   if (subscription.reconnectTimer) {
     clearTimeout(subscription.reconnectTimer)
     subscription.reconnectTimer = null
@@ -207,7 +246,18 @@ export const Route = createFileRoute('/api/agents/$agentId/engine/session/$sessi
         release = acquireWorkspaceActivitySubscription({
           baseUrl,
           workspaceId,
-          subscriber: { agentSessionId: identity.agentSessionId, send },
+          subscriber: {
+            agentSessionId: identity.agentSessionId,
+            reresolve: async () => {
+              const resolved = await resolveAgoraxManagedSessionIdentity({
+                agentId: params.agentId,
+                sessionId: params.sessionId,
+              })
+              return resolved.ok ? resolved.agentSessionId : null
+            },
+            lastReresolveAt: 0,
+            send,
+          },
         })
         request.signal.addEventListener('abort', () => {
           streamClosed = true

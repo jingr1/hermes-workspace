@@ -37,6 +37,19 @@ export type AgoraxManagedAgentHttpClientOptions = {
   fetchImpl?: typeof fetch
 }
 
+/** Transport/daemon HTTP failure that preserves the upstream status code. */
+export class AgoraxManagedAgentHttpError extends Error {
+  readonly status: number
+  readonly path: string
+
+  constructor(status: number, path: string) {
+    super(`Agorax Managed Agent request failed: ${status} ${path}`)
+    this.name = 'AgoraxManagedAgentHttpError'
+    this.status = status
+    this.path = path
+  }
+}
+
 export type CreateAgoraxAgentSessionInput = {
   backend: AgoraxManagedAgentBackend
   agentSessionId: string
@@ -385,7 +398,7 @@ export class AgoraxManagedAgentHttpClient {
       },
     })
     if (!response.ok) {
-      throw new Error(`Agorax Managed Agent request failed: ${response.status} ${path}`)
+      throw new AgoraxManagedAgentHttpError(response.status, path)
     }
     return (await response.json()) as T
   }

@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import * as yaml from 'yaml'
 import { z } from 'zod'
+import { AGORAX_MANAGED_AGENT_BACKENDS } from '@/lib/managed-agent-runtime/agent-targets'
 import { SWARM_CANONICAL_REPO } from './swarm-environment'
 
 export const SWARM_ROSTER_PATH = join(SWARM_CANONICAL_REPO, 'agents.yaml')
@@ -41,8 +42,10 @@ export const SwarmRosterWorkerSchema = z.object({
   maxConcurrentTasks: z.number().int().positive().default(1),
   acceptsBroadcast: z.boolean().default(true),
   reviewRequired: z.boolean().default(false),
+  // Derived from AGORAX_MANAGED_AGENT_BACKENDS — add a runtime in
+  // `@/lib/managed-agent-runtime/agent-targets`, not here.
   runtime: z
-    .enum(['hermes', 'claude-code', 'codex', 'deepseek-harness', 'opencode'])
+    .enum(['hermes', 'deepseek-harness', ...AGORAX_MANAGED_AGENT_BACKENDS])
     .default('hermes'),
   command: z.string().optional(),
   args: z.array(z.string()).optional(),

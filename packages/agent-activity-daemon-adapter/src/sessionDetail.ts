@@ -44,11 +44,14 @@ export function agentActivitySessionDetailFromDaemon(
   options: AgentActivitySessionMappingOptions
 ): AgentActivityDaemonActivityDetail {
   assertDaemonActivityContract(expectedAgentSessionId, activity);
-  const turns = activity.turns.map(agentActivityTurnFromDaemonTurn);
-  const interactions = activity.interactions.map(
+  // The daemon serializes empty Go slices as null; treat null/undefined as an
+  // empty aggregate (assertDaemonActivityContract still rejects non-array
+  // shapes such as strings or numbers).
+  const turns = (activity.turns ?? []).map(agentActivityTurnFromDaemonTurn);
+  const interactions = (activity.interactions ?? []).map(
     agentActivityInteractionFromDaemonInteraction
   );
-  const messages = activity.messages.map((message) =>
+  const messages = (activity.messages ?? []).map((message) =>
     agentActivityMessageFromDaemonMessage(workspaceId, message)
   );
   const latestTurn =
@@ -98,16 +101,18 @@ function assertDaemonActivityContract(
       `root Session id ${JSON.stringify(rootId)} does not match requested id ${JSON.stringify(expectedId)}`
     );
   }
-  if (!Array.isArray(activity.turns)) {
+  // null/undefined aggregates are allowed (empty Go slices serialize as null
+  // and are coerced by the caller); present-but-non-array shapes fail closed.
+  if (activity.turns != null && !Array.isArray(activity.turns)) {
     throw detailContractError("turns must be an authoritative array");
   }
-  if (!Array.isArray(activity.messages)) {
+  if (activity.messages != null && !Array.isArray(activity.messages)) {
     throw detailContractError("messages must be an authoritative array");
   }
-  if (!Array.isArray(activity.interactions)) {
+  if (activity.interactions != null && !Array.isArray(activity.interactions)) {
     throw detailContractError("interactions must be an authoritative array");
   }
-  for (const turn of activity.turns) {
+  for (const turn of activity.turns ?? []) {
     const turnId = trimmedString(turn.TurnID);
     if (!turnId || trimmedString(turn.AgentSessionID) !== rootId) {
       throw detailContractError(
@@ -115,7 +120,7 @@ function assertDaemonActivityContract(
       );
     }
   }
-  for (const message of activity.messages) {
+  for (const message of activity.messages ?? []) {
     const messageId = trimmedString(message.MessageID);
     if (!messageId || trimmedString(message.AgentSessionID) !== rootId) {
       throw detailContractError(
@@ -123,7 +128,7 @@ function assertDaemonActivityContract(
       );
     }
   }
-  for (const interaction of activity.interactions) {
+  for (const interaction of activity.interactions ?? []) {
     const requestId = trimmedString(interaction.RequestID);
     if (!requestId || trimmedString(interaction.AgentSessionID) !== rootId) {
       throw detailContractError(

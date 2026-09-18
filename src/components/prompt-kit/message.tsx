@@ -1,4 +1,3 @@
-import { Avatar } from '@base-ui/react/avatar'
 import { Markdown } from './markdown'
 import {
   TooltipContent,
@@ -18,31 +17,6 @@ function Message({ children, className, ...props }: MessageProps) {
     <div className={cn('flex gap-3 w-full', className)} {...props}>
       {children}
     </div>
-  )
-}
-
-export type MessageAvatarProps = {
-  src: string
-  alt: string
-  fallback?: string
-  delayMs?: number
-  className?: string
-}
-
-function MessageAvatar({
-  src,
-  alt,
-  fallback,
-  delayMs,
-  className,
-}: MessageAvatarProps) {
-  return (
-    <Avatar.Root className={cn('h-8 w-8 shrink-0', className)}>
-      <Avatar.Image src={src} alt={alt} />
-      {fallback && (
-        <Avatar.Fallback delay={delayMs}>{fallback}</Avatar.Fallback>
-      )}
-    </Avatar.Root>
   )
 }
 
@@ -121,4 +95,4 @@ function MessageAction({
   )
 }
 
-export { Message, MessageAvatar, MessageContent, MessageActions, MessageAction }
+export { Message, MessageContent, MessageActions, MessageAction }

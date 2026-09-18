@@ -1604,6 +1604,8 @@ const RUNTIME_LABELS: Record<string, string> = {
   codex: 'Codex',
   'deepseek-harness': 'DeepSeek',
   opencode: 'OpenCode',
+  cursor: 'Cursor',
+  kimi: 'Kimi',
 }
 
 function runtimeLabel(runtime: string): string {
@@ -1660,24 +1662,6 @@ function AgentInfo({ agent }: { agent: AgentWithStatus }) {
           </div>
         ) : null}
       </dl>
-    </div>
-  )
-}
-
-function UnsupportedRuntimeContent({ runtime }: { runtime: string }) {
-  return (
-    <div className="space-y-4">
-      <SectionHeader
-        title="Model & Provider"
-        description={`${runtimeLabel(runtime)} configuration is managed externally.`}
-      />
-      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800/50 dark:bg-amber-900/15 dark:text-amber-300">
-        <p className="font-medium">Managed runtime configuration</p>
-        <p className="mt-1">
-          {runtime} adapters are still being wired. To change settings, edit the
-          agent declaration in <code>agents.yaml</code> and reload the workspace.
-        </p>
-      </div>
     </div>
   )
 }
@@ -1768,13 +1752,12 @@ export function SettingsDialog({
     if (agent.runtime === 'hermes') {
       return <HermesContent profileName={agent.runtimeConfig.profile} />
     }
-    if (agent.runtime === 'claude-code' || agent.runtime === 'opencode') {
-      return <ClaudeCodeSettingsPanel agentId={agent.agentId} />
-    }
     if (agent.runtime === 'codex') {
       return <CodexSettingsPanel agentId={agent.agentId} />
     }
-    return <UnsupportedRuntimeContent runtime={agent.runtime} />
+    // Generic managed-runtime settings for every other non-hermes runtime
+    // (claude-code, opencode, cursor, kimi, and future managed backends).
+    return <ClaudeCodeSettingsPanel agentId={agent.agentId} />
   }
 
   return (

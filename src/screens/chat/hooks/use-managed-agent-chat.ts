@@ -378,6 +378,15 @@ export function useManagedAgentChat({
       previousRuntime.bridge.dispose()
       previousRuntime.coordinator.dispose()
       previousRuntime.engine.dispose()
+      // Drop any in-flight creation belonging to the disposed runtime, else
+      // ensureRuntime() below resurrects its already-disposed bridge and the
+      // new session hydrates into a dead engine (blank conversation view).
+      if (
+        runtimeCreationRef.current &&
+        runtimeCreationRef.current.displaySessionId === previousRuntime.displaySessionId
+      ) {
+        runtimeCreationRef.current = null
+      }
       if (!preserveCanonical) canonicalSessionIdRef.current = null
       setEngine(null)
     } else if (previousRuntime && !preserveCanonical && canonicalSessionIdRef.current) {
@@ -407,6 +416,9 @@ export function useManagedAgentChat({
   useEffect(() => {
     return () => {
       const runtime = runtimeRef.current
+      const pendingCreation = runtimeCreationRef.current
+      runtimeCreationRef.current = null
+      if (pendingCreation) pendingCreation.dispose()
       if (!runtime) return
       engineDisposeTimerRef.current = setTimeout(() => {
         runtime.bridge.dispose()

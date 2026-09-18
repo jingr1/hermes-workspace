@@ -20,6 +20,8 @@ const RUNTIME_LABELS: Record<AgentRuntime, string> = {
   codex: 'Codex',
   'deepseek-harness': 'DeepSeek',
   opencode: 'OpenCode',
+  cursor: 'Cursor',
+  kimi: 'Kimi',
 }
 
 function runtimeLabel(runtime: AgentRuntime): string {

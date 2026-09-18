@@ -1,7 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../../../../../server/auth-middleware'
-import { AgoraxManagedAgentHttpClient } from '../../../../../../../server/agent-runtime/agorax-managed-agent-http-client'
+import {
+  AgoraxManagedAgentHttpClient,
+  AgoraxManagedAgentHttpError,
+} from '../../../../../../../server/agent-runtime/agorax-managed-agent-http-client'
+import { resolveAgoraxManagedSessionIdentity } from '../../../../../../../server/agent-runtime/agorax-managed-agent-session-identity'
 import type { ManagedAgentInputResponseDto } from '@/lib/managed-agent-runtime/command-dtos'
 
 export const Route = createFileRoute('/api/agents/$agentId/engine/session/$sessionId/input')({ server: { handlers: { POST: async ({ request, params }) => {
@@ -9,14 +13,23 @@ export const Route = createFileRoute('/api/agents/$agentId/engine/session/$sessi
   const body = await request.json() as { clientSubmitId?: string; content?: string; promptContent?: never[] }
   const baseUrl = process.env.AGORAX_MANAGED_AGENT_URL?.trim(); const workspaceId = process.env.AGORAX_WORKSPACE_ID?.trim()
   if (!baseUrl || !workspaceId || !body.clientSubmitId || !body.content) return json({ error: 'Invalid managed input' }, { status: 400 })
+  const identity = await resolveAgoraxManagedSessionIdentity({
+    agentId: params.agentId,
+    sessionId: params.sessionId,
+  })
+  if (!identity.ok) return json({ error: identity.error }, { status: identity.status })
   try {
     const client = new AgoraxManagedAgentHttpClient({ baseUrl, workspaceId })
-    const result = await client.sendInput(params.sessionId, { clientSubmitId: body.clientSubmitId, content: body.content, ...(body.promptContent ? { promptContent: body.promptContent } : {}) })
+    const result = await client.sendInput(identity.agentSessionId, { clientSubmitId: body.clientSubmitId, content: body.content, ...(body.promptContent ? { promptContent: body.promptContent } : {}) })
     const response: ManagedAgentInputResponseDto = {
       result,
-      activity: await client.getActivitySnapshot(params.sessionId),
+      activity: await client.getActivitySnapshot(identity.agentSessionId),
     }
     return json(response)
   }
-  catch (error) { return json({ error: error instanceof Error ? error.message : String(error) }, { status: 502 }) }
+  catch (error) {
+    const status = error instanceof AgoraxManagedAgentHttpError && error.status === 404 ? 404 : 502
+    return json({ error: error instanceof Error ? error.message : String(error) }, { status })
+  }
 } } } })
+

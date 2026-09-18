@@ -1,4 +1,5 @@
 import type { AgentActivityUpdatedEvent } from '@agorax/agent-activity-core'
+import type { AgoraxManagedAgentBackend } from '@/lib/managed-agent-runtime/agent-targets'
 import type { AgoraxManagedPromptContentBlock } from './agorax-managed-prompt-content'
 
 /**
@@ -9,14 +10,15 @@ import type { AgoraxManagedPromptContentBlock } from './agorax-managed-prompt-co
  * chat-event-bus and is NEVER persisted (plan: 展示通道事件永不落库).
  */
 
+/**
+ * Single source of truth: managed backends come from
+ * `@/lib/managed-agent-runtime/agent-targets` (AGORAX_MANAGED_AGENT_BACKENDS).
+ * Add a new managed runtime there and every registry/schema/picker follows.
+ */
 export type AgentRuntimeKind =
   | 'hermes'
-  | 'claude-code'
-  | 'codex'
-  | 'cursor'
-  | 'kimi'
   | 'deepseek-harness'
-  | 'opencode'
+  | AgoraxManagedAgentBackend
 
 export type AgentStreamEvent =
   | {

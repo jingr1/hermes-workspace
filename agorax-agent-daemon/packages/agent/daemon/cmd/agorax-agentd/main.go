@@ -126,27 +126,47 @@ func routes(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.DB, stor
 		})
 	})
 	mux.HandleFunc("GET /v1/agent-targets", func(response http.ResponseWriter, _ *http.Request) {
+		registered := map[string]bool{}
+		if runtime != nil {
+			for _, provider := range runtime.Controller().RegisteredProviders() {
+				registered[provider] = true
+			}
+		}
+		// enabled reflects the providers that actually have a registered
+		// runtime adapter (e.g. claude-code is intentionally served by the
+		// workspace's TS CLI adapter and is reported disabled here so callers
+		// fall back instead of failing at session-create time).
+		target := func(id string, provider string) map[string]any {
+			return map[string]any{"id": id, "enabled": registered[provider]}
+		}
 		writeJSON(response, http.StatusOK, map[string]any{
 			"agents": []any{
-				map[string]any{"id": "local:claude-code", "enabled": true},
-				map[string]any{"id": "local:codex", "enabled": true},
-				map[string]any{"id": "local:cursor", "enabled": true},
-				map[string]any{"id": "local:opencode", "enabled": true},
-				map[string]any{"id": "extension:kimi-code", "enabled": true},
+				target("local:claude-code", "claude-code"),
+				target("local:codex", "codex"),
+				target("local:cursor", "cursor"),
+				target("local:opencode", "opencode"),
+				target("extension:kimi-code", "acp:kimi-code"),
 			},
 			"runtimeReady": runtime != nil,
 		})
 	})
-	mux.Handle("GET /v1/events/ws", websocket.Handler(func(connection *websocket.Conn) {
-		defer connection.Close()
-		channel, unsubscribe := hub.subscribe()
-		defer unsubscribe()
-		for payload := range channel {
-			if _, err := connection.Write(payload); err != nil {
-				return
+	mux.Handle("GET /v1/events/ws", websocket.Server{
+		// The default websocket.Handler handshake rejects requests without an
+		// Origin header ("null origin"), which breaks non-browser clients
+		// (node ws, the workspace server's shared subscription). The daemon is
+		// a localhost transport — accept any or no origin explicitly.
+		Handshake: func(_ *websocket.Config, _ *http.Request) error { return nil },
+		Handler: func(connection *websocket.Conn) {
+			defer connection.Close()
+			channel, unsubscribe := hub.subscribe()
+			defer unsubscribe()
+			for payload := range channel {
+				if _, err := connection.Write(payload); err != nil {
+					return
+				}
 			}
-		}
-	}))
+		},
+	})
 	mux.HandleFunc("GET /v1/workspaces/{workspaceID}/agent-sessions", func(response http.ResponseWriter, request *http.Request) {
 		workspaceID := request.PathValue("workspaceID")
 		sessions, found, err := store.ListSessions(request.Context(), workspaceID)
@@ -237,7 +257,7 @@ func routes(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.DB, stor
 			writeJSON(response, http.StatusNotFound, map[string]string{"error": err.Error()})
 			return
 		}
-		writeJSON(response, http.StatusOK, map[string]any{"workspaceId": workspaceID, "agentSessionId": agentSessionID, "interactions": snapshot.Interactions})
+		writeJSON(response, http.StatusOK, map[string]any{"workspaceId": workspaceID, "agentSessionId": agentSessionID, "interactions": nonNilSlice(snapshot.Interactions)})
 	})
 	mux.HandleFunc("GET /v1/workspaces/{workspaceID}/agent-sessions/{agentSessionID}/activity", func(response http.ResponseWriter, request *http.Request) {
 		workspaceID, agentSessionID := request.PathValue("workspaceID"), request.PathValue("agentSessionID")
@@ -272,9 +292,9 @@ func routes(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.DB, stor
 		writeJSON(response, http.StatusOK, map[string]any{
 			"workspaceId":     workspaceID,
 			"session":         session.Canonical,
-			"turns":           turns,
-			"messages":        messages.Messages,
-			"interactions":    interactions.Interactions,
+			"turns":           nonNilSlice(turns),
+			"messages":        nonNilSlice(messages.Messages),
+			"interactions":    nonNilSlice(interactions.Interactions),
 			"messageVersion":  messages.LatestVersion,
 			"hasMoreMessages": messages.HasMore,
 		})
@@ -336,6 +356,16 @@ func activityMessagePageQuery(request *http.Request) (afterVersion uint64, limit
 		limit = parsed
 	}
 	return afterVersion, limit, nil
+}
+
+func completedCommandString(command *canonical.WorkspaceAgentCompletedCommand, kind bool) string {
+	if command == nil {
+		return ""
+	}
+	if kind {
+		return strings.TrimSpace(command.Kind)
+	}
+	return strings.TrimSpace(command.Status)
 }
 
 func promptText(raw json.RawMessage) []agenthost.PromptContentBlock {
@@ -411,6 +441,25 @@ func (r *localCanonicalReporter) ReportSessionState(ctx context.Context, input c
 			SourceGoalOperationID: s.Turn.SourceGoalOperationID, SourceGoalRevision: s.Turn.SourceGoalRevision,
 			SourceGoalRepairEpoch: s.Turn.SourceGoalRepairEpoch, StartedAtUnixMS: s.Turn.StartedAtUnixMS,
 			SettledAtUnixMS: s.Turn.CompletedAtUnixMS, OccurredAtUnixMS: s.OccurredAtUnixMS,
+		}
+	}
+	if s.RootProviderTurn != nil {
+		// Without this the provider turn binding never reaches the canonical
+		// store, so resume evidence stays "not established" and the next
+		// SendInput is rejected with ErrProviderSessionNotEstablished.
+		report.RootProviderTurn = &storesqlite.RootProviderTurnTransition{
+			WorkspaceID:             input.WorkspaceID,
+			RootAgentSessionID:      input.AgentSessionID,
+			RootTurnID:              s.RootProviderTurn.RootTurnID,
+			ProviderTurnID:          s.RootProviderTurn.ProviderTurnID,
+			ProviderTurnBindingJSON: append(json.RawMessage(nil), s.RootProviderTurn.ProviderTurnBindingJSON...),
+			Phase:                   s.RootProviderTurn.Phase,
+			Outcome:                 s.RootProviderTurn.Outcome,
+			ErrorMessage:            s.RootProviderTurn.ErrorMessage,
+			ErrorCode:               s.RootProviderTurn.ErrorCode,
+			CompletedCommandKind:    completedCommandString(s.RootProviderTurn.CompletedCommand, true),
+			CompletedCommandStatus:  completedCommandString(s.RootProviderTurn.CompletedCommand, false),
+			OccurredAtUnixMS:        s.OccurredAtUnixMS,
 		}
 	}
 	result, err := r.store.ReportActivityState(ctx, report)
@@ -536,6 +585,16 @@ func stringPointer(value string) *string {
 		return nil
 	}
 	return &value
+}
+
+// nonNilSlice keeps empty Go slices JSON-serializable as [] instead of null:
+// the activity contract declares authoritative arrays, and clients fail closed
+// on null aggregates.
+func nonNilSlice[T any](values []T) []T {
+	if values == nil {
+		return []T{}
+	}
+	return values
 }
 
 func writeJSON(response http.ResponseWriter, status int, payload any) {

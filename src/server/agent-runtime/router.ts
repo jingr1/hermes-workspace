@@ -96,6 +96,11 @@ export class AgentRuntimeRouter {
         return new HermesAdapterStub(decl)
       case 'claude-code':
         if (agoraxManagedTransport) {
+          // NOTE: the daemon intentionally does not host claude-code, so the
+          // bridge reports it unavailable; the engine chat routes currently
+          // require daemon-backed sessions. Full claude-code support needs a
+          // canonical activity source (daemon adapter or a legacy→canonical
+          // event shim) — tracked as follow-up work.
           return new AgoraxManagedAgentBridge('claude-code', agoraxManagedTransport)
         }
         return new ClaudeCodeAdapter(decl)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"reflect"
+	"slices"
 	"strings"
 
 	agentsessionstore "agorax.local/agent-daemon/packages/agent/daemon/activity"
@@ -117,6 +118,20 @@ func authorizedAgentExtensionResumeInput(input ResumeInput, provider string) boo
 func providerTargetRefString(ref map[string]any, key string) string {
 	value, _ := ref[key].(string)
 	return strings.TrimSpace(value)
+}
+
+func (c *Controller) RegisteredProviders() []string {
+	if c == nil {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	providers := make([]string, 0, len(c.adapters))
+	for provider := range c.adapters {
+		providers = append(providers, provider)
+	}
+	slices.Sort(providers)
+	return providers
 }
 
 func (c *Controller) Sessions(roomID string) []Session {

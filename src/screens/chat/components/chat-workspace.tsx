@@ -5,7 +5,6 @@ import { useQueryClient } from '@tanstack/react-query'
 import { ChatScreen } from '../chat-screen'
 import { useProfiles } from '../hooks/use-profiles'
 import { ChatRouteLoading } from '../chat-route-loading'
-import { ManagedRuntimePanel } from './managed-runtime-panel'
 import { ManagedAgentChatView } from './managed-agent-chat-view'
 import { useAgentStore } from '@/stores/agent-store'
 import { useExternalAgentSessions } from '../hooks/use-external-agent-sessions'
@@ -42,48 +41,16 @@ export function ChatWorkspace() {
     )
   }
 
-  if (agent.runtime === 'claude-code' || agent.runtime === 'codex') {
-    return (
-      <ManagedAgentChatView agent={agent} sessionId={sessionId ?? null} />
-    )
-  }
-
+  // Every non-hermes runtime goes through the managed chat shell — the router
+  // decides per runtime whether the daemon hosts it or a direct adapter does.
+  // Keyed by agentId: the chat hook bakes agentId into long-lived refs
+  // (command port, reconcile port). Without a remount, switching agents
+  // kept answering with the previous agent's runtime.
   return (
-    <ManagedPlaceholderShell
-      agentId={agent.agentId}
+    <ManagedAgentChatView
+      key={agent.agentId}
+      agent={agent}
       sessionId={sessionId ?? null}
-    />
-  )
-}
-
-function ManagedPlaceholderShell({
-  agentId,
-  sessionId,
-}: {
-  agentId: string
-  sessionId: string | null
-}) {
-  const agent = useAgentStore((state) =>
-    state.agents.find((a) => a.agentId === agentId),
-  )
-  const sessionController = useExternalAgentSessions(agentId)
-  const activeFriendlyId = sessionId ?? 'new'
-  const isNewChat = activeFriendlyId === 'new'
-
-  if (!agent) return null
-
-  return (
-    <ChatScreen
-      activeFriendlyId={activeFriendlyId}
-      isNewChat={isNewChat}
-      sessionController={sessionController}
-      hermesChrome={false}
-      renderMain={
-        <ManagedRuntimePanel agent={agent} sessionId={sessionId} />
-      }
-      onSessionResolved={(payload) => {
-        void payload
-      }}
     />
   )
 }

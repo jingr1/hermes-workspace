@@ -14,9 +14,13 @@ import {
 } from './swarm-roster'
 import { listSwarmWorkerIds } from './swarm-foundation'
 import { resetAgentRuntimeRouter } from './agent-runtime/router'
+import type { AgentRuntimeKind } from './agent-runtime/types'
+import { AGORAX_MANAGED_AGENT_BACKENDS } from '@/lib/managed-agent-runtime/agent-targets'
 
-const MANAGED_RUNTIMES = new Set(['codex', 'claude-code'])
-const SUPPORTED_RUNTIMES = new Set(['hermes', ...MANAGED_RUNTIMES])
+// Derived from the single source of truth; add a managed runtime in
+// `@/lib/managed-agent-runtime/agent-targets` (AGORAX_MANAGED_AGENT_BACKENDS).
+const MANAGED_RUNTIMES: ReadonlySet<string> = new Set(AGORAX_MANAGED_AGENT_BACKENDS)
+const SUPPORTED_RUNTIMES: ReadonlySet<string> = new Set(['hermes', ...MANAGED_RUNTIMES])
 const DEFAULT_AGENT = {
   id: 'default',
   name: 'Default',
@@ -53,14 +57,21 @@ function normalizeInput(input: Record<string, unknown>): SwarmRosterUpsert {
   if (!SUPPORTED_RUNTIMES.has(requestedRuntime)) {
     throw new Error(`Unsupported agent runtime: ${requestedRuntime}`)
   }
-  const runtime = requestedRuntime as 'hermes' | 'codex' | 'claude-code'
+  const runtime = requestedRuntime as AgentRuntimeKind
   const id = String(input.id ?? '').trim()
   const profile = runtime === 'hermes'
     ? String(input.profile ?? id).trim()
     : undefined
+  const defaultCommandByRuntime: Record<string, string> = {
+    codex: 'codex',
+    'claude-code': 'claude',
+    cursor: 'cursor',
+    opencode: 'opencode',
+    kimi: 'kimi',
+  }
   const command = runtime === 'hermes'
     ? undefined
-    : String(input.command ?? (runtime === 'codex' ? 'codex' : 'claude')).trim()
+    : String(input.command ?? defaultCommandByRuntime[runtime] ?? runtime).trim()
 
   if (!id) throw new Error('Agent ID is required')
   if (runtime === 'hermes' && !profile) {

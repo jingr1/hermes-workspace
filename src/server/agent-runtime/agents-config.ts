@@ -14,6 +14,7 @@ import * as path from 'node:path'
 import { homedir } from 'node:os'
 import * as YAML from 'yaml'
 import type { AgentRuntimeKind } from './types'
+import { AGORAX_MANAGED_AGENT_BACKENDS } from '@/lib/managed-agent-runtime/agent-targets'
 
 export type AgentExecution = 'local' | 'ssh'
 
@@ -61,12 +62,8 @@ export type AgentsRegistry = {
 
 const RUNTIMES: ReadonlyArray<AgentRuntimeKind> = [
   'hermes',
-  'claude-code',
-  'codex',
-  'cursor',
-  'kimi',
   'deepseek-harness',
-  'opencode',
+  ...AGORAX_MANAGED_AGENT_BACKENDS,
 ]
 
 export function getAgentsYamlPath(repoRoot?: string): string {
@@ -207,8 +204,10 @@ export function loadAgentsRegistry(input?: {
     }
 
     if (runtime === 'hermes' && !entry.profile) {
-      errors.push(`agent ${id}: runtime=hermes requires a profile`)
-      continue
+      // Same default as the registry writer (agent-registry normalizeInput):
+      // a hermes agent without an explicit profile uses its own id, so one
+      // hand-edited entry cannot take down the whole registry load.
+      entry.profile = id
     }
     if (runtime !== 'hermes' && !entry.command) {
       errors.push(`agent ${id}: runtime=${runtime} requires a command`)

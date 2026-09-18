@@ -4,10 +4,7 @@ import { isAuthenticated } from '../../../../../../../server/auth-middleware'
 import {
   AgoraxManagedAgentHttpClient,
 } from '../../../../../../../server/agent-runtime/agorax-managed-agent-http-client'
-import {
-  isAgoraxManagedAgentBackend,
-} from '../../../../../../../server/agent-runtime/agorax-managed-agent-bridge'
-import { getAgentRuntimeRouter } from '../../../../../../../server/agent-runtime/router'
+import { resolveAgoraxManagedSessionIdentity } from '../../../../../../../server/agent-runtime/agorax-managed-agent-session-identity'
 import type { ManagedAgentInteractionResponseDto } from '@/lib/managed-agent-runtime/command-dtos'
 
 export const Route = createFileRoute(
@@ -20,20 +17,24 @@ export const Route = createFileRoute(
           return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
         }
         const agentId = params.agentId.trim()
-        const agentSessionId = params.sessionId.trim()
+        const sessionId = params.sessionId.trim()
         const turnId = params.turnId.trim()
         const requestId = params.requestId.trim()
-        if (!agentId || !agentSessionId || !turnId || !requestId) {
+        if (!agentId || !sessionId || !turnId || !requestId) {
           return json(
             { ok: false, error: 'agent, session, turn, and request ids are required' },
             { status: 400 },
           )
         }
 
-        const declaration = getAgentRuntimeRouter().registry.byId.get(agentId)
-        if (!declaration || !isAgoraxManagedAgentBackend(declaration.runtime)) {
-          return json({ ok: false, error: 'Managed Agent is unavailable' }, { status: 404 })
+        const identity = await resolveAgoraxManagedSessionIdentity({
+          agentId,
+          sessionId,
+        })
+        if (!identity.ok) {
+          return json({ ok: false, error: identity.error }, { status: identity.status })
         }
+        const agentSessionId = identity.agentSessionId
         const baseUrl = process.env.AGORAX_MANAGED_AGENT_URL?.trim()
         const workspaceId = process.env.AGORAX_WORKSPACE_ID?.trim()
         if (!baseUrl || !workspaceId) {
