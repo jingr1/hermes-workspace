@@ -313,6 +313,11 @@ const config = defineConfig(({ mode, command }) => {
         '**/dist/**',
         '**/skills-bundle/**',
         '**/.{idea,git,cache,output,temp}/**',
+        // Workspace packages run under `node --test --experimental-strip-types`
+        // (their suites import node:test, which vitest cannot host).
+        'packages/**',
+        // Playwright specs, not vitest suites.
+        'e2e/**',
       ],
       // Force vitest to run React through its own transform pipeline so ESM
       // `import` and CJS `require('react')` share a single module instance.

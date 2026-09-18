@@ -44,7 +44,8 @@ Agorax 是 AI agent 的**公共广场 / 多智能体协作控制面**：把聊�
 │    ├──► LangGraph Orchestrator (Python venv, LangGraph)   │
 │    │       checkpoint: ~/.hermes/langgraph-checkpoints.db │
 │    ├──► tmux server ──► hermes chat --tui (worker profile)│
-│    ├──► managed CLI (claude -p / codex -p) 子进程         │
+│    ├──► managed：agorax-agent-daemon（REST+WS，见 §5.4）；  │
+│    │    无 daemon 时 spawn claude -p / codex -p 子进程      │
 │    └──► Hermes Gateway (:8642) ◄── worker profile 回连    │
 └──────────────────────────────────────────────────────────┘
 ```
@@ -156,14 +157,49 @@ Python 包 `hermes_langgraph_orchestrator/`，把 mission 执行建模为**声�
 
 ### 5.4 Agent Runtime（managed 运行时）
 
-统一接入外部 CLI agent（`src/server/agent-runtime/`）。
+统一接入外部 CLI agent（claude-code / codex / cursor / kimi / opencode；`src/server/agent-runtime/`）。2026-09 起为 **daemon bridge + canonical engine 两层架构**：agorax 复用 tutti 的 agent 前后端映射逻辑（`packages/agent-activity-core` + `packages/agent-activity-daemon-adapter`，均提取自 tutti 对应包），迁移记录见 `docs/managed-agent-tutti-mapping.md`。
 
-- **契约**（`types.ts`）：`AgentRuntimeAdapter = { probe, startRun, streamEvents, interrupt }`。**控制/展示通道分离**：控制面走 MCP typed tool call（task_start/task_complete 状态机）；展示面走 `AgentStreamEvent`（text_delta/thinking/tool/run_exited/native_session），只喂 UI 永不落库。
-- **Adapters**：`claude-code-adapter.ts`（spawn `claude -p --output-format stream-json --mcp-config <临时文件>`；provider/model 读 `~/.claude/settings.json`；settings.env 注入子进程；detached + 独立进程组）；`codex-adapter.ts`（`codex -p`，`~/.codex/config.toml` + provider-catalog 凭据）；opencode 复用 ClaudeCodeAdapter；deepseek-harness 为 `UnavailableAdapter` 占位。
-- **路由**（`router.ts`）：`AgentRuntimeRouter` agentId→adapter + 并发健康检查。Hermes = `HermesAdapterStub`（只 probe gateway，执行仍走 swarm-dispatch 老路——"hermes 完全不动"）。
-- **回合执行**（`run-managed-turn.ts`）：1:1 chat（`/api/agents/:id/chat`）与群聊 turn 共用；issueRunToken → startRun → drain 事件（软截止顺延、硬顶 interrupt）。
+```text
+┌─ daemon host（agorax-agent-daemon，tutti daemon 复制体）─────────────┐
+│  生命周期 owner：Session/Turn/Interaction 真相源在其 SQLite            │
+│  REST  /v1/workspaces/{ws}/agent-sessions（list/create/input/cancel/ │
+│        interactions/activity[afterVersion,limit]）                   │
+│  WS    /v1/events/ws  tutti envelope（id/topic/version/emittedAt/    │
+│        scope/payload；payload.eventType ∈ message_delta|message_update│
+│        |turn_update|interaction_update|session_reconcile_required）  │
+└──────────────┬───────────────────────────────────────────────────────┘
+               │ HTTP + WS（PascalCase JSON，DTO 由 @agorax/agent-activity-daemon-adapter 映射为 canonical）
+┌──────────────▼─ 服务端 bridge（src/server/agent-runtime/ + 路由）─────┐
+│  agorax-managed-agent-http-client：实现 core AgentActivityAdapter     │
+│  （listSessions/listSessionMessages(afterVersion)/createSession/     │
+│  sendInput/submitInteractive/cancelTurn 的 daemon 方言 typed client） │
+│  events.ts（SSE）：按 workspace 共享一条 daemon WS（引用计数 + 断线    │
+│  指数退避重连），全帧转发给匹配 agentSessionId 的浏览器订阅             │
+│  三类 SSE 帧：connected / activity（完整 envelope）/ reconnect        │
+└──────────────┬───────────────────────────────────────────────────────┘
+               │ SSE
+┌──────────────▼─ 前端 canonical 层（src/lib/managed-agent-runtime/）───┐
+│  event-bridge：envelope 一致性校验 → queueMicrotask 批处理 →          │
+│  workspaceEventCoordinator.ingestEvent → engine（inline 应用）        │
+│  reconcile-port：detail + afterVersion 分页读，喂 sessionReconcileExecutor│
+│  command port（managed-agent-engine.ts）：activateSession/sendInput/  │
+│  cancelTurn/respondToInteraction → typed settlement                 │
+└──────────────┬───────────────────────────────────────────────────────┘
+               │ engine 语义方法 + canonical 合同
+┌──────────────▼─ 消费方（只投影、不双写）──────────────────────────────┐
+│  src/screens/chat/（1:1 managed chat UI：interaction kind 分支卡片、   │
+│  answersByQuestionId payload、composer submit availability/queue）    │
+│  群聊 turn-executor（canonical interaction_update → room 卡片，        │
+│  回写 POST /api/rooms/:roomId/messages/:messageId/interaction-response）│
+└───────────────────────────────────────────────────────────────────────┘
+```
+
+- **事件 = 提示，canonical 读兜底**（tutti 铁律）：WS/SSE 事件带完整 payload，前端 envelope 校验 + 版本连续性判断后 inline 应用；帧解析失败、版本缺口、断线重连 → 原地 dispatch reconcile，经 detail / `afterVersion` 增量读修复。daemon WS 对滞后订阅者丢帧时发 `session_reconcile_required`。
+- **状态所有权**：daemon host = Session/Turn/Interaction 生命周期 owner（SQLite 真相源）；activity-core engine = 前端 canonical state owner（不可变 snapshot + selectors）；群聊 / mission / Swarm / sidebar 只投影，不双写生命周期事实。
+- **Legacy 兼容路径**：`router.ts` + `agorax-managed-agent-bridge.ts` + `transport.ts`（daemon WS → `agorax-managed-agent-events.ts` 的 canonical→`AgentStreamEvent` 转换）仍为群聊 managed turn 与旧 `POST /api/agents/:id/chat` 路由服务；transport 未配置（无 `AGORAX_MANAGED_AGENT_URL`）时回退 spawn adapter（`claude-code-adapter.ts` spawn `claude -p --output-format stream-json`、`codex-adapter.ts`）。Hermes = `HermesAdapterStub`（只 probe gateway，执行仍走 swarm-dispatch 老路——"hermes 完全不动"）。
+- **回合执行**（`run-managed-turn.ts`）：群聊 managed turn 与 legacy chat 共用；issueRunToken → startRun → drain 事件（软截止顺延、硬顶 interrupt）；pending interaction 阻塞时软截止顺延。
 - **汇合推进**（`advance.ts`）：MCP `task_complete` → assignment 状态推进 → 派发下一 stage；内存 promise-chain 串行化（mission 状态在 JSON 文件，无 SQLite 事务保护）。
-- **进程治理**：`pid-registry.ts`（崩溃重挂、SIGKILL interrupt）；`managed-chat-store.ts`（managed 会话/消息 SQLite 存储，claude native session id `--resume` 配对）。
+- **进程治理**：`pid-registry.ts`（spawn 路径的崩溃重挂、SIGKILL interrupt）；`managed-chat-store.ts`（collab.db managed 会话/消息 + claude native session id `--resume` 配对，sidebar 列表投影；daemon 路径下消息真相源在 daemon，store 只做关联/展示）。
 
 ### 5.5 任务管道与 worktree
 
@@ -223,15 +259,27 @@ POST /api/swarm-langgraph/run ──► spawnLanggraphDetached(python -m …)
 前端：useGroupChatEvents 订阅 → 增量拉消息渲染
 ```
 
-### 6.3 Managed 1:1 chat turn
+### 6.3 Managed 1:1 chat turn（canonical engine 路径）
 
 ```
-POST /api/agents/:id/chat（SSE）
-  → issueRunToken → adapter.startRun(spawn claude/codex -p)
-  → drain streamEvents：text_delta/thinking/tool 事件实时推流
-  → run_exited → 落 managed_chat_messages（native session id 供 --resume）
-  → 群聊/任务场景：MCP task_complete 经 advance.ts 推进 assignment 链
+首次提交（canonical session 尚不存在）
+  → command port POST /api/agents/:id/engine/activate{displaySessionId, agentSessionId(client 生成), message}
+  → ensureManagedChatSession（collab.db 关联投影）+ startManagedChatRun
+  → daemon 建 canonical session → 返回 runId + 当前 activity 聚合（PascalCase）
+
+后续交互（engine 语义方法 → typed settlement）
+  submitPrompt     → POST .../engine/session/:sid/input     → {result, activity}
+  stopSession      → POST .../engine/session/:sid/turns/:tid/cancel
+  respondToInteraction → POST /api/agents/:id/interactions/:sid/:tid/:requestId
+
+观察路径（与命令路径并行，事件 = 提示）
+  EventSource .../engine/session/:sid/events（connected/activity/reconnect）
+  → envelope 校验 → workspaceEventCoordinator → engine inline 应用
+  帧损坏/版本缺口/断线 → session/reconcileRequested
+    → reconcile-port 读 .../detail + .../messages?afterVersion&limit 修复
 ```
+
+legacy `POST /api/agents/:id/chat`（SSE spawn 路径）仍保留供兼容，前端已不再调用。
 
 ---
 
@@ -295,5 +343,6 @@ POST /api/agents/:id/chat（SSE）
 | Swarm2 子系统 spec | `swarm2-agent-ide-spec.md`、`swarm2-autopilot-orchestration-spec.md`、`swarm2-memory-framework-spec.md`、`swarm2-frankengpu-control-plane.md`、`swarm2-worker-lifecycle-compaction-spec.md` |
 | 版本演进 | `release-2.1.0.md`、`release-2.5.0.md` |
 | Managed runtime 接入 | `../skills/hermes-workspace-agents-integration/SKILL.md` |
+| Tutti 映射逻辑复用（managed agent 迁移记录） | `managed-agent-tutti-mapping.md` |
 | 运维 | `docker.md`、`dashboard-service.md`、`troubleshooting.md`、`windows-setup-guide.md`、`AGENT-PAIRING.md`、`api-key-registry.md` |
 | 周边 | `../hermes_langgraph_orchestrator/README.md` |

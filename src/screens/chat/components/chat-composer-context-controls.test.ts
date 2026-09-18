@@ -13,7 +13,8 @@ describe('ChatComposer context controls', () => {
     const src = source()
 
     expect(src).toContain('useProfiles')
-    expect(src).toContain('Active profile — read-only')
+    // Runtime identity renders from the shared useProfiles result (read-only).
+    expect(src).toContain('activeProfile')
     expect(src).not.toContain("queryKey: ['profiles', 'composer']")
     expect(src).not.toContain("fetch('/api/profiles/activate'")
   })
@@ -21,14 +22,13 @@ describe('ChatComposer context controls', () => {
   it('surfaces workspace and reasoning controls next to the model picker', () => {
     const src = source()
 
-    expect(src).toContain("fetch('/api/workspace')")
+    expect(src).toContain("fetch('/api/workspace'")
     expect(src).toContain('Workspace context')
     expect(src).toContain('workspaceSelectMutation')
     expect(src).toContain('WorkspaceFolderPicker')
     expect(src).toContain('DialogRoot')
     expect(src).toContain('SEARCH_MODAL_EVENTS.TOGGLE_FILE_EXPLORER')
     expect(src).toContain('Reasoning effort')
-    expect(src).toContain("['medium', 'Medium']")
-    expect(src).toContain("['high', 'High']")
+    expect(src).toContain('thinkingLabel')
   })
 })

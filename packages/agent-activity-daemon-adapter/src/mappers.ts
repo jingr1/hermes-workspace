@@ -312,15 +312,14 @@ function sessionGoalFromDaemon(
 
 function daemonTurnError(
   turn: DaemonCanonicalTurn
-): { code?: string; message: string; detail?: string } | null {
+): { code?: string; message: string } | null {
   const message = turn.ErrorMessage?.trim() ?? "";
   if (!message) {
     return null;
   }
   return {
     message: turn.ErrorMessage,
-    ...(turn.ErrorCode?.trim() ? { code: turn.ErrorCode } : {}),
-    ...(turn.ErrorDetail?.trim() ? { detail: turn.ErrorDetail } : {})
+    ...(turn.ErrorCode?.trim() ? { code: turn.ErrorCode } : {})
   };
 }
 

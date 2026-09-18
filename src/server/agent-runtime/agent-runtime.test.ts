@@ -220,6 +220,17 @@ describe('pid-registry', () => {
 })
 
 describe('AgentRuntimeRouter', () => {
+  // The repo .env may configure the managed-agent transport; these tests
+  // assert the not-configured fallback path, so pin the env vars to empty.
+  beforeEach(() => {
+    vi.stubEnv('AGORAX_MANAGED_AGENT_URL', '')
+    vi.stubEnv('AGORAX_WORKSPACE_ID', '')
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   it('builds adapters per runtime; deepseek is declared-but-unavailable', async () => {
     const router = new AgentRuntimeRouter({
       rawYaml: `
