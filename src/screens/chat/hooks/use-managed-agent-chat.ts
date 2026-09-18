@@ -35,11 +35,11 @@ import {
   createManagedAgentEngine,
   hydrateManagedAgentEngine,
   hydrateManagedAgentSessionDetail,
-  managedAgentTargetId,
   selectManagedAgentChatState,
   subscribeManagedAgentEngine,
 } from '../lib/managed-agent-engine'
 import { managedPromptContentFromAttachments } from '@/lib/managed-agent-runtime/prompt-content'
+import { managedAgentTargetIdForRuntime } from '@/lib/managed-agent-runtime/agent-targets'
 import {
   createManagedAgentEventBridge,
   type ManagedAgentActivityEventPayload,
@@ -140,10 +140,12 @@ function createWindowScheduler(): EngineScheduler {
 
 export function useManagedAgentChat({
   agentId,
+  runtime,
   sessionId,
   onSessionResolved,
 }: {
   agentId: string
+  runtime: string
   sessionId: string | null
   onSessionResolved?: (payload: { sessionKey: string; friendlyId: string }) => void
 }): ManagedAgentChat {
@@ -504,7 +506,7 @@ export function useManagedAgentChat({
     try {
       const promptContent = managedPromptContentFromAttachments({ text, attachments })
       const generation = activityGenerationRef.current
-      let runtime = runtimeRef.current
+      let chatRuntime = runtimeRef.current
       if (!canonicalSessionIdRef.current) {
         const displaySessionId = activeSessionId.startsWith('new-') ? crypto.randomUUID() : activeSessionId
         const canonicalSessionId = crypto.randomUUID()
@@ -514,14 +516,14 @@ export function useManagedAgentChat({
           pendingDisplaySessionIdRef.current = displaySessionId
         }
         displaySessionIdRef.current = displaySessionId
-        runtime = await ensureRuntime(displaySessionId, generation)
+        chatRuntime = await ensureRuntime(displaySessionId, generation)
         if (generation !== activityGenerationRef.current) {
           throw new Error('Managed Agent session changed before activation')
         }
-        const accepted = runtime.engine.activateSession({
+        const accepted = chatRuntime.engine.activateSession({
           mode: 'new',
           agentSessionId: canonicalSessionId,
-          agentTargetId: managedAgentTargetId(agentId),
+          agentTargetId: managedAgentTargetIdForRuntime(runtime, agentId),
           clientSubmitId: crypto.randomUUID(),
           requestId: crypto.randomUUID(),
           initialTurnExpected: true,
@@ -534,8 +536,8 @@ export function useManagedAgentChat({
         })
         if (!accepted) throw new Error('Managed Agent activation was not accepted')
       } else {
-        if (!runtime) runtime = await ensureRuntime(displaySessionIdRef.current, generation)
-        runtime.engine.submitPrompt({
+        if (!chatRuntime) chatRuntime = await ensureRuntime(displaySessionIdRef.current, generation)
+        chatRuntime.engine.submitPrompt({
           agentSessionId: canonicalSessionIdRef.current,
           clientSubmitId: crypto.randomUUID(),
           content: promptContent,
@@ -547,7 +549,7 @@ export function useManagedAgentChat({
       setError(reason instanceof Error ? reason.message : String(reason))
       throw reason
     }
-  }, [activeSessionId, agentId, ensureRuntime, getStoredModel, selectedModel, transferModel])
+  }, [activeSessionId, agentId, runtime, ensureRuntime, getStoredModel, selectedModel, transferModel])
 
   const abort = useCallback(() => {
     const agentSessionId = canonicalSessionIdRef.current

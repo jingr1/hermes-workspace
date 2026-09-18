@@ -22,6 +22,7 @@ import { Component, useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ModelProviderPanel } from './model-provider-panel'
 import { ClaudeCodeSettingsPanel } from './claude-code-settings-panel'
+import { agentRuntimeLabel } from '@/lib/managed-agent-runtime/agent-targets'
 import { CodexSettingsPanel } from './codex-settings-panel'
 import { UsagePricingPanel } from './usage-pricing-panel'
 import type * as React from 'react'
@@ -1598,19 +1599,6 @@ function LanguageContent() {
 
 // ── Agent context header ────────────────────────────────────────────────
 
-const RUNTIME_LABELS: Record<string, string> = {
-  hermes: 'Hermes',
-  'claude-code': 'Claude Code',
-  codex: 'Codex',
-  'deepseek-harness': 'DeepSeek',
-  opencode: 'OpenCode',
-  cursor: 'Cursor',
-  kimi: 'Kimi',
-}
-
-function runtimeLabel(runtime: string): string {
-  return RUNTIME_LABELS[runtime] ?? runtime
-}
 
 function AgentInfo({ agent }: { agent: AgentWithStatus }) {
   return (
@@ -1626,7 +1614,7 @@ function AgentInfo({ agent }: { agent: AgentWithStatus }) {
             {agent.name}
           </h4>
           <p className="text-xs text-primary-500 dark:text-neutral-400">
-            {runtimeLabel(agent.runtime)}
+            {agentRuntimeLabel(agent.runtime)}
           </p>
         </div>
       </div>

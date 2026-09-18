@@ -73,6 +73,7 @@ export function ManagedAgentChatView({
   const sessionController = useExternalAgentSessions(agent.agentId)
   const chat = useManagedAgentChat({
     agentId: agent.agentId,
+    runtime: agent.runtime,
     sessionId,
   })
   const queryClient = useQueryClient()

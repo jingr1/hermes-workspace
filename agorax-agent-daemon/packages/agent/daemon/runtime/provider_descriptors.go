@@ -29,9 +29,6 @@ func newMigratedProviderAdapters(
 		}
 		adapter := newAdapterFromProviderDescriptor(descriptor, transport, host, commandResolver, options)
 		if adapter == nil {
-			if descriptor.Runtime.Kind == providerregistry.RuntimeKindClaudeCLI {
-				continue
-			}
 			panic(fmt.Sprintf("provider %q has unsupported runtime kind %q", descriptor.Identity.ID, descriptor.Runtime.Kind))
 		}
 		if provider := strings.TrimSpace(adapter.Provider()); provider != descriptor.Identity.ID {
@@ -90,9 +87,27 @@ func newAdapterFromProviderDescriptor(
 			return nil
 		}
 	case providerregistry.RuntimeKindClaudeCLI:
-		// Claude Code is executed by Agorax's TypeScript CLI adapter. The Go
-		// Host keeps the provider-neutral lifecycle but does not embed an SDK.
-		return nil
+		// Claude Code is hosted through its print-mode CLI (no embedded SDK):
+		// one managed `claude -p --output-format stream-json` process per Turn.
+		// Permission policy stays config-driven: descriptor PermissionModes
+		// validate the session setting, DefaultPermissionModeID is the second
+		// lookup, and only then does the adapter apply its documented fallback.
+		permissionModeIDs := make(map[string]bool, len(descriptor.ComposerProfile.PermissionModes))
+		for _, mode := range descriptor.ComposerProfile.PermissionModes {
+			permissionModeIDs[strings.TrimSpace(mode.ID)] = true
+		}
+		return newClaudeCLIAdapter(
+			claudeCLIAdapterConfig{
+				provider:                descriptor.Identity.ID,
+				runtimeName:             descriptor.Runtime.Name,
+				command:                 append([]string(nil), descriptor.Runtime.Command...),
+				permissionModeIDs:       permissionModeIDs,
+				defaultPermissionModeID: strings.TrimSpace(descriptor.ComposerProfile.DefaultPermissionModeID),
+			},
+			transport,
+			host,
+			commandResolver,
+		)
 	default:
 		return nil
 	}

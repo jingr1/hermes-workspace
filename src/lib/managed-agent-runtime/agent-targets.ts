@@ -58,3 +58,37 @@ export function managedAgentBackendForAgentId(
 export function managedAgentTargetId(agentId: string): string {
   return agoraxAgentTargetIdForBackend(managedAgentBackendForAgentId(agentId))
 }
+
+/**
+ * Human labels for runtimes. Display-only: runtimes without a label render
+ * their raw name, so a new backend never blocks on copy.
+ */
+export const AGENT_RUNTIME_LABELS: Record<string, string> = {
+  hermes: 'Hermes Agent',
+  codex: 'Codex',
+  'claude-code': 'Claude Code',
+  cursor: 'Cursor',
+  opencode: 'OpenCode',
+  kimi: 'Kimi',
+  'deepseek-harness': 'DeepSeek',
+}
+
+export function agentRuntimeLabel(runtime: string): string {
+  return AGENT_RUNTIME_LABELS[runtime] ?? runtime
+}
+
+/**
+ * Target id for a registry agent, preferring its declared runtime over the
+ * legacy agentId guess (whose default silently mapped unknown ids to
+ * claude-code).
+ */
+export function managedAgentTargetIdForRuntime(
+  runtime: string,
+  agentId: string,
+): string {
+  return agoraxAgentTargetIdForBackend(
+    isAgoraxManagedAgentBackend(runtime)
+      ? runtime
+      : managedAgentBackendForAgentId(agentId),
+  )
+}

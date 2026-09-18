@@ -133,9 +133,10 @@ func routes(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.DB, stor
 			}
 		}
 		// enabled reflects the providers that actually have a registered
-		// runtime adapter (e.g. claude-code is intentionally served by the
-		// workspace's TS CLI adapter and is reported disabled here so callers
-		// fall back instead of failing at session-create time).
+		// runtime adapter. claude-code is hosted by the daemon's Claude CLI
+		// adapter (print-mode `claude -p --output-format stream-json`, one
+		// managed process per turn), so it reports enabled here once the
+		// adapter is wired in the runtime.
 		target := func(id string, provider string) map[string]any {
 			return map[string]any{"id": id, "enabled": registered[provider]}
 		}
@@ -218,6 +219,14 @@ func routes(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.DB, stor
 			Cwd:            stringPointer(input.CWD), Model: stringPointer(input.Model),
 		})
 		if err != nil {
+			// Delivery-unknown is not a failure: the turn is durably submitted
+			// and its outcome arrives via events/reconcile. Surface the result
+			// (SessionStatus "unknown") instead of a 4xx so clients don't
+			// report a spurious error while the provider is still starting.
+			if errors.Is(err, agenthost.ErrSubmitDeliveryUnknown) {
+				writeJSON(response, http.StatusCreated, result)
+				return
+			}
 			writeJSON(response, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}

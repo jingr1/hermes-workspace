@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { writeLastAgent } from '../last-session'
 import type { AgentWithStatus } from '@/lib/agent-types'
 import {
@@ -28,33 +28,47 @@ export function useAgentWorkspace() {
 
   const agentsLoadedRef = useRef(false)
 
+  const loadAgents = useCallback(
+    (opts?: { pickFirstWhenEmpty?: boolean }) => {
+      setAgentsLoading(true)
+      fetchAgents()
+        .then((data) => {
+          setAgents(data.agents)
+          if (
+            opts?.pickFirstWhenEmpty &&
+            !activeAgentId &&
+            data.agents.length > 0
+          ) {
+            const firstOnline =
+              data.agents.find(
+                (a) => a.status === 'online' || a.status === 'busy',
+              ) ?? data.agents[0]
+            setActiveAgentId(firstOnline.agentId)
+          }
+        })
+        .catch((error: unknown) => {
+          setAgentsError(error instanceof Error ? error.message : String(error))
+        })
+        .finally(() => setAgentsLoading(false))
+    },
+    [activeAgentId, setActiveAgentId, setAgents, setAgentsError, setAgentsLoading],
+  )
+
   // Initial agents load
   useEffect(() => {
     if (agentsLoadedRef.current) return
     agentsLoadedRef.current = true
-    setAgentsLoading(true)
-    fetchAgents()
-      .then((data) => {
-        setAgents(data.agents)
-        if (!activeAgentId && data.agents.length > 0) {
-          const firstOnline =
-            data.agents.find(
-              (a) => a.status === 'online' || a.status === 'busy',
-            ) ?? data.agents[0]
-          setActiveAgentId(firstOnline.agentId)
-        }
-      })
-      .catch((error: unknown) => {
-        setAgentsError(error instanceof Error ? error.message : String(error))
-      })
-      .finally(() => setAgentsLoading(false))
-  }, [
-    activeAgentId,
-    setActiveAgentId,
-    setAgents,
-    setAgentsError,
-    setAgentsLoading,
-  ])
+    loadAgents({ pickFirstWhenEmpty: true })
+  }, [loadAgents])
+
+  // Settings-registry changes (create/update/delete agent) notify via a window
+  // event so the chat sidebar picks new agents up without a page reload.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const refresh = () => loadAgents()
+    window.addEventListener('agorax:agents-changed', refresh)
+    return () => window.removeEventListener('agorax:agents-changed', refresh)
+  }, [loadAgents])
 
   // Load sessions whenever active agent changes.
   useEffect(() => {

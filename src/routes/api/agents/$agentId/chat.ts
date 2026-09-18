@@ -8,20 +8,12 @@ import {
   recordNativeSessionId,
   resolveNativeSessionForRun,
 } from '../../../../server/agent-runtime/managed-chat-store'
+import { resolveManagedChatWorkspaceCwd } from '../../../../server/agent-runtime/managed-chat-workspace'
 import { getAgentRuntimeRouter } from '../../../../server/agent-runtime/router'
 import { managedPromptContentFromAttachments } from '../../../../server/agent-runtime/agorax-managed-prompt-content'
-import type { AgentStreamEvent } from '../../../../server/agent-runtime/types'
 import { loadWorkspaceCatalog } from '../../workspace'
 import { buildWorkspaceScopedTextMessage } from '../../../../lib/workspace-message-scope'
-import {
-  isBlockedSystemPath,
-  isHermesStatePath,
-  normalizeCandidate,
-} from '../../../../server/workspace-path-policy'
-import {
-  remoteWorkspaceContextForScope,
-  workspaceProfileScope,
-} from '../../../../server/workspace-profile'
+import type { AgentStreamEvent } from '../../../../server/agent-runtime/types'
 
 /**
  * POST /api/agents/:agentId/chat
@@ -88,7 +80,9 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
           typeof body.model === 'string' ? body.model.trim() : ''
         const requestedEffort =
           typeof body.effort === 'string' ? body.effort.trim() : ''
-        const attachments = Array.isArray(body.attachments) ? body.attachments : []
+        const attachments = Array.isArray(body.attachments)
+          ? body.attachments
+          : []
 
         const sessionId =
           typeof body.sessionId === 'string' && body.sessionId.trim()
@@ -117,7 +111,7 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
 
         // Same active workspace as the UI folder picker / Hermes send-stream.
         const workspace = await loadWorkspaceCatalog().catch(() => null)
-        const workspaceCwd = resolveManagedChatCwd(workspace)
+        const workspaceCwd = resolveManagedChatWorkspaceCwd(workspace)
 
         // With --resume, Claude already has history — only send the new turn.
         // First turn (--session-id) also stays single-message; no prompt replay.
@@ -128,10 +122,16 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
         ].join('\n')
         let content
         try {
-          content = managedPromptContentFromAttachments({ text: task, attachments })
+          content = managedPromptContentFromAttachments({
+            text: task,
+            attachments,
+          })
         } catch (error) {
           return new Response(
-            JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
+            JSON.stringify({
+              ok: false,
+              error: error instanceof Error ? error.message : String(error),
+            }),
             { status: 400, headers: { 'Content-Type': 'application/json' } },
           )
         }
@@ -309,29 +309,6 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
     },
   },
 })
-
-/** Map UI workspace catalog → local spawn cwd (skip invalid / Hermes state paths). */
-function resolveManagedChatCwd(
-  workspace: {
-    path?: string
-    isValid?: boolean
-  } | null,
-): string | undefined {
-  // SSH/remote workspaces are not usable as a local Claude Code spawn cwd.
-  if (remoteWorkspaceContextForScope(workspaceProfileScope())) {
-    return undefined
-  }
-  if (!workspace?.isValid || !workspace.path?.trim()) return undefined
-  const normalized = normalizeCandidate(workspace.path.trim())
-  if (
-    !normalized ||
-    isHermesStatePath(normalized) ||
-    isBlockedSystemPath(normalized)
-  ) {
-    return undefined
-  }
-  return normalized
-}
 
 function relayEvent(
   send: (event: string, data: Record<string, unknown>) => void,

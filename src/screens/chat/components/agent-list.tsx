@@ -13,20 +13,8 @@ import {
 import { cn } from '@/lib/utils'
 import { useAgentStore } from '@/stores/agent-store'
 import { statusLabel } from '@/lib/agent-status'
+import { agentRuntimeLabel } from '@/lib/managed-agent-runtime/agent-targets'
 
-const RUNTIME_LABELS: Record<AgentRuntime, string> = {
-  hermes: 'Hermes',
-  'claude-code': 'Claude Code',
-  codex: 'Codex',
-  'deepseek-harness': 'DeepSeek',
-  opencode: 'OpenCode',
-  cursor: 'Cursor',
-  kimi: 'Kimi',
-}
-
-function runtimeLabel(runtime: AgentRuntime): string {
-  return (RUNTIME_LABELS as Record<string, string>)[runtime] ?? runtime
-}
 
 function agentSubtitle(
   agent: AgentWithStatus,
@@ -41,10 +29,10 @@ function agentSubtitle(
     const provider = profile.provider?.trim()
     return (
       [model, provider].filter(Boolean).join(' · ') ||
-      runtimeLabel(agent.runtime)
+      agentRuntimeLabel(agent.runtime)
     )
   }
-  return runtimeLabel(agent.runtime)
+  return agentRuntimeLabel(agent.runtime)
 }
 
 /** Convert legacy AgentStatus to the unified status used for rendering. */

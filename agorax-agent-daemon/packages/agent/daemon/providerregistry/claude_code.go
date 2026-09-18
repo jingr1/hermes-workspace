@@ -11,8 +11,13 @@ func claudeCodeDescriptor() ProviderDescriptor {
 	return ProviderDescriptor{
 		Identity: canonicalProviderIdentity(ClaudeCodeProviderID),
 		Runtime: RuntimeDescriptor{
-			Kind:              RuntimeKindClaudeCLI,
-			Name:              "claude-cli",
+			Kind: RuntimeKindClaudeCLI,
+			Name: "claude-cli",
+			// Command[0] is the executable resolved through the runtime command
+			// adapter; any tail elements are declaration-owned args (the
+			// agents.yaml `args` equivalent) and never carry permission policy
+			// unless they explicitly declare it.
+			Command: []string{"claude"},
 			Endpoint: RuntimeEndpointDescriptor{
 				BaseURLEnvVars: []string{
 					"ANTHROPIC_BASE_URL",
