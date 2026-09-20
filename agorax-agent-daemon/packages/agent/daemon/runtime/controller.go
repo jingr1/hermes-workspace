@@ -37,6 +37,7 @@ type Controller struct {
 	sessionAvailabilityWaiters   map[string]*sessionAvailabilityWaiter
 	adapters                     map[string]Adapter
 	adapterResolver              AdapterResolver
+	enabled                      map[string]bool
 	turns                        map[string]activeTurn
 	commands                     map[string]AgentSessionCommandSnapshot
 	pendingCommandSnapshots      map[string]AgentSessionCommandSnapshot

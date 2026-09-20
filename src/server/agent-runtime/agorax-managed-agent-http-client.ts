@@ -98,10 +98,7 @@ type SendInputResponse = {
   turn: CanonicalTurnProjection
 }
 
-export {
-  agoraxAgentTargetIdForBackend,
-  type AgoraxManagedAgentBackend,
-}
+export { agoraxAgentTargetIdForBackend, type AgoraxManagedAgentBackend }
 
 /**
  * Thin Agorax transport client for the embedded Managed Agent daemon API.
@@ -127,12 +124,13 @@ export class AgoraxManagedAgentHttpClient {
   }
 
   async probe(backend: AgoraxManagedAgentBackend): Promise<AgentProbeResult> {
-    const response = await this.requestJson<{ agents?: Array<Record<string, unknown>> }>(
-      '/v1/agent-targets',
-      { method: 'GET' },
-    )
+    const response = await this.requestJson<{
+      agents?: Array<Record<string, unknown>>
+    }>('/v1/agent-targets', { method: 'GET' })
     const targetId = agoraxAgentTargetIdForBackend(backend)
-    const target = response.agents?.find((candidate) => candidate.id === targetId)
+    const target = response.agents?.find(
+      (candidate) => candidate.id === targetId,
+    )
     if (!target) {
       return {
         available: false,
@@ -145,7 +143,10 @@ export class AgoraxManagedAgentHttpClient {
         detail: `Agorax managed target ${targetId} is disabled`,
       }
     }
-    return { available: true, detail: `Agorax managed target ${targetId} is ready` }
+    return {
+      available: true,
+      detail: `Agorax managed target ${targetId} is ready`,
+    }
   }
 
   /** GET /v1/provider-status — the daemon's provider runtime aggregate. */
@@ -170,6 +171,20 @@ export class AgoraxManagedAgentHttpClient {
     )
   }
 
+  /** POST /v1/providers/{provider}/enable — enable or disable a provider runtime. */
+  async setProviderEnabled(
+    provider: string,
+    enabled: boolean,
+  ): Promise<{ provider: string; enabled: boolean }> {
+    return this.requestJson<{ provider: string; enabled: boolean }>(
+      `/v1/providers/${encodeURIComponent(provider)}/enable`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ enabled }),
+      },
+    )
+  }
+
   async createSession(
     input: CreateAgoraxAgentSessionInput,
   ): Promise<CreateSessionResponse> {
@@ -185,7 +200,9 @@ export class AgoraxManagedAgentHttpClient {
         agentSessionId: input.agentSessionId,
         agentTargetId: agoraxAgentTargetIdForBackend(input.backend),
         clientSubmitId: input.clientSubmitId,
-        initialContent: input.promptContent ?? [{ type: 'text', text: input.content }],
+        initialContent: input.promptContent ?? [
+          { type: 'text', text: input.content },
+        ],
         ...(input.cwd ? { cwd: input.cwd } : {}),
         ...(input.model ? { model: input.model } : {}),
       },
@@ -421,7 +438,11 @@ export class AgoraxManagedAgentHttpClient {
     )
   }
 
-  private async requestJson<T>(path: string, init: RequestInit, signal?: AbortSignal): Promise<T> {
+  private async requestJson<T>(
+    path: string,
+    init: RequestInit,
+    signal?: AbortSignal,
+  ): Promise<T> {
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
       ...init,
       ...(signal ? { signal } : {}),
@@ -463,7 +484,10 @@ function normalizeCreateSessionResponse(value: unknown): CreateSessionResponse {
     stringValue(canonical?.ActiveTurnID) ||
     stringValue(canonical?.activeTurnId) ||
     stringValue(record?.TurnID)
-  if (!id) throw new Error('Agorax Managed Agent create response has no canonical session id')
+  if (!id)
+    throw new Error(
+      'Agorax Managed Agent create response has no canonical session id',
+    )
   return { session: { id, activeTurnId: activeTurnId || null } }
 }
 
@@ -478,8 +502,15 @@ function normalizeSendInputResponse(
     stringValue(canonical?.ID) ||
     stringValue(canonical?.id) ||
     requestedSessionId.trim()
-  const turnId = stringValue(record?.TurnID) || stringValue(record?.turnId) || stringValue(turn?.TurnID) || stringValue(turn?.turnId)
-  if (!id || !turnId) throw new Error('Agorax Managed Agent send response has incomplete canonical identity')
+  const turnId =
+    stringValue(record?.TurnID) ||
+    stringValue(record?.turnId) ||
+    stringValue(turn?.TurnID) ||
+    stringValue(turn?.turnId)
+  if (!id || !turnId)
+    throw new Error(
+      'Agorax Managed Agent send response has incomplete canonical identity',
+    )
   return {
     kind: 'turn',
     session: { id, activeTurnId: stringValue(canonical?.ActiveTurnID) || null },
@@ -490,7 +521,7 @@ function normalizeSendInputResponse(
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : null
 }
 

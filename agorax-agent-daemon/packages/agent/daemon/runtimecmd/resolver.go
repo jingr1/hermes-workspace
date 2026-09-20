@@ -38,13 +38,20 @@ func (r Resolver) Env(overrides []string) []string {
 	baseEnv := stripEnvKeys(r.environ(), nestingGuardEnvKeys)
 	env := append(baseEnv, overrides...)
 	pathKey := pathEnvKey(env)
+	managedNPMDirs := r.userManagedNPMExecutableDirs()
 	pathGroups := [][]string{}
 	if overridePathGroups := pathGroupsFromEnv(overrides, pathKey, envValue(baseEnv, pathKey)); len(overridePathGroups) > 0 {
 		pathGroups = append(pathGroups, overridePathGroups...)
 		pathGroups = append(pathGroups, preferredExecutableDirs(env))
+		if len(managedNPMDirs) > 0 {
+			pathGroups = append(pathGroups, managedNPMDirs)
+		}
 		pathGroups = append(pathGroups, r.fallbackExecutableDirs())
 	} else {
 		pathGroups = append(pathGroups, preferredExecutableDirs(env))
+		if len(managedNPMDirs) > 0 {
+			pathGroups = append(pathGroups, managedNPMDirs)
+		}
 		pathGroups = append(pathGroups, splitPathList(envValue(baseEnv, pathKey)))
 		pathGroups = append(pathGroups, r.fallbackExecutableDirs())
 	}
@@ -143,6 +150,14 @@ func (r Resolver) UserBinInstallDirs(overrides []string) []string {
 		candidates = append(candidates, managedNPMDirs, []string{filepath.Join(home, "bin")})
 	}
 	return mergePathDirs(candidates...)
+}
+
+func (r Resolver) userManagedNPMExecutableDirs() []string {
+	home, err := r.homeDir()
+	if err != nil || strings.TrimSpace(home) == "" {
+		return nil
+	}
+	return UserManagedNPMExecutableDirs(home)
 }
 
 func preferredExecutableDirs(env []string) []string {

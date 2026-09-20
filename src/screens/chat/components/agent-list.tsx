@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useProfiles } from '../hooks/use-profiles'
 import { AgentStatusDot } from './agent-status-dot'
-import type { AgentRuntime, AgentWithStatus } from '@/lib/agent-types'
+import type { AgentWithStatus } from '@/lib/agent-types'
 import type { UnifiedAgentStatus } from '@/lib/agent-status'
 import { SettingsDialog } from '@/components/settings-dialog'
 import {
@@ -12,19 +12,14 @@ import {
 } from '@/screens/gateway/components/agent-avatar'
 import { cn } from '@/lib/utils'
 import { useAgentStore } from '@/stores/agent-store'
-import { statusLabel } from '@/lib/agent-status'
 import { agentRuntimeLabel } from '@/lib/managed-agent-runtime/agent-targets'
 import {
   AGENT_PROVIDER_BADGE_LABELS,
   providerIdForAgentRuntime,
   providerStatusBadge,
-  type AgentProviderBadge,
   type AgentProviderStatusDto,
 } from '@/lib/managed-agent-runtime/provider-status'
-import {
-  useAgentProviderStatus,
-  useInstallAgentProvider,
-} from '../hooks/use-provider-status'
+import { useAgentProviderStatus } from '../hooks/use-provider-status'
 
 
 function agentSubtitle(
@@ -44,6 +39,28 @@ function agentSubtitle(
     )
   }
   return agentRuntimeLabel(agent.runtime)
+}
+
+function providerStatusToDot(
+  entry: AgentProviderStatusDto | undefined,
+): { status: UnifiedAgentStatus; title: string } | null {
+  if (!entry) return null
+  const badge = providerStatusBadge(entry)
+  const label = AGENT_PROVIDER_BADGE_LABELS[badge]
+  switch (badge) {
+    case 'ready':
+      return {
+        status: 'active',
+        title: entry.version ? `${label} ${entry.version}` : label,
+      }
+    case 'update-available':
+      return { status: 'needsSetup', title: label }
+    case 'not-installed':
+    case 'unknown':
+      return { status: 'error', title: label }
+    default:
+      return null
+  }
 }
 
 /** Convert legacy AgentStatus to the unified status used for rendering. */
@@ -75,72 +92,6 @@ function toUnifiedStatus(
   }
 }
 
-const PROVIDER_BADGE_STYLES: Record<AgentProviderBadge, string> = {
-  ready: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
-  'update-available':
-    'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
-  'not-installed': 'bg-primary-200 text-primary-500 dark:bg-primary-800 dark:text-primary-400',
-  unknown: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
-}
-
-/**
- * Install/update affordance for one non-Hermes runtime row. Hidden for hermes
- * agents and runtimes the daemon does not detect (e.g. deepseek-harness).
- */
-function ProviderRuntimeBadge({
-  agent,
-  entry,
-  installing,
-  onInstall,
-}: {
-  agent: AgentWithStatus
-  entry: AgentProviderStatusDto | undefined
-  installing: boolean
-  onInstall: (
-    providerId: NonNullable<ReturnType<typeof providerIdForAgentRuntime>>,
-    version?: string,
-  ) => void
-}) {
-  const providerId = providerIdForAgentRuntime(agent.runtime)
-  if (!providerId) return null
-  const badge = providerStatusBadge(entry)
-  const actionable = badge === 'not-installed' || badge === 'update-available'
-  const upgrading = badge === 'update-available'
-  return (
-    <div className="mt-0.5 flex items-center gap-2">
-      <span
-        className={cn(
-          'inline-flex items-center rounded px-1.5 py-px text-[10px] font-medium',
-          PROVIDER_BADGE_STYLES[badge],
-        )}
-      >
-        {AGENT_PROVIDER_BADGE_LABELS[badge]}
-        {badge === 'ready' && entry?.version ? ` ${entry.version}` : ''}
-      </span>
-      {actionable ? (
-        <button
-          type="button"
-          disabled={installing}
-          onClick={(event) => {
-            event.stopPropagation()
-            // Upgrades pin "latest" explicitly; plain installs use the
-            // daemon's idempotent ensure-present path.
-            onInstall(providerId, upgrading ? 'latest' : undefined)
-          }}
-          className={cn(
-            'inline-flex items-center rounded px-1.5 py-px text-[10px] font-medium',
-            'bg-accent-500/10 text-accent-600 transition-colors',
-            'hover:bg-accent-500/20 disabled:cursor-not-allowed disabled:opacity-50',
-            'dark:text-accent-400',
-          )}
-        >
-          {installing ? '安装中…' : upgrading ? '升级' : '安装'}
-        </button>
-      ) : null}
-    </div>
-  )
-}
-
 function AgentListItem({
   agent,
   index,
@@ -148,8 +99,6 @@ function AgentListItem({
   onSelect,
   onOpenSettings,
   providerStatusEntry,
-  installingProvider,
-  onInstallProvider,
 }: {
   agent: AgentWithStatus
   index: number
@@ -157,11 +106,6 @@ function AgentListItem({
   onSelect: (agentId: string) => void
   onOpenSettings: (agentId: string) => void
   providerStatusEntry: AgentProviderStatusDto | undefined
-  installingProvider: boolean
-  onInstallProvider: (
-    providerId: NonNullable<ReturnType<typeof providerIdForAgentRuntime>>,
-    version?: string,
-  ) => void
 }) {
   const { profiles } = useProfiles()
   const profile = useMemo(() => {
@@ -209,6 +153,7 @@ function AgentListItem({
       <AgentStatusDot
         status={agent.status}
         needsSetup={toUnifiedStatus(agent, profile) === 'needsSetup'}
+        {...providerStatusToDot(providerStatusEntry)}
       />
       <div className="min-w-0 flex-1">
         <p
@@ -222,12 +167,6 @@ function AgentListItem({
         <p className="truncate text-xs text-primary-500">
           {agentSubtitle(agent, profile, toUnifiedStatus(agent, profile))}
         </p>
-        <ProviderRuntimeBadge
-          agent={agent}
-          entry={providerStatusEntry}
-          installing={installingProvider}
-          onInstall={onInstallProvider}
-        />
       </div>
     </div>
   )
@@ -245,7 +184,6 @@ export function AgentList({
   const storeSetActiveAgentId = useAgentStore((state) => state.setActiveAgentId)
   const [settingsAgentId, setSettingsAgentId] = useState<string | null>(null)
   const providerStatusQuery = useAgentProviderStatus()
-  const installProviderMutation = useInstallAgentProvider()
 
   const providerStatusById = useMemo(() => {
     const map = new Map<string, AgentProviderStatusDto>()
@@ -311,15 +249,6 @@ export function AgentList({
                 onSelect={handleSelect}
                 onOpenSettings={setSettingsAgentId}
                 providerStatusEntry={providerId ? providerStatusById.get(providerId) : undefined}
-                installingProvider={
-                  installProviderMutation.isPending &&
-                  installProviderMutation.variables?.provider === providerId
-                }
-                onInstallProvider={(target, version) =>
-                  installProviderMutation.mutate(
-                    version ? { provider: target, version } : { provider: target },
-                  )
-                }
               />
             )
           })}

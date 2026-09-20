@@ -166,6 +166,28 @@ func routesWithOps(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.D
 	})
 	mux.HandleFunc("GET /v1/provider-status", ops.handleProviderStatus)
 	mux.HandleFunc("POST /v1/providers/{provider}/install", ops.handleProviderInstall)
+	mux.HandleFunc("POST /v1/providers/{provider}/enable", func(response http.ResponseWriter, request *http.Request) {
+		providerID := strings.TrimSpace(request.PathValue("provider"))
+		descriptor, ok := findProviderTarget(providerID)
+		if !ok {
+			writeJSON(response, http.StatusNotFound, map[string]string{"error": fmt.Sprintf("unknown provider %q", providerID)})
+			return
+		}
+		var body struct {
+			Enabled bool `json:"enabled"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+			writeJSON(response, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		if runtime != nil && runtime.Controller() != nil {
+			runtime.Controller().SetProviderEnabled(descriptor.Identity.ID, body.Enabled)
+		}
+		writeJSON(response, http.StatusOK, map[string]any{
+			"provider": descriptor.Identity.ID,
+			"enabled":  body.Enabled,
+		})
+	})
 	mux.Handle("GET /v1/events/ws", websocket.Server{
 		// The default websocket.Handler handshake rejects requests without an
 		// Origin header ("null origin"), which breaks non-browser clients

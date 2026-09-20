@@ -26,10 +26,12 @@ export function AgentStatusDot({
   status,
   className,
   needsSetup,
+  title,
 }: {
   status: AgentStatus | UnifiedAgentStatus
   className?: string
   needsSetup?: boolean
+  title?: string
 }) {
   const style =
     UNIFIED_STATUS_STYLES[status as UnifiedAgentStatus] ??
@@ -43,7 +45,7 @@ export function AgentStatusDot({
         needsSetup ? 'bg-amber-400' : style,
         className,
       )}
-      title={needsSetup ? 'needs setup' : status}
+      title={title ?? (needsSetup ? 'needs setup' : status)}
     />
   )
 }

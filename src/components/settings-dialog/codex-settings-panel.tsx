@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { LocalEnvCheckSection } from './local-env-check-section'
 
 type CatalogProviderLite = {
   id: string
@@ -199,8 +198,6 @@ export function CodexSettingsPanel({ onSaved }: CodexSettingsPanelProps) {
           {msg}
         </div>
       )}
-
-      <LocalEnvCheckSection agentId="codex-impl" />
 
       <div
         className="space-y-3 rounded-xl border px-4 py-3 shadow-sm"

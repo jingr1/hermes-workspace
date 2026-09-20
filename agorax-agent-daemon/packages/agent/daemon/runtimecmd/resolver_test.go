@@ -425,6 +425,36 @@ func TestResolverEnvStripsClaudeCodeNestingGuards(t *testing.T) {
 	}
 }
 
+func TestResolverPrefersUserManagedNPMOverBasePath(t *testing.T) {
+	home := t.TempDir()
+	userManagedBinDir := filepath.Join(home, ".local", "bin")
+	if err := os.MkdirAll(userManagedBinDir, 0o755); err != nil {
+		t.Fatalf("mkdir managed npm bin dir: %v", err)
+	}
+	managedCodexPath := filepath.Join(userManagedBinDir, "codex")
+	writeExecutable(t, managedCodexPath)
+
+	resolver := Resolver{
+		Environ: func() []string {
+			return []string{"PATH=" + filepath.FromSlash("/usr/bin") + string(os.PathListSeparator) + filepath.FromSlash("/bin")}
+		},
+		HomeDir: func() (string, error) {
+			return home, nil
+		},
+		LookPath: func(string) (string, error) {
+			return "", os.ErrNotExist
+		},
+	}
+
+	env := resolver.Env(nil)
+	if got := resolver.Resolve("codex", env); got != managedCodexPath {
+		t.Fatalf("Resolve() = %q, want user-managed codex %q", got, managedCodexPath)
+	}
+	if got := resolver.ResolveBinary([]string{"codex"}, nil); got != managedCodexPath {
+		t.Fatalf("ResolveBinary() = %q, want user-managed codex %q", got, managedCodexPath)
+	}
+}
+
 func TestResolverUserBinInstallDirsPrefersPathEntriesThenFallbacks(t *testing.T) {
 	home := t.TempDir()
 	pathDir := filepath.Join(home, "custom-bin")

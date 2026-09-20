@@ -208,6 +208,7 @@ import { Route as ApiAgentsStatusRouteImport } from './routes/api/agents/status'
 import { Route as ApiAgentsOperationsRouteImport } from './routes/api/agents/operations'
 import { Route as ApiAgentRuntimeStatusRouteImport } from './routes/api/agent-runtime/status'
 import { Route as ApiAgentRuntimeInstallRouteImport } from './routes/api/agent-runtime/install'
+import { Route as ApiAgentRuntimeEnableRouteImport } from './routes/api/agent-runtime/enable'
 import { Route as ApiSessionsSessionKeyTruncateRouteImport } from './routes/api/sessions/$sessionKey.truncate'
 import { Route as ApiSessionsSessionKeyStatusRouteImport } from './routes/api/sessions/$sessionKey.status'
 import { Route as ApiSessionsSessionKeyCompressRouteImport } from './routes/api/sessions/$sessionKey.compress'
@@ -222,8 +223,6 @@ import { Route as ApiAgentsCodexImplModelsRouteImport } from './routes/api/agent
 import { Route as ApiAgentsCodexImplConfigRouteImport } from './routes/api/agents/codex-impl/config'
 import { Route as ApiAgentsClaudeCodeModelsRouteImport } from './routes/api/agents/claude-code/models'
 import { Route as ApiAgentsAgentIdSessionsRouteImport } from './routes/api/agents/$agentId/sessions'
-import { Route as ApiAgentsAgentIdEnvCheckRouteImport } from './routes/api/agents/$agentId/env-check'
-import { Route as ApiAgentsAgentIdEnvActionRouteImport } from './routes/api/agents/$agentId/env-action'
 import { Route as ApiAgentsAgentIdChatRouteImport } from './routes/api/agents/$agentId/chat'
 import { Route as ApiRunsSessionKeyRunIdAbandonRouteImport } from './routes/api/runs/$sessionKey.$runId.abandon'
 import { Route as ApiRoomsRoomIdParticipantsParticipantIdRouteImport } from './routes/api/rooms/$roomId/participants/$participantId'
@@ -1246,6 +1245,11 @@ const ApiAgentRuntimeInstallRoute = ApiAgentRuntimeInstallRouteImport.update({
   path: '/api/agent-runtime/install',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAgentRuntimeEnableRoute = ApiAgentRuntimeEnableRouteImport.update({
+  id: '/api/agent-runtime/enable',
+  path: '/api/agent-runtime/enable',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSessionsSessionKeyTruncateRoute =
   ApiSessionsSessionKeyTruncateRouteImport.update({
     id: '/$sessionKey/truncate',
@@ -1324,18 +1328,6 @@ const ApiAgentsAgentIdSessionsRoute =
   ApiAgentsAgentIdSessionsRouteImport.update({
     id: '/api/agents/$agentId/sessions',
     path: '/api/agents/$agentId/sessions',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiAgentsAgentIdEnvCheckRoute =
-  ApiAgentsAgentIdEnvCheckRouteImport.update({
-    id: '/api/agents/$agentId/env-check',
-    path: '/api/agents/$agentId/env-check',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiAgentsAgentIdEnvActionRoute =
-  ApiAgentsAgentIdEnvActionRouteImport.update({
-    id: '/api/agents/$agentId/env-action',
-    path: '/api/agents/$agentId/env-action',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiAgentsAgentIdChatRoute = ApiAgentsAgentIdChatRouteImport.update({
@@ -1562,6 +1554,7 @@ export interface FileRoutesByFullPath {
   '/chat/': typeof ChatIndexRoute
   '/group-chat/': typeof GroupChatIndexRoute
   '/settings/': typeof SettingsIndexRoute
+  '/api/agent-runtime/enable': typeof ApiAgentRuntimeEnableRoute
   '/api/agent-runtime/install': typeof ApiAgentRuntimeInstallRoute
   '/api/agent-runtime/status': typeof ApiAgentRuntimeStatusRoute
   '/api/agents/operations': typeof ApiAgentsOperationsRoute
@@ -1647,8 +1640,6 @@ export interface FileRoutesByFullPath {
   '/api/agents/': typeof ApiAgentsIndexRoute
   '/api/tasks/': typeof ApiTasksIndexRoute
   '/api/agents/$agentId/chat': typeof ApiAgentsAgentIdChatRoute
-  '/api/agents/$agentId/env-action': typeof ApiAgentsAgentIdEnvActionRoute
-  '/api/agents/$agentId/env-check': typeof ApiAgentsAgentIdEnvCheckRoute
   '/api/agents/$agentId/sessions': typeof ApiAgentsAgentIdSessionsRouteWithChildren
   '/api/agents/claude-code/models': typeof ApiAgentsClaudeCodeModelsRoute
   '/api/agents/codex-impl/config': typeof ApiAgentsCodexImplConfigRoute
@@ -1795,6 +1786,7 @@ export interface FileRoutesByTo {
   '/chat': typeof ChatIndexRoute
   '/group-chat': typeof GroupChatIndexRoute
   '/settings': typeof SettingsIndexRoute
+  '/api/agent-runtime/enable': typeof ApiAgentRuntimeEnableRoute
   '/api/agent-runtime/install': typeof ApiAgentRuntimeInstallRoute
   '/api/agent-runtime/status': typeof ApiAgentRuntimeStatusRoute
   '/api/agents/operations': typeof ApiAgentsOperationsRoute
@@ -1880,8 +1872,6 @@ export interface FileRoutesByTo {
   '/api/agents': typeof ApiAgentsIndexRoute
   '/api/tasks': typeof ApiTasksIndexRoute
   '/api/agents/$agentId/chat': typeof ApiAgentsAgentIdChatRoute
-  '/api/agents/$agentId/env-action': typeof ApiAgentsAgentIdEnvActionRoute
-  '/api/agents/$agentId/env-check': typeof ApiAgentsAgentIdEnvCheckRoute
   '/api/agents/$agentId/sessions': typeof ApiAgentsAgentIdSessionsRouteWithChildren
   '/api/agents/claude-code/models': typeof ApiAgentsClaudeCodeModelsRoute
   '/api/agents/codex-impl/config': typeof ApiAgentsCodexImplConfigRoute
@@ -2031,6 +2021,7 @@ export interface FileRoutesById {
   '/chat/': typeof ChatIndexRoute
   '/group-chat/': typeof GroupChatIndexRoute
   '/settings/': typeof SettingsIndexRoute
+  '/api/agent-runtime/enable': typeof ApiAgentRuntimeEnableRoute
   '/api/agent-runtime/install': typeof ApiAgentRuntimeInstallRoute
   '/api/agent-runtime/status': typeof ApiAgentRuntimeStatusRoute
   '/api/agents/operations': typeof ApiAgentsOperationsRoute
@@ -2116,8 +2107,6 @@ export interface FileRoutesById {
   '/api/agents/': typeof ApiAgentsIndexRoute
   '/api/tasks/': typeof ApiTasksIndexRoute
   '/api/agents/$agentId/chat': typeof ApiAgentsAgentIdChatRoute
-  '/api/agents/$agentId/env-action': typeof ApiAgentsAgentIdEnvActionRoute
-  '/api/agents/$agentId/env-check': typeof ApiAgentsAgentIdEnvCheckRoute
   '/api/agents/$agentId/sessions': typeof ApiAgentsAgentIdSessionsRouteWithChildren
   '/api/agents/claude-code/models': typeof ApiAgentsClaudeCodeModelsRoute
   '/api/agents/codex-impl/config': typeof ApiAgentsCodexImplConfigRoute
@@ -2268,6 +2257,7 @@ export interface FileRouteTypes {
     | '/chat/'
     | '/group-chat/'
     | '/settings/'
+    | '/api/agent-runtime/enable'
     | '/api/agent-runtime/install'
     | '/api/agent-runtime/status'
     | '/api/agents/operations'
@@ -2353,8 +2343,6 @@ export interface FileRouteTypes {
     | '/api/agents/'
     | '/api/tasks/'
     | '/api/agents/$agentId/chat'
-    | '/api/agents/$agentId/env-action'
-    | '/api/agents/$agentId/env-check'
     | '/api/agents/$agentId/sessions'
     | '/api/agents/claude-code/models'
     | '/api/agents/codex-impl/config'
@@ -2501,6 +2489,7 @@ export interface FileRouteTypes {
     | '/chat'
     | '/group-chat'
     | '/settings'
+    | '/api/agent-runtime/enable'
     | '/api/agent-runtime/install'
     | '/api/agent-runtime/status'
     | '/api/agents/operations'
@@ -2586,8 +2575,6 @@ export interface FileRouteTypes {
     | '/api/agents'
     | '/api/tasks'
     | '/api/agents/$agentId/chat'
-    | '/api/agents/$agentId/env-action'
-    | '/api/agents/$agentId/env-check'
     | '/api/agents/$agentId/sessions'
     | '/api/agents/claude-code/models'
     | '/api/agents/codex-impl/config'
@@ -2736,6 +2723,7 @@ export interface FileRouteTypes {
     | '/chat/'
     | '/group-chat/'
     | '/settings/'
+    | '/api/agent-runtime/enable'
     | '/api/agent-runtime/install'
     | '/api/agent-runtime/status'
     | '/api/agents/operations'
@@ -2821,8 +2809,6 @@ export interface FileRouteTypes {
     | '/api/agents/'
     | '/api/tasks/'
     | '/api/agents/$agentId/chat'
-    | '/api/agents/$agentId/env-action'
-    | '/api/agents/$agentId/env-check'
     | '/api/agents/$agentId/sessions'
     | '/api/agents/claude-code/models'
     | '/api/agents/codex-impl/config'
@@ -2968,6 +2954,7 @@ export interface RootRouteChildren {
   ApiWorkspaceRoute: typeof ApiWorkspaceRouteWithChildren
   ChatSessionKeyRoute: typeof ChatSessionKeyRoute
   ChatIndexRoute: typeof ChatIndexRoute
+  ApiAgentRuntimeEnableRoute: typeof ApiAgentRuntimeEnableRoute
   ApiAgentRuntimeInstallRoute: typeof ApiAgentRuntimeInstallRoute
   ApiAgentRuntimeStatusRoute: typeof ApiAgentRuntimeStatusRoute
   ApiAgentsOperationsRoute: typeof ApiAgentsOperationsRoute
@@ -3024,8 +3011,6 @@ export interface RootRouteChildren {
   ApiAgentsIndexRoute: typeof ApiAgentsIndexRoute
   ApiTasksIndexRoute: typeof ApiTasksIndexRoute
   ApiAgentsAgentIdChatRoute: typeof ApiAgentsAgentIdChatRoute
-  ApiAgentsAgentIdEnvActionRoute: typeof ApiAgentsAgentIdEnvActionRoute
-  ApiAgentsAgentIdEnvCheckRoute: typeof ApiAgentsAgentIdEnvCheckRoute
   ApiAgentsAgentIdSessionsRoute: typeof ApiAgentsAgentIdSessionsRouteWithChildren
   ApiAgentsClaudeCodeModelsRoute: typeof ApiAgentsClaudeCodeModelsRoute
   ApiAgentsCodexImplConfigRoute: typeof ApiAgentsCodexImplConfigRoute
@@ -4439,6 +4424,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentRuntimeInstallRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/agent-runtime/enable': {
+      id: '/api/agent-runtime/enable'
+      path: '/api/agent-runtime/enable'
+      fullPath: '/api/agent-runtime/enable'
+      preLoaderRoute: typeof ApiAgentRuntimeEnableRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/sessions/$sessionKey/truncate': {
       id: '/api/sessions/$sessionKey/truncate'
       path: '/$sessionKey/truncate'
@@ -4535,20 +4527,6 @@ declare module '@tanstack/react-router' {
       path: '/api/agents/$agentId/sessions'
       fullPath: '/api/agents/$agentId/sessions'
       preLoaderRoute: typeof ApiAgentsAgentIdSessionsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/agents/$agentId/env-check': {
-      id: '/api/agents/$agentId/env-check'
-      path: '/api/agents/$agentId/env-check'
-      fullPath: '/api/agents/$agentId/env-check'
-      preLoaderRoute: typeof ApiAgentsAgentIdEnvCheckRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/agents/$agentId/env-action': {
-      id: '/api/agents/$agentId/env-action'
-      path: '/api/agents/$agentId/env-action'
-      fullPath: '/api/agents/$agentId/env-action'
-      preLoaderRoute: typeof ApiAgentsAgentIdEnvActionRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/agents/$agentId/chat': {
@@ -5131,6 +5109,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiWorkspaceRoute: ApiWorkspaceRouteWithChildren,
   ChatSessionKeyRoute: ChatSessionKeyRoute,
   ChatIndexRoute: ChatIndexRoute,
+  ApiAgentRuntimeEnableRoute: ApiAgentRuntimeEnableRoute,
   ApiAgentRuntimeInstallRoute: ApiAgentRuntimeInstallRoute,
   ApiAgentRuntimeStatusRoute: ApiAgentRuntimeStatusRoute,
   ApiAgentsOperationsRoute: ApiAgentsOperationsRoute,
@@ -5188,8 +5167,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentsIndexRoute: ApiAgentsIndexRoute,
   ApiTasksIndexRoute: ApiTasksIndexRoute,
   ApiAgentsAgentIdChatRoute: ApiAgentsAgentIdChatRoute,
-  ApiAgentsAgentIdEnvActionRoute: ApiAgentsAgentIdEnvActionRoute,
-  ApiAgentsAgentIdEnvCheckRoute: ApiAgentsAgentIdEnvCheckRoute,
   ApiAgentsAgentIdSessionsRoute: ApiAgentsAgentIdSessionsRouteWithChildren,
   ApiAgentsClaudeCodeModelsRoute: ApiAgentsClaudeCodeModelsRoute,
   ApiAgentsCodexImplConfigRoute: ApiAgentsCodexImplConfigRoute,

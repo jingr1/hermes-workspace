@@ -48,6 +48,7 @@ import { LogoLoader } from '@/components/logo-loader'
 import { BrailleSpinner } from '@/components/ui/braille-spinner'
 import { ThreeDotsSpinner } from '@/components/ui/three-dots-spinner'
 import { AgentRegistryManager } from '@/components/settings/agent-registry-manager'
+import { AgentRuntimesSection } from '@/components/settings/agent-runtimes-section'
 // useWorkspaceStore removed — hamburger eliminated on mobile
 
 const VALID_SECTION_IDS: ReadonlyArray<SettingsNavId> = SETTINGS_NAV_ITEMS.map(
@@ -58,12 +59,14 @@ export const Route = createFileRoute('/settings/')({
   ssr: false,
   validateSearch: (
     search: Record<string, unknown>,
-  ): { section?: SettingsNavId } => {
+  ): { section?: SettingsNavId; provider?: string } => {
     const raw = typeof search.section === 'string' ? search.section : undefined
+    const provider =
+      typeof search.provider === 'string' ? search.provider : undefined
     if (raw && (VALID_SECTION_IDS as ReadonlyArray<string>).includes(raw)) {
-      return { section: raw as SettingsNavId }
+      return { section: raw as SettingsNavId, provider }
     }
-    return {}
+    return { provider }
   },
   component: SettingsRoute,
 })
@@ -350,7 +353,7 @@ function SettingsRoute() {
     void fetchModels()
   }, [])
 
-  const { section } = Route.useSearch()
+  const { section, provider: highlightProvider } = Route.useSearch()
   const activeSection: SettingsSectionId = section ?? 'claude'
 
   return (
@@ -511,6 +514,16 @@ function SettingsRoute() {
               icon={UserIcon}
             >
               <AgentRegistryManager />
+            </SettingsSection>
+          )}
+
+          {activeSection === 'runtimes' && (
+            <SettingsSection
+              title="Runtimes"
+              description="Install and upgrade managed CLI adapters."
+              icon={SourceCodeSquareIcon}
+            >
+              <AgentRuntimesSection highlightProvider={highlightProvider} />
             </SettingsSection>
           )}
 

@@ -686,7 +686,7 @@ func managedNPMGlobalPackageDir(prefixDir string, packageName string) string {
 	if strings.TrimSpace(prefixDir) == "" || strings.TrimSpace(packageName) == "" {
 		return ""
 	}
-	parts := strings.Split(strings.TrimPrefix(filepath.ToSlash(packageName), "@"), "/")
+	parts := strings.Split(filepath.ToSlash(packageName), "/")
 	for _, part := range parts {
 		if part == "" || part == "." || part == ".." || strings.ContainsAny(part, `/\`) {
 			return ""

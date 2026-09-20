@@ -128,10 +128,50 @@ func (c *Controller) RegisteredProviders() []string {
 	defer c.mu.Unlock()
 	providers := make([]string, 0, len(c.adapters))
 	for provider := range c.adapters {
-		providers = append(providers, provider)
+		if c.isProviderEnabledLocked(provider) {
+			providers = append(providers, provider)
+		}
 	}
 	slices.Sort(providers)
 	return providers
+}
+
+func (c *Controller) SetProviderEnabled(provider string, enabled bool) {
+	if c == nil {
+		return
+	}
+	provider = strings.TrimSpace(provider)
+	if provider == "" {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.enabled == nil {
+		c.enabled = make(map[string]bool, len(c.adapters))
+		for p := range c.adapters {
+			c.enabled[p] = true
+		}
+	}
+	c.enabled[provider] = enabled
+}
+
+func (c *Controller) IsProviderEnabled(provider string) bool {
+	if c == nil {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.isProviderEnabledLocked(strings.TrimSpace(provider))
+}
+
+func (c *Controller) isProviderEnabledLocked(provider string) bool {
+	if provider == "" {
+		return false
+	}
+	if c.enabled == nil {
+		return true
+	}
+	return c.enabled[provider]
 }
 
 func (c *Controller) Sessions(roomID string) []Session {
@@ -225,6 +265,9 @@ func (c *Controller) adapter(provider string) Adapter {
 
 func (c *Controller) resolveAdapter(ctx context.Context, input AdapterResolveInput) (Adapter, error) {
 	provider := strings.TrimSpace(input.Provider)
+	if !c.IsProviderEnabled(provider) {
+		return nil, fmt.Errorf("provider %q is disabled", provider)
+	}
 	if adapter := c.adapter(provider); adapter != nil {
 		if bound, ok := adapter.(ResolveInputBoundAdapter); ok && !bound.MatchesAdapterResolveInput(input) {
 			return nil, fmt.Errorf("cached adapter binding mismatch for %q", provider)
