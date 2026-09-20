@@ -275,17 +275,35 @@ func turnTransitionAlreadyApplied(stored Turn, incoming TurnTransition) bool {
 			return true
 		}
 	}
-	if stored.TurnID == "" || stored.Phase != strings.TrimSpace(incoming.Phase) {
+	incomingPhase := strings.TrimSpace(incoming.Phase)
+	if stored.TurnID == "" {
+		return false
+	}
+	// Durable settlement is agent-agnostic and absorbing. A second settled
+	// report (root-provider completion then canonical Turn settle, or two
+	// adapters racing the same terminal) must not fail the activity report.
+	if stored.Phase == TurnPhaseSettled && incomingPhase == TurnPhaseSettled {
+		return settledTurnOutcomesCompatible(stored.Outcome, incoming.Outcome)
+	}
+	if stored.Phase != incomingPhase {
 		return false
 	}
 	if stored.Phase != TurnPhaseSettled {
 		return true
 	}
-	outcome := strings.TrimSpace(incoming.Outcome)
-	if outcome == "" {
-		outcome = TurnOutcomeCompleted
+	return settledTurnOutcomesCompatible(stored.Outcome, incoming.Outcome)
+}
+
+func settledTurnOutcomesCompatible(storedOutcome string, incomingOutcome string) bool {
+	stored := strings.TrimSpace(storedOutcome)
+	if stored == "" {
+		stored = TurnOutcomeCompleted
 	}
-	return stored.Outcome == outcome
+	incoming := strings.TrimSpace(incomingOutcome)
+	if incoming == "" {
+		incoming = TurnOutcomeCompleted
+	}
+	return stored == incoming
 }
 
 func capabilityReferencesAlreadyApplied(stored, incoming []CapabilityReference) bool {

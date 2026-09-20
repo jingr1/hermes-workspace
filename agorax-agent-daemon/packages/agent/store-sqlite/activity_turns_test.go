@@ -522,6 +522,104 @@ func TestReportActivityStateAppliesTerminalTurnWhenSessionSnapshotIsReplay(t *te
 	}
 }
 
+func TestReportActivityStateAcceptsStaleClockTerminalSettle(t *testing.T) {
+	t.Parallel()
+	store := openTestStore(t, testOptions(&staticProjectPaths{}))
+	ctx := context.Background()
+	seedTurnTestSession(t, store, "ws-1", "session-1")
+	if _, accepted, err := store.RecordTurnTransition(ctx, TurnTransition{
+		WorkspaceID: "ws-1", AgentSessionID: "session-1", TurnID: "turn-1",
+		Phase: TurnPhaseRunning, OccurredAtUnixMS: 200,
+	}); err != nil || !accepted {
+		t.Fatalf("RecordTurnTransition(running) accepted=%v error=%v", accepted, err)
+	}
+
+	// Provider/adapters may stamp settlement with an earlier event clock than the
+	// live patch that already advanced UpdatedAt. Durable settle must still land.
+	result, err := store.ReportActivityState(ctx, ActivityStateReport{
+		Session: SessionStateReport{
+			WorkspaceID: "ws-1", AgentSessionID: "session-1", Origin: "runtime",
+			Provider: "codex", Status: "active", CurrentPhase: "idle",
+			OccurredAtUnixMS: 150,
+		},
+		Turn: &TurnTransition{
+			WorkspaceID: "ws-1", AgentSessionID: "session-1", TurnID: "turn-1",
+			Phase: TurnPhaseSettled, Outcome: TurnOutcomeCompleted, OccurredAtUnixMS: 150,
+		},
+	})
+	if err != nil || !result.TurnAccepted {
+		t.Fatalf("stale-clock settle result=%#v error=%v", result, err)
+	}
+	turn, ok, getErr := store.GetTurn(ctx, "ws-1", "session-1", "turn-1")
+	if getErr != nil || !ok || turn.Phase != TurnPhaseSettled || turn.Outcome != TurnOutcomeCompleted {
+		t.Fatalf("turn after stale-clock settle = %#v ok=%v error=%v", turn, ok, getErr)
+	}
+}
+
+func TestReportActivityStateIdempotentDuplicateSettledReport(t *testing.T) {
+	t.Parallel()
+	store := openTestStore(t, testOptions(&staticProjectPaths{}))
+	ctx := context.Background()
+	seedTurnTestSession(t, store, "ws-1", "session-1")
+	if result, err := store.ReportActivityState(ctx, ActivityStateReport{
+		Session: SessionStateReport{
+			WorkspaceID: "ws-1", AgentSessionID: "session-1", Kind: SessionKindRoot,
+			Origin: "runtime", Provider: "claude-code", OccurredAtUnixMS: 10,
+		},
+		Turn: &TurnTransition{
+			WorkspaceID: "ws-1", AgentSessionID: "session-1", TurnID: "turn-1",
+			Phase: TurnPhaseRunning, OccurredAtUnixMS: 10,
+		},
+		RootProviderTurn: &RootProviderTurnTransition{
+			WorkspaceID: "ws-1", RootAgentSessionID: "session-1", RootTurnID: "turn-1",
+			ProviderTurnID: "provider-turn-1", Phase: RootProviderTurnPhaseRunning,
+			OccurredAtUnixMS: 10,
+		},
+	}); err != nil || !result.TurnAccepted {
+		t.Fatalf("running+provider-start result=%#v error=%v", result, err)
+	}
+	if result, err := store.ReportActivityState(ctx, ActivityStateReport{
+		Session: SessionStateReport{
+			WorkspaceID: "ws-1", AgentSessionID: "session-1", Kind: SessionKindRoot,
+			Origin: "runtime", Provider: "claude-code", OccurredAtUnixMS: 20,
+		},
+		RootProviderTurn: &RootProviderTurnTransition{
+			WorkspaceID: "ws-1", RootAgentSessionID: "session-1", RootTurnID: "turn-1",
+			ProviderTurnID: "provider-turn-1", Phase: RootProviderTurnPhaseCompleted,
+			Outcome: TurnOutcomeCompleted, OccurredAtUnixMS: 20,
+		},
+	}); err != nil || !result.RootProviderTurnAccepted {
+		t.Fatalf("root provider completed result=%#v error=%v", result, err)
+	}
+	if settled, ok, getErr := store.GetTurn(ctx, "ws-1", "session-1", "turn-1"); getErr != nil || !ok || settled.Phase != TurnPhaseSettled {
+		t.Fatalf("turn after root provider completed = %#v ok=%v error=%v", settled, ok, getErr)
+	}
+
+	// A later canonical Turn settle (any agent) must be an idempotent no-op, not
+	// "turn transition was rejected" that breaks the terminal publish barrier.
+	result, err := store.ReportActivityState(ctx, ActivityStateReport{
+		Session: SessionStateReport{
+			WorkspaceID: "ws-1", AgentSessionID: "session-1", Kind: SessionKindRoot,
+			Origin: "runtime", Provider: "claude-code", CurrentPhase: "idle",
+			OccurredAtUnixMS: 21,
+		},
+		Turn: &TurnTransition{
+			WorkspaceID: "ws-1", AgentSessionID: "session-1", TurnID: "turn-1",
+			Phase: TurnPhaseSettled, Outcome: TurnOutcomeCompleted, OccurredAtUnixMS: 21,
+		},
+	})
+	if err != nil {
+		t.Fatalf("duplicate settled report error=%v", err)
+	}
+	if result.TurnAccepted {
+		t.Fatalf("duplicate settled report accepted=%v, want idempotent reject", result.TurnAccepted)
+	}
+	turn, ok, getErr := store.GetTurn(ctx, "ws-1", "session-1", "turn-1")
+	if getErr != nil || !ok || turn.Phase != TurnPhaseSettled || turn.Outcome != TurnOutcomeCompleted {
+		t.Fatalf("turn after duplicate settle = %#v ok=%v error=%v", turn, ok, getErr)
+	}
+}
+
 func TestRecordTurnTransitionAllowsWaitingToResumeRunning(t *testing.T) {
 	t.Parallel()
 	store := openTestStore(t, testOptions(&staticProjectPaths{}))

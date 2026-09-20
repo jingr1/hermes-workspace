@@ -108,9 +108,18 @@ func (*Store) recordTurnTransitionTx(
 		return mergeTurnCapabilityReferencesTx(ctx, tx, existing, capabilityRefs)
 	}
 	lifecycleRejected := hasExisting && existing.Phase == TurnPhaseSettled && !existing.Backfilled
-	if hasExisting && !existing.Backfilled &&
-		(occurred < existing.UpdatedAtUnixMS || !isAllowedTurnPhaseTransition(existing.Phase, phase)) {
-		lifecycleRejected = true
+	if hasExisting && !existing.Backfilled {
+		if !isAllowedTurnPhaseTransition(existing.Phase, phase) {
+			lifecycleRejected = true
+		} else if occurred < existing.UpdatedAtUnixMS {
+			// Stale non-terminal patches stay rejected. A terminal settle is
+			// absorbing and agent-agnostic: adapters may report settlement with
+			// an earlier event clock than a prior live patch (for example after
+			// root_provider_turn.completed already advanced UpdatedAt).
+			if phase != TurnPhaseSettled {
+				lifecycleRejected = true
+			}
+		}
 	}
 	if lifecycleRejected {
 		if len(capabilityRefs) > 0 {
