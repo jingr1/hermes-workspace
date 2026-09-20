@@ -93,20 +93,30 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
   const [slideClass, setSlideClass] = useState<string>('')
   const prevTabIndexRef = useRef<number>(-1)
 
-  // Map pathname to tab index (mirrors TABS order in mobile-tab-bar)
+  // Map pathname to tab index (mirrors MOBILE_NAV_TABS order)
   const getTabIndex = useCallback((path: string): number => {
     if (path === '/dashboard') return 0
     if (path.startsWith('/chat') || path === '/new' || path === '/') return 1
     if (path.startsWith('/files')) return 2
     if (path.startsWith('/terminal')) return 3
     if (path.startsWith('/jobs')) return 4
-    if (path === '/swarm' || path.startsWith('/swarm2')) return 5
-    if (path.startsWith('/echo-studio')) return 5
-    if (path.startsWith('/memory')) return 6
+    if (
+      path.startsWith('/missions') ||
+      path.startsWith('/mission-control')
+    )
+      return 5
+    if (path === '/swarm' || path.startsWith('/swarm2')) return 6
+    if (path.startsWith('/echo-studio')) return 6
     if (path.startsWith('/skills')) return 7
     if (path.startsWith('/mcp')) return 8
-    if (path.startsWith('/profiles')) return 9
+    if (
+      path.startsWith('/agents') ||
+      path.startsWith('/operations') ||
+      path.startsWith('/profiles')
+    )
+      return 9
     if (path.startsWith('/settings')) return 10
+    if (path.startsWith('/memory')) return -1
     return -1
   }, [])
 
@@ -186,13 +196,19 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
     if (pathname.startsWith('/files')) return 'Files'
     if (pathname.startsWith('/jobs')) return 'Jobs'
     if (pathname.startsWith('/conductor')) return 'Conductor'
-    if (pathname.startsWith('/operations')) return 'Operations'
+    if (
+      pathname.startsWith('/agents') ||
+      pathname.startsWith('/operations')
+    )
+      return 'Agents'
+    if (pathname.startsWith('/missions') || pathname.startsWith('/mission-control'))
+      return 'Missions'
     if (pathname.startsWith('/swarm2') || pathname === '/swarm') return 'Swarm'
     if (pathname.startsWith('/echo-studio')) return 'Echo Studio'
     if (pathname.startsWith('/memory')) return 'Memory'
     if (pathname.startsWith('/skills')) return 'Skills'
     if (pathname.startsWith('/mcp')) return 'MCP'
-    if (pathname.startsWith('/profiles')) return 'Profiles'
+    if (pathname.startsWith('/profiles')) return 'Agents'
     if (pathname.startsWith('/settings')) return 'Settings'
     if (pathname.startsWith('/debug')) return 'Debug'
     if (pathname.startsWith('/activity')) return 'Activity'

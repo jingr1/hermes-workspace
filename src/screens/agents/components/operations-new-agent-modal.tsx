@@ -8,6 +8,13 @@ import {
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Button } from '@/components/ui/button'
 import { fetchModels, type GatewayModelCatalogEntry } from '@/lib/gateway-api'
+import {
+  CREATE_AGENT_RUNTIMES,
+  type CreateAgentInput,
+  type CreateAgentRuntime,
+  normalizeAgentId,
+} from '@/lib/create-agent'
+import { agentRuntimeLabel } from '@/lib/managed-agent-runtime/agent-targets'
 import { cn } from '@/lib/utils'
 import { AGENT_PRESETS, type AgentPresetCapabilities } from '../agent-presets'
 
@@ -153,22 +160,19 @@ function ModelSelector({
 export function OperationsNewAgentModal({
   open,
   defaultModel,
+  cloneOptions = [],
   onClose,
   onCreate,
   isSaving,
 }: {
   open: boolean
   defaultModel: string
+  cloneOptions?: Array<{ id: string; name: string }>
   onClose: () => void
-  onCreate: (input: {
-    name: string
-    emoji: string
-    model: string
-    systemPrompt: string
-    description?: string
-  }) => Promise<unknown>
+  onCreate: (input: CreateAgentInput & { emoji?: string }) => Promise<unknown>
   isSaving: boolean
 }) {
+  const [runtime, setRuntime] = useState<CreateAgentRuntime>('hermes')
   const [presetId, setPresetId] = useState<string>('blank')
   const [presetCapabilities, setPresetCapabilities] =
     useState<AgentPresetCapabilities | null>(null)
@@ -177,9 +181,15 @@ export function OperationsNewAgentModal({
   const [model, setModel] = useState(defaultModel)
   const [description, setDescription] = useState('')
   const [systemPrompt, setSystemPrompt] = useState('')
+  const [cloneFrom, setCloneFrom] = useState('')
+  const [role, setRole] = useState('Worker')
+  const [specialty, setSpecialty] = useState('')
+  const [command, setCommand] = useState('')
+  const [args, setArgs] = useState('')
 
   useEffect(() => {
     if (!open) return
+    setRuntime('hermes')
     setPresetId('blank')
     setPresetCapabilities(null)
     setName('')
@@ -187,6 +197,11 @@ export function OperationsNewAgentModal({
     setModel(defaultModel)
     setDescription('')
     setSystemPrompt('')
+    setCloneFrom('')
+    setRole('Worker')
+    setSpecialty('')
+    setCommand('')
+    setArgs('')
   }, [defaultModel, open])
 
   function applyPreset(next: string) {
@@ -206,7 +221,7 @@ export function OperationsNewAgentModal({
   const modelsQuery = useQuery({
     queryKey: ['operations', 'models'],
     queryFn: fetchModels,
-    enabled: open,
+    enabled: open && runtime === 'hermes',
   })
 
   const models = useMemo(
@@ -217,6 +232,9 @@ export function OperationsNewAgentModal({
     [modelsQuery.data?.models],
   )
 
+  const isHermes = runtime === 'hermes'
+  const agentIdPreview = normalizeAgentId(name) || 'agent-id'
+
   if (!open) return null
 
   return (
@@ -225,7 +243,7 @@ export function OperationsNewAgentModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-3xl rounded-3xl border border-[var(--theme-border2)] bg-[var(--theme-card)] p-6 shadow-[0_30px_100px_var(--theme-shadow)]"
+        className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-[var(--theme-border2)] bg-[var(--theme-card)] p-6 shadow-[0_30px_100px_var(--theme-shadow)]"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">
@@ -238,7 +256,8 @@ export function OperationsNewAgentModal({
                 New Agent
               </h2>
               <p className="mt-1 text-sm text-[var(--theme-muted-2)]">
-                Add a persistent Operations agent to the roster.
+                Registers in the agent roster. Hermes also creates a profile via
+                /api/profiles/create.
               </p>
             </div>
           </div>
@@ -251,70 +270,24 @@ export function OperationsNewAgentModal({
           </button>
         </div>
 
-        <div className="mt-6 space-y-2">
+        <label className="mt-6 block space-y-2">
           <span className="text-sm font-medium text-[var(--theme-text)]">
-            Start from a template
+            Runtime
           </span>
-          <div className="flex flex-wrap gap-2">
-            {PRESET_OPTIONS.map((preset) => (
-              <button
-                key={preset.id}
-                type="button"
-                onClick={() => applyPreset(preset.id)}
-                className={cn(
-                  'inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-all',
-                  presetId === preset.id
-                    ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-soft)] text-[var(--theme-text)]'
-                    : 'border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-muted)] hover:bg-[var(--theme-card2)]',
-                )}
-              >
-                <span aria-hidden="true">{preset.emoji}</span>
-                <span>{preset.name}</span>
-              </button>
+          <select
+            value={runtime}
+            onChange={(event) =>
+              setRuntime(event.target.value as CreateAgentRuntime)
+            }
+            className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)]"
+          >
+            {CREATE_AGENT_RUNTIMES.map((value) => (
+              <option key={value} value={value}>
+                {agentRuntimeLabel(value)}
+              </option>
             ))}
-          </div>
-          <p className="text-xs text-[var(--theme-muted)]">
-            Templates fill in emoji, description, system prompt, and recommended
-            capabilities. You can edit everything before creating.
-          </p>
-          {presetCapabilities ? (
-            <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2.5">
-              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--theme-muted)]">
-                Recommended capabilities
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {presetCapabilities.skills.map((skill) => (
-                  <span
-                    key={skill}
-                    className="inline-flex items-center gap-1 rounded-md bg-[var(--theme-accent-soft)] px-2 py-1 text-[11px] text-[var(--theme-text)]"
-                  >
-                    🧩 {skill}
-                  </span>
-                ))}
-                {presetCapabilities.toolsets.map((toolset) => (
-                  <span
-                    key={toolset}
-                    className="inline-flex items-center gap-1 rounded-md bg-[var(--theme-card2)] px-2 py-1 text-[11px] text-[var(--theme-text)]"
-                  >
-                    🔧 {toolset}
-                  </span>
-                ))}
-                {presetCapabilities.mcpServers.map((mcp) => (
-                  <span
-                    key={mcp}
-                    className="inline-flex items-center gap-1 rounded-md bg-[var(--theme-card2)] px-2 py-1 text-[11px] text-[var(--theme-text)]"
-                  >
-                    🔗 {mcp}
-                  </span>
-                ))}
-              </div>
-              <p className="mt-1.5 text-[10px] text-[var(--theme-muted)]">
-                After creating, use the Capabilities tab to install and toggle
-                these.
-              </p>
-            </div>
-          ) : null}
-        </div>
+          </select>
+        </label>
 
         <div className="mt-4 grid gap-4 md:grid-cols-[1.2fr_0.6fr]">
           <label className="space-y-2">
@@ -327,51 +300,174 @@ export function OperationsNewAgentModal({
               placeholder="Sage"
               className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
             />
+            <p className="text-xs text-[var(--theme-muted)]">
+              Agent id: <code>{agentIdPreview}</code>
+            </p>
           </label>
 
-          <label className="space-y-2">
-            <span className="text-sm font-medium text-[var(--theme-text)]">
-              Emoji
-            </span>
-            <input
-              value={emoji}
-              onChange={(event) => setEmoji(event.target.value)}
-              placeholder="🐦"
-              className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
-            />
-          </label>
+          {isHermes ? (
+            <label className="space-y-2">
+              <span className="text-sm font-medium text-[var(--theme-text)]">
+                Emoji
+              </span>
+              <input
+                value={emoji}
+                onChange={(event) => setEmoji(event.target.value)}
+                placeholder="🐦"
+                className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+              />
+            </label>
+          ) : (
+            <label className="space-y-2">
+              <span className="text-sm font-medium text-[var(--theme-text)]">
+                Role
+              </span>
+              <input
+                value={role}
+                onChange={(event) => setRole(event.target.value)}
+                placeholder="Worker"
+                className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+              />
+            </label>
+          )}
         </div>
 
-        <label className="mt-4 block space-y-2">
-          <span className="text-sm font-medium text-[var(--theme-text)]">
-            Model
-          </span>
-          <ModelSelector value={model} onChange={setModel} models={models} />
-        </label>
+        {isHermes ? (
+          <>
+            <div className="mt-6 space-y-2">
+              <span className="text-sm font-medium text-[var(--theme-text)]">
+                Hermes profile setup
+              </span>
+              <p className="text-xs text-[var(--theme-muted)]">
+                Creates <code>~/.hermes/profiles/{agentIdPreview}</code> through{' '}
+                <code>POST /api/profiles/create</code>, then registers the agent.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {PRESET_OPTIONS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => applyPreset(preset.id)}
+                    className={cn(
+                      'inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-all',
+                      presetId === preset.id
+                        ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-soft)] text-[var(--theme-text)]'
+                        : 'border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-muted)] hover:bg-[var(--theme-card2)]',
+                    )}
+                  >
+                    <span aria-hidden="true">{preset.emoji}</span>
+                    <span>{preset.name}</span>
+                  </button>
+                ))}
+              </div>
+              {presetCapabilities ? (
+                <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2.5">
+                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--theme-muted)]">
+                    Recommended capabilities
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {presetCapabilities.skills.map((skill) => (
+                      <span
+                        key={skill}
+                        className="inline-flex items-center gap-1 rounded-md bg-[var(--theme-accent-soft)] px-2 py-1 text-[11px] text-[var(--theme-text)]"
+                      >
+                        🧩 {skill}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
 
-        <label className="mt-4 block space-y-2">
-          <span className="text-sm font-medium text-[var(--theme-text)]">
-            Description
-          </span>
-          <input
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            placeholder="X/Twitter growth agent"
-            className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
-          />
-        </label>
+            {cloneOptions.length > 0 ? (
+              <label className="mt-4 block space-y-2">
+                <span className="text-sm font-medium text-[var(--theme-text)]">
+                  Clone from existing profile
+                </span>
+                <select
+                  value={cloneFrom}
+                  onChange={(event) => setCloneFrom(event.target.value)}
+                  className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)]"
+                >
+                  <option value="">None — start blank / from template</option>
+                  {cloneOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name} ({option.id})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
 
-        <label className="mt-4 block space-y-2">
-          <span className="text-sm font-medium text-[var(--theme-text)]">
-            System Prompt
-          </span>
-          <textarea
-            value={systemPrompt}
-            onChange={(event) => setSystemPrompt(event.target.value)}
-            placeholder="You are Sage, an expert..."
-            className="min-h-[180px] w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
-          />
-        </label>
+            <label className="mt-4 block space-y-2">
+              <span className="text-sm font-medium text-[var(--theme-text)]">
+                Model
+              </span>
+              <ModelSelector
+                value={model}
+                onChange={setModel}
+                models={models}
+              />
+            </label>
+
+            <label className="mt-4 block space-y-2">
+              <span className="text-sm font-medium text-[var(--theme-text)]">
+                Description
+              </span>
+              <input
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+              />
+            </label>
+
+            <label className="mt-4 block space-y-2">
+              <span className="text-sm font-medium text-[var(--theme-text)]">
+                System Prompt
+              </span>
+              <textarea
+                value={systemPrompt}
+                onChange={(event) => setSystemPrompt(event.target.value)}
+                className="min-h-[140px] w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+              />
+            </label>
+          </>
+        ) : (
+          <>
+            <label className="mt-4 block space-y-2">
+              <span className="text-sm font-medium text-[var(--theme-text)]">
+                Command
+              </span>
+              <input
+                value={command}
+                onChange={(event) => setCommand(event.target.value)}
+                placeholder={agentRuntimeLabel(runtime)}
+                className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+              />
+            </label>
+            <label className="mt-4 block space-y-2">
+              <span className="text-sm font-medium text-[var(--theme-text)]">
+                Arguments
+              </span>
+              <input
+                value={args}
+                onChange={(event) => setArgs(event.target.value)}
+                placeholder="Optional"
+                className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+              />
+            </label>
+            <label className="mt-4 block space-y-2">
+              <span className="text-sm font-medium text-[var(--theme-text)]">
+                Specialty
+              </span>
+              <input
+                value={specialty}
+                onChange={(event) => setSpecialty(event.target.value)}
+                className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+              />
+            </label>
+          </>
+        )}
 
         <div className="mt-6 flex justify-end gap-3">
           <Button
@@ -386,10 +482,17 @@ export function OperationsNewAgentModal({
             onClick={() =>
               void onCreate({
                 name,
-                emoji,
-                model,
-                systemPrompt,
-                description,
+                runtime,
+                emoji: isHermes ? emoji : undefined,
+                model: isHermes ? model : undefined,
+                systemPrompt: isHermes ? systemPrompt : undefined,
+                description: isHermes ? description : undefined,
+                cloneFrom: isHermes ? cloneFrom || undefined : undefined,
+                profile: isHermes ? agentIdPreview : undefined,
+                role,
+                specialty: isHermes ? undefined : specialty,
+                command: isHermes ? undefined : command || undefined,
+                args: isHermes ? undefined : args || undefined,
               }).then(() => onClose())
             }
             disabled={isSaving || !name.trim()}

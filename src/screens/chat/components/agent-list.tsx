@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useMemo, useState } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import { useProfiles } from '../hooks/use-profiles'
 import { AgentStatusDot } from './agent-status-dot'
 import type { AgentWithStatus } from '@/lib/agent-types'
@@ -98,6 +99,7 @@ function AgentListItem({
   isActive,
   onSelect,
   onOpenSettings,
+  onOpenRuntimes,
   providerStatusEntry,
 }: {
   agent: AgentWithStatus
@@ -105,6 +107,7 @@ function AgentListItem({
   isActive: boolean
   onSelect: (agentId: string) => void
   onOpenSettings: (agentId: string) => void
+  onOpenRuntimes: (providerId: string) => void
   providerStatusEntry: AgentProviderStatusDto | undefined
 }) {
   const { profiles } = useProfiles()
@@ -114,6 +117,11 @@ function AgentListItem({
     return profiles.find((p) => p.name === targetProfileName)
   }, [agent, profiles])
   const accent = AGENT_ACCENT_COLORS[index % AGENT_ACCENT_COLORS.length]
+  const providerDot = providerStatusToDot(providerStatusEntry)
+  const upgradeProvider =
+    providerStatusBadge(providerStatusEntry) === 'update-available'
+      ? providerStatusEntry?.provider
+      : null
 
   return (
     <div
@@ -150,11 +158,29 @@ function AgentListItem({
           <AgentAvatar index={index} color={accent.hex} size={28} />
         </div>
       </button>
-      <AgentStatusDot
-        status={agent.status}
-        needsSetup={toUnifiedStatus(agent, profile) === 'needsSetup'}
-        {...providerStatusToDot(providerStatusEntry)}
-      />
+      <button
+        type="button"
+        className={cn(
+          'shrink-0 rounded-md',
+          upgradeProvider && 'hover:bg-primary-300/60',
+        )}
+        title={
+          upgradeProvider
+            ? `${providerDot?.title ?? '需升级'} — 打开 Runtimes`
+            : providerDot?.title
+        }
+        onClick={(event) => {
+          if (!upgradeProvider) return
+          event.stopPropagation()
+          onOpenRuntimes(upgradeProvider)
+        }}
+      >
+        <AgentStatusDot
+          status={agent.status}
+          needsSetup={toUnifiedStatus(agent, profile) === 'needsSetup'}
+          {...providerDot}
+        />
+      </button>
       <div className="min-w-0 flex-1">
         <p
           className={cn(
@@ -184,6 +210,7 @@ export function AgentList({
   const storeSetActiveAgentId = useAgentStore((state) => state.setActiveAgentId)
   const [settingsAgentId, setSettingsAgentId] = useState<string | null>(null)
   const providerStatusQuery = useAgentProviderStatus()
+  const navigate = useNavigate()
 
   const providerStatusById = useMemo(() => {
     const map = new Map<string, AgentProviderStatusDto>()
@@ -205,6 +232,16 @@ export function AgentList({
       storeSetActiveAgentId(agentId)
     },
     [onSelect, storeSetActiveAgentId],
+  )
+
+  const handleOpenRuntimes = useCallback(
+    (providerId: string) => {
+      void navigate({
+        to: '/settings',
+        search: { section: 'runtimes', provider: providerId },
+      })
+    },
+    [navigate],
   )
 
   const sortedAgents = useMemo(() => {
@@ -239,7 +276,13 @@ export function AgentList({
       ) : (
         <div className="space-y-0.5">
           {sortedAgents.map((agent, index) => {
-            const providerId = providerIdForAgentRuntime(agent.runtime)
+            const providerId =
+              providerIdForAgentRuntime(agent.runtime) ??
+              (agent.runtime === 'hermes'
+                ? 'hermes'
+                : agent.runtime === 'deepseek-harness'
+                  ? 'deepseek-harness'
+                  : null)
             return (
               <AgentListItem
                 key={agent.agentId}
@@ -248,7 +291,10 @@ export function AgentList({
                 isActive={agent.agentId === activeAgentId}
                 onSelect={handleSelect}
                 onOpenSettings={setSettingsAgentId}
-                providerStatusEntry={providerId ? providerStatusById.get(providerId) : undefined}
+                onOpenRuntimes={handleOpenRuntimes}
+                providerStatusEntry={
+                  providerId ? providerStatusById.get(providerId) : undefined
+                }
               />
             )
           })}

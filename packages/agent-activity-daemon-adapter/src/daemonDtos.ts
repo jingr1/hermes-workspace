@@ -422,6 +422,11 @@ export interface DaemonCreateAgentSessionRequest {
   initialContent?: string | DaemonPromptContentBlock[];
   cwd?: string;
   model?: string;
+  reasoningEffort?: string;
+  /** Agorax Mission MCP control channel (per-run handshake). */
+  mcpEndpoint?: string;
+  mcpRunToken?: string;
+  mcpToolAllowlist?: string[];
 }
 
 /** POST .../input request body (decode struct: clientSubmitId, content). */
@@ -440,10 +445,9 @@ export interface DaemonSubmitInteractionResponseRequest {
 // --- Composer contracts without a daemon endpoint yet ---
 
 /**
- * TODO(daemon-endpoint): the daemon has no composer-options REST endpoint.
- * This shape preserves the generated tuttid `AgentProviderComposerOptionsResponse`
- * contract the source adapter consumed, so the mapper below survives until the
- * daemon endpoint lands. Keys stay camelCase like the generated contract.
+ * Daemon composer-options REST response (session or provider scoped).
+ * Shape mirrors the generated tuttid `AgentProviderComposerOptionsResponse`
+ * contract consumed by `agentActivityComposerOptionsFromDaemonResult`.
  */
 export interface DaemonProviderComposerOptionsResponse {
   provider?: string;

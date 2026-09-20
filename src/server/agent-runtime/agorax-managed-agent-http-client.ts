@@ -19,8 +19,10 @@ import {
   agentActivitySessionFromDaemonSession,
   type AgentActivityDaemonActivityDetail,
   type DaemonAgentSessionsListResponse,
+  type DaemonCanonicalSession,
   type DaemonCreateAgentSessionRequest,
   type DaemonCreateSessionResponse,
+  type DaemonProviderComposerOptionsResponse,
   type DaemonSendAgentSessionInputRequest,
   type DaemonSendInputResponse,
   type DaemonSessionActivityResponse,
@@ -70,6 +72,10 @@ export type CreateAgoraxAgentSessionInput = {
   cwd?: string
   model?: string
   title?: string
+  reasoningEffort?: string
+  mcpEndpoint?: string
+  mcpRunToken?: string
+  mcpToolAllowlist?: string[]
 }
 
 export type SendAgoraxAgentInput = {
@@ -205,6 +211,14 @@ export class AgoraxManagedAgentHttpClient {
         ],
         ...(input.cwd ? { cwd: input.cwd } : {}),
         ...(input.model ? { model: input.model } : {}),
+        ...(input.reasoningEffort
+          ? { reasoningEffort: input.reasoningEffort }
+          : {}),
+        ...(input.mcpEndpoint ? { mcpEndpoint: input.mcpEndpoint } : {}),
+        ...(input.mcpRunToken ? { mcpRunToken: input.mcpRunToken } : {}),
+        ...(input.mcpToolAllowlist?.length
+          ? { mcpToolAllowlist: input.mcpToolAllowlist }
+          : {}),
       },
       options,
     )
@@ -434,6 +448,129 @@ export class AgoraxManagedAgentHttpClient {
           ...(input.payload ? { payload: input.payload } : {}),
         }),
       },
+      options?.signal,
+    )
+  }
+
+  updateTitle(
+    agentSessionId: string,
+    title: string,
+    options?: { signal?: AbortSignal },
+  ): Promise<{ Canonical?: DaemonCanonicalSession }> {
+    return this.requestJson(
+      `/v1/workspaces/${encodeURIComponent(this.workspaceId)}/agent-sessions/${encodeURIComponent(agentSessionId)}/title`,
+      { method: 'PATCH', body: JSON.stringify({ title }) },
+      options?.signal,
+    )
+  }
+
+  deleteSession(
+    agentSessionId: string,
+    options?: { signal?: AbortSignal },
+  ): Promise<{
+    Deleted?: boolean
+    CleanupFailed?: boolean
+    CanonicalRemoved?: boolean
+  }> {
+    return this.requestJson(
+      `/v1/workspaces/${encodeURIComponent(this.workspaceId)}/agent-sessions/${encodeURIComponent(agentSessionId)}`,
+      { method: 'DELETE' },
+      options?.signal,
+    )
+  }
+
+  updatePin(
+    agentSessionId: string,
+    pinned: boolean,
+    options?: { signal?: AbortSignal },
+  ): Promise<{ Canonical?: DaemonCanonicalSession }> {
+    return this.requestJson(
+      `/v1/workspaces/${encodeURIComponent(this.workspaceId)}/agent-sessions/${encodeURIComponent(agentSessionId)}/pin`,
+      { method: 'POST', body: JSON.stringify({ pinned }) },
+      options?.signal,
+    )
+  }
+
+  updateSettings(
+    agentSessionId: string,
+    settings: { model?: string; reasoningEffort?: string },
+    options?: { signal?: AbortSignal },
+  ): Promise<{ Canonical?: DaemonCanonicalSession }> {
+    return this.requestJson(
+      `/v1/workspaces/${encodeURIComponent(this.workspaceId)}/agent-sessions/${encodeURIComponent(agentSessionId)}/settings`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          ...(settings.model !== undefined ? { model: settings.model } : {}),
+          ...(settings.reasoningEffort !== undefined
+            ? { reasoningEffort: settings.reasoningEffort }
+            : {}),
+        }),
+      },
+      options?.signal,
+    )
+  }
+
+  getComposerOptions(input: {
+    agentSessionId?: string | null
+    provider?: string
+    model?: string | null
+    signal?: AbortSignal
+  }): Promise<DaemonProviderComposerOptionsResponse> {
+    const sessionId = input.agentSessionId?.trim()
+    if (sessionId) {
+      return this.requestJson(
+        `/v1/workspaces/${encodeURIComponent(this.workspaceId)}/agent-sessions/${encodeURIComponent(sessionId)}/composer-options`,
+        { method: 'GET' },
+        input.signal,
+      )
+    }
+    const provider = input.provider?.trim()
+    if (!provider) {
+      throw new Error('composer-options requires agentSessionId or provider')
+    }
+    const query = new URLSearchParams()
+    if (input.model?.trim()) query.set('model', input.model.trim())
+    const suffix = query.size > 0 ? `?${query.toString()}` : ''
+    return this.requestJson(
+      `/v1/agent-providers/${encodeURIComponent(provider)}/composer-options${suffix}`,
+      { method: 'GET' },
+      input.signal,
+    )
+  }
+
+  submitPlanDecision(
+    input: {
+      agentSessionId: string
+      turnId: string
+      requestId: string
+      promptKind: string
+      action: string
+      idempotencyKey: string
+    },
+    options?: { signal?: AbortSignal },
+  ): Promise<{ operation?: Record<string, unknown> }> {
+    return this.requestJson(
+      `/v1/workspaces/${encodeURIComponent(this.workspaceId)}/agent-sessions/${encodeURIComponent(input.agentSessionId)}/turns/${encodeURIComponent(input.turnId)}/plan-decisions/${encodeURIComponent(input.requestId)}`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          promptKind: input.promptKind,
+          action: input.action,
+          idempotencyKey: input.idempotencyKey,
+        }),
+      },
+      options?.signal,
+    )
+  }
+
+  getGoal(
+    agentSessionId: string,
+    options?: { signal?: AbortSignal },
+  ): Promise<unknown> {
+    return this.requestJson(
+      `/v1/workspaces/${encodeURIComponent(this.workspaceId)}/agent-sessions/${encodeURIComponent(agentSessionId)}/goal`,
+      { method: 'GET' },
       options?.signal,
     )
   }

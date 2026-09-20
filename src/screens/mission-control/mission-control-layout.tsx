@@ -1,94 +1,61 @@
 'use client'
 
-import { useState } from 'react'
-import { OverviewView } from './overview-view'
 import { BoardView } from './board-view'
 import { PipelineView } from './pipeline-view'
 import { CreateTaskButton } from './components/create-task-button'
-import { cn } from '@/lib/utils'
 
-export type MissionControlTab = 'overview' | 'board' | 'pipeline'
-
-type MissionControlLayoutProps = {
-  activeTab: MissionControlTab
-  onTabChange: (tab: MissionControlTab) => void
-  initialTaskId?: string
+type MissionsLayoutProps = {
+  selectedTaskId: string | null
+  onSelectTask: (taskId: string | null) => void
 }
 
-const TABS: Array<{ id: MissionControlTab; label: string }> = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'board', label: 'Board' },
-  { id: 'pipeline', label: 'Pipeline' },
-]
-
-export function MissionControlLayout({
-  activeTab,
-  onTabChange,
-  initialTaskId,
-}: MissionControlLayoutProps) {
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(
-    initialTaskId ?? null,
-  )
+export function MissionsLayout({
+  selectedTaskId,
+  onSelectTask,
+}: MissionsLayoutProps) {
+  const showPipeline = Boolean(selectedTaskId)
 
   return (
     <div className="flex h-full flex-col bg-[var(--theme-bg)] text-[var(--theme-text)]">
-      {/* Header + Tabs */}
       <header className="shrink-0 border-b border-[var(--theme-border)] bg-[var(--theme-card)] px-4 py-3 sm:px-6">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-lg font-semibold">Mission Control</h1>
+            <h1 className="text-lg font-semibold">Missions</h1>
             <p className="text-xs text-[var(--theme-muted)]">
-              Multi-agent runtime status, board, and pipeline drill-down.
+              {showPipeline
+                ? 'Pipeline drill-down for the selected task.'
+                : 'Task board and pipeline progress.'}
             </p>
           </div>
           <div className="flex items-center gap-3">
+            {showPipeline ? (
+              <button
+                type="button"
+                onClick={() => onSelectTask(null)}
+                className="rounded-md border border-[var(--theme-border)] px-3 py-1.5 text-xs font-medium text-[var(--theme-muted)] transition-colors hover:bg-[var(--theme-hover)] hover:text-[var(--theme-text)]"
+              >
+                Back to Board
+              </button>
+            ) : null}
             <CreateTaskButton />
-            <nav className="flex rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] p-0.5">
-              {TABS.map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => onTabChange(tab.id)}
-                  className={cn(
-                    'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-                    activeTab === tab.id
-                      ? 'bg-[var(--theme-accent)] text-white'
-                      : 'text-[var(--theme-muted)] hover:text-[var(--theme-text)]',
-                  )}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </nav>
           </div>
         </div>
       </header>
 
-      {/* Tab content */}
       <main className="min-h-0 flex-1 overflow-hidden">
-        {activeTab === 'overview' && (
-          <OverviewView
-            onSelectTask={(taskId) => {
-              setSelectedTaskId(taskId)
-              onTabChange('pipeline')
-            }}
-          />
-        )}
-        {activeTab === 'board' && (
-          <BoardView
-            onSelectTask={(taskId) => {
-              setSelectedTaskId(taskId)
-              onTabChange('pipeline')
-            }}
-          />
-        )}
-        {activeTab === 'pipeline' && (
+        {showPipeline ? (
           <PipelineView
             selectedTaskId={selectedTaskId}
-            onSelectTask={setSelectedTaskId}
+            onSelectTask={onSelectTask}
           />
+        ) : (
+          <BoardView onSelectTask={onSelectTask} />
         )}
       </main>
     </div>
   )
 }
+
+/** @deprecated Use MissionsLayout. Kept for any residual imports. */
+export const MissionControlLayout = MissionsLayout
+export type MissionControlTab = 'board' | 'pipeline'

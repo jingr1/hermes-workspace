@@ -275,6 +275,52 @@ describe('Managed Agent Engine adapter', () => {
     expect(managedAgentTargetId('claude-code')).toBe('local:claude-code')
     expect(managedAgentTargetId('kimi')).toBe('extension:kimi-code')
   })
+
+  it('prefers overlay sessionMessages over the canonical engine lane', () => {
+    const engine = createManagedAgentEngine({
+      workspaceId: 'workspace-1',
+      commandPort: { kind: 'typed', effects: unsupportedEffects(), execute: async () => undefined },
+    })
+    hydrateManagedAgentEngine(engine, {
+      ...detailDefaults,
+      workspaceId: 'workspace-1',
+      session: session(),
+      turns: [turn()],
+      messages: [{
+        workspaceId: 'workspace-1',
+        agentSessionId: 'session-1',
+        messageId: 'message-1',
+        turnId: 'turn-1',
+        role: 'assistant',
+        kind: 'text',
+        payload: { text: 'canonical' },
+        version: 1,
+        sequence: 1,
+        occurredAtUnixMs: 1,
+      }],
+      interactions: [],
+    })
+
+    const state = selectManagedAgentChatState(engine.getSnapshot(), 'session-1', {
+      sessionMessages: [{
+        workspaceId: 'workspace-1',
+        agentSessionId: 'session-1',
+        messageId: 'message-1',
+        turnId: 'turn-1',
+        role: 'assistant',
+        kind: 'text',
+        payload: { text: 'canonical live' },
+        version: 1,
+        sequence: 1,
+        occurredAtUnixMs: 1,
+      }],
+    })
+    expect(state.messages).toEqual([
+      { role: 'assistant', content: [{ type: 'text', text: 'canonical live' }], timestamp: 1 },
+    ])
+    expect(state.activeTurn?.turnId).toBe('turn-1')
+    engine.dispose()
+  })
 })
 
 const detailDefaults = {

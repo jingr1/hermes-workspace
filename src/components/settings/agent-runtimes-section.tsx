@@ -21,20 +21,24 @@ import {
   useSetAgentProviderEnabled,
 } from '@/screens/chat/hooks/use-provider-status'
 
-const PROVIDER_LABELS: Record<AgentProviderId, string> = {
+const PROVIDER_LABELS: Record<string, string> = {
+  hermes: 'Hermes Agent',
   'claude-code': 'Claude Code',
   codex: 'Codex',
   cursor: 'Cursor',
   opencode: 'OpenCode',
   'kimi-code': 'Kimi Code',
+  'deepseek-harness': 'DeepSeek',
 }
 
-const PROVIDER_COLORS: Record<AgentProviderId, string> = {
+const PROVIDER_COLORS: Record<string, string> = {
+  hermes: 'bg-teal-600',
   'claude-code': 'bg-orange-500',
   codex: 'bg-blue-500',
   cursor: 'bg-neutral-500',
   opencode: 'bg-indigo-500',
   'kimi-code': 'bg-emerald-500',
+  'deepseek-harness': 'bg-slate-400',
 }
 
 function readinessStatus(entry: AgentProviderStatusDto): {
@@ -58,7 +62,7 @@ function readinessStatus(entry: AgentProviderStatusDto): {
   }
 }
 
-function providerInitials(providerId: AgentProviderId): string {
+function providerInitials(providerId: string): string {
   const label = PROVIDER_LABELS[providerId] ?? providerId
   return label.slice(0, 2).toUpperCase()
 }
@@ -96,22 +100,29 @@ function RuntimeRow({
 }: {
   entry: AgentProviderStatusDto
   highlighted: boolean
-  installingProvider: AgentProviderId | null
-  togglingProvider: AgentProviderId | null
-  onInstall: (provider: AgentProviderId, version?: string) => void
-  onSetEnabled: (provider: AgentProviderId, enabled: boolean) => void
+  installingProvider: string | null
+  togglingProvider: string | null
+  onInstall: (provider: string, version?: string) => void
+  onSetEnabled: (provider: string, enabled: boolean) => void
 }) {
   const rowRef = useRef<HTMLTableRowElement>(null)
-  const providerId = entry.provider as AgentProviderId
+  const providerId = entry.provider
   const label = PROVIDER_LABELS[providerId] ?? providerId
   const badge = providerStatusBadge(entry)
   const { label: statusLabel, dotClass } = readinessStatus(entry)
-  const canInstall = badge === 'not-installed' && entry.install?.managedNpm
+  const isHermes = providerId === 'hermes'
+  const isStub = providerId === 'deepseek-harness'
+  const canInstall =
+    !isStub && badge === 'not-installed' && entry.install?.managedNpm
   const canUpgrade =
-    badge === 'update-available' && entry.update.capability === 'supported'
+    !isStub &&
+    badge === 'update-available' &&
+    entry.update.capability === 'supported'
   const manualCommand = entry.install?.displayCommand
   const isInstalling = installingProvider === providerId
   const isToggling = togglingProvider === providerId
+  // Hermes readiness is gateway probe; enable toggle is not meaningful.
+  const showEnableToggle = !isHermes && !isStub && entry.installed
 
   useEffect(() => {
     if (highlighted && rowRef.current) {
@@ -171,12 +182,18 @@ function RuntimeRow({
 
       {/* Enabled */}
       <td className="px-4 py-3 text-center">
-        <Switch
-          checked={entry.registered}
-          disabled={isToggling}
-          onCheckedChange={(checked) => onSetEnabled(providerId, checked)}
-          aria-label={`${label} enabled`}
-        />
+        {showEnableToggle ? (
+          <Switch
+            checked={entry.registered}
+            disabled={isToggling}
+            onCheckedChange={(checked) => onSetEnabled(providerId, checked)}
+            aria-label={`${label} enabled`}
+          />
+        ) : (
+          <span className="text-xs text-[var(--theme-muted)]">
+            {isHermes ? (entry.registered ? '就绪' : '未探测') : '—'}
+          </span>
+        )}
       </td>
 
       {/* Actions */}
@@ -285,12 +302,17 @@ export function AgentRuntimesSection({
     })
   }, [statusQuery.data?.providers])
 
-  const handleInstall = (provider: AgentProviderId, version?: string) => {
-    installMutation.mutate(version ? { provider, version } : { provider })
+  const handleInstall = (provider: string, version?: string) => {
+    installMutation.mutate(
+      version
+        ? { provider: provider as AgentProviderId, version }
+        : { provider: provider as AgentProviderId },
+    )
   }
 
-  const handleSetEnabled = (provider: AgentProviderId, enabled: boolean) => {
-    enableMutation.mutate({ provider, enabled })
+  const handleSetEnabled = (provider: string, enabled: boolean) => {
+    if (provider === 'hermes' || provider === 'deepseek-harness') return
+    enableMutation.mutate({ provider: provider as AgentProviderId, enabled })
   }
 
   return (

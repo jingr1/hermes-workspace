@@ -23,8 +23,20 @@ describe('createAgoraxManagedAgentTransport', () => {
     await transport.startRun({
       backend: 'codex',
       run: { runId: 'run-1', agentId: 'codex', task: 'hello' },
-      mcp: { endpoint: 'unused', runToken: 'unused', toolAllowlist: [] },
+      mcp: {
+        endpoint: 'http://127.0.0.1:3001/api/mcp-rpc',
+        runToken: 'mcp_rw_test',
+        toolAllowlist: ['task_start', 'task_complete'],
+      },
     })
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://managed-agent.test/v1/workspaces/workspace-1/agent-sessions',
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.stringContaining('"mcpEndpoint":"http://127.0.0.1:3001/api/mcp-rpc"'),
+      }),
+    )
+    expect(String(fetchImpl.mock.calls[0]?.[1]?.body)).toContain('"mcpRunToken":"mcp_rw_test"')
     const events = transport.streamEvents({ backend: 'codex', runId: 'run-1' })
     const iterator = events[Symbol.asyncIterator]()
     listeners[0]!({

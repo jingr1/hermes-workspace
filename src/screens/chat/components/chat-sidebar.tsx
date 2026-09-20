@@ -565,10 +565,14 @@ function ChatSidebarComponent({
   const isJobsActive = pathname === '/jobs'
   const isMemoryActive = pathname === '/memory'
   const isTasksActive = pathname === '/tasks'
-  const isMissionControlActive = pathname.startsWith('/mission-control')
+  const isMissionControlActive =
+    pathname.startsWith('/missions') || pathname.startsWith('/mission-control')
   const isGroupChatActive = pathname.startsWith('/group-chat')
   const isConductorActive = pathname === '/conductor'
-  const isOperationsActive = pathname === '/operations'
+  const isAgentsActive =
+    pathname.startsWith('/agents') ||
+    pathname.startsWith('/operations') ||
+    pathname.startsWith('/profiles')
   const isSwarmActive = pathname === '/swarm' || pathname === '/swarm2'
   const echoStudioEnabled = useSettingsStore(
     (state) => state.settings.experimentalEchoStudio,
@@ -760,7 +764,7 @@ function ChatSidebarComponent({
     },
     {
       kind: 'link',
-      to: '/mission-control',
+      to: '/missions',
       icon: Target02Icon,
       label: 'Missions',
       active: isMissionControlActive,
@@ -781,10 +785,10 @@ function ChatSidebarComponent({
     },
     {
       kind: 'link',
-      to: '/operations',
+      to: '/agents',
       icon: UserMultipleIcon,
-      label: 'Operations',
-      active: isOperationsActive,
+      label: 'Agents',
+      active: isAgentsActive,
     },
     {
       kind: 'link',
@@ -828,13 +832,6 @@ function ChatSidebarComponent({
       icon: McpServerIcon,
       label: 'MCP',
       active: isMcpActive,
-    },
-    {
-      kind: 'link',
-      to: '/profiles',
-      icon: UserMultipleIcon,
-      label: t('nav.profiles'),
-      active: pathname === '/profiles',
     },
   ]
 

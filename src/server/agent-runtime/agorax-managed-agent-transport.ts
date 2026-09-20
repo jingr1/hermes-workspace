@@ -115,7 +115,7 @@ export function createAgoraxManagedAgentTransport(
   return {
     probe: (backend: AgoraxManagedAgentBackend): Promise<AgentProbeResult> =>
       client.probe(backend),
-    startRun: async ({ backend, run }: { backend: AgoraxManagedAgentBackend; run: AgentRunInput; mcp: McpHandshake }) => {
+    startRun: async ({ backend, run, mcp }: { backend: AgoraxManagedAgentBackend; run: AgentRunInput; mcp: McpHandshake }) => {
       const displaySessionId = run.taskId?.trim()
       const existing = displaySessionId
         ? await runStore.getByDisplaySession(displaySessionId)
@@ -147,6 +147,12 @@ export function createAgoraxManagedAgentTransport(
           ...(run.content ? { promptContent: run.content } : {}),
           ...(run.cwd ? { cwd: run.cwd } : {}),
           ...(run.model ? { model: run.model } : {}),
+          ...(run.effort ? { reasoningEffort: run.effort } : {}),
+          ...(mcp.endpoint ? { mcpEndpoint: mcp.endpoint } : {}),
+          ...(mcp.runToken ? { mcpRunToken: mcp.runToken } : {}),
+          ...(mcp.toolAllowlist?.length
+            ? { mcpToolAllowlist: [...mcp.toolAllowlist] }
+            : {}),
         },
       })
       if (displaySessionId) {

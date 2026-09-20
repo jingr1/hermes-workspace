@@ -51,6 +51,12 @@ export const Route = createFileRoute('/api/agents/$agentId/engine/activate')({
           )
         }
         const model = typeof body?.model === 'string' ? body.model.trim() : ''
+        const reasoningEffort =
+          typeof body?.reasoningEffort === 'string'
+            ? body.reasoningEffort.trim()
+            : typeof body?.effort === 'string'
+              ? body.effort.trim()
+              : ''
         let promptContent: Array<AgoraxManagedPromptContentBlock>
         try {
           promptContent = managedPromptContentBlocksFromUnknown(
@@ -77,6 +83,7 @@ export const Route = createFileRoute('/api/agents/$agentId/engine/activate')({
           task: message,
           ...(promptContent.length ? { content: promptContent } : {}),
           ...(model ? { model } : {}),
+          ...(reasoningEffort ? { effort: reasoningEffort } : {}),
           ...(cwd ? { cwd } : {}),
         })
         if (!started.ok)

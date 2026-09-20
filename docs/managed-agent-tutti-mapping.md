@@ -16,6 +16,12 @@ agorax 自有 UI（`src/screens/chat/`、群聊）现在通过 **canonical 合�
 前端状态由 activity-core engine 持有；群聊 / mission / Swarm 只投影、不双写。
 复用的是 tutti 的**语义层与映射层**，不是 UI 组件——外壳、群聊、mission 所有权不变。
 
+**近期进展（2026-09 Waves）：**
+
+- Wave 2 MCP / Mission 控制通道已接线（managed daemon `mcpEndpoint` / run token）。
+- Wave 3：daemon Host REST（title/delete/pin/settings/composer-options/plan-decision/goal 只读）+ adapter/engine 接线。
+- Wave 5：Hermes native bridge 已起步（[`docs/hermes-native-bridge.md`](./hermes-native-bridge.md)、`hermes-native-bridge.ts` Phase 0–1 skeleton）；`HermesAdapterStub` / tmux 路径不变。
+
 ## 复用来源对照表
 
 | tutti 包 | agorax 包 | 说明 |
@@ -137,21 +143,21 @@ submitInteractive / cancelTurn`），是该接口的 daemon 方言 typed client�
 
 | 偏差 | 现状 | 后续 |
 | --- | --- | --- |
-| composer options 端点缺失 | daemon 无 composer options REST 端点；engine session 未上报 capabilities 时 composer 显示 `capabilities: null`（"unknown"，fail-closed，不臆造）；显式 `false` 优先 | daemon 补端点后自动点亮 |
+| composer options | daemon 从本地 Claude settings / Codex config.toml 填充模型目录（`LoadLocalProviderModels`）；无配置时仍空（fail-closed）；未做 AppServer live `model/list` 探测 | 需要时再接 Codex AppServer / OpenCode CLI list |
 | client 生成 agentSessionId | 前端 `crypto.randomUUID()` 生成 canonical session id，activate 时提交给 daemon（tutti 由 host 侧生成） | 如需 tutti 对齐再调 |
-| plan decision 端点缺失 | daemon 无 plan approve/reject 端点；plan interaction 渲染为只读信息卡片（`respondable: false` fail-closed） | 接 plan 决策合同后开放回写 |
-| goal control 未接 | engine 已支持 goal 语义，daemon 未暴露 goal 操作端点 | 单独立项 |
+| plan decision | daemon / engine / UI 已接 plan-decision（Codex `implement_prompt`）；非 Codex Host 可能拒绝 | 扩 provider 矩阵 |
+| goal control | GET goal 只读已接；goalControl 写路径仍 throw | 单独立项 |
 | session fork 未接 | engine 支持，agorax 未暴露 fork saga | 单独立项 |
 | edit retry 未接 | engine 支持，无 history revision fence | 单独立项 |
 | side conversation 未接 | 无对应产品流程 | 需要时映射为 thread/panel |
-| mission MCP 控制通道 | mission 派发到 daemon-backed agent 时 `task_start/task_complete` 合同不成立（transport 丢弃 `McpHandshake`） | 需单独决策（补 daemon MCP 通道或 mission 回退非 daemon 路径） |
-| capability 上报 | canonical session 的 `capabilities` 依赖 daemon 写入 runtime context；未写时按未知处理 | 随 composer options 端点一起补 |
+| mission MCP 控制通道 | daemon createSession 接受 `mcpEndpoint`/`mcpRunToken`/`mcpToolAllowlist`；Claude CLI adapter 写入 per-run mcp-config；transport 转发 `McpHandshake`；生产 `installAdvanceBridge` 挂在 dispatch-ready | Codex/其他 provider 见能力矩阵；非 Claude 可能 partial |
+| capability 上报 | adapter 用 `agentActivitySessionCapabilitiesFromIds` 展开 `Capabilities.values`；未上报时仍为 null（unknown） | 随 composer-options 端点一起补模型目录 |
 
 ## 非目标（本次明确不做）
 
 - 不迁移 tutti UI 组件 / UI System / Workbench；agorax 保留全部自有外壳。
-- 不实现 mission MCP 控制通道（见上表）。
-- goal control / session fork / edit retry / side conversation 等 tutti 高级合同不接。
+- 不用 Host Turn settle **替代** Mission MCP `task_complete`（Turn settle 可作执行层终态，但不单独驱动 mission DAG）。
+- goal control / session fork / edit retry / side conversation 等 tutti 高级合同产品化另立（Host REST 已部分出口）。
 - 不改 tutti 原仓库（只读参考）。
 
 ## 验证命令清单

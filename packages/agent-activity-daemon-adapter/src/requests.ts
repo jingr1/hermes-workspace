@@ -16,21 +16,24 @@ type NewAgentSessionActivationInput = Extract<
 >;
 
 /**
- * Outbound projection for POST .../agent-sessions. Only fields declared by
- * the daemon decode struct (agorax-agentd/main.go) cross the HTTP boundary:
+ * Outbound projection for POST .../agent-sessions. Fields declared by the
+ * daemon decode struct (agorax-agentd/main.go) cross the HTTP boundary:
  * agentSessionId, agentTargetId, provider, clientSubmitId, content,
- * initialContent, cwd, model. Local prompt fields such as `uri`, `hostPath`,
- * `uploadStatus`, and `assetId` never cross the HTTP boundary.
+ * initialContent, cwd, model, reasoningEffort, mcp*. Local prompt fields
+ * such as `uri`, `hostPath`, `uploadStatus`, and `assetId` never cross.
  *
- * TODO(daemon-endpoint): fields the tuttid contract accepted but the daemon
- * decode struct lacks (capabilityRefs, initialGoalControl,
- * initialAgoraxModeActivation, railPlacement, permissionModeId, planMode,
- * reasoningEffort, speed, title, visible, browserUse/codexSaverMode/
- * rtkSaverMode, submitDiagnostics, modelExplicit, noProject) are dropped
+ * TODO(daemon-endpoint): remaining tuttid fields (capabilityRefs,
+ * initialGoalControl, railPlacement, permissionModeId, planMode, speed,
+ * title, visible, browserUse/codexSaverMode/rtkSaverMode, …) are dropped
  * until the daemon endpoint accepts them.
  */
 export function daemonCreateAgentSessionRequestFromActivity(
-  input: AgentActivityCreateSessionInput & { agentSessionId: string }
+  input: AgentActivityCreateSessionInput & {
+    agentSessionId: string;
+    mcpEndpoint?: string;
+    mcpRunToken?: string;
+    mcpToolAllowlist?: string[];
+  }
 ): DaemonCreateAgentSessionRequest {
   return {
     agentSessionId: input.agentSessionId,
@@ -42,7 +45,19 @@ export function daemonCreateAgentSessionRequestFromActivity(
       input.initialContent ?? []
     ),
     ...(input.cwd?.trim() ? { cwd: input.cwd } : {}),
-    ...(input.model?.trim() ? { model: input.model } : {})
+    ...(input.model?.trim() ? { model: input.model } : {}),
+    ...(input.reasoningEffort?.trim()
+      ? { reasoningEffort: input.reasoningEffort.trim() }
+      : {}),
+    ...(input.mcpEndpoint?.trim()
+      ? { mcpEndpoint: input.mcpEndpoint.trim() }
+      : {}),
+    ...(input.mcpRunToken?.trim()
+      ? { mcpRunToken: input.mcpRunToken.trim() }
+      : {}),
+    ...(input.mcpToolAllowlist?.length
+      ? { mcpToolAllowlist: [...input.mcpToolAllowlist] }
+      : {})
   };
 }
 
@@ -63,6 +78,7 @@ export function daemonCreateAgentSessionRequestFromActivation(
       ? input.initialContent.map((block) => ({ ...block }))
       : undefined,
     model: input.settings?.model,
+    reasoningEffort: input.settings?.reasoningEffort ?? undefined,
     workspaceId: input.workspaceId
   });
 }

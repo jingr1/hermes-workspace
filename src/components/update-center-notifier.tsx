@@ -175,17 +175,28 @@ export function UpdateCenterNotifier() {
   const visibleProducts = useMemo(() => {
     const products = data ? [data.products.workspace, data.products.agent] : []
     return products.filter((product) => {
-      // Product decision: only show the top-of-app update banner when a
-      // one-click update is actually safe. Dirty checkouts, non-main branches,
-      // and blocked/conflicting states still exist, but they belong in an
-      // advanced update center view rather than a disruptive banner. See
-      // Eric feedback 2026-05-04.
+      // Hermes Agent upgrades live on Settings → Runtimes; keep the global
+      // banner for Workspace product updates only (avoid repeated Agent banners).
+      if (product.id === 'agent') return false
       if (!product.updateAvailable) return false
       if (!product.canUpdate) return false
       if (phases[product.id] === 'done') return false
       return !dismissed.has(productDismissKey(product))
     })
   }, [data, dismissed, phases])
+
+  useEffect(() => {
+    const agent = data?.products.agent
+    if (!agent?.updateAvailable || !agent.canUpdate) return
+    const key = productDismissKey(agent)
+    if (dismissed.has(key)) return
+    if (localStorage.getItem(`${DISMISS_PREFIX}agent-toast:${key}`)) return
+    localStorage.setItem(`${DISMISS_PREFIX}agent-toast:${key}`, '1')
+    toast(
+      'Hermes Agent 有可用更新 — 打开 Settings → Runtimes（或 /settings?section=runtimes&provider=hermes）',
+      { type: 'info', duration: 9000 },
+    )
+  }, [data?.products.agent, dismissed])
 
   function dismiss(product: ProductUpdateStatus) {
     const key = productDismissKey(product)

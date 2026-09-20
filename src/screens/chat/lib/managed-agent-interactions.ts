@@ -21,9 +21,10 @@ import type {
  *   (`{id?, header, question, multiSelect?, allowFreeText?, options:
  *   [{id?, label, description}]}`), matching tutti's normalizeAskUserQuestions
  *   contract.
- * - plan: read-only info card this phase. `input.plan` / `input.filePath` /
- *   `input.toolCall.title`; Agorax has no plan-decision endpoint yet, so the
- *   card fails closed (supportsResponse = false, no writeback is faked).
+ * - plan: info card with optional implement writeback when the daemon
+ *   plan-decision endpoint is available (`supportsResponse = true`). Host
+ *   only admits Codex `implement_prompt` strategy; other providers fail closed
+ *   at the API rather than faking success.
  */
 
 export type ManagedAgentInteractionActionSemantic =
@@ -69,7 +70,7 @@ export type ManagedAgentInteractionCard = {
   questions: Array<ManagedAgentInteractionQuestion>
   /** plan only; null for other kinds */
   plan: { content: string; filePath: string | null } | null
-  /** false for plan cards this phase (no plan-decision endpoint). */
+  /** false when the card cannot write back (answered/superseded still render). */
   supportsResponse: boolean
 }
 
@@ -325,8 +326,9 @@ function projectPlan(
     actions: [],
     questions: [],
     plan: { content, filePath },
-    // Fail closed: Agorax has no plan-decision endpoint this phase.
-    supportsResponse: false,
+    // Host plan-decision is available; Codex implement_prompt succeeds, other
+    // providers fail closed at the daemon with an honest error.
+    supportsResponse: true,
   }
 }
 

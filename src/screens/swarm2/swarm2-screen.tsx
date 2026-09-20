@@ -1877,7 +1877,7 @@ export function Swarm2Screen() {
                   {
                     title: 'FAQ',
                     bullets: [
-                      'If a worker is missing setup or model config, fix that in Operations first.',
+                      'If a worker is missing setup or model config, fix that in Agents first.',
                       'Swarm2 is the operational coordination layer, not the first-time setup screen.',
                     ],
                   },

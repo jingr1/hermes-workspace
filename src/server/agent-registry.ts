@@ -1,5 +1,4 @@
 import {
-  createProfile,
   deleteProfile,
   isLiveNamedProfile,
 } from './profiles-browser'
@@ -115,23 +114,14 @@ export function createAgentDeclaration(input: Record<string, unknown>) {
   if (next.runtime === 'hermes') {
     const profile = next.profile ?? next.id
     if (!isLiveNamedProfile(profile)) {
-      createProfile(profile, { cloneFrom: 'default' })
+      throw new Error(
+        `Hermes profile "${profile}" does not exist. Create it first via POST /api/profiles/create (Agents/Settings New Agent Hermes profile step).`,
+      )
     }
   }
-  try {
-    const roster = upsertSwarmRosterWorker(next, rosterIds())
-    resetAgentRuntimeRouter()
-    return roster
-  } catch (error) {
-    if (next.runtime === 'hermes') {
-      try {
-        deleteProfile(next.profile ?? next.id)
-      } catch {
-        // Preserve the original roster error; cleanup is best effort.
-      }
-    }
-    throw error
-  }
+  const roster = upsertSwarmRosterWorker(next, rosterIds())
+  resetAgentRuntimeRouter()
+  return roster
 }
 
 export function updateAgentDeclaration(

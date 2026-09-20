@@ -19,6 +19,7 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ReserveRouteImport } from './routes/reserve'
 import { Route as ProfilesRouteImport } from './routes/profiles'
 import { Route as OperationsRouteImport } from './routes/operations'
+import { Route as MissionsRouteImport } from './routes/missions'
 import { Route as MissionControlRouteImport } from './routes/mission-control'
 import { Route as MemoryRouteImport } from './routes/memory'
 import { Route as McpRouteImport } from './routes/mcp'
@@ -28,6 +29,7 @@ import { Route as FilesRouteImport } from './routes/files'
 import { Route as EchoStudioRouteImport } from './routes/echo-studio'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ConductorRouteImport } from './routes/conductor'
+import { Route as AgentsRouteImport } from './routes/agents'
 import { Route as SplatRouteImport } from './routes/$'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
@@ -205,6 +207,7 @@ import { Route as ApiAuthCodexRouteImport } from './routes/api/auth.codex'
 import { Route as ApiAuthAnthropicRouteImport } from './routes/api/auth.anthropic'
 import { Route as ApiArtifactsArtifactIdRouteImport } from './routes/api/artifacts.$artifactId'
 import { Route as ApiAgentsStatusRouteImport } from './routes/api/agents/status'
+import { Route as ApiAgentsSnapshotRouteImport } from './routes/api/agents/snapshot'
 import { Route as ApiAgentsOperationsRouteImport } from './routes/api/agents/operations'
 import { Route as ApiAgentRuntimeStatusRouteImport } from './routes/api/agent-runtime/status'
 import { Route as ApiAgentRuntimeInstallRouteImport } from './routes/api/agent-runtime/install'
@@ -235,12 +238,17 @@ import { Route as ApiRoomsRoomIdPendingTurnsTurnIdDismissRouteImport } from './r
 import { Route as ApiRoomsRoomIdPendingTurnsTurnIdAnswerRouteImport } from './routes/api/rooms/$roomId/pending-turns/$turnId/answer'
 import { Route as ApiRoomsRoomIdMessagesMessageIdInteractionResponseRouteImport } from './routes/api/rooms/$roomId/messages/$messageId/interaction-response'
 import { Route as ApiAgentsAgentIdRunsRunIdInterruptRouteImport } from './routes/api/agents/$agentId/runs/$runId/interrupt'
+import { Route as ApiAgentsAgentIdEngineSessionSessionIdRouteImport } from './routes/api/agents/$agentId/engine/session/$sessionId'
 import { Route as ApiAgentsAgentIdInteractionsSessionIdTurnIdRequestIdRouteImport } from './routes/api/agents/$agentId/interactions/$sessionId/$turnId/$requestId'
+import { Route as ApiAgentsAgentIdEngineSessionSessionIdTitleRouteImport } from './routes/api/agents/$agentId/engine/session/$sessionId/title'
+import { Route as ApiAgentsAgentIdEngineSessionSessionIdSettingsRouteImport } from './routes/api/agents/$agentId/engine/session/$sessionId/settings'
+import { Route as ApiAgentsAgentIdEngineSessionSessionIdPinRouteImport } from './routes/api/agents/$agentId/engine/session/$sessionId/pin'
 import { Route as ApiAgentsAgentIdEngineSessionSessionIdMessagesRouteImport } from './routes/api/agents/$agentId/engine/session/$sessionId/messages'
 import { Route as ApiAgentsAgentIdEngineSessionSessionIdInputRouteImport } from './routes/api/agents/$agentId/engine/session/$sessionId/input'
 import { Route as ApiAgentsAgentIdEngineSessionSessionIdEventsRouteImport } from './routes/api/agents/$agentId/engine/session/$sessionId/events'
 import { Route as ApiAgentsAgentIdEngineSessionSessionIdDetailRouteImport } from './routes/api/agents/$agentId/engine/session/$sessionId/detail'
 import { Route as ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdCancelRouteImport } from './routes/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/cancel'
+import { Route as ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdPlanDecisionsRequestIdRouteImport } from './routes/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/plan-decisions/$requestId'
 
 const VtCapitalRoute = VtCapitalRouteImport.update({
   id: '/vt-capital',
@@ -292,6 +300,11 @@ const OperationsRoute = OperationsRouteImport.update({
   path: '/operations',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MissionsRoute = MissionsRouteImport.update({
+  id: '/missions',
+  path: '/missions',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MissionControlRoute = MissionControlRouteImport.update({
   id: '/mission-control',
   path: '/mission-control',
@@ -335,6 +348,11 @@ const DashboardRoute = DashboardRouteImport.update({
 const ConductorRoute = ConductorRouteImport.update({
   id: '/conductor',
   path: '/conductor',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgentsRoute = AgentsRouteImport.update({
+  id: '/agents',
+  path: '/agents',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SplatRoute = SplatRouteImport.update({
@@ -1230,6 +1248,11 @@ const ApiAgentsStatusRoute = ApiAgentsStatusRouteImport.update({
   path: '/api/agents/status',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAgentsSnapshotRoute = ApiAgentsSnapshotRouteImport.update({
+  id: '/api/agents/snapshot',
+  path: '/api/agents/snapshot',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAgentsOperationsRoute = ApiAgentsOperationsRouteImport.update({
   id: '/api/agents/operations',
   path: '/api/agents/operations',
@@ -1401,46 +1424,79 @@ const ApiAgentsAgentIdRunsRunIdInterruptRoute =
     path: '/api/agents/$agentId/runs/$runId/interrupt',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiAgentsAgentIdEngineSessionSessionIdRoute =
+  ApiAgentsAgentIdEngineSessionSessionIdRouteImport.update({
+    id: '/api/agents/$agentId/engine/session/$sessionId',
+    path: '/api/agents/$agentId/engine/session/$sessionId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAgentsAgentIdInteractionsSessionIdTurnIdRequestIdRoute =
   ApiAgentsAgentIdInteractionsSessionIdTurnIdRequestIdRouteImport.update({
     id: '/$turnId/$requestId',
     path: '/$turnId/$requestId',
     getParentRoute: () => ApiAgentsAgentIdInteractionsSessionIdRoute,
   } as any)
+const ApiAgentsAgentIdEngineSessionSessionIdTitleRoute =
+  ApiAgentsAgentIdEngineSessionSessionIdTitleRouteImport.update({
+    id: '/title',
+    path: '/title',
+    getParentRoute: () => ApiAgentsAgentIdEngineSessionSessionIdRoute,
+  } as any)
+const ApiAgentsAgentIdEngineSessionSessionIdSettingsRoute =
+  ApiAgentsAgentIdEngineSessionSessionIdSettingsRouteImport.update({
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => ApiAgentsAgentIdEngineSessionSessionIdRoute,
+  } as any)
+const ApiAgentsAgentIdEngineSessionSessionIdPinRoute =
+  ApiAgentsAgentIdEngineSessionSessionIdPinRouteImport.update({
+    id: '/pin',
+    path: '/pin',
+    getParentRoute: () => ApiAgentsAgentIdEngineSessionSessionIdRoute,
+  } as any)
 const ApiAgentsAgentIdEngineSessionSessionIdMessagesRoute =
   ApiAgentsAgentIdEngineSessionSessionIdMessagesRouteImport.update({
-    id: '/api/agents/$agentId/engine/session/$sessionId/messages',
-    path: '/api/agents/$agentId/engine/session/$sessionId/messages',
-    getParentRoute: () => rootRouteImport,
+    id: '/messages',
+    path: '/messages',
+    getParentRoute: () => ApiAgentsAgentIdEngineSessionSessionIdRoute,
   } as any)
 const ApiAgentsAgentIdEngineSessionSessionIdInputRoute =
   ApiAgentsAgentIdEngineSessionSessionIdInputRouteImport.update({
-    id: '/api/agents/$agentId/engine/session/$sessionId/input',
-    path: '/api/agents/$agentId/engine/session/$sessionId/input',
-    getParentRoute: () => rootRouteImport,
+    id: '/input',
+    path: '/input',
+    getParentRoute: () => ApiAgentsAgentIdEngineSessionSessionIdRoute,
   } as any)
 const ApiAgentsAgentIdEngineSessionSessionIdEventsRoute =
   ApiAgentsAgentIdEngineSessionSessionIdEventsRouteImport.update({
-    id: '/api/agents/$agentId/engine/session/$sessionId/events',
-    path: '/api/agents/$agentId/engine/session/$sessionId/events',
-    getParentRoute: () => rootRouteImport,
+    id: '/events',
+    path: '/events',
+    getParentRoute: () => ApiAgentsAgentIdEngineSessionSessionIdRoute,
   } as any)
 const ApiAgentsAgentIdEngineSessionSessionIdDetailRoute =
   ApiAgentsAgentIdEngineSessionSessionIdDetailRouteImport.update({
-    id: '/api/agents/$agentId/engine/session/$sessionId/detail',
-    path: '/api/agents/$agentId/engine/session/$sessionId/detail',
-    getParentRoute: () => rootRouteImport,
+    id: '/detail',
+    path: '/detail',
+    getParentRoute: () => ApiAgentsAgentIdEngineSessionSessionIdRoute,
   } as any)
 const ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdCancelRoute =
   ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdCancelRouteImport.update({
-    id: '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/cancel',
-    path: '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/cancel',
-    getParentRoute: () => rootRouteImport,
+    id: '/turns/$turnId/cancel',
+    path: '/turns/$turnId/cancel',
+    getParentRoute: () => ApiAgentsAgentIdEngineSessionSessionIdRoute,
   } as any)
+const ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdPlanDecisionsRequestIdRoute =
+  ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdPlanDecisionsRequestIdRouteImport.update(
+    {
+      id: '/turns/$turnId/plan-decisions/$requestId',
+      path: '/turns/$turnId/plan-decisions/$requestId',
+      getParentRoute: () => ApiAgentsAgentIdEngineSessionSessionIdRoute,
+    } as any,
+  )
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
+  '/agents': typeof AgentsRoute
   '/conductor': typeof ConductorRoute
   '/dashboard': typeof DashboardRoute
   '/echo-studio': typeof EchoStudioRoute
@@ -1450,6 +1506,7 @@ export interface FileRoutesByFullPath {
   '/mcp': typeof McpRoute
   '/memory': typeof MemoryRoute
   '/mission-control': typeof MissionControlRoute
+  '/missions': typeof MissionsRoute
   '/operations': typeof OperationsRoute
   '/profiles': typeof ProfilesRoute
   '/reserve': typeof ReserveRoute
@@ -1558,6 +1615,7 @@ export interface FileRoutesByFullPath {
   '/api/agent-runtime/install': typeof ApiAgentRuntimeInstallRoute
   '/api/agent-runtime/status': typeof ApiAgentRuntimeStatusRoute
   '/api/agents/operations': typeof ApiAgentsOperationsRoute
+  '/api/agents/snapshot': typeof ApiAgentsSnapshotRoute
   '/api/agents/status': typeof ApiAgentsStatusRoute
   '/api/artifacts/$artifactId': typeof ApiArtifactsArtifactIdRoute
   '/api/auth/anthropic': typeof ApiAuthAnthropicRoute
@@ -1661,6 +1719,7 @@ export interface FileRoutesByFullPath {
   '/api/agents/$agentId/sessions/$sessionId': typeof ApiAgentsAgentIdSessionsSessionIdRoute
   '/api/rooms/$roomId/participants/$participantId': typeof ApiRoomsRoomIdParticipantsParticipantIdRoute
   '/api/runs/$sessionKey/$runId/abandon': typeof ApiRunsSessionKeyRunIdAbandonRoute
+  '/api/agents/$agentId/engine/session/$sessionId': typeof ApiAgentsAgentIdEngineSessionSessionIdRouteWithChildren
   '/api/agents/$agentId/runs/$runId/interrupt': typeof ApiAgentsAgentIdRunsRunIdInterruptRoute
   '/api/rooms/$roomId/messages/$messageId/interaction-response': typeof ApiRoomsRoomIdMessagesMessageIdInteractionResponseRoute
   '/api/rooms/$roomId/pending-turns/$turnId/answer': typeof ApiRoomsRoomIdPendingTurnsTurnIdAnswerRoute
@@ -1669,12 +1728,17 @@ export interface FileRoutesByFullPath {
   '/api/agents/$agentId/engine/session/$sessionId/events': typeof ApiAgentsAgentIdEngineSessionSessionIdEventsRoute
   '/api/agents/$agentId/engine/session/$sessionId/input': typeof ApiAgentsAgentIdEngineSessionSessionIdInputRoute
   '/api/agents/$agentId/engine/session/$sessionId/messages': typeof ApiAgentsAgentIdEngineSessionSessionIdMessagesRoute
+  '/api/agents/$agentId/engine/session/$sessionId/pin': typeof ApiAgentsAgentIdEngineSessionSessionIdPinRoute
+  '/api/agents/$agentId/engine/session/$sessionId/settings': typeof ApiAgentsAgentIdEngineSessionSessionIdSettingsRoute
+  '/api/agents/$agentId/engine/session/$sessionId/title': typeof ApiAgentsAgentIdEngineSessionSessionIdTitleRoute
   '/api/agents/$agentId/interactions/$sessionId/$turnId/$requestId': typeof ApiAgentsAgentIdInteractionsSessionIdTurnIdRequestIdRoute
   '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/cancel': typeof ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdCancelRoute
+  '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/plan-decisions/$requestId': typeof ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdPlanDecisionsRequestIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
+  '/agents': typeof AgentsRoute
   '/conductor': typeof ConductorRoute
   '/dashboard': typeof DashboardRoute
   '/echo-studio': typeof EchoStudioRoute
@@ -1683,6 +1747,7 @@ export interface FileRoutesByTo {
   '/mcp': typeof McpRoute
   '/memory': typeof MemoryRoute
   '/mission-control': typeof MissionControlRoute
+  '/missions': typeof MissionsRoute
   '/operations': typeof OperationsRoute
   '/profiles': typeof ProfilesRoute
   '/reserve': typeof ReserveRoute
@@ -1790,6 +1855,7 @@ export interface FileRoutesByTo {
   '/api/agent-runtime/install': typeof ApiAgentRuntimeInstallRoute
   '/api/agent-runtime/status': typeof ApiAgentRuntimeStatusRoute
   '/api/agents/operations': typeof ApiAgentsOperationsRoute
+  '/api/agents/snapshot': typeof ApiAgentsSnapshotRoute
   '/api/agents/status': typeof ApiAgentsStatusRoute
   '/api/artifacts/$artifactId': typeof ApiArtifactsArtifactIdRoute
   '/api/auth/anthropic': typeof ApiAuthAnthropicRoute
@@ -1893,6 +1959,7 @@ export interface FileRoutesByTo {
   '/api/agents/$agentId/sessions/$sessionId': typeof ApiAgentsAgentIdSessionsSessionIdRoute
   '/api/rooms/$roomId/participants/$participantId': typeof ApiRoomsRoomIdParticipantsParticipantIdRoute
   '/api/runs/$sessionKey/$runId/abandon': typeof ApiRunsSessionKeyRunIdAbandonRoute
+  '/api/agents/$agentId/engine/session/$sessionId': typeof ApiAgentsAgentIdEngineSessionSessionIdRouteWithChildren
   '/api/agents/$agentId/runs/$runId/interrupt': typeof ApiAgentsAgentIdRunsRunIdInterruptRoute
   '/api/rooms/$roomId/messages/$messageId/interaction-response': typeof ApiRoomsRoomIdMessagesMessageIdInteractionResponseRoute
   '/api/rooms/$roomId/pending-turns/$turnId/answer': typeof ApiRoomsRoomIdPendingTurnsTurnIdAnswerRoute
@@ -1901,13 +1968,18 @@ export interface FileRoutesByTo {
   '/api/agents/$agentId/engine/session/$sessionId/events': typeof ApiAgentsAgentIdEngineSessionSessionIdEventsRoute
   '/api/agents/$agentId/engine/session/$sessionId/input': typeof ApiAgentsAgentIdEngineSessionSessionIdInputRoute
   '/api/agents/$agentId/engine/session/$sessionId/messages': typeof ApiAgentsAgentIdEngineSessionSessionIdMessagesRoute
+  '/api/agents/$agentId/engine/session/$sessionId/pin': typeof ApiAgentsAgentIdEngineSessionSessionIdPinRoute
+  '/api/agents/$agentId/engine/session/$sessionId/settings': typeof ApiAgentsAgentIdEngineSessionSessionIdSettingsRoute
+  '/api/agents/$agentId/engine/session/$sessionId/title': typeof ApiAgentsAgentIdEngineSessionSessionIdTitleRoute
   '/api/agents/$agentId/interactions/$sessionId/$turnId/$requestId': typeof ApiAgentsAgentIdInteractionsSessionIdTurnIdRequestIdRoute
   '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/cancel': typeof ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdCancelRoute
+  '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/plan-decisions/$requestId': typeof ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdPlanDecisionsRequestIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
+  '/agents': typeof AgentsRoute
   '/conductor': typeof ConductorRoute
   '/dashboard': typeof DashboardRoute
   '/echo-studio': typeof EchoStudioRoute
@@ -1917,6 +1989,7 @@ export interface FileRoutesById {
   '/mcp': typeof McpRoute
   '/memory': typeof MemoryRoute
   '/mission-control': typeof MissionControlRoute
+  '/missions': typeof MissionsRoute
   '/operations': typeof OperationsRoute
   '/profiles': typeof ProfilesRoute
   '/reserve': typeof ReserveRoute
@@ -2025,6 +2098,7 @@ export interface FileRoutesById {
   '/api/agent-runtime/install': typeof ApiAgentRuntimeInstallRoute
   '/api/agent-runtime/status': typeof ApiAgentRuntimeStatusRoute
   '/api/agents/operations': typeof ApiAgentsOperationsRoute
+  '/api/agents/snapshot': typeof ApiAgentsSnapshotRoute
   '/api/agents/status': typeof ApiAgentsStatusRoute
   '/api/artifacts/$artifactId': typeof ApiArtifactsArtifactIdRoute
   '/api/auth/anthropic': typeof ApiAuthAnthropicRoute
@@ -2128,6 +2202,7 @@ export interface FileRoutesById {
   '/api/agents/$agentId/sessions/$sessionId': typeof ApiAgentsAgentIdSessionsSessionIdRoute
   '/api/rooms/$roomId/participants/$participantId': typeof ApiRoomsRoomIdParticipantsParticipantIdRoute
   '/api/runs/$sessionKey/$runId/abandon': typeof ApiRunsSessionKeyRunIdAbandonRoute
+  '/api/agents/$agentId/engine/session/$sessionId': typeof ApiAgentsAgentIdEngineSessionSessionIdRouteWithChildren
   '/api/agents/$agentId/runs/$runId/interrupt': typeof ApiAgentsAgentIdRunsRunIdInterruptRoute
   '/api/rooms/$roomId/messages/$messageId/interaction-response': typeof ApiRoomsRoomIdMessagesMessageIdInteractionResponseRoute
   '/api/rooms/$roomId/pending-turns/$turnId/answer': typeof ApiRoomsRoomIdPendingTurnsTurnIdAnswerRoute
@@ -2136,14 +2211,19 @@ export interface FileRoutesById {
   '/api/agents/$agentId/engine/session/$sessionId/events': typeof ApiAgentsAgentIdEngineSessionSessionIdEventsRoute
   '/api/agents/$agentId/engine/session/$sessionId/input': typeof ApiAgentsAgentIdEngineSessionSessionIdInputRoute
   '/api/agents/$agentId/engine/session/$sessionId/messages': typeof ApiAgentsAgentIdEngineSessionSessionIdMessagesRoute
+  '/api/agents/$agentId/engine/session/$sessionId/pin': typeof ApiAgentsAgentIdEngineSessionSessionIdPinRoute
+  '/api/agents/$agentId/engine/session/$sessionId/settings': typeof ApiAgentsAgentIdEngineSessionSessionIdSettingsRoute
+  '/api/agents/$agentId/engine/session/$sessionId/title': typeof ApiAgentsAgentIdEngineSessionSessionIdTitleRoute
   '/api/agents/$agentId/interactions/$sessionId/$turnId/$requestId': typeof ApiAgentsAgentIdInteractionsSessionIdTurnIdRequestIdRoute
   '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/cancel': typeof ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdCancelRoute
+  '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/plan-decisions/$requestId': typeof ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdPlanDecisionsRequestIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/$'
+    | '/agents'
     | '/conductor'
     | '/dashboard'
     | '/echo-studio'
@@ -2153,6 +2233,7 @@ export interface FileRouteTypes {
     | '/mcp'
     | '/memory'
     | '/mission-control'
+    | '/missions'
     | '/operations'
     | '/profiles'
     | '/reserve'
@@ -2261,6 +2342,7 @@ export interface FileRouteTypes {
     | '/api/agent-runtime/install'
     | '/api/agent-runtime/status'
     | '/api/agents/operations'
+    | '/api/agents/snapshot'
     | '/api/agents/status'
     | '/api/artifacts/$artifactId'
     | '/api/auth/anthropic'
@@ -2364,6 +2446,7 @@ export interface FileRouteTypes {
     | '/api/agents/$agentId/sessions/$sessionId'
     | '/api/rooms/$roomId/participants/$participantId'
     | '/api/runs/$sessionKey/$runId/abandon'
+    | '/api/agents/$agentId/engine/session/$sessionId'
     | '/api/agents/$agentId/runs/$runId/interrupt'
     | '/api/rooms/$roomId/messages/$messageId/interaction-response'
     | '/api/rooms/$roomId/pending-turns/$turnId/answer'
@@ -2372,12 +2455,17 @@ export interface FileRouteTypes {
     | '/api/agents/$agentId/engine/session/$sessionId/events'
     | '/api/agents/$agentId/engine/session/$sessionId/input'
     | '/api/agents/$agentId/engine/session/$sessionId/messages'
+    | '/api/agents/$agentId/engine/session/$sessionId/pin'
+    | '/api/agents/$agentId/engine/session/$sessionId/settings'
+    | '/api/agents/$agentId/engine/session/$sessionId/title'
     | '/api/agents/$agentId/interactions/$sessionId/$turnId/$requestId'
     | '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/cancel'
+    | '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/plan-decisions/$requestId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/$'
+    | '/agents'
     | '/conductor'
     | '/dashboard'
     | '/echo-studio'
@@ -2386,6 +2474,7 @@ export interface FileRouteTypes {
     | '/mcp'
     | '/memory'
     | '/mission-control'
+    | '/missions'
     | '/operations'
     | '/profiles'
     | '/reserve'
@@ -2493,6 +2582,7 @@ export interface FileRouteTypes {
     | '/api/agent-runtime/install'
     | '/api/agent-runtime/status'
     | '/api/agents/operations'
+    | '/api/agents/snapshot'
     | '/api/agents/status'
     | '/api/artifacts/$artifactId'
     | '/api/auth/anthropic'
@@ -2596,6 +2686,7 @@ export interface FileRouteTypes {
     | '/api/agents/$agentId/sessions/$sessionId'
     | '/api/rooms/$roomId/participants/$participantId'
     | '/api/runs/$sessionKey/$runId/abandon'
+    | '/api/agents/$agentId/engine/session/$sessionId'
     | '/api/agents/$agentId/runs/$runId/interrupt'
     | '/api/rooms/$roomId/messages/$messageId/interaction-response'
     | '/api/rooms/$roomId/pending-turns/$turnId/answer'
@@ -2604,12 +2695,17 @@ export interface FileRouteTypes {
     | '/api/agents/$agentId/engine/session/$sessionId/events'
     | '/api/agents/$agentId/engine/session/$sessionId/input'
     | '/api/agents/$agentId/engine/session/$sessionId/messages'
+    | '/api/agents/$agentId/engine/session/$sessionId/pin'
+    | '/api/agents/$agentId/engine/session/$sessionId/settings'
+    | '/api/agents/$agentId/engine/session/$sessionId/title'
     | '/api/agents/$agentId/interactions/$sessionId/$turnId/$requestId'
     | '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/cancel'
+    | '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/plan-decisions/$requestId'
   id:
     | '__root__'
     | '/'
     | '/$'
+    | '/agents'
     | '/conductor'
     | '/dashboard'
     | '/echo-studio'
@@ -2619,6 +2715,7 @@ export interface FileRouteTypes {
     | '/mcp'
     | '/memory'
     | '/mission-control'
+    | '/missions'
     | '/operations'
     | '/profiles'
     | '/reserve'
@@ -2727,6 +2824,7 @@ export interface FileRouteTypes {
     | '/api/agent-runtime/install'
     | '/api/agent-runtime/status'
     | '/api/agents/operations'
+    | '/api/agents/snapshot'
     | '/api/agents/status'
     | '/api/artifacts/$artifactId'
     | '/api/auth/anthropic'
@@ -2830,6 +2928,7 @@ export interface FileRouteTypes {
     | '/api/agents/$agentId/sessions/$sessionId'
     | '/api/rooms/$roomId/participants/$participantId'
     | '/api/runs/$sessionKey/$runId/abandon'
+    | '/api/agents/$agentId/engine/session/$sessionId'
     | '/api/agents/$agentId/runs/$runId/interrupt'
     | '/api/rooms/$roomId/messages/$messageId/interaction-response'
     | '/api/rooms/$roomId/pending-turns/$turnId/answer'
@@ -2838,13 +2937,18 @@ export interface FileRouteTypes {
     | '/api/agents/$agentId/engine/session/$sessionId/events'
     | '/api/agents/$agentId/engine/session/$sessionId/input'
     | '/api/agents/$agentId/engine/session/$sessionId/messages'
+    | '/api/agents/$agentId/engine/session/$sessionId/pin'
+    | '/api/agents/$agentId/engine/session/$sessionId/settings'
+    | '/api/agents/$agentId/engine/session/$sessionId/title'
     | '/api/agents/$agentId/interactions/$sessionId/$turnId/$requestId'
     | '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/cancel'
+    | '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/plan-decisions/$requestId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SplatRoute: typeof SplatRoute
+  AgentsRoute: typeof AgentsRoute
   ConductorRoute: typeof ConductorRoute
   DashboardRoute: typeof DashboardRoute
   EchoStudioRoute: typeof EchoStudioRoute
@@ -2854,6 +2958,7 @@ export interface RootRouteChildren {
   McpRoute: typeof McpRoute
   MemoryRoute: typeof MemoryRoute
   MissionControlRoute: typeof MissionControlRoute
+  MissionsRoute: typeof MissionsRoute
   OperationsRoute: typeof OperationsRoute
   ProfilesRoute: typeof ProfilesRoute
   ReserveRoute: typeof ReserveRoute
@@ -2958,6 +3063,7 @@ export interface RootRouteChildren {
   ApiAgentRuntimeInstallRoute: typeof ApiAgentRuntimeInstallRoute
   ApiAgentRuntimeStatusRoute: typeof ApiAgentRuntimeStatusRoute
   ApiAgentsOperationsRoute: typeof ApiAgentsOperationsRoute
+  ApiAgentsSnapshotRoute: typeof ApiAgentsSnapshotRoute
   ApiAgentsStatusRoute: typeof ApiAgentsStatusRoute
   ApiClaudeCodeSettingsRoute: typeof ApiClaudeCodeSettingsRoute
   ApiClaudeProxySplatRoute: typeof ApiClaudeProxySplatRoute
@@ -3021,12 +3127,8 @@ export interface RootRouteChildren {
   ApiAgentsAgentIdEngineSessionsRoute: typeof ApiAgentsAgentIdEngineSessionsRoute
   ApiAgentsAgentIdInteractionsSessionIdRoute: typeof ApiAgentsAgentIdInteractionsSessionIdRouteWithChildren
   ApiRunsSessionKeyRunIdAbandonRoute: typeof ApiRunsSessionKeyRunIdAbandonRoute
+  ApiAgentsAgentIdEngineSessionSessionIdRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdRouteWithChildren
   ApiAgentsAgentIdRunsRunIdInterruptRoute: typeof ApiAgentsAgentIdRunsRunIdInterruptRoute
-  ApiAgentsAgentIdEngineSessionSessionIdDetailRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdDetailRoute
-  ApiAgentsAgentIdEngineSessionSessionIdEventsRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdEventsRoute
-  ApiAgentsAgentIdEngineSessionSessionIdInputRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdInputRoute
-  ApiAgentsAgentIdEngineSessionSessionIdMessagesRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdMessagesRoute
-  ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdCancelRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdCancelRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -3101,6 +3203,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OperationsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/missions': {
+      id: '/missions'
+      path: '/missions'
+      fullPath: '/missions'
+      preLoaderRoute: typeof MissionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/mission-control': {
       id: '/mission-control'
       path: '/mission-control'
@@ -3162,6 +3271,13 @@ declare module '@tanstack/react-router' {
       path: '/conductor'
       fullPath: '/conductor'
       preLoaderRoute: typeof ConductorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agents': {
+      id: '/agents'
+      path: '/agents'
+      fullPath: '/agents'
+      preLoaderRoute: typeof AgentsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/$': {
@@ -4403,6 +4519,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentsStatusRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/agents/snapshot': {
+      id: '/api/agents/snapshot'
+      path: '/api/agents/snapshot'
+      fullPath: '/api/agents/snapshot'
+      preLoaderRoute: typeof ApiAgentsSnapshotRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/agents/operations': {
       id: '/api/agents/operations'
       path: '/api/agents/operations'
@@ -4613,6 +4736,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentsAgentIdRunsRunIdInterruptRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/agents/$agentId/engine/session/$sessionId': {
+      id: '/api/agents/$agentId/engine/session/$sessionId'
+      path: '/api/agents/$agentId/engine/session/$sessionId'
+      fullPath: '/api/agents/$agentId/engine/session/$sessionId'
+      preLoaderRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/agents/$agentId/interactions/$sessionId/$turnId/$requestId': {
       id: '/api/agents/$agentId/interactions/$sessionId/$turnId/$requestId'
       path: '/$turnId/$requestId'
@@ -4620,40 +4750,68 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentsAgentIdInteractionsSessionIdTurnIdRequestIdRouteImport
       parentRoute: typeof ApiAgentsAgentIdInteractionsSessionIdRoute
     }
+    '/api/agents/$agentId/engine/session/$sessionId/title': {
+      id: '/api/agents/$agentId/engine/session/$sessionId/title'
+      path: '/title'
+      fullPath: '/api/agents/$agentId/engine/session/$sessionId/title'
+      preLoaderRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdTitleRouteImport
+      parentRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdRoute
+    }
+    '/api/agents/$agentId/engine/session/$sessionId/settings': {
+      id: '/api/agents/$agentId/engine/session/$sessionId/settings'
+      path: '/settings'
+      fullPath: '/api/agents/$agentId/engine/session/$sessionId/settings'
+      preLoaderRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdSettingsRouteImport
+      parentRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdRoute
+    }
+    '/api/agents/$agentId/engine/session/$sessionId/pin': {
+      id: '/api/agents/$agentId/engine/session/$sessionId/pin'
+      path: '/pin'
+      fullPath: '/api/agents/$agentId/engine/session/$sessionId/pin'
+      preLoaderRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdPinRouteImport
+      parentRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdRoute
+    }
     '/api/agents/$agentId/engine/session/$sessionId/messages': {
       id: '/api/agents/$agentId/engine/session/$sessionId/messages'
-      path: '/api/agents/$agentId/engine/session/$sessionId/messages'
+      path: '/messages'
       fullPath: '/api/agents/$agentId/engine/session/$sessionId/messages'
       preLoaderRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdMessagesRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdRoute
     }
     '/api/agents/$agentId/engine/session/$sessionId/input': {
       id: '/api/agents/$agentId/engine/session/$sessionId/input'
-      path: '/api/agents/$agentId/engine/session/$sessionId/input'
+      path: '/input'
       fullPath: '/api/agents/$agentId/engine/session/$sessionId/input'
       preLoaderRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdInputRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdRoute
     }
     '/api/agents/$agentId/engine/session/$sessionId/events': {
       id: '/api/agents/$agentId/engine/session/$sessionId/events'
-      path: '/api/agents/$agentId/engine/session/$sessionId/events'
+      path: '/events'
       fullPath: '/api/agents/$agentId/engine/session/$sessionId/events'
       preLoaderRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdEventsRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdRoute
     }
     '/api/agents/$agentId/engine/session/$sessionId/detail': {
       id: '/api/agents/$agentId/engine/session/$sessionId/detail'
-      path: '/api/agents/$agentId/engine/session/$sessionId/detail'
+      path: '/detail'
       fullPath: '/api/agents/$agentId/engine/session/$sessionId/detail'
       preLoaderRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdDetailRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdRoute
     }
     '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/cancel': {
       id: '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/cancel'
-      path: '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/cancel'
+      path: '/turns/$turnId/cancel'
       fullPath: '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/cancel'
       preLoaderRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdCancelRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdRoute
+    }
+    '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/plan-decisions/$requestId': {
+      id: '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/plan-decisions/$requestId'
+      path: '/turns/$turnId/plan-decisions/$requestId'
+      fullPath: '/api/agents/$agentId/engine/session/$sessionId/turns/$turnId/plan-decisions/$requestId'
+      preLoaderRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdPlanDecisionsRequestIdRouteImport
+      parentRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdRoute
     }
   }
 }
@@ -4997,9 +5155,49 @@ const ApiAgentsAgentIdInteractionsSessionIdRouteWithChildren =
     ApiAgentsAgentIdInteractionsSessionIdRouteChildren,
   )
 
+interface ApiAgentsAgentIdEngineSessionSessionIdRouteChildren {
+  ApiAgentsAgentIdEngineSessionSessionIdDetailRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdDetailRoute
+  ApiAgentsAgentIdEngineSessionSessionIdEventsRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdEventsRoute
+  ApiAgentsAgentIdEngineSessionSessionIdInputRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdInputRoute
+  ApiAgentsAgentIdEngineSessionSessionIdMessagesRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdMessagesRoute
+  ApiAgentsAgentIdEngineSessionSessionIdPinRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdPinRoute
+  ApiAgentsAgentIdEngineSessionSessionIdSettingsRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdSettingsRoute
+  ApiAgentsAgentIdEngineSessionSessionIdTitleRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdTitleRoute
+  ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdCancelRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdCancelRoute
+  ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdPlanDecisionsRequestIdRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdPlanDecisionsRequestIdRoute
+}
+
+const ApiAgentsAgentIdEngineSessionSessionIdRouteChildren: ApiAgentsAgentIdEngineSessionSessionIdRouteChildren =
+  {
+    ApiAgentsAgentIdEngineSessionSessionIdDetailRoute:
+      ApiAgentsAgentIdEngineSessionSessionIdDetailRoute,
+    ApiAgentsAgentIdEngineSessionSessionIdEventsRoute:
+      ApiAgentsAgentIdEngineSessionSessionIdEventsRoute,
+    ApiAgentsAgentIdEngineSessionSessionIdInputRoute:
+      ApiAgentsAgentIdEngineSessionSessionIdInputRoute,
+    ApiAgentsAgentIdEngineSessionSessionIdMessagesRoute:
+      ApiAgentsAgentIdEngineSessionSessionIdMessagesRoute,
+    ApiAgentsAgentIdEngineSessionSessionIdPinRoute:
+      ApiAgentsAgentIdEngineSessionSessionIdPinRoute,
+    ApiAgentsAgentIdEngineSessionSessionIdSettingsRoute:
+      ApiAgentsAgentIdEngineSessionSessionIdSettingsRoute,
+    ApiAgentsAgentIdEngineSessionSessionIdTitleRoute:
+      ApiAgentsAgentIdEngineSessionSessionIdTitleRoute,
+    ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdCancelRoute:
+      ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdCancelRoute,
+    ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdPlanDecisionsRequestIdRoute:
+      ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdPlanDecisionsRequestIdRoute,
+  }
+
+const ApiAgentsAgentIdEngineSessionSessionIdRouteWithChildren =
+  ApiAgentsAgentIdEngineSessionSessionIdRoute._addFileChildren(
+    ApiAgentsAgentIdEngineSessionSessionIdRouteChildren,
+  )
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SplatRoute: SplatRoute,
+  AgentsRoute: AgentsRoute,
   ConductorRoute: ConductorRoute,
   DashboardRoute: DashboardRoute,
   EchoStudioRoute: EchoStudioRoute,
@@ -5009,6 +5207,7 @@ const rootRouteChildren: RootRouteChildren = {
   McpRoute: McpRoute,
   MemoryRoute: MemoryRoute,
   MissionControlRoute: MissionControlRoute,
+  MissionsRoute: MissionsRoute,
   OperationsRoute: OperationsRoute,
   ProfilesRoute: ProfilesRoute,
   ReserveRoute: ReserveRoute,
@@ -5113,6 +5312,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentRuntimeInstallRoute: ApiAgentRuntimeInstallRoute,
   ApiAgentRuntimeStatusRoute: ApiAgentRuntimeStatusRoute,
   ApiAgentsOperationsRoute: ApiAgentsOperationsRoute,
+  ApiAgentsSnapshotRoute: ApiAgentsSnapshotRoute,
   ApiAgentsStatusRoute: ApiAgentsStatusRoute,
   ApiClaudeCodeSettingsRoute: ApiClaudeCodeSettingsRoute,
   ApiClaudeProxySplatRoute: ApiClaudeProxySplatRoute,
@@ -5179,18 +5379,10 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentsAgentIdInteractionsSessionIdRoute:
     ApiAgentsAgentIdInteractionsSessionIdRouteWithChildren,
   ApiRunsSessionKeyRunIdAbandonRoute: ApiRunsSessionKeyRunIdAbandonRoute,
+  ApiAgentsAgentIdEngineSessionSessionIdRoute:
+    ApiAgentsAgentIdEngineSessionSessionIdRouteWithChildren,
   ApiAgentsAgentIdRunsRunIdInterruptRoute:
     ApiAgentsAgentIdRunsRunIdInterruptRoute,
-  ApiAgentsAgentIdEngineSessionSessionIdDetailRoute:
-    ApiAgentsAgentIdEngineSessionSessionIdDetailRoute,
-  ApiAgentsAgentIdEngineSessionSessionIdEventsRoute:
-    ApiAgentsAgentIdEngineSessionSessionIdEventsRoute,
-  ApiAgentsAgentIdEngineSessionSessionIdInputRoute:
-    ApiAgentsAgentIdEngineSessionSessionIdInputRoute,
-  ApiAgentsAgentIdEngineSessionSessionIdMessagesRoute:
-    ApiAgentsAgentIdEngineSessionSessionIdMessagesRoute,
-  ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdCancelRoute:
-    ApiAgentsAgentIdEngineSessionSessionIdTurnsTurnIdCancelRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

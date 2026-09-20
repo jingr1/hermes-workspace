@@ -82,11 +82,12 @@ export const MOBILE_NAV_TABS: Array<TabItem> = [
     match: (p) => p.startsWith('/jobs'),
   },
   {
-    id: 'mission-control',
+    id: 'missions',
     label: 'Missions',
     icon: Target02Icon,
-    to: '/mission-control',
-    match: (p) => p.startsWith('/mission-control'),
+    to: '/missions',
+    match: (p) =>
+      p.startsWith('/missions') || p.startsWith('/mission-control'),
   },
   {
     id: 'swarm',
@@ -110,11 +111,14 @@ export const MOBILE_NAV_TABS: Array<TabItem> = [
     match: (p) => p.startsWith('/mcp'),
   },
   {
-    id: 'profiles',
-    label: 'Profiles',
+    id: 'agents',
+    label: 'Agents',
     icon: UserGroupIcon,
-    to: '/profiles',
-    match: (p) => p.startsWith('/profiles'),
+    to: '/agents',
+    match: (p) =>
+      p.startsWith('/agents') ||
+      p.startsWith('/operations') ||
+      p.startsWith('/profiles'),
   },
   {
     id: 'settings',

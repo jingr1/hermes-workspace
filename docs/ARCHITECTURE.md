@@ -163,7 +163,8 @@ Python 包 `hermes_langgraph_orchestrator/`，把 mission 执行建模为**声�
 ┌─ daemon host（agorax-agent-daemon，tutti daemon 复制体）─────────────┐
 │  生命周期 owner：Session/Turn/Interaction 真相源在其 SQLite            │
 │  REST  /v1/workspaces/{ws}/agent-sessions（list/create/input/cancel/ │
-│        interactions/activity[afterVersion,limit]）                   │
+│        interactions/activity[afterVersion,limit]/title/pin/settings/│
+│        delete/composer-options/plan-decisions/goal）                 │
 │  WS    /v1/events/ws  tutti envelope（id/topic/version/emittedAt/    │
 │        scope/payload；payload.eventType ∈ message_delta|message_update│
 │        |turn_update|interaction_update|session_reconcile_required）  │
@@ -196,7 +197,8 @@ Python 包 `hermes_langgraph_orchestrator/`，把 mission 执行建模为**声�
 
 - **事件 = 提示，canonical 读兜底**（tutti 铁律）：WS/SSE 事件带完整 payload，前端 envelope 校验 + 版本连续性判断后 inline 应用；帧解析失败、版本缺口、断线重连 → 原地 dispatch reconcile，经 detail / `afterVersion` 增量读修复。daemon WS 对滞后订阅者丢帧时发 `session_reconcile_required`。
 - **状态所有权**：daemon host = Session/Turn/Interaction 生命周期 owner（SQLite 真相源）；activity-core engine = 前端 canonical state owner（不可变 snapshot + selectors）；群聊 / mission / Swarm / sidebar 只投影，不双写生命周期事实。
-- **Legacy 兼容路径**：`router.ts` + `agorax-managed-agent-bridge.ts` + `transport.ts`（daemon WS → `agorax-managed-agent-events.ts` 的 canonical→`AgentStreamEvent` 转换）仍为群聊 managed turn 与旧 `POST /api/agents/:id/chat` 路由服务；transport 未配置（无 `AGORAX_MANAGED_AGENT_URL`）时回退 spawn adapter（`claude-code-adapter.ts` spawn `claude -p --output-format stream-json`、`codex-adapter.ts`）。Hermes = `HermesAdapterStub`（只 probe gateway，执行仍走 swarm-dispatch 老路——"hermes 完全不动"）。
+- **Legacy 兼容路径**：`router.ts` + `agorax-managed-agent-bridge.ts` + `transport.ts`（daemon WS → `agorax-managed-agent-events.ts` 的 canonical→`AgentStreamEvent` 转换）仍为群聊 managed turn 与旧 `POST /api/agents/:id/chat` 路由服务；transport 未配置（无 `AGORAX_MANAGED_AGENT_URL`）时回退 spawn adapter（`claude-code-adapter.ts` spawn `claude -p --output-format stream-json`、`codex-adapter.ts`）。Hermes = `HermesAdapterStub`（只 probe gateway，执行仍走 swarm-dispatch / send-stream）。**Native bridge skeleton**（`hermes-native-bridge.ts`，见 [`docs/hermes-native-bridge.md`](./hermes-native-bridge.md)）定义 `agorax_run_mapping` 与 Create/Send stubs，不替换 stub/tmux。
+- **Host REST 出口（daemon）**：session title/delete/pin/settings、composer-options（诚实空目录）、plan-decision、goal 只读已挂到 `agorax-agentd`；Workspace engine 路由与 activity adapter 已接线 rename/delete/pin。
 - **回合执行**（`run-managed-turn.ts`）：群聊 managed turn 与 legacy chat 共用；issueRunToken → startRun → drain 事件（软截止顺延、硬顶 interrupt）；pending interaction 阻塞时软截止顺延。
 - **汇合推进**（`advance.ts`）：MCP `task_complete` → assignment 状态推进 → 派发下一 stage；内存 promise-chain 串行化（mission 状态在 JSON 文件，无 SQLite 事务保护）。
 - **进程治理**：`pid-registry.ts`（spawn 路径的崩溃重挂、SIGKILL interrupt）；`managed-chat-store.ts`（collab.db managed 会话/消息 + claude native session id `--resume` 配对，sidebar 列表投影；daemon 路径下消息真相源在 daemon，store 只做关联/展示）。
@@ -325,7 +327,7 @@ legacy `POST /api/agents/:id/chat`（SSE spawn 路径）仍保留供兼容，前
 
 - **mission 状态 JSON/SQLite 双写**：swarm-missions.json 与 collab.db 存在漂移风险，靠 `reconcileOnBoot` 缓解，未根治。
 - **deepseek-harness adapter 未交付**（`UnavailableAdapter` 占位）。
-- **Hermes adapter 仍走老路**：`HermesAdapterStub` 只 probe 不执行，1:1 群聊与 swarm 分发两套路径并存。
+- **Hermes adapter 仍走老路**：`HermesAdapterStub` 只 probe 不执行，1:1 群聊与 swarm 分发两套路径并存；native bridge Phase 0–1 仅骨架（见 `docs/hermes-native-bridge.md`）。
 - **GitHub 仓库未更名**：包名/镜像名已是 agorax，但仓库路径仍为 `outsourc-e/hermes-workspace`（更新器与命名合同中按 legacy 处理）；仓库更名后需同步 `claude-update.ts` 的 remote 定义与 compose 镜像引用。
 - 文档基线漂移：`docs/swarm/SWARM_ARCHITECTURE_OVERVIEW.md` 基于 v2.3.0，roster 真相已迁至 AGENTS.md + agents.yaml。
 

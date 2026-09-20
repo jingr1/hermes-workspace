@@ -220,7 +220,7 @@ export function PipelineView({
   onSelectTask,
 }: {
   selectedTaskId: string | null
-  onSelectTask: (taskId: string) => void
+  onSelectTask: (taskId: string | null) => void
 }) {
   const tasksQuery = useQuery({
     queryKey: TASKS_QUERY_KEY,

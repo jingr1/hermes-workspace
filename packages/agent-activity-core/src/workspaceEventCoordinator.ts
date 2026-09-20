@@ -213,19 +213,27 @@ export function createAgentActivityWorkspaceEventCoordinator({
     ) {
       return snapshotCache.projected;
     }
+    // Callers must pass AgentActivitySnapshot (via the activity projector),
+    // never raw engine state. Guard the record so a bad host wire-up fails
+    // closed to an empty projection instead of throwing in Object.keys.
+    const canonicalMessagesById = canonical.sessionMessagesById ?? {};
     const sessionIds = new Set([
-      ...Object.keys(canonical.sessionMessagesById),
+      ...Object.keys(canonicalMessagesById),
       ...overlaySessionIds
     ]);
     if (sessionIds.size === 0) {
-      snapshotCache = { canonical, projected: canonical, revision };
-      return canonical;
+      const projected =
+        canonical.sessionMessagesById === canonicalMessagesById
+          ? canonical
+          : { ...canonical, sessionMessagesById: canonicalMessagesById };
+      snapshotCache = { canonical, projected, revision };
+      return projected;
     }
-    const sessionMessagesById = { ...canonical.sessionMessagesById };
+    const sessionMessagesById = { ...canonicalMessagesById };
     for (const agentSessionId of sessionIds) {
       sessionMessagesById[agentSessionId] = overlay.project(
         { agentSessionId, workspaceId: normalizedWorkspaceId },
-        canonical.sessionMessagesById[agentSessionId] ?? EMPTY_MESSAGES
+        canonicalMessagesById[agentSessionId] ?? EMPTY_MESSAGES
       );
     }
     const projected = { ...canonical, sessionMessagesById };

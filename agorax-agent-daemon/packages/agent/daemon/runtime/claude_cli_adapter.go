@@ -2,9 +2,12 @@ package agentruntime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -668,6 +671,10 @@ func claudeRootProviderTurnCompletedEvent(
 // assembles the argv. The prompt travels as one positional argument after
 // `--` (Claude Code print mode), never through a shell: no sh -c / cmd /c
 // string is constructed anywhere on this path.
+//
+// When session.RuntimeContext carries agoraxMissionMcp {endpoint, runToken},
+// a per-run mcp-config.json is written and --mcp-config + HERMES_MCP_TOKEN
+// are injected (parity with the TypeScript ClaudeCodeAdapter).
 func (a *claudeCLIAdapter) buildLaunch(
 	ctx context.Context,
 	session Session,
@@ -692,7 +699,69 @@ func (a *claudeCLIAdapter) buildLaunch(
 	if err != nil {
 		return nil, nil, err
 	}
+	mcpConfigPath, mcpToken, mcpErr := writeAgoraxMissionMcpConfig(session)
+	if mcpErr != nil {
+		return nil, nil, mcpErr
+	}
+	if mcpConfigPath != "" {
+		// Insert --mcp-config before the trailing `-- <prompt>` pair.
+		insertAt := len(argv) - 2
+		if insertAt < 1 {
+			insertAt = len(argv)
+		}
+		withMcp := make([]string, 0, len(argv)+2)
+		withMcp = append(withMcp, argv[:insertAt]...)
+		withMcp = append(withMcp, "--mcp-config", mcpConfigPath)
+		withMcp = append(withMcp, argv[insertAt:]...)
+		argv = withMcp
+		if mcpToken != "" {
+			env = append(env, "HERMES_MCP_TOKEN="+mcpToken)
+		}
+	}
 	return argv, env, nil
+}
+
+// writeAgoraxMissionMcpConfig materializes a per-run Claude MCP config when
+// RuntimeContext.agoraxMissionMcp is present. Returns ("", "", nil) when
+// no MCP handshake was attached.
+func writeAgoraxMissionMcpConfig(session Session) (configPath string, runToken string, err error) {
+	raw, ok := session.RuntimeContext["agoraxMissionMcp"]
+	if !ok || raw == nil {
+		return "", "", nil
+	}
+	asMap, ok := raw.(map[string]any)
+	if !ok {
+		return "", "", nil
+	}
+	endpoint, _ := asMap["endpoint"].(string)
+	token, _ := asMap["runToken"].(string)
+	endpoint = strings.TrimSpace(endpoint)
+	token = strings.TrimSpace(token)
+	if endpoint == "" || token == "" {
+		return "", "", nil
+	}
+	dir, err := os.MkdirTemp("", "agorax-claude-mcp-*")
+	if err != nil {
+		return "", "", fmt.Errorf("create mcp config dir: %w", err)
+	}
+	path := filepath.Join(dir, "mcp-config.json")
+	body, err := json.Marshal(map[string]any{
+		"mcpServers": map[string]any{
+			"hermes-workspace": map[string]any{
+				"url": endpoint,
+				"headers": map[string]string{
+					"Authorization": "Bearer ${HERMES_MCP_TOKEN}",
+				},
+			},
+		},
+	})
+	if err != nil {
+		return "", "", err
+	}
+	if err := os.WriteFile(path, body, 0o600); err != nil {
+		return "", "", fmt.Errorf("write mcp config: %w", err)
+	}
+	return path, token, nil
 }
 
 // permissionArgv resolves the permission-policy argv segment for one launch:

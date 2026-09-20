@@ -3,14 +3,14 @@ import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../server/auth-middleware'
 import { AgoraxManagedAgentHttpClient } from '../../../server/agent-runtime/agorax-managed-agent-http-client'
 import { AGENT_PROVIDER_IDS } from '@/lib/managed-agent-runtime/provider-status'
+import { applyAgentUpdate } from '../../../server/update-system'
 
-const PROVIDER_ID_SET = new Set<string>(AGENT_PROVIDER_IDS)
+const PROVIDER_ID_SET = new Set<string>([...AGENT_PROVIDER_IDS, 'hermes'])
 
 /**
- * POST /api/agent-runtime/install — triggers a managed npm install/upgrade
- * for one provider runtime through the embedded Managed Agent daemon. Body:
- * `{ provider: string, version?: string }`. Idempotent on the daemon side
- * (an already-satisfied install returns 200 "already").
+ * POST /api/agent-runtime/install — managed npm install/upgrade for daemon
+ * providers, or Hermes Agent git upgrade via `applyAgentUpdate` when
+ * `provider=hermes`. Body: `{ provider: string, version?: string }`.
  */
 export const Route = createFileRoute('/api/agent-runtime/install')({
   server: {
@@ -33,6 +33,31 @@ export const Route = createFileRoute('/api/agent-runtime/install')({
             { error: `unknown provider ${provider}` },
             { status: 400 },
           )
+        }
+        if (provider === 'hermes') {
+          try {
+            const result = await applyAgentUpdate()
+            if (!result.ok) {
+              return json(
+                { error: result.error || 'Hermes Agent update failed' },
+                { status: 502 },
+              )
+            }
+            return json({
+              provider: 'hermes',
+              status: 'installed' as const,
+              version: result.status?.version,
+            })
+          } catch (error) {
+            return json(
+              {
+                error: `Hermes Agent update failed: ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+              },
+              { status: 502 },
+            )
+          }
         }
         const baseUrl = process.env.AGORAX_MANAGED_AGENT_URL?.trim()
         if (!baseUrl) {

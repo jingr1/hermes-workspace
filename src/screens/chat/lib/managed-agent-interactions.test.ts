@@ -139,7 +139,7 @@ describe('projectManagedAgentInteraction — question', () => {
 })
 
 describe('projectManagedAgentInteraction — plan', () => {
-  it('projects a read-only plan info card (supportsResponse = false)', () => {
+  it('projects a respondable plan info card (supportsResponse = true)', () => {
     const card = projectManagedAgentInteraction(
       interaction({
         kind: 'plan',
@@ -156,7 +156,7 @@ describe('projectManagedAgentInteraction — plan', () => {
       kind: 'plan',
       title: 'Exit plan mode',
       plan: { content: '1. Do the thing', filePath: '/tmp/plan.md' },
-      supportsResponse: false,
+      supportsResponse: true,
       actions: [],
     })
   })

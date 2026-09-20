@@ -100,6 +100,8 @@ export type ManagedAgentChat = {
   >
   error: string | null
   activeTitle: string
+  fileChanges: unknown
+  usage: unknown
   composer: ManagedAgentComposerState
   submit: (text: string, attachments: Array<ComposerAttachment>, options?: { effort?: string }) => Promise<void>
   abort: () => void
@@ -113,6 +115,7 @@ interface ManagedAgentChatRuntime {
   workspaceId: string
   engine: AgentSessionEngine
   coordinator: ReturnType<typeof createAgentActivityWorkspaceEventCoordinator>
+  projectCanonicalSnapshot: ReturnType<typeof createAgentActivitySnapshotProjector>
   bridge: ManagedAgentEventBridge
   executeSessionReconcile(
     command: SessionReconcileCommand,
@@ -122,7 +125,11 @@ interface ManagedAgentChatRuntime {
 
 const EMPTY_CHAT_STATE = {
   messages: [] as Array<ChatMessage>,
-  activeTurn: null,
+  activeTurn: null as ReturnType<typeof selectManagedAgentChatState>['activeTurn'],
+  latestTurn: null as ReturnType<typeof selectManagedAgentChatState>['latestTurn'],
+  fileChanges: null as ReturnType<typeof selectManagedAgentChatState>['fileChanges'],
+  usage: null as ReturnType<typeof selectManagedAgentChatState>['usage'],
+  sessionTitle: null as string | null,
   isStreaming: false,
   error: null as string | null,
   interactions: [] as Array<AgentActivityInteraction>,
@@ -299,6 +306,7 @@ export function useManagedAgentChat({
           displaySessionId,
           engine,
           executeSessionReconcile: (command, options) => executor.execute(command, options),
+          projectCanonicalSnapshot: projectSnapshot,
           workspaceId,
         }
         runtimeRef.current = runtime
@@ -438,9 +446,40 @@ export function useManagedAgentChat({
     () => engine?.getSnapshot() ?? null,
     () => engine?.getSnapshot() ?? null,
   )
-  const chatState = engineSnapshot
-    ? selectManagedAgentChatState(engineSnapshot, canonicalSessionIdRef.current)
-    : EMPTY_CHAT_STATE
+  // Overlay-only message_delta updates notify the coordinator, not the engine.
+  // Subscribe so streaming toolOutput / text patches re-render before reconcile.
+  const overlayEpochRef = useRef(0)
+  const overlayEpoch = useSyncExternalStore(
+    useCallback(
+      (listener) => {
+        const coordinator = runtimeRef.current?.coordinator
+        if (!engine || !coordinator) return () => undefined
+        return coordinator.subscribe(() => {
+          overlayEpochRef.current += 1
+          listener()
+        })
+      },
+      [engine],
+    ),
+    () => overlayEpochRef.current,
+    () => 0,
+  )
+  // coordinator.project expects AgentActivitySnapshot (projector output), never
+  // raw engine state. Engine selectors still own turns / interactions / composer.
+  const chatState = useMemo(() => {
+    if (!engineSnapshot) return EMPTY_CHAT_STATE
+    const agentSessionId = canonicalSessionIdRef.current
+    const runtime = runtimeRef.current
+    const sessionMessages =
+      runtime && agentSessionId
+        ? runtime.coordinator.project(
+            runtime.projectCanonicalSnapshot(engineSnapshot),
+          ).sessionMessagesById[agentSessionId]
+        : undefined
+    return selectManagedAgentChatState(engineSnapshot, agentSessionId, {
+      sessionMessages,
+    })
+  }, [engineSnapshot, overlayEpoch])
 
   // Per-interaction response settlement, straight from the engine's
   // interactionResponsesById — the panel joins these with the canonical
@@ -559,7 +598,35 @@ export function useManagedAgentChat({
   const respondToInteraction = useCallback(async (input: ManagedAgentInteractionResponseInput) => {
     const agentSessionId = canonicalSessionIdRef.current
     const runtime = runtimeRef.current
-    if (!runtime || !agentSessionId || !runtime.engine.submitInteractionResponse({ agentSessionId, ...input })) {
+    if (!runtime || !agentSessionId) {
+      throw new Error('Interaction response was not accepted')
+    }
+    // Plan implement writeback goes through Host plan-decision (Codex
+    // implement_prompt), not the generic interaction response path.
+    if (input.action === 'implement') {
+      const turnId = input.turnId.trim()
+      const workspaceId = runtime.engine.identity.workspaceId
+      const scopeKey = [
+        'plan-implementation',
+        workspaceId,
+        agentSessionId,
+        turnId,
+      ].join(':')
+      runtime.engine.dispatch({
+        type: 'plan/decisionRequested',
+        action: 'implement',
+        agentSessionId,
+        commandId: `plan-decision:${scopeKey}`,
+        idempotencyKey: scopeKey,
+        promptKind: 'plan-implementation',
+        requestId: turnId,
+        turnId,
+        workspaceId,
+        timeoutMs: 30_000,
+      })
+      return
+    }
+    if (!runtime.engine.submitInteractionResponse({ agentSessionId, ...input })) {
       throw new Error('Interaction response was not accepted')
     }
   }, [])
@@ -581,10 +648,11 @@ export function useManagedAgentChat({
   }, [setActiveSessionId])
 
   const activeTitle = useMemo(() => {
+    if (chatState.sessionTitle) return chatState.sessionTitle.slice(0, 80)
     const firstUser = chatState.messages.find((message) => message.role === 'user')
     const text = firstUser?.content?.find((part) => part.type === 'text')
     return text?.type === 'text' && text.text ? text.text.slice(0, 40) : 'Chat'
-  }, [chatState.messages])
+  }, [chatState.messages, chatState.sessionTitle])
 
   return {
     activeSessionId,
@@ -593,6 +661,8 @@ export function useManagedAgentChat({
     activeToolCalls: chatState.activeToolCalls,
     interactions: [...chatState.interactions],
     interactionResponses,
+    fileChanges: chatState.fileChanges,
+    usage: chatState.usage,
     error: error ?? chatState.error,
     activeTitle,
     composer,

@@ -45,7 +45,7 @@ async function fetchProviderStatus(): Promise<AgentProviderStatusListDto> {
 }
 
 async function installProvider(input: {
-  provider: AgentProviderId
+  provider: AgentProviderId | 'hermes'
   version?: string
 }): Promise<AgentProviderInstallResultDto> {
   const response = await fetch('/api/agent-runtime/install', {

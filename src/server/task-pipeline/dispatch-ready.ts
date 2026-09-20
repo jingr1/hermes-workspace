@@ -12,6 +12,7 @@
  */
 import { dispatchSwarmAssignments } from '../../routes/api/swarm-dispatch'
 import { dispatchAssignment } from '../agent-runtime/dispatch'
+import { installAdvanceBridge } from '../agent-runtime/advance'
 import { getAgentRuntimeRouter } from '../agent-runtime/router'
 import {
   getSwarmMission,
@@ -24,6 +25,14 @@ import { syncLaneFromMission } from './lane-sync'
 // naturally imported by the hermes/swarm checkpoint path; pulling it in here
 // (dispatch-ready is imported by swarm-dispatch/task-service) wires it up.
 import './review'
+
+// Production Mission MCP → assignment advance: task_complete drives the next
+// ready stage. Idempotent; tests may reinstall with custom dispatchNext.
+installAdvanceBridge({
+  dispatchNext: async ({ missionId, assignmentId }) => {
+    await dispatchAssignment({ missionId, assignmentId })
+  },
+})
 
 export type DispatchedAssignmentSummary = {
   assignmentId: string

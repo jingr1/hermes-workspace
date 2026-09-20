@@ -16,6 +16,7 @@ import {
   CpuIcon,
   Clock01Icon,
   Alert01Icon,
+  AnalyticsUpIcon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Button } from '@/components/ui/button'
@@ -49,7 +50,13 @@ type AvailableModel = {
   name: string
 }
 
-type Tab = 'identity' | 'model' | 'capabilities' | 'schedule' | 'activity'
+type Tab =
+  | 'identity'
+  | 'model'
+  | 'capabilities'
+  | 'schedule'
+  | 'activity'
+  | 'usage'
 
 const TABS: Array<{ id: Tab; label: string; icon: typeof UserSquareIcon }> = [
   { id: 'identity', label: 'Identity', icon: UserSquareIcon },
@@ -57,6 +64,7 @@ const TABS: Array<{ id: Tab; label: string; icon: typeof UserSquareIcon }> = [
   { id: 'capabilities', label: 'Capabilities', icon: PuzzleIcon },
   { id: 'schedule', label: 'Schedule', icon: Calendar01Icon },
   { id: 'activity', label: 'Activity', icon: ViewIcon },
+  { id: 'usage', label: 'Usage', icon: AnalyticsUpIcon },
 ]
 
 function normalizeModel(
@@ -205,30 +213,96 @@ function ModelSelector({
 // ---------------------------------------------------------------------------
 
 function IdentityTab({
+  agentId,
   name,
   emoji,
   description,
   systemPrompt,
+  isActiveProfile,
   onName,
   onEmoji,
   onDescription,
   onSystemPrompt,
+  onActivate,
+  isActivating,
+  onRename,
+  isRenaming,
 }: {
+  agentId: string
   name: string
   emoji: string
   description: string
   systemPrompt: string
+  isActiveProfile: boolean
   onName: (v: string) => void
   onEmoji: (v: string) => void
   onDescription: (v: string) => void
   onSystemPrompt: (v: string) => void
+  onActivate: () => void
+  isActivating: boolean
+  onRename: (newName: string) => void
+  isRenaming: boolean
 }) {
+  const [renameOpen, setRenameOpen] = useState(false)
+  const [renameValue, setRenameValue] = useState(agentId)
+
+  useEffect(() => {
+    setRenameValue(agentId)
+    setRenameOpen(false)
+  }, [agentId])
+
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        {isActiveProfile ? (
+          <span className="inline-flex items-center rounded-full border border-emerald-300/50 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+            Active profile
+          </span>
+        ) : (
+          <Button
+            type="button"
+            variant="secondary"
+            className="border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
+            onClick={onActivate}
+            disabled={isActivating || agentId === 'default'}
+          >
+            {isActivating ? 'Activating…' : 'Activate profile'}
+          </Button>
+        )}
+        <Button
+          type="button"
+          variant="secondary"
+          className="border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
+          onClick={() => setRenameOpen((v) => !v)}
+          disabled={isRenaming || agentId === 'default'}
+        >
+          Rename profile
+        </Button>
+      </div>
+
+      {renameOpen ? (
+        <div className="flex flex-col gap-2 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3 sm:flex-row sm:items-center">
+          <input
+            value={renameValue}
+            onChange={(event) => setRenameValue(event.target.value)}
+            placeholder="new-profile-id"
+            className="w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-3 py-2 text-sm outline-none focus:border-[var(--theme-accent)]"
+          />
+          <Button
+            type="button"
+            className="bg-[var(--theme-accent)] text-primary-950 hover:bg-[var(--theme-accent-strong)]"
+            disabled={isRenaming || !renameValue.trim()}
+            onClick={() => onRename(renameValue.trim())}
+          >
+            {isRenaming ? 'Renaming…' : 'Confirm rename'}
+          </Button>
+        </div>
+      ) : null}
+
       <div className="grid gap-4 md:grid-cols-[1.2fr_0.6fr]">
         <label className="space-y-2">
           <span className="text-sm font-medium text-[var(--theme-text)]">
-            Name
+            Display name
           </span>
           <input
             value={name}
@@ -268,6 +342,89 @@ function IdentityTab({
           className="min-h-[220px] w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)]"
         />
       </label>
+    </div>
+  )
+}
+
+function UsageTab({ agent }: { agent: OperationsAgent }) {
+  const usage = agent.usage
+  if (!usage) {
+    return (
+      <div className="rounded-2xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-6 text-sm text-[var(--theme-muted)]">
+        Loading usage metrics…
+      </div>
+    )
+  }
+
+  const tiles = [
+    { label: 'Sessions', value: String(usage.sessionCount) },
+    { label: 'Messages', value: String(usage.messageCount) },
+    { label: 'Tool calls', value: String(usage.toolCallCount) },
+    { label: 'Tokens', value: usage.totalTokens.toLocaleString() },
+    {
+      label: 'Est. cost',
+      value:
+        usage.estimatedCostUsd != null
+          ? `$${usage.estimatedCostUsd.toFixed(2)}`
+          : '—',
+    },
+    { label: 'Cron jobs', value: String(usage.cronJobCount) },
+    { label: 'Assigned tasks', value: String(usage.assignedTaskCount) },
+    {
+      label: 'Gateway',
+      value: `${usage.gatewayState}${usage.processAlive ? ' · alive' : ''}`,
+    },
+  ]
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {tiles.map((tile) => (
+          <div
+            key={tile.label}
+            className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3"
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)]">
+              {tile.label}
+            </p>
+            <p className="mt-1 text-sm font-semibold text-[var(--theme-text)]">
+              {tile.value}
+            </p>
+          </div>
+        ))}
+      </div>
+      <div className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-muted)]">
+        <p>
+          Telegram:{' '}
+          <span className="text-[var(--theme-text)]">
+            {usage.telegramState || 'unknown'}
+          </span>
+        </p>
+        <p className="mt-1">
+          Last session:{' '}
+          <span className="text-[var(--theme-text)]">
+            {usage.lastSessionTitle || '—'}
+            {usage.lastSessionAt
+              ? ` · ${formatRelativeTime(usage.lastSessionAt)}`
+              : ''}
+          </span>
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Link
+            to="/tasks"
+            search={{ assignee: agent.id }}
+            className="rounded-lg border border-[var(--theme-border)] px-3 py-1.5 text-xs font-medium text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
+          >
+            View tasks
+          </Link>
+          <a
+            href={`/jobs?agent=${encodeURIComponent(agent.id)}`}
+            className="rounded-lg border border-[var(--theme-border)] px-3 py-1.5 text-xs font-medium text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
+          >
+            View jobs
+          </a>
+        </div>
+      </div>
     </div>
   )
 }
@@ -925,6 +1082,10 @@ export function OperationsAgentDetail({
   onClose,
   onSave,
   onDelete,
+  onActivate,
+  isActivating,
+  onRename,
+  isRenaming,
   isSaving,
   isDeleting,
   onToggleSkill,
@@ -946,6 +1107,13 @@ export function OperationsAgentDetail({
     description?: string
   }) => Promise<unknown>
   onDelete: (agentId: string) => Promise<unknown>
+  onActivate: (agentId: string) => Promise<unknown>
+  isActivating: boolean
+  onRename: (input: {
+    oldName: string
+    newName: string
+  }) => Promise<unknown>
+  isRenaming: boolean
   isSaving: boolean
   isDeleting: boolean
   onToggleSkill: (input: {
@@ -1090,14 +1258,22 @@ export function OperationsAgentDetail({
         <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6">
           {activeTab === 'identity' ? (
             <IdentityTab
+              agentId={agent.id}
               name={name}
               emoji={emoji}
               description={description}
               systemPrompt={systemPrompt}
+              isActiveProfile={agent.isActiveProfile}
               onName={setName}
               onEmoji={setEmoji}
               onDescription={setDescription}
               onSystemPrompt={setSystemPrompt}
+              onActivate={() => void onActivate(agent.id)}
+              isActivating={isActivating}
+              onRename={(newName) =>
+                void onRename({ oldName: agent.id, newName })
+              }
+              isRenaming={isRenaming}
             />
           ) : activeTab === 'model' ? (
             <ModelTab
@@ -1120,6 +1296,8 @@ export function OperationsAgentDetail({
             />
           ) : activeTab === 'schedule' ? (
             <ScheduleTab agent={agent} onClose={onClose} />
+          ) : activeTab === 'usage' ? (
+            <UsageTab agent={agent} />
           ) : (
             <ActivityTab agent={agent} />
           )}

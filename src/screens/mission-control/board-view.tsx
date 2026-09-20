@@ -1,10 +1,11 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { KanbanLane, TaskSummary } from '@/lib/mission-control-api'
 import { cn } from '@/lib/utils'
 import { fetchTasks } from '@/lib/mission-control-api'
+import { CreateTaskButton } from './components/create-task-button'
 
 const LANES: Array<{ id: KanbanLane; label: string }> = [
   { id: 'backlog', label: 'Backlog' },
@@ -27,11 +28,81 @@ const LANE_COLORS: Record<KanbanLane, string> = {
 
 const TASKS_QUERY_KEY = ['mission-control', 'tasks'] as const
 
+type TaskKpiFilter = 'all' | 'in_progress' | 'blocked' | 'pending_human' | 'done'
+
+function resolveLane(task: TaskSummary): KanbanLane {
+  const lane =
+    (task.derivedLane ?? task.lane) === 'ready'
+      ? 'todo'
+      : (task.derivedLane ?? task.lane)
+  return lane
+}
+
+function isInProgress(task: TaskSummary): boolean {
+  const lane = resolveLane(task)
+  return lane === 'running' || lane === 'review' || lane === 'todo'
+}
+
+function isBlocked(task: TaskSummary): boolean {
+  return resolveLane(task) === 'blocked'
+}
+
+function isPendingHuman(task: TaskSummary): boolean {
+  if (isBlocked(task)) return true
+  const state = (task.missionState ?? '').toLowerCase()
+  return (
+    state.includes('needs_human') ||
+    state.includes('needs_input') ||
+    state.includes('pending')
+  )
+}
+
+function isDone(task: TaskSummary): boolean {
+  return resolveLane(task) === 'done'
+}
+
+function KpiChip({
+  label,
+  value,
+  active,
+  tone,
+  onClick,
+}: {
+  label: string
+  value: number
+  active: boolean
+  tone: 'slate' | 'amber' | 'rose' | 'emerald'
+  onClick: () => void
+}) {
+  const toneClasses = {
+    slate: 'border-slate-400/30 data-[active=true]:bg-slate-500/15',
+    amber: 'border-amber-400/30 data-[active=true]:bg-amber-500/15',
+    rose: 'border-rose-400/30 data-[active=true]:bg-rose-500/15',
+    emerald: 'border-emerald-400/30 data-[active=true]:bg-emerald-500/15',
+  }
+  return (
+    <button
+      type="button"
+      data-active={active}
+      onClick={onClick}
+      className={cn(
+        'flex min-w-[7rem] flex-1 items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left transition-colors hover:bg-[var(--theme-hover)]',
+        toneClasses[tone],
+        active && 'ring-1 ring-[var(--theme-accent)]',
+      )}
+    >
+      <span className="text-[11px] text-[var(--theme-muted)]">{label}</span>
+      <span className="text-sm font-semibold tabular-nums">{value}</span>
+    </button>
+  )
+}
+
 export function BoardView({
   onSelectTask,
 }: {
   onSelectTask: (taskId: string) => void
 }) {
+  const [kpiFilter, setKpiFilter] = useState<TaskKpiFilter>('all')
   const tasksQuery = useQuery({
     queryKey: TASKS_QUERY_KEY,
     queryFn: fetchTasks,
@@ -40,68 +111,148 @@ export function BoardView({
 
   const tasks = tasksQuery.data?.tasks ?? []
 
+  const kpi = useMemo(() => {
+    let inProgress = 0
+    let blocked = 0
+    let pendingHuman = 0
+    let done = 0
+    for (const task of tasks) {
+      if (isDone(task)) done += 1
+      if (isInProgress(task)) inProgress += 1
+      if (isBlocked(task)) blocked += 1
+      if (isPendingHuman(task)) pendingHuman += 1
+    }
+    return { inProgress, blocked, pendingHuman, done }
+  }, [tasks])
+
+  const filteredTasks = useMemo(() => {
+    switch (kpiFilter) {
+      case 'in_progress':
+        return tasks.filter(isInProgress)
+      case 'blocked':
+        return tasks.filter(isBlocked)
+      case 'pending_human':
+        return tasks.filter(isPendingHuman)
+      case 'done':
+        return tasks.filter(isDone)
+      default:
+        return tasks
+    }
+  }, [tasks, kpiFilter])
+
   const byLane = useMemo(() => {
     const map = new Map<KanbanLane, Array<TaskSummary>>()
     for (const lane of LANES) map.set(lane.id, [])
-    for (const task of tasks) {
-      const lane =
-        (task.derivedLane ?? task.lane) === 'ready'
-          ? 'todo'
-          : (task.derivedLane ?? task.lane)
+    for (const task of filteredTasks) {
+      const lane = resolveLane(task)
       const bucket = map.get(lane) ?? map.get('backlog')!
       bucket.push(task)
     }
     return map
-  }, [tasks])
+  }, [filteredTasks])
+
+  function toggleFilter(next: TaskKpiFilter) {
+    setKpiFilter((prev) => (prev === next ? 'all' : next))
+  }
+
+  if (!tasksQuery.isLoading && tasks.length === 0) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
+        <div className="max-w-sm space-y-2">
+          <h2 className="text-base font-semibold">No missions yet</h2>
+          <p className="text-sm text-[var(--theme-muted)]">
+            Create a task to start a multi-agent pipeline. Agent setup lives on
+            the Agents page.
+          </p>
+        </div>
+        <CreateTaskButton />
+      </div>
+    )
+  }
 
   return (
-    <div className="h-full overflow-x-auto overflow-y-hidden p-4">
-      <div className="flex h-full min-w-[900px] gap-3">
-        {LANES.map((lane) => {
-          const laneTasks = byLane.get(lane.id) ?? []
-          return (
-            <div
-              key={lane.id}
-              className="flex w-64 flex-col rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)]"
-            >
+    <div className="flex h-full flex-col overflow-hidden">
+      <div className="shrink-0 border-b border-[var(--theme-border)] px-4 py-3 sm:px-6">
+        <div className="flex flex-wrap gap-2">
+          <KpiChip
+            label="In progress"
+            value={kpi.inProgress}
+            active={kpiFilter === 'in_progress'}
+            tone="amber"
+            onClick={() => toggleFilter('in_progress')}
+          />
+          <KpiChip
+            label="Blocked"
+            value={kpi.blocked}
+            active={kpiFilter === 'blocked'}
+            tone="rose"
+            onClick={() => toggleFilter('blocked')}
+          />
+          <KpiChip
+            label="Pending human"
+            value={kpi.pendingHuman}
+            active={kpiFilter === 'pending_human'}
+            tone="amber"
+            onClick={() => toggleFilter('pending_human')}
+          />
+          <KpiChip
+            label="Done"
+            value={kpi.done}
+            active={kpiFilter === 'done'}
+            tone="emerald"
+            onClick={() => toggleFilter('done')}
+          />
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden p-4">
+        <div className="flex h-full min-w-[900px] gap-3">
+          {LANES.map((lane) => {
+            const laneTasks = byLane.get(lane.id) ?? []
+            return (
               <div
-                className="flex items-center justify-between rounded-t-xl border-b border-[var(--theme-border)] px-3 py-2"
-                style={{
-                  borderTopWidth: 2,
-                  borderTopColor: LANE_COLORS[lane.id],
-                }}
+                key={lane.id}
+                className="flex w-64 flex-col rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)]"
               >
-                <span className="text-xs font-semibold">{lane.label}</span>
-                <span className="text-[10px] text-[var(--theme-muted)]">
-                  {laneTasks.length}
-                </span>
-              </div>
-              <div className="flex flex-col gap-2 overflow-y-auto p-2">
-                {laneTasks.map((task) => (
-                  <button
-                    key={task.cardId}
-                    type="button"
-                    onClick={() => onSelectTask(task.cardId)}
-                    className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3 text-left transition-colors hover:border-[var(--theme-accent)] hover:bg-[var(--theme-hover)]"
-                  >
-                    <div className="text-xs font-medium">{task.title}</div>
-                    <div className="mt-1 flex items-center gap-2 text-[10px] text-[var(--theme-muted)]">
-                      {task.currentAssignee && (
-                        <span>{task.currentAssignee}</span>
-                      )}
-                      <span>{task.progress}%</span>
+                <div
+                  className="flex items-center justify-between rounded-t-xl border-b border-[var(--theme-border)] px-3 py-2"
+                  style={{
+                    borderTopWidth: 2,
+                    borderTopColor: LANE_COLORS[lane.id],
+                  }}
+                >
+                  <span className="text-xs font-semibold">{lane.label}</span>
+                  <span className="text-[10px] text-[var(--theme-muted)]">
+                    {laneTasks.length}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-2 overflow-y-auto p-2">
+                  {laneTasks.map((task) => (
+                    <button
+                      key={task.cardId}
+                      type="button"
+                      onClick={() => onSelectTask(task.cardId)}
+                      className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3 text-left transition-colors hover:border-[var(--theme-accent)] hover:bg-[var(--theme-hover)]"
+                    >
+                      <div className="text-xs font-medium">{task.title}</div>
+                      <div className="mt-1 flex items-center gap-2 text-[10px] text-[var(--theme-muted)]">
+                        {task.currentAssignee && (
+                          <span>{task.currentAssignee}</span>
+                        )}
+                        <span>{task.progress}%</span>
+                      </div>
+                    </button>
+                  ))}
+                  {laneTasks.length === 0 && (
+                    <div className="py-6 text-center text-[10px] text-[var(--theme-muted)]">
+                      No tasks
                     </div>
-                  </button>
-                ))}
-                {laneTasks.length === 0 && (
-                  <div className="py-6 text-center text-[10px] text-[var(--theme-muted)]">
-                    No tasks
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
       </div>
     </div>
   )

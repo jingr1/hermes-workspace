@@ -170,9 +170,27 @@ function ManagedAgentInteractionCardView({
               {card.plan.content}
             </pre>
           ) : null}
-          <p className="mt-1 text-[11px] italic text-[var(--theme-muted)]">
-            暂不支持回写（plan decision 端点未接入）
-          </p>
+          {actionable ? (
+            <button
+              type="button"
+              disabled={!actionable}
+              onClick={() =>
+                void respond({
+                  turnId: card.turnId,
+                  // Host SubmitPlanDecision requires requestId === turnId.
+                  requestId: card.turnId,
+                  action: 'implement',
+                })
+              }
+              className="mt-2 border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1 text-[11px] font-medium text-[var(--theme-text)] hover:bg-[var(--theme-card2)] disabled:opacity-50"
+            >
+              执行计划
+            </button>
+          ) : (
+            <p className="mt-1 text-[11px] italic text-[var(--theme-muted)]">
+              计划已处理或当前不可回写
+            </p>
+          )}
         </div>
       ) : null}
 

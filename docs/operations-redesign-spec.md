@@ -1,4 +1,10 @@
-# Operations 页面重构设计方案
+# Operations / Agents 页面重构设计方案
+
+> **IA 更新（2026-09-20）：** 产品一级面最终路由为 **`/agents`**（不再以 Operations 为侧栏名）。  
+> Mission Control **Overview** 删除，能力拆入 Agents + Missions Board。  
+> 全站入口、redirect、Board KPI、`currentTask` 深链与分阶段计划见  
+> [`ia-missions-agents-merge.md`](./ia-missions-agents-merge.md)。  
+> 下文「Operations」均指 **Agents 页内部配置深度**；实现时 UI 文案与路由用 Agents。
 
 ## 1. 核心问题与设计原则
 
@@ -6,22 +12,23 @@
 
 - **定位模糊**：当前 Operations 页面想做 "persistent agent team"，但仅做了轻量的 profile 管理 + 会话拼接。
 - **能力浅**：每个 agent 的可配置项仅限 name、emoji、model、description、system prompt，缺少 skills、MCP、tools、workspace、env 等决定 agent 能力边界的关键字段。
-- **与 Swarm 重叠**：两个页面都在展示 "agent/worker" 卡片和状态，但 Operations 既没做深配置，也没做好业务产出聚合，导致用户感觉"看到的内容很少、跟 Swarm 重叠"。
+- **与 Swarm / Missions Overview 重叠**：多处展示 agent 卡片与 online/busy KPI，配置浅、态势口径不一致。
 - **数据分散**：profile、skills、MCP、providers 等配置分布在多个页面，没有一个按 agent 聚合的入口。
 
 ### 1.2 设计原则
 
-1. **Single source of agent truth**：一个 agent = 一个 Hermes profile，Operations 是这个 profile 的完整配置中心。
-2. **和 Swarm 明确分层**：
-   - Operations：agent 是什么、能做什么、用什么资源（静态配置）。
-   - Swarm：agent 现在跑没跑、tmux 里在干什么、mission 怎么编排（运行时）。
+1. **Single source of agent truth**：一个 agent = 一个 Hermes profile，**Agents（原 Operations）** 是这个 profile 的完整配置中心。
+2. **和 Missions / Swarm 明确分层**：
+   - Agents：agent 是什么、能做什么、用什么资源（配置 + 轻量健康/用量）。
+   - Missions：任务 Board / Pipeline（工作流）；**无 Overview agent 墙**。
+   - Swarm：tmux / dispatch / Human Gate / checkpoint（编排现场）。
 3. **角色模板化**：预设 role 应该是 "skills + MCP + tools + workspace + memory" 的组合包，而不仅仅是 system prompt 文案。
 4. **配置完整性检查**：每个 agent 的配置状态可视（model、provider、skill、MCP、tools 等），缺少关键项时给出明确提示。
-5. **轻量运行看板**：保留会话摘要、cron 任务、团队 activity feed，但不去做 Swarm 已经做好的运行时细节。
+5. **轻量运行看板**：保留会话摘要、cron 任务、团队 activity feed，但不去做 Swarm 已经做好的运行时细节，也不做 Missions Board。
 
 ## 2. 新定位
 
-Operations 重新定位为：
+Agents（原 Operations）重新定位为：
 
 > **Agent Team Headquarters（Agent 团队总部）**
 >
@@ -29,13 +36,14 @@ Operations 重新定位为：
 
 ### 2.1 与周边页面的边界
 
-| 页面               | 不再做                       | 交给 Operations                            | 交给 Swarm                                         |
+| 页面               | 不再做                       | 交给 Agents（原 Operations）               | 交给 Missions / Swarm                              |
 | ------------------ | ---------------------------- | ------------------------------------------ | -------------------------------------------------- |
-| Profiles           | profile 列表、创建、激活     | profile 的完整编辑（具身在 Operations 中） | -                                                  |
-| Skills             | 统一按 profile 管理 skills   | 按 agent 管理 skills/MCP                   | -                                                  |
-| MCP                | 统一按 profile 管理 MCP      | 按 agent 管理 MCP                          | -                                                  |
+| Profiles           | 独立入口；列表、创建、激活 | profile 完整编辑 + Activate/Rename         | -                                                  |
+| Monitoring（Crew） | 独立 tab                     | Usage tab + 卡上健康摘要                   | -                                                  |
+| Missions Overview  | 整 tab 删除                  | Agent wall + agent KPI                     | Board：任务 KPI + Recent；Pipeline 不变            |
+| Skills / MCP       | 统一按 profile 散落管理      | 按 agent 管理 skills/MCP                   | -                                                  |
 | Settings/Providers | 按 agent 管理 provider/model | provider/model 选择、.env 检测             | -                                                  |
-| Swarm              | -                            | -                                          | worker 运行时、dispatch、mission、tmux、checkpoint |
+| Swarm              | -                            | 可选 Ping/Recover 快捷                     | worker 运行时、dispatch、tmux、Human Gate          |
 
 ## 3. 页面结构
 

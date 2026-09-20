@@ -1078,3 +1078,18 @@ test("mismatched deletion identity reconciles instead of tombstoning", () => {
   harness.coordinator.dispose();
   harness.engine.dispose();
 });
+
+test("project fails closed when sessionMessagesById is missing", () => {
+  const harness = createHarness();
+  const projected = harness.coordinator.project({
+    workspaceId: "workspace-1",
+    sessions: [],
+    presences: [],
+    // Host bug: raw engine state (or a partial snapshot) without the
+    // activity-projector message map must not throw in Object.keys.
+    sessionMessagesById: undefined as unknown as Record<string, never>
+  });
+  assert.deepEqual(projected.sessionMessagesById, {});
+  harness.coordinator.dispose();
+  harness.engine.dispose();
+});

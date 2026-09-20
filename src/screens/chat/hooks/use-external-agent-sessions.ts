@@ -54,8 +54,48 @@ export function useExternalAgentSessions(
   const reload = useCallback(() => {
     if (!agentId) return
     setSessionsLoading(agentId, true)
-    void fetchSessionsForAgent(agentId)
-      .then((data) => setSessions(agentId, data.sessions))
+    void Promise.all([
+      fetchSessionsForAgent(agentId).catch(() => ({ sessions: [] as Array<AgentSession> })),
+      fetch(`/api/agents/${encodeURIComponent(agentId)}/engine/sessions`)
+        .then(async (response) => {
+          if (!response.ok) return { sessions: [] as Array<{ agentSessionId: string; title?: string; updatedAtUnixMs?: number; resumable?: boolean }> }
+          return (await response.json()) as {
+            sessions?: Array<{
+              agentSessionId: string
+              title?: string
+              updatedAtUnixMs?: number
+              resumable?: boolean
+            }>
+          }
+        })
+        .catch(() => ({ sessions: [] as Array<{ agentSessionId: string; title?: string; updatedAtUnixMs?: number; resumable?: boolean }> })),
+    ])
+      .then(([display, canonical]) => {
+        const byId = new Map<string, AgentSession>()
+        for (const session of display.sessions) {
+          byId.set(session.sessionId, session)
+        }
+        for (const session of canonical.sessions ?? []) {
+          const id = session.agentSessionId?.trim()
+          if (!id) continue
+          const existing = byId.get(id)
+          byId.set(id, {
+            sessionId: id,
+            agentId,
+            state: existing?.state ?? 'idle',
+            title:
+              session.title?.trim() ||
+              existing?.title ||
+              (session.resumable ? 'Resumable chat' : 'Chat'),
+            lastMessageAt:
+              typeof session.updatedAtUnixMs === 'number'
+                ? new Date(session.updatedAtUnixMs).toISOString()
+                : existing?.lastMessageAt ?? new Date().toISOString(),
+            ...(existing?.summary ? { summary: existing.summary } : {}),
+          })
+        }
+        setSessions(agentId, [...byId.values()])
+      })
       .catch(() => setSessions(agentId, []))
       .finally(() => setSessionsLoading(agentId, false))
   }, [agentId, setSessions, setSessionsLoading])

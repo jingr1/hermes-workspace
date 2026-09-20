@@ -339,20 +339,15 @@ describe('createAgoraxManagedAgentActivityAdapter', () => {
     )
   })
 
-  it('throws explicit errors for daemon-unsupported operations', () => {
+  it('throws explicit errors for still-unsupported operations', () => {
     const adapter = createAgoraxManagedAgentActivityAdapter({
       baseUrl: 'http://127.0.0.1:9120',
       workspaceId: 'workspace-1',
       fetchImpl: mockFetch({}).fetchImpl,
     })
 
-    assert.throws(() => adapter.loadComposerOptions({} as never), /does not support composer options/)
     assert.throws(() => adapter.goalControl({} as never), /does not support goal control/)
     assert.throws(() => adapter.updateAgoraxModeActivation({} as never), /does not support Agorax mode activation/)
-    assert.throws(() => adapter.deleteSession({} as never), /does not support session deletion/)
-    assert.throws(() => adapter.deleteSessions({} as never), /does not support session deletion/)
-    assert.throws(() => adapter.renameSession({} as never), /does not support session rename/)
-    assert.throws(() => adapter.setSessionPinned({} as never), /does not support session pin/)
     assert.throws(() => adapter.forkSession({} as never), /does not support session fork/)
   })
 

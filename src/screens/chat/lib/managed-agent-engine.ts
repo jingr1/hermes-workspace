@@ -3,7 +3,9 @@ import {
   selectEngineActiveTurn,
   selectEngineLatestTurn,
   selectEngineInteractionsForSession,
+  selectEngineSession,
   selectSessionMessages,
+  type AgentActivityMessage,
   type AgentActivitySendInputResult,
   type AgentActivitySessionDetailSnapshot,
   type AgentActivitySubmitInteractiveResult,
@@ -63,9 +65,13 @@ export function createManagedAgentCommandPort(
     ) => Promise<unknown>
   },
 ): EngineTypedCommandPort {
-  const request = async (path: string, body?: unknown): Promise<unknown> => {
+  const request = async (
+    path: string,
+    body?: unknown,
+    method: 'POST' | 'PATCH' | 'DELETE' = 'POST',
+  ): Promise<unknown> => {
     const response = await fetch(path, {
-      method: 'POST',
+      method,
       headers: { 'Content-Type': 'application/json' },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     })
@@ -79,6 +85,19 @@ export function createManagedAgentCommandPort(
     return payload
   }
   const unavailable = async (): Promise<never> => { throw new Error('Unsupported Managed Agent command') }
+  const mapActivitySession = async (
+    agentSessionId: string,
+    activityPayload: unknown,
+  ) => {
+    const detail = mapManagedAgentActivitySnapshot(activityPayload)
+    if (!detail) throw new Error('Managed Agent mutation returned an invalid snapshot')
+    onActivity(detail)
+    const session = detail.session
+    if (session.agentSessionId !== agentSessionId && !session.agentSessionId) {
+      throw new Error('Managed Agent mutation returned no session')
+    }
+    return { detail, session }
+  }
   return {
     kind: 'typed',
     effects: {
@@ -95,6 +114,9 @@ export function createManagedAgentCommandPort(
             message: input.initialDisplayPrompt ?? '',
             promptContent: input.initialContent,
             ...(input.settings?.model ? { model: input.settings.model } : {}),
+            ...(input.settings?.reasoningEffort
+              ? { reasoningEffort: input.settings.reasoningEffort }
+              : {}),
           }),
         )
         const detail = mapManagedAgentActivitySnapshot(response.activity)
@@ -106,10 +128,60 @@ export function createManagedAgentCommandPort(
           session: detail.session,
         }
       },
-      deleteSessions: unavailable,
-      renameSession: unavailable,
-      setSessionPinned: unavailable,
-      updateSessionSettings: unavailable,
+      deleteSessions: async (input) => {
+        const removedSessionIds: string[] = []
+        for (const agentSessionId of input.agentSessionIds) {
+          await request(
+            `/api/agents/${encodeURIComponent(agentId)}/engine/session/${encodeURIComponent(agentSessionId)}`,
+            undefined,
+            'DELETE',
+          )
+          removedSessionIds.push(agentSessionId)
+        }
+        return {
+          removedSessionIds,
+          removedSessions: removedSessionIds.length,
+          removedMessages: 0,
+          cleanupFailedSessionIds: [],
+        }
+      },
+      renameSession: async (input) => {
+        const payload = await request(
+          `/api/agents/${encodeURIComponent(agentId)}/engine/session/${encodeURIComponent(input.agentSessionId)}/title`,
+          { title: input.title },
+          'PATCH',
+        )
+        const activity =
+          payload && typeof payload === 'object' && 'activity' in payload
+            ? (payload as { activity: unknown }).activity
+            : null
+        const { session } = await mapActivitySession(input.agentSessionId, activity)
+        return { session }
+      },
+      setSessionPinned: async (input) => {
+        const payload = await request(
+          `/api/agents/${encodeURIComponent(agentId)}/engine/session/${encodeURIComponent(input.agentSessionId)}/pin`,
+          { pinned: input.pinned },
+        )
+        const activity =
+          payload && typeof payload === 'object' && 'activity' in payload
+            ? (payload as { activity: unknown }).activity
+            : null
+        const { session } = await mapActivitySession(input.agentSessionId, activity)
+        return { session }
+      },
+      updateSessionSettings: async (input) => {
+        await request(
+          `/api/agents/${encodeURIComponent(agentId)}/engine/session/${encodeURIComponent(input.agentSessionId)}/settings`,
+          {
+            ...(input.settings.model ? { model: input.settings.model } : {}),
+            ...(input.settings.reasoningEffort
+              ? { reasoningEffort: input.settings.reasoningEffort }
+              : {}),
+          },
+        )
+        return {}
+      },
       sendInput: async (input): Promise<AgentActivitySendInputResult> => {
         const response = managedAgentInputResponseFromJson(
           await request(`/api/agents/${encodeURIComponent(agentId)}/engine/session/${encodeURIComponent(input.agentSessionId)}/input`, {
@@ -184,6 +256,81 @@ export function createManagedAgentCommandPort(
         return { session: detail.session }
       },
     },
+    executePlanDecision: async (command) => {
+      const payload = await request(
+        `/api/agents/${encodeURIComponent(agentId)}/engine/session/${encodeURIComponent(command.agentSessionId)}/turns/${encodeURIComponent(command.turnId)}/plan-decisions/${encodeURIComponent(command.requestId)}`,
+        {
+          promptKind: command.promptKind,
+          action: command.action,
+          idempotencyKey: command.idempotencyKey,
+        },
+      )
+      const operation =
+        payload &&
+        typeof payload === 'object' &&
+        'result' in payload &&
+        (payload as { result?: { operation?: Record<string, unknown> } }).result
+          ?.operation
+          ? (payload as { result: { operation: Record<string, unknown> } }).result
+              .operation
+          : payload &&
+              typeof payload === 'object' &&
+              'result' in payload &&
+              (payload as { result?: Record<string, unknown> }).result
+            ? (payload as { result: Record<string, unknown> }).result
+            : null
+      if (!operation || typeof operation !== 'object') {
+        throw new Error('Managed Agent plan decision returned no operation')
+      }
+      const activity =
+        payload && typeof payload === 'object' && 'activity' in payload
+          ? (payload as { activity: unknown }).activity
+          : null
+      if (activity) {
+        const detail = mapManagedAgentActivitySnapshot(activity)
+        if (detail) onActivity(detail)
+      }
+      const statusRaw = String(
+        (operation as { Status?: unknown; status?: unknown }).Status ??
+          (operation as { status?: unknown }).status ??
+          'completed',
+      ).toLowerCase()
+      const status =
+        statusRaw === 'prepared' ||
+        statusRaw === 'leased' ||
+        statusRaw === 'completed' ||
+        statusRaw === 'failed'
+          ? statusRaw
+          : 'completed'
+      return {
+        operation: {
+          agentSessionId: command.agentSessionId,
+          idempotencyKey: command.idempotencyKey,
+          operationId: String(
+            (operation as { OperationID?: unknown; operationId?: unknown })
+              .OperationID ??
+              (operation as { operationId?: unknown }).operationId ??
+              command.commandId,
+          ),
+          requestId: command.requestId,
+          status,
+          turnId: command.turnId,
+          workspaceId: command.workspaceId,
+          result:
+            typeof (operation as { Result?: unknown }).Result === 'string'
+              ? ((operation as { Result: string }).Result as string)
+              : typeof (operation as { result?: unknown }).result === 'string'
+                ? ((operation as { result: string }).result as string)
+                : null,
+          error:
+            typeof (operation as { LastError?: unknown }).LastError === 'string'
+              ? ((operation as { LastError: string }).LastError as string)
+              : typeof (operation as { error?: unknown }).error === 'string'
+                ? ((operation as { error: string }).error as string)
+                : null,
+        },
+      }
+    },
     execute: options?.executeExtensionCommand
       ? (command, effectOptions) => options.executeExtensionCommand!(command, effectOptions)
       : unavailable,
@@ -242,11 +389,29 @@ export function subscribeManagedAgentEngine(
 export function selectManagedAgentChatState(
   state: AgentSessionEngineState,
   agentSessionId: string | null,
+  options?: {
+    /**
+     * Optimistic / live overlay messages from
+     * `coordinator.project(projectSnapshot(engineState))`. Engine selectors
+     * still own turns/interactions; only the message lane is overridable.
+     */
+    sessionMessages?: readonly AgentActivityMessage[]
+  },
 ) {
-  const sessionMessages = agentSessionId
-    ? selectSessionMessages(state, agentSessionId)
-    : []
-  const messages = sessionMessages.map(toChatMessage)
+  const sessionMessages =
+    options?.sessionMessages ??
+    (agentSessionId ? selectSessionMessages(state, agentSessionId) : [])
+  const messages = sessionMessages.map((message) =>
+    toChatMessage({
+      messageId: message.messageId,
+      role: message.role,
+      kind: message.kind,
+      payload: message.payload,
+      occurredAtUnixMs: message.occurredAtUnixMs,
+      status: message.status,
+      semantics: message.semantics ?? null,
+    }),
+  )
   const latestTurn = selectEngineLatestTurn(state, agentSessionId)
   const projectedActiveTurn = selectEngineActiveTurn(state, agentSessionId)
   const activeTurn = projectedActiveTurn &&
@@ -273,6 +438,14 @@ export function selectManagedAgentChatState(
   return {
     messages,
     activeTurn,
+    latestTurn,
+    fileChanges: latestTurn?.fileChanges ?? null,
+    usage: agentSessionId
+      ? selectEngineSession(state, agentSessionId)?.usage ?? null
+      : null,
+    sessionTitle: agentSessionId
+      ? selectEngineSession(state, agentSessionId)?.title?.trim() || null
+      : null,
     isStreaming: activeTurn !== null && activeTurn.phase !== 'settled',
     error: terminalError ??
       (visibleError
@@ -282,7 +455,7 @@ export function selectManagedAgentChatState(
         : null),
     interactions: selectEngineInteractionsForSession(state, agentSessionId),
     activeToolCalls: agentSessionId
-      ? selectSessionMessages(state, agentSessionId)
+      ? sessionMessages
           .filter((message) =>
             isToolCallKind(message.kind) &&
             !isTerminalToolStatus(message.status)
@@ -304,7 +477,19 @@ function toChatMessage(message: {
   payload: Record<string, unknown>
   occurredAtUnixMs: number
   status?: string | null
+  semantics?: {
+    noticeCommand?: string
+    noticeCommandStatus?: string
+  } | null
 }): ChatMessage {
+  const notice = noticeCommandSystemLine(message.semantics)
+  if (notice) {
+    return {
+      role: 'system',
+      content: [{ type: 'text', text: notice }],
+      timestamp: message.occurredAtUnixMs,
+    }
+  }
   if (isToolCallKind(message.kind)) {
     const error = firstNonEmptyString(
       message.payload.error,
@@ -408,6 +593,37 @@ function systemNoticeText(payload: Record<string, unknown>): string {
     if (typeof value === 'string' && value.trim()) return value
   }
   return ''
+}
+
+function noticeCommandSystemLine(
+  semantics:
+    | {
+        noticeCommand?: string
+        noticeCommandStatus?: string
+      }
+    | null
+    | undefined,
+): string | null {
+  const command = semantics?.noticeCommand?.trim()
+  if (!command) return null
+  const status = semantics?.noticeCommandStatus?.trim()
+  const labels: Record<string, string> = {
+    compact: 'Compacting context',
+    review: 'Reviewing changes',
+    undo: 'Undoing last action',
+    goal: 'Updating goal',
+  }
+  const label = labels[command] ?? command
+  if (!status || status === 'running' || status === 'started') {
+    return `${label}…`
+  }
+  if (status === 'completed' || status === 'succeeded') {
+    return `${label} complete`
+  }
+  if (status === 'failed' || status === 'error') {
+    return `${label} failed`
+  }
+  return `${label} (${status})`
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {

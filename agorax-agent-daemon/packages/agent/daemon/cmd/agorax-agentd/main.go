@@ -17,6 +17,7 @@ import (
 	agentdaemon "agorax.local/agent-daemon/packages/agent/daemon"
 	activity "agorax.local/agent-daemon/packages/agent/daemon/activity"
 	hostadapter "agorax.local/agent-daemon/packages/agent/daemon/hostadapter"
+	"agorax.local/agent-daemon/packages/agent/daemon/modelcatalog"
 	agenthost "agorax.local/agent-daemon/packages/agent/host"
 	storesqlite "agorax.local/agent-daemon/packages/agent/store-sqlite"
 	canonical "agorax.local/agent-daemon/packages/agent/store-sqlite/canonical"
@@ -78,7 +79,8 @@ func run() error {
 	host := agenthost.New(agenthost.Config{
 		CanonicalStore: workspaceStore, TurnSubmissions: store,
 		EffectiveHistory: store, SessionManagement: workspaceStore,
-		RuntimeOperations: store, Runtime: hostRuntime,
+		SessionBatchManagement: workspaceStore,
+		RuntimeOperations:      store, Runtime: hostRuntime,
 		HistoryRuntime: hostRuntime, GoalRuntime: hostRuntime,
 		OperationOwner: "agorax-agentd", EditRetryDisabled: true,
 	})
@@ -228,14 +230,19 @@ func routesWithOps(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.D
 			return
 		}
 		var input struct {
-			AgentSessionID string          `json:"agentSessionId"`
-			AgentTargetID  string          `json:"agentTargetId"`
-			Provider       string          `json:"provider"`
-			ClientSubmitID string          `json:"clientSubmitId"`
-			Content        json.RawMessage `json:"content"`
-			InitialContent json.RawMessage `json:"initialContent"`
-			CWD            string          `json:"cwd"`
-			Model          string          `json:"model"`
+			AgentSessionID  string          `json:"agentSessionId"`
+			AgentTargetID   string          `json:"agentTargetId"`
+			Provider        string          `json:"provider"`
+			ClientSubmitID  string          `json:"clientSubmitId"`
+			Content         json.RawMessage `json:"content"`
+			InitialContent  json.RawMessage `json:"initialContent"`
+			CWD             string          `json:"cwd"`
+			Model           string          `json:"model"`
+			ReasoningEffort string          `json:"reasoningEffort"`
+			// Optional per-run Mission MCP handshake (Agorax workspace control channel).
+			McpEndpoint     string   `json:"mcpEndpoint"`
+			McpRunToken     string   `json:"mcpRunToken"`
+			McpToolAllowlist []string `json:"mcpToolAllowlist"`
 		}
 		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
 			writeJSON(response, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -249,11 +256,23 @@ func routesWithOps(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.D
 		if provider == "" {
 			provider = providerFromTarget(input.AgentTargetID)
 		}
+		var runtimeContext map[string]any
+		if strings.TrimSpace(input.McpEndpoint) != "" && strings.TrimSpace(input.McpRunToken) != "" {
+			runtimeContext = map[string]any{
+				"agoraxMissionMcp": map[string]any{
+					"endpoint":      strings.TrimSpace(input.McpEndpoint),
+					"runToken":      strings.TrimSpace(input.McpRunToken),
+					"toolAllowlist": input.McpToolAllowlist,
+				},
+			}
+		}
 		result, err := host.CreateSession(request.Context(), workspaceID, agenthost.CreateSessionInput{
 			AgentSessionID: input.AgentSessionID, AgentTargetID: input.AgentTargetID,
 			Provider: provider, ClientSubmitID: input.ClientSubmitID,
 			InitialContent: content,
 			Cwd:            stringPointer(input.CWD), Model: stringPointer(input.Model),
+			ReasoningEffort: stringPointer(input.ReasoningEffort),
+			RuntimeContext:  runtimeContext,
 		})
 		if err != nil {
 			// Delivery-unknown is not a failure: the turn is durably submitted
@@ -371,7 +390,270 @@ func routesWithOps(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.D
 		}
 		writeJSON(response, http.StatusOK, result)
 	})
+
+	// Session management surfaces (Host APIs already owned the lifecycle;
+	// these routes are thin HTTP adapters matching Tutti's tuttid shape).
+	mux.HandleFunc("PATCH /v1/workspaces/{workspaceID}/agent-sessions/{agentSessionID}/title", handleUpdateTitle(host))
+	mux.HandleFunc("PUT /v1/workspaces/{workspaceID}/agent-sessions/{agentSessionID}/title", handleUpdateTitle(host))
+	mux.HandleFunc("POST /v1/workspaces/{workspaceID}/agent-sessions/{agentSessionID}/title", handleUpdateTitle(host))
+	mux.HandleFunc("DELETE /v1/workspaces/{workspaceID}/agent-sessions/{agentSessionID}", func(response http.ResponseWriter, request *http.Request) {
+		result, err := host.DeleteSession(request.Context(), agenthost.SessionRef{
+			WorkspaceID: request.PathValue("workspaceID"), AgentSessionID: request.PathValue("agentSessionID"),
+		})
+		if err != nil {
+			writeHostError(response, err)
+			return
+		}
+		writeJSON(response, http.StatusOK, result)
+	})
+	mux.HandleFunc("POST /v1/workspaces/{workspaceID}/agent-sessions/{agentSessionID}/pin", func(response http.ResponseWriter, request *http.Request) {
+		var input struct {
+			Pinned bool `json:"pinned"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+			writeJSON(response, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		result, err := host.UpdatePin(request.Context(), agenthost.UpdatePinInput{
+			WorkspaceID: request.PathValue("workspaceID"), AgentSessionID: request.PathValue("agentSessionID"), Pinned: input.Pinned,
+		})
+		if err != nil {
+			writeHostError(response, err)
+			return
+		}
+		writeJSON(response, http.StatusOK, result)
+	})
+	mux.HandleFunc("POST /v1/workspaces/{workspaceID}/agent-sessions/{agentSessionID}/settings", func(response http.ResponseWriter, request *http.Request) {
+		var input struct {
+			Model           *string `json:"model"`
+			ReasoningEffort *string `json:"reasoningEffort"`
+			PermissionModeID *string `json:"permissionModeId"`
+			PlanMode        *bool   `json:"planMode"`
+			Speed           *string `json:"speed"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+			writeJSON(response, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		result, err := host.UpdateSettings(request.Context(), agenthost.UpdateSettingsInput{
+			WorkspaceID: request.PathValue("workspaceID"), AgentSessionID: request.PathValue("agentSessionID"),
+			Settings: agenthost.ComposerSettingsPatch{
+				Model: input.Model, ReasoningEffort: input.ReasoningEffort,
+				PermissionModeID: input.PermissionModeID, PlanMode: input.PlanMode, Speed: input.Speed,
+			},
+		})
+		if err != nil {
+			writeHostError(response, err)
+			return
+		}
+		writeJSON(response, http.StatusOK, result)
+	})
+	mux.HandleFunc("GET /v1/workspaces/{workspaceID}/agent-sessions/{agentSessionID}/composer-options", func(response http.ResponseWriter, request *http.Request) {
+		workspaceID, agentSessionID := request.PathValue("workspaceID"), request.PathValue("agentSessionID")
+		session, err := host.GetSession(request.Context(), agenthost.SessionRef{WorkspaceID: workspaceID, AgentSessionID: agentSessionID})
+		if err != nil {
+			writeHostError(response, err)
+			return
+		}
+		provider := strings.TrimSpace(session.Canonical.Provider)
+		requestedModel := strings.TrimSpace(session.Canonical.Model)
+		if settings := composerSettingsFromMap(session.Canonical.Settings); settings.Model != "" {
+			requestedModel = settings.Model
+		}
+		writeJSON(response, http.StatusOK, projectComposerOptions(provider, requestedModel))
+	})
+	mux.HandleFunc("GET /v1/agent-providers/{provider}/composer-options", func(response http.ResponseWriter, request *http.Request) {
+		provider := strings.TrimSpace(request.PathValue("provider"))
+		if provider == "" {
+			writeJSON(response, http.StatusBadRequest, map[string]string{"error": "provider is required"})
+			return
+		}
+		requestedModel := strings.TrimSpace(request.URL.Query().Get("model"))
+		writeJSON(response, http.StatusOK, projectComposerOptions(provider, requestedModel))
+	})
+	mux.HandleFunc("POST /v1/workspaces/{workspaceID}/agent-sessions/{agentSessionID}/turns/{turnID}/plan-decisions/{requestID}", func(response http.ResponseWriter, request *http.Request) {
+		var input struct {
+			PromptKind     string `json:"promptKind"`
+			Action         string `json:"action"`
+			IdempotencyKey string `json:"idempotencyKey"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+			writeJSON(response, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		operation, err := host.SubmitPlanDecision(
+			request.Context(),
+			agenthost.SessionRef{WorkspaceID: request.PathValue("workspaceID"), AgentSessionID: request.PathValue("agentSessionID")},
+			request.PathValue("turnID"),
+			request.PathValue("requestID"),
+			agenthost.SubmitPlanDecisionInput{
+				PromptKind: input.PromptKind, Action: input.Action, IdempotencyKey: input.IdempotencyKey,
+			},
+		)
+		if err != nil {
+			writeHostError(response, err)
+			return
+		}
+		writeJSON(response, http.StatusOK, map[string]any{"operation": operation})
+	})
+	mux.HandleFunc("GET /v1/workspaces/{workspaceID}/agent-sessions/{agentSessionID}/goal", func(response http.ResponseWriter, request *http.Request) {
+		result, err := host.GetGoalState(request.Context(), agenthost.SessionRef{
+			WorkspaceID: request.PathValue("workspaceID"), AgentSessionID: request.PathValue("agentSessionID"),
+		})
+		if err != nil {
+			writeHostError(response, err)
+			return
+		}
+		writeJSON(response, http.StatusOK, result)
+	})
 	return mux
+}
+
+func handleUpdateTitle(host *agenthost.Host) http.HandlerFunc {
+	return func(response http.ResponseWriter, request *http.Request) {
+		var input struct {
+			Title string `json:"title"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+			writeJSON(response, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		result, err := host.UpdateTitle(request.Context(), agenthost.UpdateTitleInput{
+			WorkspaceID: request.PathValue("workspaceID"), AgentSessionID: request.PathValue("agentSessionID"), Title: input.Title,
+		})
+		if err != nil {
+			writeHostError(response, err)
+			return
+		}
+		writeJSON(response, http.StatusOK, result)
+	}
+}
+
+func writeHostError(response http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, agenthost.ErrSessionNotFound):
+		writeJSON(response, http.StatusNotFound, map[string]string{"error": err.Error()})
+	case errors.Is(err, agenthost.ErrInvalidArgument), errors.Is(err, agenthost.ErrSessionTitleTooLong):
+		writeJSON(response, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	default:
+		writeJSON(response, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+}
+
+// projectComposerOptions builds the composer-options REST body from local
+// provider config (Claude settings.json / Codex config.toml) when available.
+// Missing config yields an empty options list (fail-closed, never invented).
+func projectComposerOptions(provider, requestedModel string) map[string]any {
+	models := modelcatalog.LoadLocalProviderModels(provider)
+	projection := modelcatalog.ProjectComposerCatalog(models, requestedModel)
+	modelOptions := make([]map[string]any, 0, len(models))
+	for _, model := range models {
+		modelOptions = append(modelOptions, map[string]any{
+			"value": model.ID,
+			"label": firstNonBlank(model.DisplayName, model.ID),
+			"name":  firstNonBlank(model.DisplayName, model.ID),
+			"id":    model.ID,
+			"default": model.IsDefault,
+		})
+	}
+	reasoningByModel := map[string]any{}
+	for modelID, profile := range projection.ReasoningOptionsByModel {
+		options := make([]map[string]any, 0, len(profile.Options))
+		for _, option := range profile.Options {
+			options = append(options, map[string]any{
+				"value": option.Value, "label": firstNonBlank(option.Label, option.Value),
+				"description": option.Description, "default": option.Default,
+			})
+		}
+		reasoningByModel[modelID] = map[string]any{
+			"defaultValue": profile.DefaultValue, "options": options,
+		}
+	}
+	effectiveModel := strings.TrimSpace(requestedModel)
+	if projection.Selection.Found {
+		effectiveModel = projection.Selection.Model.ID
+	}
+	reasoningConfigurable := projection.Selection.ReasoningEffortsAdvertised &&
+		len(projection.Selection.ReasoningEfforts) > 0
+	reasoningOptions := make([]map[string]any, 0, len(projection.Selection.ReasoningEfforts))
+	for _, option := range projection.Selection.ReasoningEfforts {
+		reasoningOptions = append(reasoningOptions, map[string]any{
+			"value": option.Value, "label": firstNonBlank(option.Label, option.Value),
+			"description": option.Description, "default": option.Default,
+		})
+	}
+	reasoningDefault := projection.Selection.DefaultReasoningEffort
+	return map[string]any{
+		"provider":                provider,
+		"codexSaverModeSupported": false,
+		"rtkSaverModeSupported":   false,
+		"capabilities":            nil,
+		"modelConfig": map[string]any{
+			"configurable":   len(modelOptions) > 0,
+			"effectiveValue": effectiveModel,
+			"currentValue":   effectiveModel,
+			"defaultValue":   effectiveModel,
+			"options":        modelOptions,
+		},
+		"reasoningConfig": map[string]any{
+			"configurable":   reasoningConfigurable,
+			"effectiveValue": reasoningDefault,
+			"currentValue":   reasoningDefault,
+			"defaultValue":   reasoningDefault,
+			"options":        reasoningOptions,
+		},
+		"speedConfig": map[string]any{
+			"configurable":   false,
+			"effectiveValue": "",
+			"currentValue":   "",
+			"defaultValue":   "",
+			"options":        []any{},
+		},
+		"reasoningOptionsByModel": reasoningByModel,
+		"effectiveSettings": map[string]any{
+			"model": effectiveModel, "reasoningEffort": reasoningDefault, "speed": "",
+		},
+		"permissionConfig": map[string]any{
+			"configurable": false, "defaultValue": "", "currentValue": "", "modes": []any{},
+		},
+		"runtimeContext": map[string]any{},
+		"skills":         []any{},
+		"commands":       []any{},
+		"capabilityCatalog": []any{},
+		"behavior": map[string]any{
+			"collapseModelOptionsToLatest":     false,
+			"modelOptionsAuthoritative":        true,
+			"refreshModelOptionsAfterSettings": false,
+			"prewarmDraftSession":              false,
+			"planModeExclusiveWithPermissionMode": false,
+		},
+		"slashCommandPolicy": map[string]any{
+			"fallbackCommands": []any{}, "commandEffects": []any{}, "commandCatalogAuthoritative": false,
+		},
+	}
+}
+
+func composerSettingsFromMap(settings map[string]any) agenthost.ComposerSettings {
+	if settings == nil {
+		return agenthost.ComposerSettings{}
+	}
+	asString := func(key string) string {
+		value, _ := settings[key].(string)
+		return strings.TrimSpace(value)
+	}
+	return agenthost.ComposerSettings{
+		Model: asString("model"), ReasoningEffort: asString("reasoningEffort"), Speed: asString("speed"),
+		PermissionModeID: asString("permissionModeId"),
+	}
+}
+
+func firstNonBlank(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 const (

@@ -178,6 +178,44 @@ export function ManagedAgentChatView({
     return enabled.length > 0 ? `Capabilities: ${enabled.join(' · ')}` : 'No optional capabilities reported'
   }, [chat.composer.capabilities])
 
+  const turnMetaHint = useMemo(() => {
+    const parts: string[] = []
+    const fileChanges = chat.fileChanges as
+      | { filesChanged?: number; linesAdded?: number; linesRemoved?: number }
+      | null
+      | undefined
+    if (fileChanges && typeof fileChanges === 'object') {
+      const files = fileChanges.filesChanged
+      const added = fileChanges.linesAdded
+      const removed = fileChanges.linesRemoved
+      if (
+        typeof files === 'number' ||
+        typeof added === 'number' ||
+        typeof removed === 'number'
+      ) {
+        parts.push(
+          `Files ${typeof files === 'number' ? files : '—'} · +${typeof added === 'number' ? added : 0}/−${typeof removed === 'number' ? removed : 0}`,
+        )
+      }
+    }
+    const usage = chat.usage as
+      | { contextWindow?: { usedTokens?: number; totalTokens?: number } | null }
+      | null
+      | undefined
+    const window = usage?.contextWindow
+    if (
+      window &&
+      typeof window.usedTokens === 'number' &&
+      typeof window.totalTokens === 'number' &&
+      window.totalTokens > 0
+    ) {
+      parts.push(
+        `Context ${Math.round((window.usedTokens / window.totalTokens) * 100)}%`,
+      )
+    }
+    return parts.length > 0 ? parts.join(' · ') : null
+  }, [chat.fileChanges, chat.usage])
+
   return (
     <AssistantAvatarProvider
       value={{
@@ -223,11 +261,18 @@ export function ManagedAgentChatView({
               runtimeConfigHint: `${composerBrand.hint} · ${capabilityHint}`,
             }}
             topNotices={
-              chat.error ? (
-                <div className="my-2 mx-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-                  {chat.error}
-                </div>
-              ) : null
+              <>
+                {chat.error ? (
+                  <div className="my-2 mx-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+                    {chat.error}
+                  </div>
+                ) : null}
+                {turnMetaHint ? (
+                  <div className="my-2 mx-4 text-[11px] text-muted-foreground">
+                    {turnMetaHint}
+                  </div>
+                ) : null}
+              </>
             }
           >
             <ManagedAgentInteractionPanel

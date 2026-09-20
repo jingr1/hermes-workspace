@@ -16,7 +16,7 @@ import { OperationsAgentDetail } from './components/operations-agent-detail'
 import { OperationsNewAgentModal } from './components/operations-new-agent-modal'
 import { OperationsSettingsModal } from './components/operations-settings-modal'
 import { FullOutputsView } from './components/full-outputs-view'
-import { AgentBusPanel, type AgentBusData } from './components/agent-bus-panel'
+import { AgentBusPanel as SwarmHealthBar } from './components/agent-bus-panel'
 import {
   TeamOverview,
   type TeamOverviewFilter,
@@ -71,9 +71,9 @@ export function OperationsScreen() {
     configQuery,
     sessionsQuery,
     cronJobsQuery,
-    swarmRuntimeQuery,
-    swarmHealthQuery,
-    crewStatusQuery,
+    snapshotQuery,
+    healthSummary,
+    enableUsagePolling,
     settings,
     saveSettings,
     defaultModel,
@@ -83,6 +83,10 @@ export function OperationsScreen() {
     isSavingAgent,
     deleteAgent,
     isDeletingAgent,
+    activateAgent,
+    isActivatingAgent,
+    renameAgent,
+    isRenamingAgent,
     toggleSkill,
     isTogglingSkill,
     toggleMcp,
@@ -90,27 +94,6 @@ export function OperationsScreen() {
     removeMcp,
     isRemovingMcp,
   } = useOperations()
-
-  const agentBusData: AgentBusData = useMemo(() => {
-    const crew = crewStatusQuery.data?.crew ?? []
-    const workers = swarmHealthQuery.data?.workers ?? []
-    const entries = (swarmRuntimeQuery.data?.entries ?? []).map((entry) => ({
-      ...entry,
-      displayName: entry.workerId,
-      blockedReason: entry.blockedReason ?? null,
-    }))
-    return {
-      crew,
-      workers,
-      entries,
-      healthSummary: swarmHealthQuery.data?.summary ?? {},
-      lastCheck: Math.max(
-        crewStatusQuery.data?.fetchedAt ?? 0,
-        swarmHealthQuery.data?.checkedAt ?? 0,
-        swarmRuntimeQuery.data?.checkedAt ?? 0,
-      ),
-    }
-  }, [crewStatusQuery.data, swarmHealthQuery.data, swarmRuntimeQuery.data])
 
   const filteredAgents = useMemo(() => {
     if (filter === 'all') return agents
@@ -129,6 +112,10 @@ export function OperationsScreen() {
   const settingsAgent =
     agents.find((agent) => agent.id === settingsAgentId) ?? null
 
+  useEffect(() => {
+    if (settingsAgentId) enableUsagePolling()
+  }, [settingsAgentId, enableUsagePolling])
+
   return (
     <main
       className="min-h-full bg-surface px-3 pb-24 pt-5 text-primary-900 md:px-5 md:pt-8"
@@ -142,10 +129,10 @@ export function OperationsScreen() {
             </div>
             <div>
               <h1 className="text-base font-semibold text-primary-900">
-                Operations
+                Agents
               </h1>
               <p className="mt-1 text-sm text-primary-600">
-                Your persistent agent team
+                Configure your persistent agent team
               </p>
             </div>
           </div>
@@ -200,7 +187,7 @@ export function OperationsScreen() {
 
         {isLoading ? (
           <section className="rounded-3xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-6 py-12 text-center text-sm text-[var(--theme-muted)] shadow-[0_24px_80px_var(--theme-shadow)]">
-            Loading Operations roster…
+            Loading Agents roster…
           </section>
         ) : error ? (
           <section className="rounded-3xl border border-[var(--theme-danger-border)] bg-[var(--theme-danger-soft)] px-6 py-12 text-center text-sm text-[var(--theme-text)] shadow-[0_24px_80px_var(--theme-shadow)]">
@@ -235,7 +222,11 @@ export function OperationsScreen() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.08, duration: 0.25 }}
             >
-              <AgentBusPanel data={agentBusData} />
+              <SwarmHealthBar
+                health={healthSummary}
+                checkedAt={snapshotQuery.data?.checkedAt ?? null}
+                agentCount={agents.length}
+              />
             </motion.div>
 
             <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -326,6 +317,9 @@ export function OperationsScreen() {
       <OperationsNewAgentModal
         open={newAgentOpen}
         defaultModel={defaultModel}
+        cloneOptions={agents
+          .filter((agent) => agent.id !== 'default')
+          .map((agent) => ({ id: agent.id, name: agent.name }))}
         onClose={() => setNewAgentOpen(false)}
         onCreate={createAgent}
         isSaving={isCreatingAgent}
@@ -349,6 +343,10 @@ export function OperationsScreen() {
             current === agentId ? null : current,
           )
         }}
+        onActivate={activateAgent}
+        isActivating={isActivatingAgent}
+        onRename={renameAgent}
+        isRenaming={isRenamingAgent}
         isSaving={isSavingAgent}
         isDeleting={isDeletingAgent}
         onToggleSkill={toggleSkill}

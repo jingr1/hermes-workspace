@@ -1,10 +1,7 @@
 // Canonical daemon DTO-to-activity composer-options mapper.
-//
-// TODO(daemon-endpoint): the Agorax agent daemon has no composer-options REST
-// endpoint yet. This mapper is preserved from the tuttid adapter so hosts can
-// keep one canonical projection; the response contract it consumes lives in
-// daemonDtos.ts (DaemonProviderComposerOptionsResponse) and mirrors the
-// generated tuttid shape until the daemon endpoint lands.
+// Daemon exposes GET .../composer-options (session) and
+// GET /v1/agent-providers/{provider}/composer-options (honest empty catalog
+// until live model lists are probed).
 import type {
   AgentActivityComposerCapabilityOption,
   AgentActivityComposerOptions,
@@ -18,9 +15,7 @@ import type {
 import type { DaemonProviderComposerOptionsResponse } from "./daemonDtos.ts";
 
 /**
- * @deprecated TODO(daemon-endpoint): no daemon composer-options route exists
- * yet; the daemon response shape is not finalized. Kept so the canonical
- * projection survives the port.
+ * Maps daemon composer-options JSON into the activity-core catalog shape.
  */
 export function agentActivityComposerOptionsFromDaemonResult(
   provider: string,

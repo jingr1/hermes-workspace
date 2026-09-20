@@ -178,8 +178,61 @@ export async function respondToManagedInteractionCard(input: {
     }
   }
   if (card.kind === 'plan') {
-    // Fail closed — no plan-decision endpoint this phase.
-    return { ok: false, status: 409, error: 'plan cards are read-only' }
+    if (input.action !== 'implement') {
+      return {
+        ok: false,
+        status: 400,
+        error: 'plan cards only support action=implement',
+      }
+    }
+    const client = managedAgentHttpClient(message.senderParticipantId ?? '')
+    if (!client) {
+      return { ok: false, status: 404, error: 'Managed Agent is unavailable' }
+    }
+    const turnId = card.turnId.trim()
+    const scopeKey = [
+      'plan-implementation',
+      process.env.AGORAX_WORKSPACE_ID?.trim() || 'default',
+      card.agentSessionId,
+      turnId,
+    ].join(':')
+    try {
+      await client.submitPlanDecision({
+        agentSessionId: card.agentSessionId,
+        turnId,
+        // Host SubmitPlanDecision requires requestId === turnId.
+        requestId: turnId,
+        promptKind: 'plan-implementation',
+        action: 'implement',
+        idempotencyKey: scopeKey,
+      })
+    } catch (error) {
+      return {
+        ok: false,
+        status: 502,
+        error: error instanceof Error ? error.message : String(error),
+      }
+    }
+    try {
+      await refreshManagedInteractionCards({
+        roomId: input.roomId,
+        agentSessionId: card.agentSessionId,
+        agentId: message.senderParticipantId ?? '',
+        dbPath: input.dbPath,
+      })
+    } catch (error) {
+      console.warn(
+        '[managed-interaction-cards] refresh after plan decision failed:',
+        error instanceof Error ? error.message : String(error),
+      )
+    }
+    const refreshed = findManagedInteractionCardMessage(input.roomId, card, {
+      dbPath: input.dbPath,
+    })
+    const status = refreshed
+      ? (decodeManagedInteractionCard(refreshed.content)?.status ?? 'answered')
+      : 'answered'
+    return { ok: true, status }
   }
   if (card.status !== 'pending') {
     return {

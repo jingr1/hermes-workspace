@@ -8,6 +8,7 @@ import type {
   AgentActivityTurnOrigin,
   AgentActivityTurnOutcome
 } from "@agorax/agent-activity-core";
+import { agentActivitySessionCapabilitiesFromIds } from "@agorax/agent-activity-core";
 import type {
   DaemonCanonicalInteraction,
   DaemonCanonicalMessage,
@@ -60,10 +61,10 @@ export function agentActivitySessionFromDaemonSession(
     // TODO(daemon-endpoint): canonical Session JSON carries no permission
     // config; the REST surface does not expose one.
     permissionConfig: { configurable: false, modes: [] },
-    // TODO(daemon-endpoint): daemon emits CapabilitySnapshot {values}; map to
-    // AgentActivitySessionCapabilities once a value-level core helper import
-    // is allowed here.
-    capabilities: null,
+    // CapabilitySnapshot wire uses json:"values".
+    capabilities: session.Capabilities?.values?.length
+      ? agentActivitySessionCapabilitiesFromIds(session.Capabilities.values)
+      : null,
     lifecycleCapabilities: { fork: false, forkThroughTurn: false },
     ...(options.lifecycleCapabilitiesProjected === undefined
       ? {}
@@ -82,7 +83,8 @@ export function agentActivitySessionFromDaemonSession(
     agoraxModeActivation: null,
     imported: session.Metadata?.imported ?? false,
     visible: session.Metadata?.visible ?? true,
-    resumable: false,
+    // Provider session id present ⇒ the runtime can attempt resume.
+    resumable: Boolean(session.ProviderSessionID?.trim()),
     messageVersion: session.MessageVersion,
     lastEventUnixMs: session.LastEventUnixMS || updatedAtUnixMs,
     startedAtUnixMs: session.StartedAtUnixMS,

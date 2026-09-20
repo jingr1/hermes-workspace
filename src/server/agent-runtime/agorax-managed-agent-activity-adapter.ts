@@ -9,6 +9,7 @@ import {
   AgoraxManagedAgentHttpClient,
 } from './agorax-managed-agent-http-client'
 import {
+  agentActivityComposerOptionsFromDaemonResult,
   agentActivitySessionFromDaemonSession,
   agentActivityTurnFromDaemonTurn,
   daemonCreateAgentSessionRequestFromActivity,
@@ -31,11 +32,9 @@ export type AgoraxManagedAgentActivityAdapterOptions = {
  * Core `AgentActivityAdapter` over the embedded Managed Agent daemon.
  *
  * The daemon dialect covers the read/reconcile surface (session list, detail,
- * paged messages) plus session creation, input submission and interaction
- * responses; everything is mapped through `@agorax/agent-activity-daemon-adapter`
- * into canonical core shapes. Daemon surface gaps (composer options, goal
- * control, session delete/rename/pin/fork, Agorax-mode activation) throw
- * explicit errors instead of fabricating data.
+ * paged messages) plus session creation, input submission, interaction
+ * responses, rename/delete/pin, and composer options. Remaining Host gaps
+ * (goal control writes, fork, Agorax-mode activation) still throw explicitly.
  */
 export function createAgoraxManagedAgentActivityAdapter(
   options: AgoraxManagedAgentActivityAdapterOptions,
@@ -95,8 +94,18 @@ export function createAgoraxManagedAgentActivityAdapter(
       })
     },
 
-    loadComposerOptions() {
-      throw unsupported('composer options')
+    async loadComposerOptions(input) {
+      assertWorkspace(input.workspaceId)
+      const response = await client.getComposerOptions({
+        agentSessionId: input.agentSessionId,
+        provider: input.provider,
+        model: input.settings?.model ?? null,
+        signal: input.signal,
+      })
+      return agentActivityComposerOptionsFromDaemonResult(
+        input.provider,
+        response,
+      )
     },
 
     async createSession(input) {
@@ -163,20 +172,56 @@ export function createAgoraxManagedAgentActivityAdapter(
       return { session: mapCanonicalSession(response.Canonical ?? null) }
     },
 
-    deleteSession() {
-      throw unsupported('session deletion')
+    async deleteSession(input) {
+      assertWorkspace(input.workspaceId)
+      const result = await client.deleteSession(input.agentSessionId, {
+        signal: input.signal,
+      })
+      return {
+        removed: Boolean(result.Deleted ?? result.CanonicalRemoved),
+        cleanupFailed: Boolean(result.CleanupFailed),
+      }
     },
 
-    deleteSessions() {
-      throw unsupported('session deletion')
+    async deleteSessions(input) {
+      assertWorkspace(input.workspaceId)
+      const removedSessionIds: string[] = []
+      const cleanupFailedSessionIds: string[] = []
+      for (const agentSessionId of input.agentSessionIds) {
+        const result = await client.deleteSession(agentSessionId, {
+          signal: input.signal,
+        })
+        if (result.Deleted || result.CanonicalRemoved) {
+          removedSessionIds.push(agentSessionId)
+        }
+        if (result.CleanupFailed) cleanupFailedSessionIds.push(agentSessionId)
+      }
+      return {
+        removedSessionIds,
+        removedSessions: removedSessionIds.length,
+        removedMessages: 0,
+        cleanupFailedSessionIds,
+      }
     },
 
-    renameSession() {
-      throw unsupported('session rename')
+    async renameSession(input) {
+      assertWorkspace(input.workspaceId)
+      const response = await client.updateTitle(
+        input.agentSessionId,
+        input.title,
+        { signal: input.signal },
+      )
+      return mapCanonicalSession(response.Canonical ?? null)
     },
 
-    setSessionPinned() {
-      throw unsupported('session pin')
+    async setSessionPinned(input) {
+      assertWorkspace(input.workspaceId)
+      const response = await client.updatePin(
+        input.agentSessionId,
+        input.pinned,
+        { signal: input.signal },
+      )
+      return mapCanonicalSession(response.Canonical ?? null)
     },
 
     forkSession() {

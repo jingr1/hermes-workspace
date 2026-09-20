@@ -14,6 +14,7 @@ import {
   PuzzleIcon,
   Rocket01Icon,
   Settings01Icon,
+  Target02Icon,
   UserGroupIcon,
   UserMultipleIcon,
 } from '@hugeicons/core-free-icons'
@@ -58,6 +59,14 @@ export const MOBILE_HAMBURGER_NAV_ITEMS = [
     match: (p: string) => p.startsWith('/jobs'),
   },
   {
+    id: 'missions',
+    label: 'Missions',
+    icon: Target02Icon,
+    to: '/missions',
+    match: (p: string) =>
+      p.startsWith('/missions') || p.startsWith('/mission-control'),
+  },
+  {
     id: 'conductor',
     label: 'Conductor',
     icon: Rocket01Icon,
@@ -65,11 +74,14 @@ export const MOBILE_HAMBURGER_NAV_ITEMS = [
     match: (p: string) => p.startsWith('/conductor'),
   },
   {
-    id: 'operations',
-    label: 'Operations',
+    id: 'agents',
+    label: 'Agents',
     icon: UserMultipleIcon,
-    to: '/operations',
-    match: (p: string) => p.startsWith('/operations'),
+    to: '/agents',
+    match: (p: string) =>
+      p.startsWith('/agents') ||
+      p.startsWith('/operations') ||
+      p.startsWith('/profiles'),
   },
   {
     id: 'swarm',
@@ -106,13 +118,6 @@ export const MOBILE_HAMBURGER_NAV_ITEMS = [
     icon: McpServerIcon,
     to: '/mcp',
     match: (p: string) => p.startsWith('/mcp'),
-  },
-  {
-    id: 'profiles',
-    label: 'Profiles',
-    icon: UserGroupIcon,
-    to: '/profiles',
-    match: (p: string) => p.startsWith('/profiles'),
   },
 ]
 

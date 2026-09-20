@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { CronJob } from '@/components/cron-manager/cron-types'
 import { toast } from '@/components/ui/toast'
@@ -8,6 +8,17 @@ import {
   formatModelName,
   formatRelativeTime,
 } from '@/screens/dashboard/lib/formatters'
+import {
+  AGENTS_SNAPSHOT_QUERY_KEY,
+  fetchAgentsSnapshot,
+  mapUnifiedToOperationsStatus,
+} from '@/hooks/use-agent-snapshot'
+import type { CrewMember } from '@/hooks/use-crew-status'
+import {
+  createAgentConsistent,
+  type CreateAgentInput,
+  normalizeAgentId,
+} from '@/lib/create-agent'
 
 // Claude-Workspace adapter: Operations is backed by Hermes profiles
 // (each profile = one persistent agent). Profiles live at ~/.hermes/profiles/<name>/
@@ -126,6 +137,21 @@ type CapabilitiesResponse = {
   envPath?: string
 }
 
+export type OperationsAgentUsage = {
+  sessionCount: number
+  messageCount: number
+  toolCallCount: number
+  totalTokens: number
+  estimatedCostUsd: number | null
+  cronJobCount: number
+  assignedTaskCount: number
+  gatewayState: string
+  processAlive: boolean
+  telegramState: string | null
+  lastSessionTitle: string | null
+  lastSessionAt: number | null
+}
+
 export type OperationsAgent = GatewayConfigAgent & {
   meta: OperationsAgentMeta
   shortModel: string
@@ -153,6 +179,13 @@ export type OperationsAgent = GatewayConfigAgent & {
   blockedReason: string | null
   needsHuman: boolean
   runtimeState: string | null
+  /** Live task title from snapshot (may be free text). */
+  currentTask: string | null
+  /** Swarm mission id when the worker is on a pipeline mission. */
+  missionId: string | null
+  /** Whether this profile is the workspace-active profile. */
+  isActiveProfile: boolean
+  usage: OperationsAgentUsage | null
 }
 
 type ConfigPayload = {
@@ -211,14 +244,6 @@ function createFallbackColor(agentId: string): string {
 function createFallbackEmoji(agentId: string): string {
   const emojis = ['🤖', '🐦', '🔨', '✍️', '📊', '🛰️', '🧠', '🛠️']
   return emojis[hashString(agentId) % emojis.length] ?? '🤖'
-}
-
-function normalizeAgentId(input: string): string {
-  return input
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
 }
 
 function readTimestamp(value: unknown): number | null {
@@ -305,7 +330,10 @@ function parseConfigPayload(payload: ConfigPayload): ConfigPayload {
   return payload
 }
 
-async function fetchClaudeProfiles(): Promise<ClaudeProfileSummary[]> {
+async function fetchClaudeProfiles(): Promise<{
+  profiles: ClaudeProfileSummary[]
+  activeProfile: string
+}> {
   const response = await fetch('/api/profiles/list?light=1')
   const contentType = response.headers.get('content-type') || ''
   if (!contentType.includes('json')) {
@@ -313,18 +341,24 @@ async function fetchClaudeProfiles(): Promise<ClaudeProfileSummary[]> {
   }
   const payload = (await response.json().catch(() => ({}))) as {
     profiles?: ClaudeProfileSummary[]
+    activeProfile?: string
     error?: string
   }
   if (!response.ok || payload.error) {
     throw new Error(payload.error || `HTTP ${response.status}`)
   }
-  return Array.isArray(payload.profiles) ? payload.profiles : []
+  return {
+    profiles: Array.isArray(payload.profiles) ? payload.profiles : [],
+    activeProfile: payload.activeProfile || 'default',
+  }
 }
 
 // Adapt Hermes profiles into the ConfigPayload shape that the existing
 // Operations UI expects. Each profile becomes one agent.
-async function fetchOperationsConfig(): Promise<ConfigPayload> {
-  const profiles = await fetchClaudeProfiles()
+async function fetchOperationsConfig(): Promise<
+  ConfigPayload & { activeProfile: string }
+> {
+  const { profiles, activeProfile } = await fetchClaudeProfiles()
   const list = profiles.map((profile) => ({
     id: profile.name,
     name: profile.name === 'default' ? 'Workspace' : profile.name,
@@ -341,32 +375,11 @@ async function fetchOperationsConfig(): Promise<ConfigPayload> {
   const defaultModel = profiles.find((p) => p.name === 'default')?.model || ''
   return {
     ok: true,
+    activeProfile,
     parsed: {
       agents: { list },
       defaultModel,
     },
-  }
-}
-
-async function createClaudeProfile(input: {
-  name: string
-  model?: string
-  provider?: string
-  cloneFrom?: string
-}) {
-  const response = await fetch('/api/profiles/create', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(input),
-  })
-  const payload = (await response.json().catch(() => ({}))) as {
-    ok?: boolean
-    error?: string
-  }
-  if (!response.ok || payload.ok === false) {
-    throw new Error(
-      payload.error || `Failed to create profile (${response.status})`,
-    )
   }
 }
 
@@ -575,6 +588,24 @@ function getAgentStatus(
   return 'idle'
 }
 
+function mapUsageFromCrew(member: CrewMember | undefined): OperationsAgentUsage | null {
+  if (!member) return null
+  return {
+    sessionCount: member.sessionCount,
+    messageCount: member.messageCount,
+    toolCallCount: member.toolCallCount,
+    totalTokens: member.totalTokens,
+    estimatedCostUsd: member.estimatedCostUsd,
+    cronJobCount: member.cronJobCount,
+    assignedTaskCount: member.assignedTaskCount,
+    gatewayState: member.gatewayState,
+    processAlive: member.processAlive,
+    telegramState: member.platforms?.telegram?.state ?? null,
+    lastSessionTitle: member.lastSessionTitle,
+    lastSessionAt: member.lastSessionAt,
+  }
+}
+
 function getProgressStatus(
   status: OperationsAgentStatus,
   latestSession: GatewaySession | null,
@@ -686,7 +717,7 @@ export function useOperations() {
   const capabilitiesQuery = useQuery({
     queryKey: ['operations', 'capabilities'],
     queryFn: async () => {
-      const profiles = await fetchClaudeProfiles()
+      const { profiles } = await fetchClaudeProfiles()
       const results: Record<string, CapabilitiesResponse> = {}
       await Promise.all(
         profiles.map(async (profile) => {
@@ -717,76 +748,33 @@ export function useOperations() {
     refetchInterval: 30_000,
   })
 
-  const swarmRuntimeQuery = useQuery({
-    queryKey: ['operations', 'swarm-runtime'],
-    queryFn: async () => {
-      const response = await fetch('/api/swarm-runtime')
-      if (!response.ok) throw new Error(`Swarm runtime HTTP ${response.status}`)
-      const payload = (await response.json()) as {
-        checkedAt?: number
-        entries?: Array<{
-          workerId: string
-          state: string
-          lastOutputAt: number | null
-          needsHuman: boolean
-          currentTask: string | null
-          blockedReason: string | null
-        }>
-      }
-      return payload
-    },
+  /** Single aggregate poll for live status / KPI / currentTask (Phase 3). */
+  const snapshotQuery = useQuery({
+    queryKey: AGENTS_SNAPSHOT_QUERY_KEY,
+    queryFn: fetchAgentsSnapshot,
     refetchInterval: 30_000,
+    staleTime: 20_000,
   })
 
-  const swarmHealthQuery = useQuery({
-    queryKey: ['operations', 'swarm-health'],
-    queryFn: async () => {
-      const response = await fetch('/api/swarm-health')
-      if (!response.ok) throw new Error(`Swarm health HTTP ${response.status}`)
-      return response.json() as Promise<{
-        checkedAt?: number
-        workers?: Array<{
-          workerId: string
-          displayName: string
-          modelAuthStatus: string
-          recentAuthErrors: number
-          fallbackActive: boolean
-          primaryAuthOk: boolean | null
-        }>
-        summary?: {
-          totalWorkers?: number
-          totalAuthErrors24h?: number
-          totalFallbacks24h?: number
-          workersUsingFallback?: number
-          workersPrimaryAuthFailed?: number
-          degraded?: boolean
-          warnings?: Array<string>
-        }
-      }>
-    },
-    refetchInterval: 30_000,
-  })
-
-  const crewStatusQuery = useQuery({
+  /**
+   * Usage metrics (Monitoring) — only polled when needed so Agents first paint
+   * stays on the snapshot. Invalidate/refetch from Usage tab / detail open.
+   */
+  const [usageEnabled, setUsageEnabled] = useState(false)
+  const enableUsagePolling = useCallback(() => setUsageEnabled(true), [])
+  const crewUsageQuery = useQuery({
     queryKey: ['operations', 'crew-status'],
     queryFn: async () => {
       const response = await fetch('/api/crew-status')
       if (!response.ok) throw new Error(`Crew status HTTP ${response.status}`)
       return response.json() as Promise<{
-        crew?: Array<{
-          id: string
-          displayName: string
-          role: string
-          profileFound: boolean
-          gatewayState: string
-          processAlive: boolean
-          model: string
-          provider: string
-        }>
+        crew?: Array<CrewMember>
         fetchedAt?: number
       }>
     },
-    refetchInterval: 30_000,
+    enabled: usageEnabled,
+    refetchInterval: usageEnabled ? 60_000 : false,
+    staleTime: 30_000,
   })
 
   const cronJobsQuery = useQuery({
@@ -798,7 +786,6 @@ export function useOperations() {
   const agents = useMemo(() => {
     const parsed = configQuery.data?.parsed
     const allAgents = normalizeAgentList(parsed?.agents?.list)
-    // Filter out system/internal agents — only show operations agents
     const HIDDEN_AGENTS = new Set([
       'main',
       'pc1-coder',
@@ -808,21 +795,19 @@ export function useOperations() {
     const configAgents = allAgents.filter((a) => !HIDDEN_AGENTS.has(a.id))
     const sessions = sessionsQuery.data ?? []
     const cronJobs = cronJobsQuery.data ?? []
-    const runtimeEntries = new Map(
-      (swarmRuntimeQuery.data?.entries ?? []).map((entry) => [
-        entry.workerId,
+    const snapshotById = new Map(
+      (snapshotQuery.data?.agents ?? []).map((entry) => [
+        entry.agentId,
         entry,
       ]),
     )
     const capsMap = capabilitiesQuery.data ?? {}
-    const crewMap = new Map(
-      (crewStatusQuery.data?.crew ?? []).map((member) => [
-        member.id,
-        member.profileFound &&
-          member.gatewayState === 'running' &&
-          member.processAlive,
-      ]),
+    const crewById = new Map(
+      (crewUsageQuery.data?.crew ?? []).map((member) => [member.id, member]),
     )
+    const activeProfile =
+      (configQuery.data as (ConfigPayload & { activeProfile?: string }) | undefined)
+        ?.activeProfile ?? null
 
     return configAgents.map((agent) => {
       const meta = loadAgentMeta(agent.id, {
@@ -831,7 +816,7 @@ export function useOperations() {
       })
       const agentSessions = getAgentSessions(agent.id, sessions)
       const latestSession = agentSessions[0] ?? null
-      const runtime = runtimeEntries.get(agent.id)
+      const snap = snapshotById.get(agent.id)
       const jobs = getAgentJobs(agent.id, cronJobs)
       const nextRunAt =
         jobs
@@ -841,19 +826,22 @@ export function useOperations() {
           .sort((left, right) => left - right)[0] ?? null
       const lastActivityAt =
         readTimestamp(latestSession?.updatedAt) ??
-        runtime?.lastOutputAt ??
+        snap?.status?.updatedAt ??
         jobs
           .map((job) => readTimestamp(job.lastRun?.startedAt))
           .filter((value): value is number => value !== null)
           .sort((left, right) => right - left)[0] ??
         null
-      const needsSetup = !agent.model || agent.model.trim().length === 0
-      const status = getAgentStatus(
-        latestSession,
-        runtime?.state,
-        runtime?.lastOutputAt,
-        needsSetup,
-      )
+      const needsSetup =
+        Boolean(snap?.status?.needsSetup) ||
+        !agent.model ||
+        agent.model.trim().length === 0
+      const status = snap?.status
+        ? mapUnifiedToOperationsStatus(
+            snap.status.unifiedStatus,
+            needsSetup,
+          )
+        : getAgentStatus(latestSession, null, null, needsSetup)
       const recentOutputs = [
         ...agentSessions.map((session) =>
           buildSessionOutput(session, agent.id),
@@ -864,7 +852,6 @@ export function useOperations() {
         .sort((left, right) => right.timestamp - left.timestamp)
         .slice(0, 5)
 
-      // Use real capabilities data when available, fall back to counts
       const caps = capsMap[agent.id]
       const capabilities: OperationsAgentCapabilities = {
         skills:
@@ -940,18 +927,22 @@ export function useOperations() {
         capabilities,
         resources,
         health,
-        blockedReason: runtime?.blockedReason ?? null,
-        needsHuman: runtime?.needsHuman ?? false,
-        runtimeState: runtime?.state ?? null,
+        blockedReason: snap?.status?.lastSummary ?? null,
+        needsHuman: snap?.status?.needsHuman ?? false,
+        runtimeState: snap?.status?.state ?? null,
+        currentTask: snap?.status?.currentTask ?? null,
+        missionId: snap?.status?.missionId ?? null,
+        isActiveProfile: activeProfile === agent.id,
+        usage: mapUsageFromCrew(crewById.get(agent.id)),
       } satisfies OperationsAgent
     })
   }, [
     configQuery.data,
     sessionsQuery.data,
     cronJobsQuery.data,
-    swarmRuntimeQuery.data,
+    snapshotQuery.data,
     capabilitiesQuery.data,
-    crewStatusQuery.data,
+    crewUsageQuery.data,
     metaVersion,
   ])
 
@@ -966,50 +957,27 @@ export function useOperations() {
   }, [agents, settings.activityFeedLength])
 
   const createAgentMutation = useMutation({
-    mutationFn: async (input: {
-      name: string
-      model: string
-      emoji: string
-      systemPrompt: string
-      description?: string
-    }) => {
-      const id = normalizeAgentId(input.name)
-      if (!id) throw new Error('Agent name is required')
-      if (id === 'default') {
-        throw new Error('"default" is reserved — pick another name')
-      }
-      const currentAgents = normalizeAgentList(
-        configQuery.data?.parsed?.agents?.list,
-      )
-      if (currentAgents.some((agent) => agent.id === id)) {
-        throw new Error('A profile with this name already exists')
-      }
-
-      await createClaudeProfile({
-        name: id,
-        model: input.model.trim() || undefined,
-      })
-      // Persist system prompt + description into the profile config so they
-      // survive across browsers; localStorage meta keeps emoji/color preferences.
-      if (input.systemPrompt.trim() || input.description?.trim()) {
-        await updateClaudeProfile(id, {
-          system_prompt: input.systemPrompt.trim() || undefined,
-          description: input.description?.trim() || undefined,
+    mutationFn: async (input: CreateAgentInput & { emoji?: string }) => {
+      const result = await createAgentConsistent(input)
+      if (input.runtime === 'hermes') {
+        persistAgentMeta(result.id, {
+          emoji: input.emoji?.trim() || createFallbackEmoji(result.id),
+          description: input.description?.trim() ?? '',
+          systemPrompt: input.systemPrompt?.trim() ?? '',
+          color: createFallbackColor(result.id),
+          createdAt: new Date().toISOString(),
         })
+        setMetaVersion((value) => value + 1)
       }
-      persistAgentMeta(id, {
-        emoji: input.emoji.trim() || createFallbackEmoji(id),
-        description: input.description?.trim() ?? '',
-        systemPrompt: input.systemPrompt.trim(),
-        color: createFallbackColor(id),
-        createdAt: new Date().toISOString(),
-      })
-      setMetaVersion((value) => value + 1)
-      setSelectedAgentId(id)
+      setSelectedAgentId(result.id)
+      return result
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: ['operations', 'config'],
+      })
+      await queryClient.invalidateQueries({
+        queryKey: AGENTS_SNAPSHOT_QUERY_KEY,
       })
       toast('Agent created', { type: 'success' })
     },
@@ -1017,6 +985,85 @@ export function useOperations() {
       toast(error instanceof Error ? error.message : 'Failed to create agent', {
         type: 'error',
       })
+    },
+  })
+
+  const activateAgentMutation = useMutation({
+    mutationFn: async (agentId: string) => {
+      const response = await fetch('/api/profiles/activate', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: agentId }),
+      })
+      const payload = (await response.json().catch(() => ({}))) as {
+        ok?: boolean
+        error?: string
+      }
+      if (!response.ok || payload.ok === false) {
+        throw new Error(
+          payload.error || `Failed to activate profile (${response.status})`,
+        )
+      }
+    },
+    onSuccess: async (_data, agentId) => {
+      await queryClient.invalidateQueries({
+        queryKey: ['operations', 'config'],
+      })
+      toast(`Activated ${agentId}`, { type: 'success' })
+    },
+    onError: (error) => {
+      toast(
+        error instanceof Error ? error.message : 'Failed to activate agent',
+        { type: 'error' },
+      )
+    },
+  })
+
+  const renameAgentMutation = useMutation({
+    mutationFn: async (input: { oldName: string; newName: string }) => {
+      const next = normalizeAgentId(input.newName)
+      if (!next) throw new Error('New name is required')
+      if (next === 'default') {
+        throw new Error('"default" is reserved — pick another name')
+      }
+      const response = await fetch('/api/profiles/rename', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ oldName: input.oldName, newName: next }),
+      })
+      const payload = (await response.json().catch(() => ({}))) as {
+        ok?: boolean
+        error?: string
+        profile?: { name?: string }
+      }
+      if (!response.ok || payload.ok === false) {
+        throw new Error(
+          payload.error || `Failed to rename profile (${response.status})`,
+        )
+      }
+      const renamed = payload.profile?.name || next
+      // Move local meta under the new id.
+      const meta = loadAgentMeta(input.oldName)
+      removeAgentMeta(input.oldName)
+      persistAgentMeta(renamed, meta)
+      setMetaVersion((value) => value + 1)
+      setSelectedAgentId(renamed)
+      return renamed
+    },
+    onSuccess: async (renamed) => {
+      await queryClient.invalidateQueries({
+        queryKey: ['operations', 'config'],
+      })
+      await queryClient.invalidateQueries({
+        queryKey: AGENTS_SNAPSHOT_QUERY_KEY,
+      })
+      toast(`Renamed to ${renamed}`, { type: 'success' })
+    },
+    onError: (error) => {
+      toast(
+        error instanceof Error ? error.message : 'Failed to rename agent',
+        { type: 'error' },
+      )
     },
   })
 
@@ -1216,9 +1263,10 @@ export function useOperations() {
     sessionsQuery,
     cronJobsQuery,
     capabilitiesQuery,
-    swarmRuntimeQuery,
-    swarmHealthQuery,
-    crewStatusQuery,
+    snapshotQuery,
+    crewUsageQuery,
+    enableUsagePolling,
+    healthSummary: snapshotQuery.data?.health ?? null,
     recentActivity,
     settings,
     saveSettings,
@@ -1231,6 +1279,10 @@ export function useOperations() {
     isSavingAgent: saveAgentMutation.isPending,
     deleteAgent: deleteAgentMutation.mutateAsync,
     isDeletingAgent: deleteAgentMutation.isPending,
+    activateAgent: activateAgentMutation.mutateAsync,
+    isActivatingAgent: activateAgentMutation.isPending,
+    renameAgent: renameAgentMutation.mutateAsync,
+    isRenamingAgent: renameAgentMutation.isPending,
     saveAgentMeta,
     toggleSkill: toggleSkillMutation.mutateAsync,
     isTogglingSkill: toggleSkillMutation.isPending,
@@ -1247,10 +1299,7 @@ export function useOperations() {
           queryKey: ['operations', 'capabilities'],
         }),
         queryClient.invalidateQueries({
-          queryKey: ['operations', 'swarm-runtime'],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ['operations', 'swarm-health'],
+          queryKey: AGENTS_SNAPSHOT_QUERY_KEY,
         }),
         queryClient.invalidateQueries({
           queryKey: ['operations', 'crew-status'],
