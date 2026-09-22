@@ -220,7 +220,7 @@ pnpm dev
 **Look for this in the startup output:**
 
 ```
-[claude-api] Configured API: http://127.0.0.1:8642
+[hermes-api] Configured API: http://127.0.0.1:8642
 [gateway] gateway=http://127.0.0.1:8642 ... mode=enhanced-fork core=[health, chatCompletions, models, streaming]
 ```
 

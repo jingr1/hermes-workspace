@@ -33,7 +33,7 @@ const _authHeaders = (): Record<string, string> => {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
-console.log(`[claude-api] Configured API: ${CLAUDE_API}`)
+console.log(`[hermes-api] Configured API: ${CLAUDE_API}`)
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -540,12 +540,12 @@ export async function streamChat(
       fs.mkdirSync(dir, { recursive: true })
       const file = path.join(dir, `sse-${sessionId}-${Date.now()}.log`)
       toolDebugStream = fs.createWriteStream(file, { flags: 'a' })
-      console.log(`[claude-api][tool-debug] writing SSE dump to ${file}`)
+      console.log(`[hermes-api][tool-debug] writing SSE dump to ${file}`)
       toolDebugStream.write(
         `# session=${sessionId} ts=${new Date().toISOString()}\n`,
       )
     } catch (err) {
-      console.warn('[claude-api][tool-debug] failed to open dump file:', err)
+      console.warn('[hermes-api][tool-debug] failed to open dump file:', err)
     }
   }
 

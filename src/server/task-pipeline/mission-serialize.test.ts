@@ -47,7 +47,7 @@ function makeMission(
     createdAt: 1,
     updatedAt: 2,
     pipelineId: 'rad',
-    taskId: 'card-1',
+    taskId: null,
     projectId: null,
     workspaceMode: 'canonical',
     executionMode: 'pipeline',
@@ -98,12 +98,12 @@ describe('mission-serialize runtime stub', () => {
       stageKey: 'research',
     })
     const summary = buildMissionSummary({
-      cardId: 'card-1',
       cardTitle: 'Demo',
       cardStatus: 'running',
       mission: makeMission(assignment),
     })
     expect(summary.currentAssignee).toBe('researcher')
     expect(summary.currentStage).toBe('research')
+    expect(summary.missionId).toBe('mission-1')
   })
 })

@@ -247,21 +247,21 @@ export function PipelineView({
   })
   const missions = missionsQuery.data?.missions ?? []
 
-  const [activeCardId, setActiveCardId] = useState<string | null>(activeId)
+  const [activeMissionKey, setActiveMissionKey] = useState<string | null>(activeId)
   useEffect(() => {
-    if (activeId) setActiveCardId(activeId)
+    if (activeId) setActiveMissionKey(activeId)
   }, [activeId])
 
   const activeMission: MissionSummary | null = useMemo(() => {
     if (missions.length === 0) return null
     return (
       missions.find(
-        (t) => t.cardId === activeCardId || t.missionId === activeCardId,
+        (t) => t.missionId === activeMissionKey,
       ) ?? missions[0]
     )
-  }, [missions, activeCardId])
+  }, [missions, activeMissionKey])
 
-  const detailKey = activeMission?.missionId ?? activeMission?.cardId
+  const detailKey = activeMission?.missionId ?? null
   const detailQuery = useQuery({
     queryKey: ['mission-control', 'mission', detailKey],
     queryFn: () => fetchMissionDetail(detailKey!),
@@ -294,7 +294,7 @@ export function PipelineView({
   const labelsKey = (missionView?.labels ?? []).join(',')
   useEffect(() => {
     setLabelsDraft(labelsKey)
-  }, [missionView?.missionId, missionView?.cardId, labelsKey])
+  }, [missionView?.missionId, labelsKey])
 
   const invalidateMission = () => {
     void queryClient.invalidateQueries({
@@ -304,7 +304,7 @@ export function PipelineView({
   }
 
   const startMutation = useMutation({
-    mutationFn: () => startMission(activeMission!.cardId),
+    mutationFn: () => startMission(activeMission!.missionId!),
     onSuccess: () => {
       invalidateMission()
       toast('Mission continued', { type: 'success' })
@@ -327,16 +327,11 @@ export function PipelineView({
   })
 
   const deleteMutation = useMutation({
-    mutationFn: () =>
-      deleteMission(
-        activeMission?.missionId ??
-          activeMission?.cardId ??
-          detailKey!,
-      ),
+    mutationFn: () => deleteMission(detailKey!),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: MISSIONS_QUERY_KEY })
       select(null)
-      setActiveCardId(null)
+      setActiveMissionKey(null)
       toast('Mission deleted', { type: 'success' })
     },
     onError: (error: Error) => {
@@ -361,15 +356,17 @@ export function PipelineView({
         </h2>
         {missions.map((m) => (
           <button
-            key={m.cardId}
+            key={m.missionId}
             type="button"
             onClick={() => {
-              setActiveCardId(m.cardId)
-              select(m.cardId)
+              const id = m.missionId
+              if (!id) return
+              setActiveMissionKey(id)
+              select(id)
             }}
             className={cn(
               'mb-1 w-full rounded-lg px-2.5 py-2 text-left text-xs transition-colors',
-              activeMission?.cardId === m.cardId
+              activeMission?.missionId === m.missionId
                 ? 'bg-[var(--theme-accent)] text-white'
                 : 'hover:bg-[var(--theme-hover)]',
             )}
@@ -378,7 +375,7 @@ export function PipelineView({
             <div
               className={cn(
                 'mt-0.5 text-[10px]',
-                activeMission?.cardId === m.cardId
+                activeMission?.missionId === m.missionId
                   ? 'text-white/70'
                   : 'text-[var(--theme-muted)]',
               )}

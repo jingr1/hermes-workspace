@@ -185,19 +185,6 @@ export function UpdateCenterNotifier() {
     })
   }, [data, dismissed, phases])
 
-  useEffect(() => {
-    const agent = data?.products.agent
-    if (!agent?.updateAvailable || !agent.canUpdate) return
-    const key = productDismissKey(agent)
-    if (dismissed.has(key)) return
-    if (localStorage.getItem(`${DISMISS_PREFIX}agent-toast:${key}`)) return
-    localStorage.setItem(`${DISMISS_PREFIX}agent-toast:${key}`, '1')
-    toast(
-      'Hermes Agent 有可用更新 — 打开 Settings → Runtimes（或 /settings?section=runtimes&provider=hermes）',
-      { type: 'info', duration: 9000 },
-    )
-  }, [data?.products.agent, dismissed])
-
   function dismiss(product: ProductUpdateStatus) {
     const key = productDismissKey(product)
     localStorage.setItem(`${DISMISS_PREFIX}${product.id}`, key)

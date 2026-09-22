@@ -1,18 +1,21 @@
 # Mission / Task domain model
 
-> Agorax keeps a **two-level** work model (Mission → Task), plus an optional
-> **Project** binding for *where* agents touch git. Multica IssueSurface UX is
-> borrowed for the Mission list; Symphony’s schedulable unit maps to **Task**,
-> not Mission.
+> Agorax keeps a **two-level** work model (**Mission → Task**). Multica
+> IssueSurface UX is borrowed for the Mission list; Symphony’s schedulable unit
+> maps to **Task** (assignment), not Mission.
 >
 > Project 合同见 [`mission-project-domain.md`](mission-project-domain.md)。
+>
+> **Kanban cards are not part of this domain.** List / detail / delete are
+> mission-keyed (`missionId`). Board lanes derive from assignment state
+> (`derivedLane`) with optional human `boardLane` override.
 
 ## Entities
 
 | Layer | Agorax | Multica analogue | Symphony analogue |
 |-------|--------|------------------|-------------------|
-| Target repo (optional) | **Project** (`projects.yaml`) | Project（同名不同义，见 project 合同） | — |
-| User list entity | **Mission** | Issue | — (no higher container) |
+| Target repo (optional) | **Project** (`projects.yaml`) | Project（同名不同义） | — |
+| User list entity | **Mission** | Issue | — |
 | Schedulable unit | **Task** (`SwarmMissionAssignment`) | staged sub-issue / AgentTask | **Issue** |
 | Collaboration | optional group `roomId` | squad assignee | — |
 
@@ -30,11 +33,13 @@
 - **assignee + chat_group**: bind existing room; no auto-decompose
 - Room: created only via manual «Create room» (`ensureRoomForMission` → writes `roomId`)
 - Optional `projectId` — 详见 project 合同
+- Primary key: `mission.id`（API / UI 一律用 `missionId`）
 
 ### Task
 
 Fields include Symphony-aligned stubs:
 
+- `id` — assignment id（运行时 `taskId`）
 - `createdByWorkerId` — who decomposed (e.g. `system:pipeline`)
 - `dispatchable` — eligibility for automated dispatch
 - `externalRef` — optional tracker identity
@@ -47,6 +52,7 @@ Runtime stub: `GET /api/missions/:missionId/tasks/:taskId/runtime`
 - MissionSurface modes: board / list / table / swimlane (**no Gantt**)
 - List rows are Missions only; Tasks appear in Mission detail table
 - `/tasks` redirects to `/missions`
+- Board drag writes `mission.boardLane` via `PATCH /api/missions/:id`（不再写 kanban card）
 
 ## Pipeline contract vs Symphony WORKFLOW.md
 
@@ -61,8 +67,8 @@ Skills keep `SKILL.md` YAML front matter; optional `metadata.hermes.pipeline_sta
 
 ## APIs
 
-- `GET/POST /api/missions` — primary
-- `GET/POST/PATCH/DELETE /api/missions/:id` — detail / start / patch properties / delete
+- `GET/POST /api/missions` — primary（GET 直接列 `listSwarmMissions`）
+- `GET/POST/PATCH/DELETE /api/missions/:id` — detail / start / patch / delete（`:id` = missionId）
 - `GET /api/missions/:id/tasks/:taskId/runtime` — Task runtime stub
 - `GET /api/projects` — projects.yaml declarations (target repos)
 - `GET/POST /api/tasks` — compatibility alias

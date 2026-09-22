@@ -1,16 +1,17 @@
 /**
- * lane-sync — Mission/Assignment state → kanban card lane (plan 模块 1
- * «Lane 同步规则», 单向：流水线为准；人工拖拽仅改 backlog/todo/ready).
+ * lane-sync — Mission/Assignment state → board lane.
  *
- * Mapping (plan table):
- *   no mission                    → backlog / todo   (untouched here)
- *   any assignment queued         → ready
- *   any dispatched                → running
- *   any blocked / needs_input     → blocked
- *   current ready/running stage is kind: review → review
+ * Mapping:
  *   mission complete              → done
+ *   any blocked / needs_input     → blocked
+ *   any dispatched                → running
+ *   any reviewing / checkpointed  → review
+ *   any queued                    → ready
+ *   else                          → todo
+ *
+ * Kanban cards are no longer part of the Mission domain; callers use
+ * `laneFromMission` (and optional `mission.boardLane`) only.
  */
-import { getSwarmMission } from '../swarm-missions'
 import type { SwarmMission } from '../swarm-missions'
 
 export type KanbanLane =
@@ -36,14 +37,20 @@ export function laneFromMission(mission: SwarmMission): KanbanLane {
   return 'todo'
 }
 
+/** Effective board lane: human override when set, else derived. */
+export function effectiveBoardLane(mission: SwarmMission): KanbanLane {
+  if (mission.boardLane) return mission.boardLane
+  return laneFromMission(mission)
+}
+
+/**
+ * @deprecated Cards removed from Mission domain. Returns derived lane only.
+ */
 export async function syncLaneFromMission(input: {
-  cardId: string
   missionId: string
-  updateCard: (cardId: string, lane: KanbanLane) => unknown | Promise<unknown>
 }): Promise<KanbanLane | null> {
+  const { getSwarmMission } = await import('../swarm-missions')
   const mission = getSwarmMission(input.missionId)
   if (!mission) return null
-  const lane = laneFromMission(mission)
-  await input.updateCard(input.cardId, lane)
-  return lane
+  return laneFromMission(mission)
 }

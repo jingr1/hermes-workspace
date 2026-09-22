@@ -72,7 +72,6 @@ export function serializeMissionTask(assignment: SwarmMissionAssignment) {
 }
 
 export type MissionSummary = {
-  cardId: string
   title: string
   lane: KanbanLane | string
   missionId: string | null
@@ -90,6 +89,8 @@ export type MissionSummary = {
   priority: number | null
   labels: Array<string>
   taskCount: number
+  /** Human board override when set. */
+  boardLane: KanbanLane | null
 }
 
 function pickActiveAssignment(mission: SwarmMission | null) {
@@ -108,37 +109,56 @@ function pickActiveAssignment(mission: SwarmMission | null) {
 }
 
 export function buildMissionSummary(input: {
-  cardId: string
-  cardTitle: string
-  cardStatus: string
+  cardTitle?: string
+  cardStatus?: string
   mission: SwarmMission | null
 }): MissionSummary {
-  const { cardId, cardTitle, cardStatus, mission } = input
-  const effectiveLane = mission ? laneFromMission(mission) : cardStatus
+  const { mission } = input
+  if (!mission) {
+    return {
+      title: input.cardTitle ?? 'Untitled',
+      lane: input.cardStatus ?? 'todo',
+      missionId: null,
+      missionState: null,
+      derivedLane: null,
+      currentAssignee: null,
+      currentStage: null,
+      progress: 0,
+      executionMode: null,
+      assignee: null,
+      roomId: null,
+      pipelineId: null,
+      projectId: null,
+      priority: null,
+      labels: [],
+      taskCount: 0,
+      boardLane: null,
+    }
+  }
+  const derived = laneFromMission(mission)
   const active = pickActiveAssignment(mission)
-  const dispatchedWorker =
-    mission?.assignments.find((a) => a.state === 'dispatched')?.workerId ?? null
   return {
-    cardId,
-    title: mission?.title?.trim() ? mission.title.trim() : cardTitle,
-    lane: cardStatus,
-    missionId: mission?.id ?? null,
-    missionState: mission?.state ?? null,
-    derivedLane: mission ? laneFromMission(mission) : null,
+    title: mission.title?.trim()
+      ? mission.title.trim()
+      : (input.cardTitle ?? 'Untitled'),
+    lane: mission.boardLane ?? derived,
+    missionId: mission.id,
+    missionState: mission.state,
+    derivedLane: derived,
     currentAssignee:
       active?.workerId ??
-      dispatchedWorker ??
-      (mission?.assignee?.type === 'agent' ? mission.assignee.id : null),
+      (mission.assignee?.type === 'agent' ? mission.assignee.id : null),
     currentStage: active?.stageKey ?? active?.workerId ?? null,
-    progress: computeMissionProgress(mission, effectiveLane),
-    executionMode: mission?.executionMode ?? null,
-    assignee: mission?.assignee ?? null,
-    roomId: mission?.roomId ?? null,
-    pipelineId: mission?.pipelineId ?? null,
-    projectId: mission?.projectId ?? null,
-    priority: mission?.priority ?? null,
-    labels: mission?.labels ?? [],
-    taskCount: mission?.assignments.length ?? 0,
+    progress: computeMissionProgress(mission, derived),
+    executionMode: mission.executionMode ?? null,
+    assignee: mission.assignee ?? null,
+    roomId: mission.roomId ?? null,
+    pipelineId: mission.pipelineId ?? null,
+    projectId: mission.projectId ?? null,
+    priority: mission.priority ?? null,
+    labels: mission.labels ?? [],
+    taskCount: mission.assignments.length,
+    boardLane: mission.boardLane ?? null,
   }
 }
 

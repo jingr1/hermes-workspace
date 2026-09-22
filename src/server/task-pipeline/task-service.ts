@@ -13,24 +13,14 @@ import {
   createOrUpdateMission,
   deleteSwarmMission,
   getSwarmMission,
-  listSwarmMissions,
   readyQueuedAssignments,
   rewriteAssignmentDependencies,
-  setMissionTaskId,
   type MissionAssignee,
   type MissionExecutionMode,
 } from '../swarm-missions'
-import {
-  createKanbanCard,
-  deleteKanbanCard,
-  listKanbanCards,
-  updateKanbanCard,
-} from '../kanban-backend'
-import { deleteSwarmKanbanCard } from '../swarm-kanban-store'
 import { ensureMissionWorktree, releaseMissionWorktree } from '../git-ops'
 import { getPipelineTemplate } from './pipeline-templates'
 import { generateStageBrief } from './stage-brief'
-import { syncLaneFromMission } from './lane-sync'
 import { getProject } from './projects'
 import {
   dispatchReadyAssignments,
@@ -69,7 +59,6 @@ export type CreateTaskInput = CreateMissionBase & {
 }
 
 export type CreatedMission = {
-  cardId: string
   missionId: string
   pipelineId: string | null
   executionMode: MissionExecutionMode
@@ -130,8 +119,9 @@ export function instantiatePipeline(input: {
   title: string
   spec: string
   acceptanceCriteria: Array<string>
-  cardId: string
   projectId?: string | null
+  priority?: number | null
+  labels?: Array<string>
 }): SwarmMission {
   const specVersion = 1
   const stages = input.template.stages
@@ -153,6 +143,8 @@ export function instantiatePipeline(input: {
     assignee: null,
     roomId: null,
     pipelineId: input.template.id,
+    priority: input.priority ?? null,
+    labels: input.labels ?? [],
     assignments: [
       {
         workerId: first.agent,
@@ -201,7 +193,7 @@ export function instantiatePipeline(input: {
     ),
     briefSpecVersion: specVersion,
     pipelineId: input.template.id,
-    taskId: input.cardId,
+    taskId: null,
     specVersion,
     executionMode: 'pipeline',
     createdByWorkerId: 'system:pipeline',
@@ -223,14 +215,6 @@ export async function createMission(
     if (!project) throw new Error(`Unknown project: ${input.projectId}`)
   }
 
-  const card = await createKanbanCard({
-    title: input.title,
-    spec: input.spec,
-    acceptanceCriteria: input.acceptanceCriteria ?? [],
-    status: 'todo',
-    createdBy: 'task-service',
-  })
-
   let mission: SwarmMission
   let workspaceMode = 'canonical'
   let pipelineId: string | null = null
@@ -247,8 +231,9 @@ export async function createMission(
       title: input.title,
       spec: input.spec,
       acceptanceCriteria: input.acceptanceCriteria ?? [],
-      cardId: card.id,
       projectId: input.projectId ?? null,
+      priority: input.priority ?? null,
+      labels: input.labels ?? [],
     })
 
     if (template.workspaceMode === 'worktree' && project) {
@@ -272,7 +257,6 @@ export async function createMission(
       const room = getRoom(assignee.id)
       if (!room) throw new Error(`Unknown chat group room: ${assignee.id}`)
       roomId = room.id
-      // Bind room only; do not auto-decompose tasks.
       mission = createOrUpdateMission({
         title: input.title,
         projectId: input.projectId ?? null,
@@ -285,10 +269,8 @@ export async function createMission(
         labels: input.labels ?? [],
         assignments: [],
       })
-      setMissionTaskId({ missionId: mission.id, taskId: card.id })
       mission = getSwarmMission(mission.id) ?? mission
     } else {
-      // Single agent → one Task from mission spec.
       const instruction = [
         `# Mission: ${input.title}`,
         '',
@@ -322,18 +304,9 @@ export async function createMission(
           },
         ],
       })
-      setMissionTaskId({ missionId: mission.id, taskId: card.id })
       mission = getSwarmMission(mission.id) ?? mission
     }
   }
-
-  await updateKanbanCard(card.id, { missionId: mission.id })
-  await syncLaneFromMission({
-    cardId: card.id,
-    missionId: mission.id,
-    updateCard: (id: string, lane: KanbanLane) =>
-      updateKanbanCard(id, { status: lane }),
-  })
 
   const live = getSwarmMission(mission.id) ?? mission
   const firstAssignmentIds = readyQueuedAssignments(live.id).map((a) => a.id)
@@ -351,7 +324,6 @@ export async function createMission(
   const finalMission = getSwarmMission(live.id) ?? live
 
   return {
-    cardId: card.id,
     missionId: finalMission.id,
     pipelineId: finalMission.pipelineId ?? pipelineId,
     executionMode: finalMission.executionMode ?? input.executionMode,
@@ -366,15 +338,14 @@ export async function createMission(
 }
 
 export type DeleteMissionResult = {
-  missionId: string | null
-  cardId: string | null
-  cardDeleted: boolean
+  missionId: string
   worktreeReleased: boolean
 }
 
 /**
- * Delete a mission and its kanban card. Cancels in-flight assignments first,
- * then hard-deletes the swarm mission record and best-effort removes the card.
+ * Delete a mission by missionId. Cancels in-flight assignments, releases
+ * worktree when applicable, then hard-deletes the swarm mission record.
+ * Kanban cards are not part of the Mission domain.
  */
 export async function deleteMission(missionId: string): Promise<DeleteMissionResult> {
   const mission = getSwarmMission(missionId)
@@ -404,89 +375,12 @@ export async function deleteMission(missionId: string): Promise<DeleteMissionRes
     }
   }
 
-  const cardId = mission.taskId ?? null
-  let cardDeleted = false
-  if (cardId) {
-    cardDeleted = await tryDeleteKanbanCard(cardId)
-  }
-
   deleteSwarmMission(mission.id)
 
   return {
     missionId: mission.id,
-    cardId,
-    cardDeleted,
     worktreeReleased,
   }
-}
-
-async function tryDeleteKanbanCard(cardId: string): Promise<boolean> {
-  let cardDeleted = false
-  try {
-    cardDeleted = await deleteKanbanCard(cardId)
-  } catch (error) {
-    console.warn(
-      `[deleteMission] kanban card delete failed for ${cardId}:`,
-      error,
-    )
-  }
-  if (!cardDeleted) {
-    cardDeleted = deleteSwarmKanbanCard(cardId)
-  }
-  return cardDeleted
-}
-
-/**
- * Delete by mission id **or** kanban card id. List UI is card-keyed
- * (`t_…` Claude ids / local UUIDs); orphan cards without a swarm mission
- * must still be removable.
- */
-export async function deleteMissionByRef(
-  missionOrCardId: string,
-): Promise<DeleteMissionResult> {
-  const id = missionOrCardId.trim()
-  if (!id) throw new Error('Missing mission or card id')
-
-  const byMission = getSwarmMission(id)
-  if (byMission) return deleteMission(byMission.id)
-
-  const cards = await listKanbanCards()
-  const card = cards.find((c) => c.id === id) ?? null
-  let mission =
-    (card?.missionId ? getSwarmMission(card.missionId) : null) ??
-    listSwarmMissions(500).find((m) => m.taskId === id) ??
-    null
-
-  if (mission) {
-    const result = await deleteMission(mission.id)
-    // Card id may differ from mission.taskId (stale link); ensure the
-    // clicked card is gone from the list.
-    if (card && !result.cardDeleted) {
-      const cardDeleted = await tryDeleteKanbanCard(card.id)
-      return { ...result, cardId: card.id, cardDeleted }
-    }
-    if (card && result.cardId !== card.id) {
-      const cardDeleted = await tryDeleteKanbanCard(card.id)
-      return {
-        ...result,
-        cardId: card.id,
-        cardDeleted: result.cardDeleted || cardDeleted,
-      }
-    }
-    return result
-  }
-
-  if (card) {
-    const cardDeleted = await tryDeleteKanbanCard(card.id)
-    return {
-      missionId: null,
-      cardId: card.id,
-      cardDeleted,
-      worktreeReleased: false,
-    }
-  }
-
-  throw new Error(`Mission not found: ${id}`)
 }
 
 /** @deprecated Prefer createMission */
@@ -496,5 +390,5 @@ export async function createTask(
   return createMission(input)
 }
 
-export { syncLaneFromMission }
+export { syncLaneFromMission } from './lane-sync'
 export type { KanbanLane }

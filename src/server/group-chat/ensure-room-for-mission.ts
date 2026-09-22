@@ -128,7 +128,7 @@ export async function ensureRoomForMission(input: {
         existing.id,
         {
           workspacePath,
-          taskId: mission.taskId ?? existing.taskId,
+          taskId: missionId,
           updatedAt: Date.now(),
         },
         { dbPath: input.dbPath },
@@ -142,7 +142,7 @@ export async function ensureRoomForMission(input: {
   const room = createRoom({
     title,
     missionId,
-    taskId: mission.taskId ?? missionId,
+    taskId: missionId,
     workspacePath,
     dbPath: input.dbPath,
   })

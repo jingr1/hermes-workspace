@@ -250,7 +250,7 @@ describe('dispatch-ready', () => {
     expect(passed?.ok).toBe(true)
   })
 
-  it('syncs kanban lane after dispatch', async () => {
+  it('dispatches without kanban card sync', async () => {
     const { mod, swarm, swarmDispatch, router, kanban } = await loadModule()
     vi.mocked(router.getAgentRuntimeRouter).mockReturnValue(
       mockRouter([{ id: 'researcher', runtime: 'hermes' }]) as never,
@@ -272,59 +272,144 @@ describe('dispatch-ready', () => {
         mission.assignments.map((a) => [a.id, a.dependsOn]),
       ),
       pipelineId: 'default-build',
-      taskId: 'card-lane',
+      taskId: null,
     })
 
-    await mod.dispatchReadyAssignments(mission.id)
+    const result = await mod.dispatchReadyAssignments(mission.id)
 
-    expect(kanban.updateKanbanCard).toHaveBeenCalledWith(
-      'card-lane',
-      expect.objectContaining({ status: expect.any(String) }),
-    )
+    expect(result.dispatched).toHaveLength(1)
+    expect(kanban.updateKanbanCard).not.toHaveBeenCalled()
   })
 
   it('createTask autoDispatch=true triggers kickoff', async () => {
-    const { mod: _mod, swarm, swarmDispatch, router, kanban } = await loadModule()
-    vi.mocked(router.getAgentRuntimeRouter).mockReturnValue(
-      mockRouter([{ id: 'researcher', runtime: 'hermes' }]) as never,
+    const { swarmDispatch, router, kanban } = await loadModule()
+    writeFileSync(
+      join(tempRoot, 'pipelines.yaml'),
+      `version: 1
+pipelines:
+  - id: default-build
+    name: Default
+    workspaceMode: canonical
+    stages:
+      - key: research
+        agent: researcher
+        dependsOn: []
+`,
     )
-    vi.mocked(swarmDispatch.dispatchSwarmAssignments).mockResolvedValue({
-      results: [{ ok: true, workerId: 'researcher', error: null }],
-    } as never)
+    writeFileSync(
+      join(tempRoot, 'agents.yaml'),
+      `version: 2
+agents:
+  - id: researcher
+    name: Researcher
+    role: research
+    specialty: research
+    mission: research
+    profile: researcher
+    modes: [quick]
+    tools: []
+    skills: []
+    plugins: []
+    pluginToolsets: []
+    mcpServers: []
+    wrapper: researcher:quick
+    capabilities: [research]
+    enabled: true
+    runtime: hermes
+    execution: local
+    dispatchable: true
+`,
+    )
+    const prev = process.cwd()
+    process.chdir(tempRoot)
+    try {
+      vi.mocked(router.getAgentRuntimeRouter).mockReturnValue(
+        mockRouter([{ id: 'researcher', runtime: 'hermes' }]) as never,
+      )
+      vi.mocked(swarmDispatch.dispatchSwarmAssignments).mockResolvedValue({
+        results: [{ ok: true, workerId: 'researcher', error: null }],
+      } as never)
 
-    const { createTask } = await import('./task-service')
-    const created = await createTask({
-      title: 'Auto dispatch test',
-      spec: 'spec',
-      pipelineId: 'default-build',
-      acceptanceCriteria: [],
-      autoDispatch: true,
-    })
+      const { createTask } = await import('./task-service')
+      const created = await createTask({
+        title: 'Auto dispatch test',
+        spec: 'spec',
+        pipelineId: 'default-build',
+        acceptanceCriteria: [],
+        autoDispatch: true,
+      })
 
-    expect(created.dispatched).toHaveLength(1)
-    expect(created.dispatched[0]?.workerId).toBe('researcher')
-    expect(created.dispatched[0]?.ok).toBe(true)
-    expect(kanban.updateKanbanCard).toHaveBeenCalled()
+      expect(created.dispatched).toHaveLength(1)
+      expect(created.dispatched[0]?.workerId).toBe('researcher')
+      expect(created.dispatched[0]?.ok).toBe(true)
+      expect(created.missionId).toBeTruthy()
+      expect(kanban.updateKanbanCard).not.toHaveBeenCalled()
+    } finally {
+      process.chdir(prev)
+    }
   })
 
   it('createTask autoDispatch=false does not kickoff', async () => {
     const { swarmDispatch, router, kanban } = await loadModule()
-    vi.mocked(router.getAgentRuntimeRouter).mockReturnValue(
-      mockRouter([{ id: 'researcher', runtime: 'hermes' }]) as never,
+    writeFileSync(
+      join(tempRoot, 'pipelines.yaml'),
+      `version: 1
+pipelines:
+  - id: default-build
+    name: Default
+    workspaceMode: canonical
+    stages:
+      - key: research
+        agent: researcher
+        dependsOn: []
+`,
     )
+    writeFileSync(
+      join(tempRoot, 'agents.yaml'),
+      `version: 2
+agents:
+  - id: researcher
+    name: Researcher
+    role: research
+    specialty: research
+    mission: research
+    profile: researcher
+    modes: [quick]
+    tools: []
+    skills: []
+    plugins: []
+    pluginToolsets: []
+    mcpServers: []
+    wrapper: researcher:quick
+    capabilities: [research]
+    enabled: true
+    runtime: hermes
+    execution: local
+    dispatchable: true
+`,
+    )
+    const prev = process.cwd()
+    process.chdir(tempRoot)
+    try {
+      vi.mocked(router.getAgentRuntimeRouter).mockReturnValue(
+        mockRouter([{ id: 'researcher', runtime: 'hermes' }]) as never,
+      )
 
-    const { createTask } = await import('./task-service')
-    const created = await createTask({
-      title: 'No auto dispatch test',
-      spec: 'spec',
-      pipelineId: 'default-build',
-      acceptanceCriteria: [],
-      autoDispatch: false,
-    })
+      const { createTask } = await import('./task-service')
+      const created = await createTask({
+        title: 'No auto dispatch test',
+        spec: 'spec',
+        pipelineId: 'default-build',
+        acceptanceCriteria: [],
+        autoDispatch: false,
+      })
 
-    expect(created.dispatched).toHaveLength(0)
-    expect(swarmDispatch.dispatchSwarmAssignments).not.toHaveBeenCalled()
-    expect(kanban.updateKanbanCard).toHaveBeenCalled()
+      expect(created.dispatched).toHaveLength(0)
+      expect(swarmDispatch.dispatchSwarmAssignments).not.toHaveBeenCalled()
+      expect(kanban.updateKanbanCard).not.toHaveBeenCalled()
+    } finally {
+      process.chdir(prev)
+    }
   })
 
   it('fires checkpoint continuation hook for pipeline missions', async () => {

@@ -229,9 +229,11 @@ export function BoardView({
                 <div className="flex flex-col gap-2 overflow-y-auto p-2">
                   {laneTasks.map((task) => (
                     <button
-                      key={task.cardId}
+                      key={task.missionId}
                       type="button"
-                      onClick={() => onSelectTask(task.cardId)}
+                      onClick={() => {
+                        if (task.missionId) onSelectTask(task.missionId)
+                      }}
                       className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3 text-left transition-colors hover:border-[var(--theme-accent)] hover:bg-[var(--theme-hover)]"
                     >
                       <div className="text-xs font-medium">{task.title}</div>

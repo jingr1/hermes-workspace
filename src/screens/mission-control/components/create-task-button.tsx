@@ -39,7 +39,6 @@ async function fetchRooms(): Promise<Array<{ id: string; title: string }>> {
 
 async function createMission(payload: Record<string, unknown>): Promise<{
   missionId?: string | null
-  cardId?: string
   roomId?: string | null
 }> {
   const res = await fetch('/api/missions', {
@@ -50,7 +49,6 @@ async function createMission(payload: Record<string, unknown>): Promise<{
   const data = (await res.json().catch(() => ({}))) as {
     error?: string
     missionId?: string | null
-    cardId?: string
     roomId?: string | null
   }
   if (!res.ok || data.error) {
@@ -148,7 +146,7 @@ export function CreateMissionButton({
       setSpec('')
       setCriteria('')
       setProjectId('')
-      const id = data.cardId ?? data.missionId
+      const id = data.missionId
       if (id) {
         void navigate({
           to: '/missions',

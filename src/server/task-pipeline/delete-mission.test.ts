@@ -43,9 +43,6 @@ projects:
         dispatched: [],
       })),
     }))
-    vi.doMock('./lane-sync', () => ({
-      syncLaneFromMission: vi.fn(async () => undefined),
-    }))
   })
 
   afterEach(() => {
@@ -55,15 +52,12 @@ projects:
     vi.resetModules()
     vi.doUnmock('../git-ops')
     vi.doUnmock('./dispatch-ready')
-    vi.doUnmock('./lane-sync')
     rmSync(tmp, { recursive: true, force: true })
   })
 
-  it('removes mission and local kanban card', async () => {
-    const { createOrUpdateMission, getSwarmMission, setMissionTaskId } =
-      await import('../swarm-missions')
-    const { createSwarmKanbanCard, listSwarmKanbanCards } = await import(
-      '../swarm-kanban-store'
+  it('removes mission from store by missionId', async () => {
+    const { createOrUpdateMission, getSwarmMission } = await import(
+      '../swarm-missions'
     )
     const { deleteMission } = await import('./task-service')
 
@@ -79,37 +73,9 @@ projects:
         },
       ],
     })
-    const card = createSwarmKanbanCard({
-      title: 'to-delete',
-      missionId: mission.id,
-      status: 'todo',
-    })
-    setMissionTaskId({ missionId: mission.id, taskId: card.id })
 
     const result = await deleteMission(mission.id)
     expect(result.missionId).toBe(mission.id)
-    expect(result.cardId).toBe(card.id)
-    expect(result.cardDeleted).toBe(true)
     expect(getSwarmMission(mission.id)).toBeNull()
-    expect(listSwarmKanbanCards().some((c) => c.id === card.id)).toBe(false)
-  })
-
-  it('deletes orphan kanban card by card id (t_… style)', async () => {
-    const { createSwarmKanbanCard, listSwarmKanbanCards } = await import(
-      '../swarm-kanban-store'
-    )
-    const { deleteMissionByRef } = await import('./task-service')
-
-    const card = createSwarmKanbanCard({
-      title: 'orphan-card',
-      status: 'todo',
-    })
-    // Simulate Claude-style id by rewriting via local store delete+recreate is hard;
-    // assert the card id path works for whatever id the store assigned.
-    const result = await deleteMissionByRef(card.id)
-    expect(result.missionId).toBeNull()
-    expect(result.cardId).toBe(card.id)
-    expect(result.cardDeleted).toBe(true)
-    expect(listSwarmKanbanCards().some((c) => c.id === card.id)).toBe(false)
   })
 })

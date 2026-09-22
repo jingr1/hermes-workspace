@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { KanbanLane, MissionSummary } from '@/lib/mission-control-api'
 import { cn } from '@/lib/utils'
-import { fetchMissions } from '@/lib/mission-control-api'
+import { fetchMissions, patchMission } from '@/lib/mission-control-api'
 import { CreateMissionButton } from './components/create-task-button'
 import { toast } from '@/components/ui/toast'
 
@@ -52,27 +52,11 @@ function loadPrefs(): Partial<SurfacePrefs> {
   }
 }
 
-async function patchMissionLane(
-  cardId: string,
-  status: KanbanLane,
-): Promise<void> {
-  const res = await fetch('/api/swarm-kanban', {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id: cardId, status }),
-  })
-  const data = (await res.json().catch(() => ({}))) as {
-    ok?: boolean
-    error?: string
-  }
-  if (!res.ok || data.ok === false) {
-    throw new Error(data.error || `Failed to move mission: ${res.status}`)
-  }
-}
-
 function resolveLane(m: MissionSummary): KanbanLane {
   const lane =
-    (m.derivedLane ?? m.lane) === 'ready' ? 'todo' : (m.derivedLane ?? m.lane)
+    (m.boardLane ?? m.derivedLane ?? m.lane) === 'ready'
+      ? 'todo'
+      : (m.boardLane ?? m.derivedLane ?? m.lane)
   return lane
 }
 
@@ -89,11 +73,11 @@ function isActiveWorker(m: MissionSummary): boolean {
 }
 
 function selectId(m: MissionSummary): string {
-  return m.missionId ?? m.cardId
+  return m.missionId ?? ''
 }
 
 type MissionSurfaceProps = {
-  onSelectMission: (cardId: string | null) => void
+  onSelectMission: (missionId: string | null) => void
 }
 
 export function MissionSurface({ onSelectMission }: MissionSurfaceProps) {
@@ -110,7 +94,7 @@ export function MissionSurface({ onSelectMission }: MissionSurfaceProps) {
     prefs.swimlaneBy ?? 'assignee',
   )
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [dragCardId, setDragCardId] = useState<string | null>(null)
+  const [dragMissionId, setDragMissionId] = useState<string | null>(null)
   const queryClient = useQueryClient()
 
   useEffect(() => {
@@ -131,8 +115,8 @@ export function MissionSurface({ onSelectMission }: MissionSurfaceProps) {
   const missions = missionsQuery.data?.missions ?? []
 
   const moveMutation = useMutation({
-    mutationFn: async (input: { cardId: string; status: KanbanLane }) =>
-      patchMissionLane(input.cardId, input.status),
+    mutationFn: async (input: { missionId: string; status: KanbanLane }) =>
+      patchMission(input.missionId, { boardLane: input.status }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: MISSIONS_QUERY_KEY })
     },
@@ -193,17 +177,17 @@ export function MissionSurface({ onSelectMission }: MissionSurfaceProps) {
   }
 
   async function batchMove(status: KanbanLane) {
-    const targets = missions.filter((m) => selectedIds.has(m.cardId))
+    const targets = missions.filter((m) => selectedIds.has(selectId(m)))
     for (const m of targets) {
-      await moveMutation.mutateAsync({ cardId: m.cardId, status })
+      await moveMutation.mutateAsync({ missionId: selectId(m), status })
     }
     setSelectedIds(new Set())
     toast(`Moved ${targets.length} mission(s)`, { type: 'success' })
   }
 
   function onDropLane(laneId: KanbanLane) {
-    if (!dragCardId) return
-    void moveMutation.mutateAsync({ cardId: dragCardId, status: laneId })
+    if (!dragMissionId) return
+    void moveMutation.mutateAsync({ missionId: dragMissionId, status: laneId })
     setDragCardId(null)
   }
 
@@ -329,10 +313,10 @@ export function MissionSurface({ onSelectMission }: MissionSurfaceProps) {
                 <div className="flex flex-col gap-2 p-2">
                   {(byLane.get(lane.id) ?? []).map((m) => (
                     <MissionCard
-                      key={m.cardId}
+                      key={selectId(m)}
                       mission={m}
                       draggable
-                      onDragStart={() => setDragCardId(m.cardId)}
+                      onDragStart={() => setDragMissionId(selectId(m))}
                       onOpen={() => onSelectMission(selectId(m))}
                     />
                   ))}
@@ -357,13 +341,13 @@ export function MissionSurface({ onSelectMission }: MissionSurfaceProps) {
                   <div className="divide-y divide-[var(--theme-border)] rounded-lg border border-[var(--theme-border)]">
                     {rows.map((m) => (
                       <div
-                        key={m.cardId}
+                        key={selectId(m)}
                         className="flex items-center gap-2 px-3 py-2 hover:bg-[var(--theme-hover)]"
                       >
                         <input
                           type="checkbox"
-                          checked={selectedIds.has(m.cardId)}
-                          onChange={() => toggleSelect(m.cardId)}
+                          checked={selectedIds.has(selectId(m))}
+                          onChange={() => toggleSelect(selectId(m))}
                         />
                         <button
                           type="button"
@@ -402,14 +386,14 @@ export function MissionSurface({ onSelectMission }: MissionSurfaceProps) {
               <tbody>
                 {filtered.map((m) => (
                   <tr
-                    key={m.cardId}
+                    key={selectId(m)}
                     className="border-b border-[var(--theme-border)] hover:bg-[var(--theme-hover)]"
                   >
                     <td className="px-3 py-2">
                       <input
                         type="checkbox"
-                        checked={selectedIds.has(m.cardId)}
-                        onChange={() => toggleSelect(m.cardId)}
+                        checked={selectedIds.has(selectId(m))}
+                        onChange={() => toggleSelect(selectId(m))}
                       />
                     </td>
                     <td
@@ -450,11 +434,11 @@ export function MissionSurface({ onSelectMission }: MissionSurfaceProps) {
                         .filter((m) => resolveLane(m) === lane.id)
                         .map((m) => (
                           <MissionCard
-                            key={m.cardId}
+                            key={selectId(m)}
                             mission={m}
                             compact
                             draggable
-                            onDragStart={() => setDragCardId(m.cardId)}
+                            onDragStart={() => setDragMissionId(selectId(m))}
                             onOpen={() => onSelectMission(selectId(m))}
                           />
                         ))}

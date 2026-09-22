@@ -80,9 +80,7 @@ agents:
     process.chdir(prevCwd)
     vi.resetModules()
     vi.doUnmock('../swarm-environment')
-    vi.doUnmock('../kanban-backend')
     vi.doUnmock('./dispatch-ready')
-    vi.doUnmock('./lane-sync')
     vi.doUnmock('../group-chat/room-store')
     rmSync(tmp, { recursive: true, force: true })
   })
@@ -106,28 +104,11 @@ agents:
       SWARM_MEMORY_HANDOFFS: join(tmp, 'memory'),
       SWARM_LEGACY_OUTPUT_ROOT: join(tmp, 'output'),
     }))
-    vi.doMock('../kanban-backend', () => ({
-      createKanbanCard: vi.fn(async () => ({
-        id: 'card-pipeline-1',
-        title: 'Pipe mission',
-        status: 'todo',
-        missionId: null,
-      })),
-      updateKanbanCard: vi.fn(async (_id: string, updates: unknown) => ({
-        id: 'card-pipeline-1',
-        title: 'Pipe mission',
-        status: 'todo',
-        ...(updates as object),
-      })),
-    }))
     vi.doMock('./dispatch-ready', () => ({
       dispatchReadyAssignments: vi.fn(async () => ({
         ok: true,
         dispatched: [{ assignmentId: 'a1', workerId: 'architect', ok: true }],
       })),
-    }))
-    vi.doMock('./lane-sync', () => ({
-      syncLaneFromMission: vi.fn(async () => undefined),
     }))
 
     const { createMission } = await import('./task-service')
@@ -144,6 +125,7 @@ agents:
     expect(created.roomId).toBeNull()
     expect(created.executionMode).toBe('pipeline')
     expect(created.pipelineId).toBe('design-implement')
+    expect(created.missionId).toBeTruthy()
     expect(created.dispatched.length).toBeGreaterThan(0)
 
     const mission = getSwarmMission(created.missionId)
@@ -160,28 +142,11 @@ agents:
       SWARM_MEMORY_HANDOFFS: join(tmp, 'memory'),
       SWARM_LEGACY_OUTPUT_ROOT: join(tmp, 'output'),
     }))
-    vi.doMock('../kanban-backend', () => ({
-      createKanbanCard: vi.fn(async () => ({
-        id: 'card-group-1',
-        title: 'Group mission',
-        status: 'todo',
-        missionId: null,
-      })),
-      updateKanbanCard: vi.fn(async (_id: string, updates: unknown) => ({
-        id: 'card-group-1',
-        title: 'Group mission',
-        status: 'todo',
-        ...(updates as object),
-      })),
-    }))
     vi.doMock('./dispatch-ready', () => ({
       dispatchReadyAssignments: vi.fn(async () => ({
         ok: true,
         dispatched: [],
       })),
-    }))
-    vi.doMock('./lane-sync', () => ({
-      syncLaneFromMission: vi.fn(async () => undefined),
     }))
     vi.doMock('../group-chat/room-store', () => ({
       getRoom: vi.fn(() => ({ id: 'room-abc', title: 'Collab' })),
@@ -197,6 +162,5 @@ agents:
 
     expect(created.roomId).toBe('room-abc')
     expect(created.firstAssignmentIds).toEqual([])
-    expect(created.dispatched).toEqual([])
   })
 })

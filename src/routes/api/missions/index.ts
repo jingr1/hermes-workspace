@@ -1,7 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../server/auth-middleware'
-import { listKanbanCards } from '../../../server/kanban-backend'
 import { createMission } from '../../../server/task-pipeline/task-service'
 import { listSwarmMissions } from '../../../server/swarm-missions'
 import { buildMissionSummary } from '../../../server/task-pipeline/mission-serialize'
@@ -17,23 +16,10 @@ export const Route = createFileRoute('/api/missions/')({
       GET: async ({ request }) => {
         if (!isAuthenticated(request))
           return json({ error: 'Unauthorized' }, { status: 401 })
-        const cards = await listKanbanCards()
         const missions = listSwarmMissions(500)
-        const missionById = new Map(missions.map((m) => [m.id, m]))
-        const missionByTaskId = new Map(
-          missions.filter((m) => m.taskId).map((m) => [m.taskId as string, m]),
+        const list = missions.map((mission) =>
+          buildMissionSummary({ mission }),
         )
-        const list = cards.map((card) => {
-          const mission = card.missionId
-            ? (missionById.get(card.missionId) ?? null)
-            : (missionByTaskId.get(card.id) ?? null)
-          return buildMissionSummary({
-            cardId: card.id,
-            cardTitle: card.title,
-            cardStatus: card.status,
-            mission,
-          })
-        })
         return json({ missions: list, tasks: list })
       },
 
@@ -69,7 +55,6 @@ export const Route = createFileRoute('/api/missions/')({
           )
         }
         if (!hasPipeline && !hasAssignee && body.executionMode !== 'assignee') {
-          // Legacy: pipelineId-only clients
           if (!body.pipelineId) {
             return json(
               { error: 'Provide pipelineId or assignee' },

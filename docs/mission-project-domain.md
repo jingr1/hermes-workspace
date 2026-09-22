@@ -78,7 +78,7 @@ Pipeline 模板级二选一（`pipeline-templates.ts` 加载期校验）：
 
 ### Delete (`deleteMission`)
 
-1. `cancelSwarmMission` → 删 mission 记录 + kanban card。
+1. `cancelSwarmMission` → 删 mission 记录。
 2. 若 `projectId && workspaceMode === 'worktree'` → `releaseMissionWorktree(project, missionId)`（best-effort；失败打 warn）。
 
 Patch：`projectId` 可改（校验 known id）；**不**自动迁移已有 worktree（改绑属运维/产品边界，文档层记：worktree 与 create 时 project 强耦合）。
@@ -87,7 +87,7 @@ Patch：`projectId` 可改（校验 known id）；**不**自动迁移已有 work
 
 ## 5. UX 含义
 
-- **Mission 列表**：支持按 `projectId` swimlane；无 project 归入「未分类」类泳道。
+- **Mission 列表**：支持按 `projectId` swimlane；无 project 归入「未分类」类泳道。列表实体是 Mission（`listSwarmMissions`），**不再**经 kanban card 投影。
 - **Create Mission**：可选选 Project；pipeline 选择隐含 workspace 语义（当前 shipped pipelines 均为 `canonical`；worktree pipeline 需 UI 提示需选 project + 非本地 tmux worker）。
 - **Mission 详情 Properties**：`project` 可编辑；`workspaceMode` / pipeline / lane 多为只读信息字段。
 - **群聊**：Ad-hoc room 自管 `workspacePath`；From mission 的 room cwd 只读派生，worktree 模式展示/依赖 mission 侧 worktree 已 ensure。

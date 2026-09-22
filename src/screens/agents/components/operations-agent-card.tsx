@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import {
   ArrowRight01Icon,
@@ -22,15 +22,12 @@ import { PixelAvatar } from '@/components/agent-swarm/pixel-avatar'
 import { Markdown } from '@/components/prompt-kit/markdown'
 import { toast } from '@/components/ui/toast'
 import { runCronJob, toggleCronJob } from '@/lib/cron-api'
-import { fetchTasks } from '@/lib/mission-control-api'
 import { cn } from '@/lib/utils'
 import {
   useAgentChat,
   type OperationsChatMessage,
 } from '../hooks/use-agent-chat'
 import type { OperationsAgent } from '../hooks/use-operations'
-
-const TASKS_QUERY_KEY = ['mission-control', 'tasks'] as const
 
 function getStatusStyles(
   status: OperationsAgent['status'],
@@ -254,33 +251,11 @@ export function OperationsAgentCard({
   )
   const cronJobCount = agent.jobs.length
 
-  const tasksQuery = useQuery({
-    queryKey: TASKS_QUERY_KEY,
-    queryFn: fetchTasks,
-    refetchInterval: 60_000,
-    enabled: Boolean(agent.missionId || agent.currentTask),
-  })
-
-  const missionTaskId = useMemo(() => {
-    if (!agent.missionId) return null
-    const tasks = tasksQuery.data?.tasks ?? []
-    return (
-      tasks.find((task) => task.missionId === agent.missionId)?.cardId ?? null
-    )
-  }, [agent.missionId, tasksQuery.data?.tasks])
-
   function openCurrentMission() {
     if (agent.missionId) {
       void navigate({
         to: '/missions',
         search: { missionId: agent.missionId },
-      })
-      return
-    }
-    if (missionTaskId) {
-      void navigate({
-        to: '/missions',
-        search: { missionId: missionTaskId },
       })
       return
     }
@@ -517,9 +492,7 @@ export function OperationsAgentCard({
           onClick={openCurrentMission}
           className="mx-2 mb-1 flex items-center gap-1.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2.5 py-1.5 text-left transition-colors hover:border-[var(--theme-accent)] hover:bg-[var(--theme-hover)]"
           title={
-            missionTaskId
-              ? 'Open mission pipeline'
-              : 'Open Missions board'
+            agent.missionId ? 'Open mission pipeline' : 'Open Missions board'
           }
         >
           <HugeiconsIcon

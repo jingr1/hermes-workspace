@@ -3,20 +3,14 @@ import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../../server/auth-middleware'
 import {
-  listKanbanCards,
-  updateKanbanCard,
-} from '../../../../server/kanban-backend'
-import {
   getSwarmMission,
-  listSwarmMissions,
   patchMissionFields,
   readyQueuedAssignments,
   type MissionAssignee,
+  type SwarmMission,
 } from '../../../../server/swarm-missions'
 import { dispatchReadyAssignments } from '../../../../server/task-pipeline/dispatch-ready'
-import {
-  deleteMissionByRef,
-} from '../../../../server/task-pipeline/task-service'
+import { deleteMission } from '../../../../server/task-pipeline/task-service'
 import { getCollabDbPath } from '../../../../server/collab-db'
 import { openSqliteDatabase } from '../../../../server/sqlite-helper'
 import {
@@ -25,34 +19,17 @@ import {
 } from '../../../../server/task-pipeline/mission-serialize'
 import type { DispatchReadyResult } from '../../../../server/task-pipeline/dispatch-ready'
 import { getProject } from '../../../../server/task-pipeline/projects'
+import type { KanbanLane } from '../../../../server/task-pipeline/lane-sync'
 
-async function resolveMission(id: string) {
-  // Accept missionId or cardId (legacy taskId).
-  let mission = getSwarmMission(id)
-  if (mission) {
-    const cards = await listKanbanCards()
-    const card =
-      cards.find((c) => c.missionId === mission!.id) ??
-      (mission.taskId ? cards.find((c) => c.id === mission!.taskId) : null) ??
-      null
-    return { card, mission }
-  }
-  const cards = await listKanbanCards()
-  const card = cards.find((c) => c.id === id)
-  if (!card) return { card: null, mission: null }
-  mission = card.missionId ? getSwarmMission(card.missionId) : null
-  if (!mission) {
-    const missions = listSwarmMissions(500)
-    mission = missions.find((m) => m.taskId === id) ?? null
-  }
-  return { card, mission }
+function resolveMission(id: string): SwarmMission | null {
+  return getSwarmMission(id)
 }
 
 /**
  * GET    /api/missions/:missionId → mission detail + tasks
  * POST   /api/missions/:missionId → dispatch ready tasks
  * PATCH  /api/missions/:missionId → update configurable fields
- * DELETE /api/missions/:missionId → delete mission + card
+ * DELETE /api/missions/:missionId → delete mission
  */
 export const Route = createFileRoute('/api/missions/$missionId/')({
   server: {
@@ -60,28 +37,12 @@ export const Route = createFileRoute('/api/missions/$missionId/')({
       GET: async ({ request, params }) => {
         if (!isAuthenticated(request))
           return json({ error: 'Unauthorized' }, { status: 401 })
-        const { card, mission } = await resolveMission(params.missionId)
-        if (!card && !mission) {
+        const mission = resolveMission(params.missionId)
+        if (!mission) {
           return json(
             { error: `Mission not found: ${params.missionId}` },
             { status: 404 },
           )
-        }
-        if (!mission) {
-          return json({
-            mission: card
-              ? buildMissionSummary({
-                  cardId: card.id,
-                  cardTitle: card.title,
-                  cardStatus: card.status,
-                  mission: null,
-                })
-              : null,
-            tasks: [],
-            pipeline: null,
-            runs: [],
-            events: [],
-          })
         }
 
         const dbPath = getCollabDbPath()
@@ -99,21 +60,18 @@ export const Route = createFileRoute('/api/missions/$missionId/')({
           }
         }
 
-        const summary = buildMissionSummary({
-          cardId: card?.id ?? mission.taskId ?? mission.id,
-          cardTitle: card?.title ?? mission.title,
-          cardStatus: card?.status ?? 'todo',
-          mission,
-        })
+        const summary = buildMissionSummary({ mission })
 
         return json({
           mission: summary,
-          task: card
-            ? {
-                ...card,
-                title: mission.title.trim() ? mission.title.trim() : card.title,
-              }
-            : null,
+          task: {
+            id: mission.id,
+            title: mission.title,
+            spec: '',
+            acceptanceCriteria: [],
+            status: summary.lane,
+            missionId: mission.id,
+          },
           tasks: mission.assignments.map(serializeMissionTask),
           pipeline: {
             id: mission.pipelineId ?? null,
@@ -141,7 +99,7 @@ export const Route = createFileRoute('/api/missions/$missionId/')({
       POST: async ({ request, params }) => {
         if (!isAuthenticated(request))
           return json({ error: 'Unauthorized' }, { status: 401 })
-        const { mission } = await resolveMission(params.missionId)
+        const mission = resolveMission(params.missionId)
         if (!mission) {
           return json(
             { error: `Mission not found: ${params.missionId}` },
@@ -177,7 +135,7 @@ export const Route = createFileRoute('/api/missions/$missionId/')({
       PATCH: async ({ request, params }) => {
         if (!isAuthenticated(request))
           return json({ error: 'Unauthorized' }, { status: 401 })
-        const { card, mission } = await resolveMission(params.missionId)
+        const mission = resolveMission(params.missionId)
         if (!mission) {
           return json(
             { error: `Mission not found: ${params.missionId}` },
@@ -192,6 +150,7 @@ export const Route = createFileRoute('/api/missions/$missionId/')({
           projectId?: string | null
           priority?: number | null
           labels?: Array<string>
+          boardLane?: KanbanLane | null
         }
         try {
           body = await request.json()
@@ -239,39 +198,15 @@ export const Route = createFileRoute('/api/missions/$missionId/')({
           projectId: body.projectId,
           priority: body.priority,
           labels: body.labels,
+          boardLane: body.boardLane,
         })
         if (!patched) {
           return json({ error: 'Failed to patch mission' }, { status: 500 })
         }
 
-        const cardId = card?.id ?? patched.taskId
-        if (cardId && body.title?.trim()) {
-          try {
-            await updateKanbanCard(cardId, { title: body.title.trim() })
-          } catch (error) {
-            console.warn(
-              `[missions PATCH] card title sync failed for ${cardId}:`,
-              error,
-            )
-          }
-        }
-
-        const cards = await listKanbanCards()
-        const nextCard =
-          cards.find((c) => c.missionId === patched.id) ??
-          (patched.taskId
-            ? cards.find((c) => c.id === patched.taskId)
-            : null) ??
-          card
-
         return json({
           ok: true,
-          mission: buildMissionSummary({
-            cardId: nextCard?.id ?? patched.taskId ?? patched.id,
-            cardTitle: nextCard?.title ?? patched.title,
-            cardStatus: nextCard?.status ?? 'todo',
-            mission: patched,
-          }),
+          mission: buildMissionSummary({ mission: patched }),
         })
       },
 
@@ -279,7 +214,7 @@ export const Route = createFileRoute('/api/missions/$missionId/')({
         if (!isAuthenticated(request))
           return json({ error: 'Unauthorized' }, { status: 401 })
         try {
-          const result = await deleteMissionByRef(params.missionId)
+          const result = await deleteMission(params.missionId)
           return json({ ok: true, ...result })
         } catch (error) {
           const message =

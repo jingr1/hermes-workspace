@@ -188,9 +188,9 @@ set -g exit-unattached off
 | LangGraph                    | `hermes_langgraph_orchestrator/`                                             |
 | 群聊                         | `src/server/group-chat/`、`src/screens/group-chat/`、`src/routes/api/rooms*` |
 | 1:1 Chat / managed companion | `src/screens/chat/`、`src/routes/api/agents/`                                |
-| Missions / Agents UI         | `/missions`、`/agents`（旧 `/mission-control` `/operations` `/profiles` redirect）；合同见 `docs/ia-missions-agents-merge.md` |
+| Missions / Agents UI         | `/missions`、`/agents`（旧 `/mission-control` `/operations` `/profiles` redirect）；合同见 `docs/ia-missions-agents-merge.md`、`docs/mission-task-domain.md`（mission-keyed，无 kanban card） |
 | Swarm UI                     | `src/screens/swarm2/`、`src/routes/swarm2.tsx`                               |
 | Profile 同步                 | `scripts/sync-swarm-profiles.mjs`                                            |
-| 项目 / worktree              | `projects.yaml`、`src/server/git-ops.ts`、`src/server/task-pipeline/`        |
+| 项目 / worktree              | `projects.yaml`、`docs/mission-project-domain.md`、`src/server/git-ops.ts`、`src/server/task-pipeline/` |
 
 改 agent roster / skills / 门控时：先改 `agents.yaml`（及必要时 workflow yaml），再 sync profiles，并同步更新本文，避免合同漂移。

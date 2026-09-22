@@ -87,7 +87,7 @@ export type SwarmMission = {
   specVersion?: number
   /** Pipeline template this mission was instantiated from (P2a). */
   pipelineId?: string | null
-  /** Kanban card id this mission is bound to (P2a). */
+  /** @deprecated Unused; Mission list is mission-keyed. Prefer null. */
   taskId?: string | null
   /** Project this mission targets (P2b). */
   projectId?: string | null
@@ -105,6 +105,19 @@ export type SwarmMission = {
   /** Optional display helpers for MissionSurface filters. */
   priority?: number | null
   labels?: Array<string>
+  /**
+   * Optional human board placement (MissionSurface drag).
+   * When null, UI uses laneFromMission(derived).
+   */
+  boardLane?:
+    | 'backlog'
+    | 'todo'
+    | 'ready'
+    | 'running'
+    | 'review'
+    | 'blocked'
+    | 'done'
+    | null
 }
 
 export type SwarmMissionEvent = {
@@ -966,6 +979,7 @@ export function patchMissionFields(input: {
   projectId?: string | null
   priority?: number | null
   labels?: Array<string>
+  boardLane?: SwarmMission['boardLane']
 }): SwarmMission | null {
   const store = readStore()
   const mission = store.missions.find((item) => item.id === input.missionId)
@@ -982,6 +996,7 @@ export function patchMissionFields(input: {
   if (input.projectId !== undefined) mission.projectId = input.projectId
   if (input.priority !== undefined) mission.priority = input.priority
   if (input.labels !== undefined) mission.labels = input.labels
+  if (input.boardLane !== undefined) mission.boardLane = input.boardLane
   mission.updatedAt = now()
   writeStore(store)
   return mission

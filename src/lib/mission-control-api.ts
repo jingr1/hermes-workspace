@@ -64,7 +64,6 @@ export type MissionAssignee = {
 }
 
 export type MissionSummary = {
-  cardId: string
   title: string
   lane: KanbanLane
   missionId: string | null
@@ -81,6 +80,7 @@ export type MissionSummary = {
   priority: number | null
   labels: Array<string>
   taskCount: number
+  boardLane: KanbanLane | null
 }
 
 /** @deprecated Prefer MissionSummary */
@@ -197,12 +197,12 @@ export async function fetchTasks(): Promise<TasksResponse> {
 }
 
 export async function fetchMissionDetail(
-  missionOrCardId: string,
+  missionId: string,
 ): Promise<MissionDetail> {
-  const res = await fetch(`/api/missions/${missionOrCardId}`)
+  const res = await fetch(`/api/missions/${missionId}`)
   if (!res.ok) {
-    // Legacy card id path
-    const legacy = await fetch(`/api/tasks/${missionOrCardId}`)
+    // Compat: older /api/tasks/:id shape
+    const legacy = await fetch(`/api/tasks/${missionId}`)
     if (!legacy.ok)
       throw new Error(`Failed to fetch mission detail: ${res.status}`)
     const data = (await legacy.json()) as TaskDetail & {
@@ -211,7 +211,6 @@ export async function fetchMissionDetail(
     }
     return {
       mission: data.mission ?? {
-        cardId: data.task.id,
         title: data.task.title,
         lane: data.task.status,
         missionId: data.task.missionId,
@@ -228,6 +227,7 @@ export async function fetchMissionDetail(
         priority: null,
         labels: [],
         taskCount: data.pipeline?.stages.length ?? 0,
+        boardLane: null,
       },
       task: data.task,
       tasks:
@@ -260,7 +260,7 @@ export async function fetchTaskDetail(taskId: string): Promise<TaskDetail> {
   const detail = await fetchMissionDetail(taskId)
   return {
     task: detail.task ?? {
-      id: detail.mission.cardId,
+      id: detail.mission.missionId ?? '',
       title: detail.mission.title,
       spec: '',
       acceptanceCriteria: [],
@@ -273,7 +273,7 @@ export async function fetchTaskDetail(taskId: string): Promise<TaskDetail> {
   }
 }
 
-export async function startMission(missionOrCardId: string): Promise<{
+export async function startMission(missionId: string): Promise<{
   ok: boolean
   dispatched: Array<{
     assignmentId: string
@@ -282,11 +282,11 @@ export async function startMission(missionOrCardId: string): Promise<{
     error?: string
   }>
 }> {
-  const res = await fetch(`/api/missions/${missionOrCardId}`, {
+  const res = await fetch(`/api/missions/${missionId}`, {
     method: 'POST',
   })
   if (!res.ok) {
-    const legacy = await fetch(`/api/tasks/${missionOrCardId}`, {
+    const legacy = await fetch(`/api/tasks/${missionId}`, {
       method: 'POST',
     })
     const data = (await legacy.json().catch(() => ({}))) as {
@@ -324,13 +324,14 @@ export type PatchMissionInput = {
   projectId?: string | null
   priority?: number | null
   labels?: Array<string>
+  boardLane?: KanbanLane | null
 }
 
 export async function patchMission(
-  missionOrCardId: string,
+  missionId: string,
   patch: PatchMissionInput,
 ): Promise<MissionSummary> {
-  const res = await fetch(`/api/missions/${missionOrCardId}`, {
+  const res = await fetch(`/api/missions/${missionId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(patch),
@@ -345,19 +346,17 @@ export async function patchMission(
   return data.mission
 }
 
-export async function deleteMission(missionOrCardId: string): Promise<{
+export async function deleteMission(missionId: string): Promise<{
   ok: boolean
   missionId: string | null
-  cardId: string | null
 }> {
-  const res = await fetch(`/api/missions/${missionOrCardId}`, {
+  const res = await fetch(`/api/missions/${missionId}`, {
     method: 'DELETE',
   })
   const data = (await res.json().catch(() => ({}))) as {
     error?: string
     ok?: boolean
     missionId?: string | null
-    cardId?: string | null
   }
   if (!res.ok || data.error) {
     throw new Error(data.error || `Failed to delete mission: ${res.status}`)
@@ -365,7 +364,6 @@ export async function deleteMission(missionOrCardId: string): Promise<{
   return {
     ok: true,
     missionId: data.missionId ?? null,
-    cardId: data.cardId ?? null,
   }
 }
 

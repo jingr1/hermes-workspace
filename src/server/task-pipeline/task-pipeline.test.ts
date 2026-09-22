@@ -285,7 +285,7 @@ describe('review.ts', () => {
       title: 'Build',
       spec: 'spec',
       acceptanceCriteria: ['works'],
-      cardId: 'card-1',
+      // card removed
     })
 
     const buildAssignment = mission.assignments.find(
@@ -404,7 +404,7 @@ describe('review.ts', () => {
       title: 'Build',
       spec: 'spec',
       acceptanceCriteria: ['works'],
-      cardId: 'card-1',
+      // card removed
     })
 
     const buildAssignment = mission.assignments.find(
@@ -495,13 +495,13 @@ describe('task-service instantiatePipeline (two-pass)', () => {
       title: 'Build the thing',
       spec: 'spec text here',
       acceptanceCriteria: ['works'],
-      cardId: 'card-1',
+      // card removed
     })
 
     // 5 stages → 5 assignments, architect owns spec+review (two assignments).
     expect(mission.assignments).toHaveLength(5)
     expect(mission.pipelineId).toBe('default-build')
-    expect(mission.taskId).toBe('card-1')
+    expect(mission.taskId ?? null).toBeNull()
     expect(mission.specVersion).toBe(1)
 
     const byStage = new Map(mission.assignments.map((a) => [a.stageKey, a]))

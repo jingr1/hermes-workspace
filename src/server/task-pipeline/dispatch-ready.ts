@@ -7,7 +7,7 @@
  *
  * Used by:
  *   - createTask autoDispatch kickoff
- *   - POST /api/tasks/:cardId/start retry/continue
+ *   - POST /api/missions/:missionId/start retry/continue
  *   - terminal checkpoint continuation hook
  */
 import { dispatchSwarmAssignments } from '../../routes/api/swarm-dispatch'
@@ -19,8 +19,6 @@ import {
   readyQueuedAssignments,
   setOnCheckpointTerminalHook,
 } from '../swarm-missions'
-import { updateKanbanCard } from '../kanban-backend'
-import { syncLaneFromMission } from './lane-sync'
 // Side-effect: register the swarm-path review verdict hook. review.ts is not
 // naturally imported by the hermes/swarm checkpoint path; pulling it in here
 // (dispatch-ready is imported by swarm-dispatch/task-service) wires it up.
@@ -59,21 +57,8 @@ function resolveAssignmentRuntime(workerId: string): 'hermes' | 'managed' {
   return 'hermes'
 }
 
-async function syncCardLane(missionId: string): Promise<void> {
-  const mission = getSwarmMission(missionId)
-  if (!mission?.taskId) return
-  try {
-    await syncLaneFromMission({
-      cardId: mission.taskId,
-      missionId,
-      updateCard: (id, lane) => updateKanbanCard(id, { status: lane }),
-    })
-  } catch (error) {
-    console.warn(
-      `[dispatch-ready] lane sync failed for ${missionId}:`,
-      error instanceof Error ? error.message : String(error),
-    )
-  }
+async function syncCardLane(_missionId: string): Promise<void> {
+  // Mission board lanes are derived from assignment state; no kanban card sync.
 }
 
 /**
