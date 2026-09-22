@@ -11,6 +11,10 @@ metadata:
     tags: [swarm, harden, gate, checklist, review]
     category: swarm
     related_skills: [architect-core, mission-memory-layout]
+    pipeline_stages: [harden]
+    outcomes:
+      - name: HARDEN_OUTCOME
+        values: [pass, fail]
 ---
 
 # Harden Gate (Gate H)

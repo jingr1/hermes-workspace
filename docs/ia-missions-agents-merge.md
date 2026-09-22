@@ -13,7 +13,7 @@
 
 | 侧栏文案 | 最终路由 | 一句话 | 管什么 |
 | -------- | -------- | ------ | ------ |
-| **Missions** | `/missions` | 「在做什么」 | Board + Pipeline；Create Task；群聊入口 |
+| **Missions** | `/missions` | 「在做什么」 | MissionSurface（board/list/table/swimlane）+ 详情 Tasks；Create Mission；可选群聊 |
 | **Agents** | `/agents` | 「是谁、能干什么、健康吗」 | profile 配置、轻量健康/用量、cron、outputs |
 | **Swarm** | `/swarm2` | 「编排现场」 | dispatch / tmux / Human Gate / checkpoint |
 
@@ -22,6 +22,7 @@
 - Mission Control **Overview** tab（能力拆到 Agents + Board）
 - `/profiles`（含 Monitoring tab）
 - `/operations` 作为产品名（路由 redirect 到 `/agents`）
+- **独立 `/tasks` 页**（redirect → `/missions`；Task 仅在 Mission 详情展示）
 
 ---
 
@@ -44,8 +45,10 @@ Overview tab **删除**。`?tab=overview` → redirect 到 Board（见 §5）。
 
 | 子态 | 如何进入 | 说明 |
 | ---- | -------- | ---- |
-| **Board** | `/missions`（默认） | Kanban；Create Task 在 header |
-| **Pipeline** | `/missions?taskId=<id>` | 单任务流水线；不必再占一级 tab |
+| **MissionSurface** | `/missions` | board / list / table / swimlane；Create Mission（pipeline \| assignee 互斥） |
+| **Detail** | `/missions?missionId=<id>`（兼容 `taskId`） | Tasks 分解表 + StageBar + Timeline；群聊按需 Create room |
+
+列表实体始终是 **Mission**；Task 不进列表行。详见 [`mission-task-domain.md`](./mission-task-domain.md)。
 
 旧 tab 名 `board` / `pipeline` 可映射到上述行为；`overview` 废弃。
 
@@ -64,8 +67,8 @@ Overview 删除后，Board 必须自带态势，避免空板无引导。
 
 实现注意：
 
-- 数据源：`GET /api/tasks`（与 Board 同 query），不要另轮询 `/api/agents/status` 只为这四个数。
-- 空板：文案 + 主 CTA **Create Task**（保留现有 create-task-button）。
+- 数据源：`GET /api/missions`（兼容 `GET /api/tasks`；与 Board 同 query），不要另轮询 `/api/agents/status` 只为这四个数。
+- 空板：文案 + 主 CTA **Create Mission**（pipeline \| assignee 互斥）。
 
 ### 3.3 Board 上不再出现
 
@@ -85,7 +88,7 @@ Agent 点击若出现在任务卡 assignee 上：进 Pipeline 或 Chat；「配�
 | Profiles：列表 / Create / Activate / Rename / Delete / clone wizard | 网格 + New Agent；Detail → Identity |
 | Profiles：description 编辑 | Detail → Identity |
 | Monitoring：online、Telegram、tokens/cost、session/tool 计数 | 卡片 1 行摘要 + Detail → **Usage** tab |
-| Monitoring：跳 `/tasks?assignee=` `/jobs?agent=` | 卡上保留或 Usage 内链接 |
+| Monitoring：跳 `/missions?missionId=` `/jobs?agent=` | 卡上保留或 Usage 内链接 |
 | Operations：Capabilities / Schedule / Activity / Outputs / Recover / Ping | 保留；Agent Bus 收成顶栏「Swarm health」条，不再整面 Troop 墙 |
 
 ### 4.2 Detail tabs（目标）
@@ -103,7 +106,7 @@ Overview 里「谁在忙哪张卡」迁到 Agents 卡，避免 Missions↔Agents
 
 | 字段 | 展示 | 交互 |
 | ---- | ---- | ---- |
-| `currentTask` / `missionId` / task card id | 卡上单行标题或 id | 点击 → `/missions?taskId=<cardId>` |
+| `currentTask` / `missionId` / task card id | 卡上单行标题或 id | 点击 → `/missions?missionId=<missionId>`（兼容 `taskId` card id） |
 | checkpoint / needsHuman | 状态点旁短标签 | needsHuman 时可次要链到 `/swarm2` |
 
 无 current task 时不占位空行（或显示 Idle）。
@@ -127,8 +130,9 @@ Overview 里「谁在忙哪张卡」迁到 Agents 卡，避免 Missions↔Agents
 | `/mission-control?tab=overview` | `/missions` | Overview 废弃 |
 | `/mission-control?tab=board` | `/missions` | |
 | `/mission-control?tab=pipeline` | `/missions` | 无 taskId 时仍 Board |
-| `/mission-control?tab=pipeline&taskId=X` | `/missions?taskId=X` | |
-| `/mission-control?taskId=X` | `/missions?taskId=X` | |
+| `/mission-control?tab=pipeline&taskId=X` | `/missions?missionId=X`（兼容 `taskId`） | |
+| `/mission-control?taskId=X` | `/missions?missionId=X`（兼容 `taskId`） | |
+| `/tasks` | `/missions` | 独立 Tasks 页废弃 |
 | `/operations` | `/agents` | 保留 query（如 `?agent=`） |
 | `/operations?*` | `/agents?*` | |
 | `/profiles` | `/agents` | |

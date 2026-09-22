@@ -270,10 +270,17 @@ export function OperationsAgentCard({
   }, [agent.missionId, tasksQuery.data?.tasks])
 
   function openCurrentMission() {
+    if (agent.missionId) {
+      void navigate({
+        to: '/missions',
+        search: { missionId: agent.missionId },
+      })
+      return
+    }
     if (missionTaskId) {
       void navigate({
         to: '/missions',
-        search: { taskId: missionTaskId },
+        search: { missionId: missionTaskId },
       })
       return
     }

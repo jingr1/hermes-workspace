@@ -5,7 +5,6 @@ import {
   ArrowRight01Icon,
   BrainIcon,
   Chat01Icon,
-  CheckListIcon,
   Clock01Icon,
   ComputerTerminal01Icon,
   DashboardSquare01Icon,
@@ -564,7 +563,6 @@ function ChatSidebarComponent({
   const isTerminalActive = pathname === '/terminal'
   const isJobsActive = pathname === '/jobs'
   const isMemoryActive = pathname === '/memory'
-  const isTasksActive = pathname === '/tasks'
   const isMissionControlActive =
     pathname.startsWith('/missions') || pathname.startsWith('/mission-control')
   const isGroupChatActive = pathname.startsWith('/group-chat')
@@ -754,13 +752,6 @@ function ChatSidebarComponent({
       icon: Clock01Icon,
       label: t('nav.jobs'),
       active: isJobsActive,
-    },
-    {
-      kind: 'link',
-      to: '/tasks',
-      icon: CheckListIcon,
-      label: 'Tasks',
-      active: isTasksActive,
     },
     {
       kind: 'link',

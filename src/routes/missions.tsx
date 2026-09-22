@@ -4,6 +4,8 @@ import { usePageTitle } from '@/hooks/use-page-title'
 import { MissionsLayout } from '@/screens/mission-control/mission-control-layout'
 
 const searchSchema = z.object({
+  missionId: z.string().optional(),
+  /** Legacy alias for mission/card id */
   taskId: z.string().optional(),
 })
 
@@ -17,16 +19,16 @@ function MissionsRoute() {
   usePageTitle('Missions')
   const search = useSearch({ from: '/missions' })
   const navigate = useNavigate({ from: '/missions' })
-  const taskId = search.taskId
+  const missionId = search.missionId ?? search.taskId
 
-  function selectTask(nextTaskId: string | null) {
+  function selectMission(nextId: string | null) {
     void navigate({
       search: (prev) => {
-        if (!nextTaskId) {
-          const { taskId: _removed, ...rest } = prev
+        if (!nextId) {
+          const { missionId: _m, taskId: _t, ...rest } = prev
           return rest
         }
-        return { ...prev, taskId: nextTaskId }
+        return { ...prev, missionId: nextId, taskId: undefined }
       },
       replace: true,
     })
@@ -34,8 +36,8 @@ function MissionsRoute() {
 
   return (
     <MissionsLayout
-      selectedTaskId={taskId ?? null}
-      onSelectTask={selectTask}
+      selectedMissionId={missionId ?? null}
+      onSelectMission={selectMission}
     />
   )
 }

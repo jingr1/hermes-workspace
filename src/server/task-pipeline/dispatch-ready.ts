@@ -24,7 +24,7 @@ import { syncLaneFromMission } from './lane-sync'
 // Side-effect: register the swarm-path review verdict hook. review.ts is not
 // naturally imported by the hermes/swarm checkpoint path; pulling it in here
 // (dispatch-ready is imported by swarm-dispatch/task-service) wires it up.
-import './review'
+import { markTaskRunning, releaseTaskClaim } from './task-scheduler'
 
 // Production Mission MCP → assignment advance: task_complete drives the next
 // ready stage. Idempotent; tests may reinstall with custom dispatchNext.
@@ -159,6 +159,14 @@ export async function dispatchReadyAssignments(
   }
 
   await syncCardLane(missionId)
+
+  for (const row of dispatched) {
+    if (row.ok) {
+      markTaskRunning({ missionId, assignmentId: row.assignmentId })
+    } else {
+      releaseTaskClaim(row.assignmentId)
+    }
+  }
 
   return {
     ok: dispatched.every((d) => d.ok),

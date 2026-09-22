@@ -1,19 +1,14 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { z } from 'zod'
-import { usePageTitle } from '@/hooks/use-page-title'
-import { TasksScreen } from '@/screens/tasks/tasks-screen'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
-const searchSchema = z.object({
-  assignee: z.string().optional(),
-})
-
+/**
+ * Legacy /tasks page — redirects to Missions (list entity = Mission).
+ */
 export const Route = createFileRoute('/tasks')({
   ssr: false,
-  validateSearch: searchSchema,
-  component: TasksRoute,
+  beforeLoad: () => {
+    throw redirect({
+      to: '/missions',
+      replace: true,
+    })
+  },
 })
-
-function TasksRoute() {
-  usePageTitle('Tasks')
-  return <TasksScreen />
-}

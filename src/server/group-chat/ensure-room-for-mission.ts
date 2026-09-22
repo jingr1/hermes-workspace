@@ -7,7 +7,7 @@
 import { getAgentRuntimeRouter } from '../agent-runtime/router'
 import { ensureMissionWorktree } from '../git-ops'
 import { getProject } from '../task-pipeline/projects'
-import { getSwarmMission } from '../swarm-missions'
+import { getSwarmMission, updateMissionRoomId } from '../swarm-missions'
 import type { Room, RoomRuntime } from './types'
 import {
   addParticipant,
@@ -134,7 +134,8 @@ export async function ensureRoomForMission(input: {
         { dbPath: input.dbPath },
       ) ?? existing
     inviteMissionAgents(room.id, missionId, { dbPath: input.dbPath })
-    return { room, created: false }
+  updateMissionRoomId({ missionId, roomId: room.id })
+  return { room, created: false }
   }
 
   const title = mission.title?.trim() || `Mission ${missionId}`
@@ -146,5 +147,6 @@ export async function ensureRoomForMission(input: {
     dbPath: input.dbPath,
   })
   inviteMissionAgents(room.id, missionId, { dbPath: input.dbPath })
+  updateMissionRoomId({ missionId, roomId: room.id })
   return { room, created: true }
 }

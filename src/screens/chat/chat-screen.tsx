@@ -8,7 +8,7 @@ import React, {
   useRef,
   useState,
 } from 'react'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useFeatureCapability } from '@/hooks/use-feature-capability'
 
@@ -536,6 +536,13 @@ export function ChatScreen({
   hermesChrome = true,
 }: ChatScreenProps) {
   const navigate = useNavigate()
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  })
+  /** Full-page chat only — panel/embedded must never steal the URL. */
+  const canMutateChatRoute =
+    !embedded &&
+    (pathname.startsWith('/chat') || pathname === '/new' || pathname === '/')
   const chatFocusMode = useWorkspaceStore((s) => s.chatFocusMode)
   const setChatFocusMode = useWorkspaceStore((s) => s.setChatFocusMode)
   const queryClient = useQueryClient()
@@ -1467,7 +1474,7 @@ export function ChatScreen({
         activeSendRef.current = null
         setSending(false)
         if (isMissingAuth(messageText)) {
-          if (!embedded) {
+          if (canMutateChatRoute) {
             try {
               navigate({ to: '/', replace: true })
             } catch {
@@ -1483,7 +1490,7 @@ export function ChatScreen({
         setPendingGeneration(false)
         setWaitingForResponse(false)
       },
-      [navigate, queryClient],
+      [canMutateChatRoute, navigate, queryClient],
     ),
     onMessageAccepted: useCallback(
       (_sessionKey: string, friendlyId: string, clientId: string) => {
@@ -2095,7 +2102,7 @@ export function ChatScreen({
       }
       return
     }
-    if (isMissingAuth(messageText) && !embedded) {
+    if (isMissingAuth(messageText) && canMutateChatRoute) {
       navigate({ to: '/', replace: true })
     }
     const message = sessionsError
@@ -2117,7 +2124,7 @@ export function ChatScreen({
     sessionsQuery.isSuccess,
     shouldRedirectToNew,
     isRedirecting,
-    embedded,
+    canMutateChatRoute,
     navigate,
   ])
 
@@ -2133,7 +2140,7 @@ export function ChatScreen({
   }, [isNewChat, isRedirecting, sessionsQuery.isSuccess, shouldRedirectToNew])
 
   useEffect(() => {
-    if (embedded) return
+    if (!canMutateChatRoute) return
     if (isNewChat) return
     if (!shouldRedirectToNew) return
     resetPendingSend()
@@ -2167,7 +2174,9 @@ export function ChatScreen({
     sessionKeyForHistory,
     sessions,
     shouldRedirectToNew,
-    embedded,
+    canMutateChatRoute,
+    sessionsQuery.isSuccess,
+    sessionOwnedByProfile,
   ])
 
   useEffect(() => {
@@ -3385,7 +3394,7 @@ export function ChatScreen({
           writeLastSession(friendlyId, activeProfileName)
         }
         const routeToSession = (friendlyId: string) => {
-          if (embedded) return
+          if (!canMutateChatRoute) return
           persistLastSession(friendlyId)
           navigate({
             to: '/chat/$sessionKey',
@@ -3466,8 +3475,8 @@ export function ChatScreen({
       activeFriendlyId,
       activeSessionKey,
       activeProfileName,
+      canMutateChatRoute,
       createSessionForMessage,
-      embedded,
       forcedSessionKey,
       isNewChat,
       isPortableMode,

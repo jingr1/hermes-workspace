@@ -93,7 +93,7 @@ API 要点：
 - `PATCH /api/rooms/:id`：可改 `workspacePath`；已绑 `missionId` 时手改 path → **409**
 - `POST /api/rooms/from-mission`：`{ missionId }` → `ensureRoomForMission`（幂等）
 
-项目声明见 [`projects.yaml`](projects.yaml)（控制面仓库默认不在列表中；自托管需 `selfHosted: true`）。
+项目声明见 [`projects.yaml`](projects.yaml)（控制面仓库默认不在列表中；自托管需 `selfHosted: true`）。Mission ↔ Project 合同见 [`docs/mission-project-domain.md`](docs/mission-project-domain.md)。
 
 ---
 

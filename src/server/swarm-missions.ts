@@ -28,6 +28,21 @@ export type SwarmMissionState =
   | 'complete'
   | 'cancelled'
 
+export type MissionExecutionMode = 'pipeline' | 'assignee'
+
+export type MissionAssignee = {
+  type: 'agent' | 'chat_group'
+  id: string
+}
+
+/** Optional external tracker / Symphony Issue identity (hangs on Task). */
+export type TaskExternalRef = {
+  kind: string
+  id: string
+  identifier?: string
+  url?: string
+}
+
 export type SwarmMissionAssignment = {
   id: string
   workerId: string
@@ -50,6 +65,14 @@ export type SwarmMissionAssignment = {
   headSha?: string | null
   /** Capability requirements for this stage (P2b). */
   requires?: Array<string>
+  /** Who decomposed/dispatched this task (e.g. system:pipeline, orchestrator). */
+  createdByWorkerId?: string | null
+  /** Symphony-aligned: eligibility for automated dispatch. */
+  dispatchable?: boolean
+  /** Symphony-aligned: optional tracker / external issue ref. */
+  externalRef?: TaskExternalRef | null
+  /** Symphony-aligned: per-task workspace path snapshot. */
+  workspacePath?: string | null
 }
 
 export type SwarmMission = {
@@ -70,6 +93,18 @@ export type SwarmMission = {
   projectId?: string | null
   /** workspaceMode: canonical | worktree (P2b). */
   workspaceMode?: string | null
+  /** How this mission was created: pipeline template vs direct assignee. */
+  executionMode?: MissionExecutionMode | null
+  /** Mission-level assignee (agent or chat group); null in pipeline mode. */
+  assignee?: MissionAssignee | null
+  /**
+   * Bound group-chat room. Null by default for pipeline missions;
+   * set when user manually creates a room or assignee is chat_group.
+   */
+  roomId?: string | null
+  /** Optional display helpers for MissionSurface filters. */
+  priority?: number | null
+  labels?: Array<string>
 }
 
 export type SwarmMissionEvent = {
@@ -340,6 +375,12 @@ export function createOrUpdateMission(input: {
   title: string
   projectId?: string | null
   workspaceMode?: string | null
+  executionMode?: MissionExecutionMode | null
+  assignee?: MissionAssignee | null
+  roomId?: string | null
+  pipelineId?: string | null
+  priority?: number | null
+  labels?: Array<string>
   assignments: Array<{
     workerId: string
     task: string
@@ -347,6 +388,11 @@ export function createOrUpdateMission(input: {
     dependsOn?: Array<string>
     reviewRequired?: boolean
     requires?: Array<string>
+    createdByWorkerId?: string | null
+    dispatchable?: boolean
+    externalRef?: TaskExternalRef | null
+    workspacePath?: string | null
+    stageKey?: string | null
   }>
 }): CreateOrUpdateMissionResult {
   const store = readStore()
@@ -367,6 +413,12 @@ export function createOrUpdateMission(input: {
       ],
       projectId: input.projectId ?? null,
       workspaceMode: input.workspaceMode ?? null,
+      executionMode: input.executionMode ?? null,
+      assignee: input.assignee ?? null,
+      roomId: input.roomId ?? null,
+      pipelineId: input.pipelineId ?? null,
+      priority: input.priority ?? null,
+      labels: input.labels ?? [],
     }
     store.missions.push(mission)
     createdMission = true
@@ -376,6 +428,13 @@ export function createOrUpdateMission(input: {
   if (input.projectId !== undefined) mission.projectId = input.projectId
   if (input.workspaceMode !== undefined)
     mission.workspaceMode = input.workspaceMode
+  if (input.executionMode !== undefined)
+    mission.executionMode = input.executionMode
+  if (input.assignee !== undefined) mission.assignee = input.assignee
+  if (input.roomId !== undefined) mission.roomId = input.roomId
+  if (input.pipelineId !== undefined) mission.pipelineId = input.pipelineId
+  if (input.priority !== undefined) mission.priority = input.priority
+  if (input.labels !== undefined) mission.labels = input.labels
   for (const assignment of input.assignments) {
     // One active assignment per worker per mission. Skip if the worker already
     // has a non-terminal assignment, regardless of task text differences.
@@ -401,6 +460,11 @@ export function createOrUpdateMission(input: {
       reviewedAt: null,
       reviewedBy: null,
       checkpoint: null,
+      createdByWorkerId: assignment.createdByWorkerId ?? 'system:pipeline',
+      dispatchable: assignment.dispatchable !== false,
+      externalRef: assignment.externalRef ?? null,
+      workspacePath: assignment.workspacePath ?? null,
+      stageKey: assignment.stageKey ?? null,
     })
   }
   // Cycle guard (plan risk table): a cyclic dependsOn graph makes
@@ -718,6 +782,10 @@ export function appendMissionContinuation(input: {
     reviewedAt: null,
     reviewedBy: null,
     checkpoint: null,
+    createdByWorkerId: 'system:pipeline',
+    dispatchable: true,
+    externalRef: null,
+    workspacePath: null,
   })
   assertAcyclicDependencies(mission.assignments)
   mission.events.push(
@@ -875,6 +943,59 @@ export function setMissionTaskId(input: {
   return mission
 }
 
+export function updateMissionRoomId(input: {
+  missionId: string
+  roomId: string | null
+}): SwarmMission | null {
+  const store = readStore()
+  const mission = store.missions.find((item) => item.id === input.missionId)
+  if (!mission) return null
+  mission.roomId = input.roomId
+  mission.updatedAt = now()
+  writeStore(store)
+  return mission
+}
+
+export function patchMissionFields(input: {
+  missionId: string
+  title?: string
+  executionMode?: MissionExecutionMode | null
+  assignee?: MissionAssignee | null
+  roomId?: string | null
+  pipelineId?: string | null
+  projectId?: string | null
+  priority?: number | null
+  labels?: Array<string>
+}): SwarmMission | null {
+  const store = readStore()
+  const mission = store.missions.find((item) => item.id === input.missionId)
+  if (!mission) return null
+  if (input.title !== undefined) {
+    const trimmed = input.title.trim()
+    if (trimmed) mission.title = trimmed
+  }
+  if (input.executionMode !== undefined)
+    mission.executionMode = input.executionMode
+  if (input.assignee !== undefined) mission.assignee = input.assignee
+  if (input.roomId !== undefined) mission.roomId = input.roomId
+  if (input.pipelineId !== undefined) mission.pipelineId = input.pipelineId
+  if (input.projectId !== undefined) mission.projectId = input.projectId
+  if (input.priority !== undefined) mission.priority = input.priority
+  if (input.labels !== undefined) mission.labels = input.labels
+  mission.updatedAt = now()
+  writeStore(store)
+  return mission
+}
+
+/** Hard-delete a mission from the swarm store. Returns false if missing. */
+export function deleteSwarmMission(missionId: string): boolean {
+  const store = readStore()
+  const next = store.missions.filter((item) => item.id !== missionId)
+  if (next.length === store.missions.length) return false
+  writeStore({ ...store, missions: next })
+  return true
+}
+
 export function rewriteAssignmentDependencies(input: {
   missionId: string
   dependsOnByAssignmentId: Record<string, Array<string>>
@@ -884,6 +1005,8 @@ export function rewriteAssignmentDependencies(input: {
   pipelineId?: string
   taskId?: string
   specVersion?: number
+  executionMode?: MissionExecutionMode | null
+  createdByWorkerId?: string | null
 }): SwarmMission | null {
   const store = readStore()
   const mission = store.missions.find((item) => item.id === input.missionId)
@@ -899,10 +1022,18 @@ export function rewriteAssignmentDependencies(input: {
     if (requires !== undefined) assignment.requires = requires
     if (input.briefSpecVersion !== undefined)
       assignment.briefSpecVersion = input.briefSpecVersion
+    if (input.createdByWorkerId !== undefined) {
+      assignment.createdByWorkerId = input.createdByWorkerId
+    } else if (assignment.createdByWorkerId == null) {
+      assignment.createdByWorkerId = 'system:pipeline'
+    }
+    if (assignment.dispatchable === undefined) assignment.dispatchable = true
   }
   if (input.pipelineId !== undefined) mission.pipelineId = input.pipelineId
   if (input.taskId !== undefined) mission.taskId = input.taskId
   if (input.specVersion !== undefined) mission.specVersion = input.specVersion
+  if (input.executionMode !== undefined)
+    mission.executionMode = input.executionMode
   assertAcyclicDependencies(mission.assignments)
   mission.updatedAt = now()
   mission.state = deriveMissionState(mission.assignments)

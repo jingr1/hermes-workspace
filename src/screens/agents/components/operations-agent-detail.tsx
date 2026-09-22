@@ -411,11 +411,10 @@ function UsageTab({ agent }: { agent: OperationsAgent }) {
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <Link
-            to="/tasks"
-            search={{ assignee: agent.id }}
+            to="/missions"
             className="rounded-lg border border-[var(--theme-border)] px-3 py-1.5 text-xs font-medium text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
           >
-            View tasks
+            View missions
           </Link>
           <a
             href={`/jobs?agent=${encodeURIComponent(agent.id)}`}

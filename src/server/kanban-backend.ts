@@ -8,6 +8,7 @@ import {
   SWARM_KANBAN_FILE,
   type CreateSwarmKanbanCardInput,
   createSwarmKanbanCard,
+  deleteSwarmKanbanCard,
   listSwarmKanbanCards,
   type SwarmKanbanCard,
   updateSwarmKanbanCard,
@@ -18,6 +19,7 @@ import {
   fetchDashboardKanbanBoard,
   createDashboardKanbanTask,
   updateDashboardKanbanTask,
+  deleteDashboardKanbanTask,
   type DashboardKanbanTask,
 } from './kanban-dashboard-proxy'
 
@@ -42,6 +44,7 @@ type KanbanBackend = {
     cardId: string,
     updates: UpdateSwarmKanbanCardInput,
   ): SwarmKanbanCard | null | Promise<SwarmKanbanCard | null>
+  delete(cardId: string): boolean | Promise<boolean>
 }
 
 // Map upstream Hermes kanban statuses (triage/todo/ready/running/done/blocked
@@ -252,6 +255,7 @@ function readClaudeTasks(): ClaudeTaskRow[] {
     'select',
     claudeTaskProjection(),
     'from tasks',
+    "where coalesce(tasks.status, '') != 'archived'",
     'order by tasks.created_at desc, tasks.id desc;',
   ].join(' ')
   const raw = runSqlite(detection.dbPath, query)
@@ -446,6 +450,9 @@ const localBackend: KanbanBackend = {
   update(cardId, updates) {
     return updateSwarmKanbanCard(cardId, updates)
   },
+  delete(cardId) {
+    return deleteSwarmKanbanCard(cardId)
+  },
 }
 
 const claudeBackend: KanbanBackend = {
@@ -566,6 +573,17 @@ const claudeBackend: KanbanBackend = {
     const updated = readClaudeTask(cardId)
     return updated ? claudeTaskToCard(updated) : null
   },
+  delete(cardId) {
+    const detection = detectClaudeKanban()
+    if (!detection.available) return false
+    const existing = readClaudeTask(cardId)
+    if (!existing) return false
+    runSqlite(
+      detection.dbPath,
+      `update tasks set status = 'archived' where id = ${sqliteQuote(cardId)};`,
+    )
+    return true
+  },
 }
 
 // Hermes Dashboard kanban plugin backend (HTTP proxy).
@@ -634,6 +652,27 @@ const dashboardProxyBackend: KanbanBackend = {
     } catch (err) {
       if (err instanceof Error && err.message.includes('→ 404')) return null
       throw err
+    }
+  },
+  async delete(cardId) {
+    try {
+      await deleteDashboardKanbanTask(cardId)
+      return true
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('→ 404')) return false
+      // Fallback: archive via PATCH when DELETE is unsupported.
+      try {
+        await updateDashboardKanbanTask(cardId, { status: 'archived' })
+        return true
+      } catch (fallbackErr) {
+        if (
+          fallbackErr instanceof Error &&
+          fallbackErr.message.includes('→ 404')
+        ) {
+          return false
+        }
+        throw fallbackErr
+      }
     }
   },
 }
@@ -721,4 +760,8 @@ export async function updateKanbanCard(
   updates: UpdateSwarmKanbanCardInput,
 ): Promise<SwarmKanbanCard | null> {
   return invokeKanbanBackend((backend) => backend.update(cardId, updates))
+}
+
+export async function deleteKanbanCard(cardId: string): Promise<boolean> {
+  return invokeKanbanBackend((backend) => backend.delete(cardId))
 }

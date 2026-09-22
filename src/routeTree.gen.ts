@@ -78,6 +78,7 @@ import { Route as ApiSendStreamRouteImport } from './routes/api/send-stream'
 import { Route as ApiSendRouteImport } from './routes/api/send'
 import { Route as ApiRoomsRouteImport } from './routes/api/rooms'
 import { Route as ApiProviderUsageRouteImport } from './routes/api/provider-usage'
+import { Route as ApiProjectsRouteImport } from './routes/api/projects'
 import { Route as ApiPreviewFileRouteImport } from './routes/api/preview-file'
 import { Route as ApiPluginsRouteImport } from './routes/api/plugins'
 import { Route as ApiPipelinesRouteImport } from './routes/api/pipelines'
@@ -127,6 +128,7 @@ import { Route as ApiArtifactsRouteImport } from './routes/api/artifacts'
 import { Route as ApiAgentRegistryRouteImport } from './routes/api/agent-registry'
 import { Route as ApiAgentBusRouteImport } from './routes/api/agent-bus'
 import { Route as ApiTasksIndexRouteImport } from './routes/api/tasks/index'
+import { Route as ApiMissionsIndexRouteImport } from './routes/api/missions/index'
 import { Route as ApiAgentsIndexRouteImport } from './routes/api/agents/index'
 import { Route as SettingsAgentsAgentIdRouteImport } from './routes/settings/agents/$agentId'
 import { Route as ChatAgentAgentIdRouteImport } from './routes/chat/agent/$agentId'
@@ -212,6 +214,7 @@ import { Route as ApiAgentsOperationsRouteImport } from './routes/api/agents/ope
 import { Route as ApiAgentRuntimeStatusRouteImport } from './routes/api/agent-runtime/status'
 import { Route as ApiAgentRuntimeInstallRouteImport } from './routes/api/agent-runtime/install'
 import { Route as ApiAgentRuntimeEnableRouteImport } from './routes/api/agent-runtime/enable'
+import { Route as ApiMissionsMissionIdIndexRouteImport } from './routes/api/missions/$missionId/index'
 import { Route as ApiSessionsSessionKeyTruncateRouteImport } from './routes/api/sessions/$sessionKey.truncate'
 import { Route as ApiSessionsSessionKeyStatusRouteImport } from './routes/api/sessions/$sessionKey.status'
 import { Route as ApiSessionsSessionKeyCompressRouteImport } from './routes/api/sessions/$sessionKey.compress'
@@ -237,6 +240,7 @@ import { Route as ApiAgentsAgentIdActivitySessionIdRouteImport } from './routes/
 import { Route as ApiRoomsRoomIdPendingTurnsTurnIdDismissRouteImport } from './routes/api/rooms/$roomId/pending-turns/$turnId/dismiss'
 import { Route as ApiRoomsRoomIdPendingTurnsTurnIdAnswerRouteImport } from './routes/api/rooms/$roomId/pending-turns/$turnId/answer'
 import { Route as ApiRoomsRoomIdMessagesMessageIdInteractionResponseRouteImport } from './routes/api/rooms/$roomId/messages/$messageId/interaction-response'
+import { Route as ApiMissionsMissionIdTasksTaskIdRuntimeRouteImport } from './routes/api/missions/$missionId/tasks/$taskId/runtime'
 import { Route as ApiAgentsAgentIdRunsRunIdInterruptRouteImport } from './routes/api/agents/$agentId/runs/$runId/interrupt'
 import { Route as ApiAgentsAgentIdEngineSessionSessionIdRouteImport } from './routes/api/agents/$agentId/engine/session/$sessionId'
 import { Route as ApiAgentsAgentIdInteractionsSessionIdTurnIdRequestIdRouteImport } from './routes/api/agents/$agentId/interactions/$sessionId/$turnId/$requestId'
@@ -597,6 +601,11 @@ const ApiProviderUsageRoute = ApiProviderUsageRouteImport.update({
   path: '/api/provider-usage',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiProjectsRoute = ApiProjectsRouteImport.update({
+  id: '/api/projects',
+  path: '/api/projects',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPreviewFileRoute = ApiPreviewFileRouteImport.update({
   id: '/api/preview-file',
   path: '/api/preview-file',
@@ -841,6 +850,11 @@ const ApiAgentBusRoute = ApiAgentBusRouteImport.update({
 const ApiTasksIndexRoute = ApiTasksIndexRouteImport.update({
   id: '/api/tasks/',
   path: '/api/tasks/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMissionsIndexRoute = ApiMissionsIndexRouteImport.update({
+  id: '/api/missions/',
+  path: '/api/missions/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAgentsIndexRoute = ApiAgentsIndexRouteImport.update({
@@ -1273,6 +1287,12 @@ const ApiAgentRuntimeEnableRoute = ApiAgentRuntimeEnableRouteImport.update({
   path: '/api/agent-runtime/enable',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiMissionsMissionIdIndexRoute =
+  ApiMissionsMissionIdIndexRouteImport.update({
+    id: '/api/missions/$missionId/',
+    path: '/api/missions/$missionId/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiSessionsSessionKeyTruncateRoute =
   ApiSessionsSessionKeyTruncateRouteImport.update({
     id: '/$sessionKey/truncate',
@@ -1417,6 +1437,12 @@ const ApiRoomsRoomIdMessagesMessageIdInteractionResponseRoute =
     id: '/$messageId/interaction-response',
     path: '/$messageId/interaction-response',
     getParentRoute: () => ApiRoomsRoomIdMessagesRoute,
+  } as any)
+const ApiMissionsMissionIdTasksTaskIdRuntimeRoute =
+  ApiMissionsMissionIdTasksTaskIdRuntimeRouteImport.update({
+    id: '/api/missions/$missionId/tasks/$taskId/runtime',
+    path: '/api/missions/$missionId/tasks/$taskId/runtime',
+    getParentRoute: () => rootRouteImport,
   } as any)
 const ApiAgentsAgentIdRunsRunIdInterruptRoute =
   ApiAgentsAgentIdRunsRunIdInterruptRouteImport.update({
@@ -1565,6 +1591,7 @@ export interface FileRoutesByFullPath {
   '/api/pipelines': typeof ApiPipelinesRoute
   '/api/plugins': typeof ApiPluginsRoute
   '/api/preview-file': typeof ApiPreviewFileRoute
+  '/api/projects': typeof ApiProjectsRoute
   '/api/provider-usage': typeof ApiProviderUsageRoute
   '/api/rooms': typeof ApiRoomsRouteWithChildren
   '/api/send': typeof ApiSendRoute
@@ -1696,6 +1723,7 @@ export interface FileRoutesByFullPath {
   '/chat/agent/$agentId': typeof ChatAgentAgentIdRoute
   '/settings/agents/$agentId': typeof SettingsAgentsAgentIdRoute
   '/api/agents/': typeof ApiAgentsIndexRoute
+  '/api/missions/': typeof ApiMissionsIndexRoute
   '/api/tasks/': typeof ApiTasksIndexRoute
   '/api/agents/$agentId/chat': typeof ApiAgentsAgentIdChatRoute
   '/api/agents/$agentId/sessions': typeof ApiAgentsAgentIdSessionsRouteWithChildren
@@ -1712,6 +1740,7 @@ export interface FileRoutesByFullPath {
   '/api/sessions/$sessionKey/compress': typeof ApiSessionsSessionKeyCompressRoute
   '/api/sessions/$sessionKey/status': typeof ApiSessionsSessionKeyStatusRoute
   '/api/sessions/$sessionKey/truncate': typeof ApiSessionsSessionKeyTruncateRoute
+  '/api/missions/$missionId/': typeof ApiMissionsMissionIdIndexRoute
   '/api/agents/$agentId/activity/$sessionId': typeof ApiAgentsAgentIdActivitySessionIdRoute
   '/api/agents/$agentId/engine/activate': typeof ApiAgentsAgentIdEngineActivateRoute
   '/api/agents/$agentId/engine/sessions': typeof ApiAgentsAgentIdEngineSessionsRoute
@@ -1721,6 +1750,7 @@ export interface FileRoutesByFullPath {
   '/api/runs/$sessionKey/$runId/abandon': typeof ApiRunsSessionKeyRunIdAbandonRoute
   '/api/agents/$agentId/engine/session/$sessionId': typeof ApiAgentsAgentIdEngineSessionSessionIdRouteWithChildren
   '/api/agents/$agentId/runs/$runId/interrupt': typeof ApiAgentsAgentIdRunsRunIdInterruptRoute
+  '/api/missions/$missionId/tasks/$taskId/runtime': typeof ApiMissionsMissionIdTasksTaskIdRuntimeRoute
   '/api/rooms/$roomId/messages/$messageId/interaction-response': typeof ApiRoomsRoomIdMessagesMessageIdInteractionResponseRoute
   '/api/rooms/$roomId/pending-turns/$turnId/answer': typeof ApiRoomsRoomIdPendingTurnsTurnIdAnswerRoute
   '/api/rooms/$roomId/pending-turns/$turnId/dismiss': typeof ApiRoomsRoomIdPendingTurnsTurnIdDismissRoute
@@ -1805,6 +1835,7 @@ export interface FileRoutesByTo {
   '/api/pipelines': typeof ApiPipelinesRoute
   '/api/plugins': typeof ApiPluginsRoute
   '/api/preview-file': typeof ApiPreviewFileRoute
+  '/api/projects': typeof ApiProjectsRoute
   '/api/provider-usage': typeof ApiProviderUsageRoute
   '/api/rooms': typeof ApiRoomsRouteWithChildren
   '/api/send': typeof ApiSendRoute
@@ -1936,6 +1967,7 @@ export interface FileRoutesByTo {
   '/chat/agent/$agentId': typeof ChatAgentAgentIdRoute
   '/settings/agents/$agentId': typeof SettingsAgentsAgentIdRoute
   '/api/agents': typeof ApiAgentsIndexRoute
+  '/api/missions': typeof ApiMissionsIndexRoute
   '/api/tasks': typeof ApiTasksIndexRoute
   '/api/agents/$agentId/chat': typeof ApiAgentsAgentIdChatRoute
   '/api/agents/$agentId/sessions': typeof ApiAgentsAgentIdSessionsRouteWithChildren
@@ -1952,6 +1984,7 @@ export interface FileRoutesByTo {
   '/api/sessions/$sessionKey/compress': typeof ApiSessionsSessionKeyCompressRoute
   '/api/sessions/$sessionKey/status': typeof ApiSessionsSessionKeyStatusRoute
   '/api/sessions/$sessionKey/truncate': typeof ApiSessionsSessionKeyTruncateRoute
+  '/api/missions/$missionId': typeof ApiMissionsMissionIdIndexRoute
   '/api/agents/$agentId/activity/$sessionId': typeof ApiAgentsAgentIdActivitySessionIdRoute
   '/api/agents/$agentId/engine/activate': typeof ApiAgentsAgentIdEngineActivateRoute
   '/api/agents/$agentId/engine/sessions': typeof ApiAgentsAgentIdEngineSessionsRoute
@@ -1961,6 +1994,7 @@ export interface FileRoutesByTo {
   '/api/runs/$sessionKey/$runId/abandon': typeof ApiRunsSessionKeyRunIdAbandonRoute
   '/api/agents/$agentId/engine/session/$sessionId': typeof ApiAgentsAgentIdEngineSessionSessionIdRouteWithChildren
   '/api/agents/$agentId/runs/$runId/interrupt': typeof ApiAgentsAgentIdRunsRunIdInterruptRoute
+  '/api/missions/$missionId/tasks/$taskId/runtime': typeof ApiMissionsMissionIdTasksTaskIdRuntimeRoute
   '/api/rooms/$roomId/messages/$messageId/interaction-response': typeof ApiRoomsRoomIdMessagesMessageIdInteractionResponseRoute
   '/api/rooms/$roomId/pending-turns/$turnId/answer': typeof ApiRoomsRoomIdPendingTurnsTurnIdAnswerRoute
   '/api/rooms/$roomId/pending-turns/$turnId/dismiss': typeof ApiRoomsRoomIdPendingTurnsTurnIdDismissRoute
@@ -2048,6 +2082,7 @@ export interface FileRoutesById {
   '/api/pipelines': typeof ApiPipelinesRoute
   '/api/plugins': typeof ApiPluginsRoute
   '/api/preview-file': typeof ApiPreviewFileRoute
+  '/api/projects': typeof ApiProjectsRoute
   '/api/provider-usage': typeof ApiProviderUsageRoute
   '/api/rooms': typeof ApiRoomsRouteWithChildren
   '/api/send': typeof ApiSendRoute
@@ -2179,6 +2214,7 @@ export interface FileRoutesById {
   '/chat/agent/$agentId': typeof ChatAgentAgentIdRoute
   '/settings/agents/$agentId': typeof SettingsAgentsAgentIdRoute
   '/api/agents/': typeof ApiAgentsIndexRoute
+  '/api/missions/': typeof ApiMissionsIndexRoute
   '/api/tasks/': typeof ApiTasksIndexRoute
   '/api/agents/$agentId/chat': typeof ApiAgentsAgentIdChatRoute
   '/api/agents/$agentId/sessions': typeof ApiAgentsAgentIdSessionsRouteWithChildren
@@ -2195,6 +2231,7 @@ export interface FileRoutesById {
   '/api/sessions/$sessionKey/compress': typeof ApiSessionsSessionKeyCompressRoute
   '/api/sessions/$sessionKey/status': typeof ApiSessionsSessionKeyStatusRoute
   '/api/sessions/$sessionKey/truncate': typeof ApiSessionsSessionKeyTruncateRoute
+  '/api/missions/$missionId/': typeof ApiMissionsMissionIdIndexRoute
   '/api/agents/$agentId/activity/$sessionId': typeof ApiAgentsAgentIdActivitySessionIdRoute
   '/api/agents/$agentId/engine/activate': typeof ApiAgentsAgentIdEngineActivateRoute
   '/api/agents/$agentId/engine/sessions': typeof ApiAgentsAgentIdEngineSessionsRoute
@@ -2204,6 +2241,7 @@ export interface FileRoutesById {
   '/api/runs/$sessionKey/$runId/abandon': typeof ApiRunsSessionKeyRunIdAbandonRoute
   '/api/agents/$agentId/engine/session/$sessionId': typeof ApiAgentsAgentIdEngineSessionSessionIdRouteWithChildren
   '/api/agents/$agentId/runs/$runId/interrupt': typeof ApiAgentsAgentIdRunsRunIdInterruptRoute
+  '/api/missions/$missionId/tasks/$taskId/runtime': typeof ApiMissionsMissionIdTasksTaskIdRuntimeRoute
   '/api/rooms/$roomId/messages/$messageId/interaction-response': typeof ApiRoomsRoomIdMessagesMessageIdInteractionResponseRoute
   '/api/rooms/$roomId/pending-turns/$turnId/answer': typeof ApiRoomsRoomIdPendingTurnsTurnIdAnswerRoute
   '/api/rooms/$roomId/pending-turns/$turnId/dismiss': typeof ApiRoomsRoomIdPendingTurnsTurnIdDismissRoute
@@ -2292,6 +2330,7 @@ export interface FileRouteTypes {
     | '/api/pipelines'
     | '/api/plugins'
     | '/api/preview-file'
+    | '/api/projects'
     | '/api/provider-usage'
     | '/api/rooms'
     | '/api/send'
@@ -2423,6 +2462,7 @@ export interface FileRouteTypes {
     | '/chat/agent/$agentId'
     | '/settings/agents/$agentId'
     | '/api/agents/'
+    | '/api/missions/'
     | '/api/tasks/'
     | '/api/agents/$agentId/chat'
     | '/api/agents/$agentId/sessions'
@@ -2439,6 +2479,7 @@ export interface FileRouteTypes {
     | '/api/sessions/$sessionKey/compress'
     | '/api/sessions/$sessionKey/status'
     | '/api/sessions/$sessionKey/truncate'
+    | '/api/missions/$missionId/'
     | '/api/agents/$agentId/activity/$sessionId'
     | '/api/agents/$agentId/engine/activate'
     | '/api/agents/$agentId/engine/sessions'
@@ -2448,6 +2489,7 @@ export interface FileRouteTypes {
     | '/api/runs/$sessionKey/$runId/abandon'
     | '/api/agents/$agentId/engine/session/$sessionId'
     | '/api/agents/$agentId/runs/$runId/interrupt'
+    | '/api/missions/$missionId/tasks/$taskId/runtime'
     | '/api/rooms/$roomId/messages/$messageId/interaction-response'
     | '/api/rooms/$roomId/pending-turns/$turnId/answer'
     | '/api/rooms/$roomId/pending-turns/$turnId/dismiss'
@@ -2532,6 +2574,7 @@ export interface FileRouteTypes {
     | '/api/pipelines'
     | '/api/plugins'
     | '/api/preview-file'
+    | '/api/projects'
     | '/api/provider-usage'
     | '/api/rooms'
     | '/api/send'
@@ -2663,6 +2706,7 @@ export interface FileRouteTypes {
     | '/chat/agent/$agentId'
     | '/settings/agents/$agentId'
     | '/api/agents'
+    | '/api/missions'
     | '/api/tasks'
     | '/api/agents/$agentId/chat'
     | '/api/agents/$agentId/sessions'
@@ -2679,6 +2723,7 @@ export interface FileRouteTypes {
     | '/api/sessions/$sessionKey/compress'
     | '/api/sessions/$sessionKey/status'
     | '/api/sessions/$sessionKey/truncate'
+    | '/api/missions/$missionId'
     | '/api/agents/$agentId/activity/$sessionId'
     | '/api/agents/$agentId/engine/activate'
     | '/api/agents/$agentId/engine/sessions'
@@ -2688,6 +2733,7 @@ export interface FileRouteTypes {
     | '/api/runs/$sessionKey/$runId/abandon'
     | '/api/agents/$agentId/engine/session/$sessionId'
     | '/api/agents/$agentId/runs/$runId/interrupt'
+    | '/api/missions/$missionId/tasks/$taskId/runtime'
     | '/api/rooms/$roomId/messages/$messageId/interaction-response'
     | '/api/rooms/$roomId/pending-turns/$turnId/answer'
     | '/api/rooms/$roomId/pending-turns/$turnId/dismiss'
@@ -2774,6 +2820,7 @@ export interface FileRouteTypes {
     | '/api/pipelines'
     | '/api/plugins'
     | '/api/preview-file'
+    | '/api/projects'
     | '/api/provider-usage'
     | '/api/rooms'
     | '/api/send'
@@ -2905,6 +2952,7 @@ export interface FileRouteTypes {
     | '/chat/agent/$agentId'
     | '/settings/agents/$agentId'
     | '/api/agents/'
+    | '/api/missions/'
     | '/api/tasks/'
     | '/api/agents/$agentId/chat'
     | '/api/agents/$agentId/sessions'
@@ -2921,6 +2969,7 @@ export interface FileRouteTypes {
     | '/api/sessions/$sessionKey/compress'
     | '/api/sessions/$sessionKey/status'
     | '/api/sessions/$sessionKey/truncate'
+    | '/api/missions/$missionId/'
     | '/api/agents/$agentId/activity/$sessionId'
     | '/api/agents/$agentId/engine/activate'
     | '/api/agents/$agentId/engine/sessions'
@@ -2930,6 +2979,7 @@ export interface FileRouteTypes {
     | '/api/runs/$sessionKey/$runId/abandon'
     | '/api/agents/$agentId/engine/session/$sessionId'
     | '/api/agents/$agentId/runs/$runId/interrupt'
+    | '/api/missions/$missionId/tasks/$taskId/runtime'
     | '/api/rooms/$roomId/messages/$messageId/interaction-response'
     | '/api/rooms/$roomId/pending-turns/$turnId/answer'
     | '/api/rooms/$roomId/pending-turns/$turnId/dismiss'
@@ -3017,6 +3067,7 @@ export interface RootRouteChildren {
   ApiPipelinesRoute: typeof ApiPipelinesRoute
   ApiPluginsRoute: typeof ApiPluginsRoute
   ApiPreviewFileRoute: typeof ApiPreviewFileRoute
+  ApiProjectsRoute: typeof ApiProjectsRoute
   ApiProviderUsageRoute: typeof ApiProviderUsageRoute
   ApiRoomsRoute: typeof ApiRoomsRouteWithChildren
   ApiSendRoute: typeof ApiSendRoute
@@ -3115,6 +3166,7 @@ export interface RootRouteChildren {
   ApiUsageTrendsRoute: typeof ApiUsageTrendsRoute
   ChatAgentAgentIdRoute: typeof ChatAgentAgentIdRoute
   ApiAgentsIndexRoute: typeof ApiAgentsIndexRoute
+  ApiMissionsIndexRoute: typeof ApiMissionsIndexRoute
   ApiTasksIndexRoute: typeof ApiTasksIndexRoute
   ApiAgentsAgentIdChatRoute: typeof ApiAgentsAgentIdChatRoute
   ApiAgentsAgentIdSessionsRoute: typeof ApiAgentsAgentIdSessionsRouteWithChildren
@@ -3122,6 +3174,7 @@ export interface RootRouteChildren {
   ApiAgentsCodexImplConfigRoute: typeof ApiAgentsCodexImplConfigRoute
   ApiAgentsCodexImplModelsRoute: typeof ApiAgentsCodexImplModelsRoute
   ApiRunsRunIdSteerRoute: typeof ApiRunsRunIdSteerRoute
+  ApiMissionsMissionIdIndexRoute: typeof ApiMissionsMissionIdIndexRoute
   ApiAgentsAgentIdActivitySessionIdRoute: typeof ApiAgentsAgentIdActivitySessionIdRoute
   ApiAgentsAgentIdEngineActivateRoute: typeof ApiAgentsAgentIdEngineActivateRoute
   ApiAgentsAgentIdEngineSessionsRoute: typeof ApiAgentsAgentIdEngineSessionsRoute
@@ -3129,6 +3182,7 @@ export interface RootRouteChildren {
   ApiRunsSessionKeyRunIdAbandonRoute: typeof ApiRunsSessionKeyRunIdAbandonRoute
   ApiAgentsAgentIdEngineSessionSessionIdRoute: typeof ApiAgentsAgentIdEngineSessionSessionIdRouteWithChildren
   ApiAgentsAgentIdRunsRunIdInterruptRoute: typeof ApiAgentsAgentIdRunsRunIdInterruptRoute
+  ApiMissionsMissionIdTasksTaskIdRuntimeRoute: typeof ApiMissionsMissionIdTasksTaskIdRuntimeRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -3616,6 +3670,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiProviderUsageRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/projects': {
+      id: '/api/projects'
+      path: '/api/projects'
+      fullPath: '/api/projects'
+      preLoaderRoute: typeof ApiProjectsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/preview-file': {
       id: '/api/preview-file'
       path: '/api/preview-file'
@@ -3957,6 +4018,13 @@ declare module '@tanstack/react-router' {
       path: '/api/tasks'
       fullPath: '/api/tasks/'
       preLoaderRoute: typeof ApiTasksIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/missions/': {
+      id: '/api/missions/'
+      path: '/api/missions'
+      fullPath: '/api/missions/'
+      preLoaderRoute: typeof ApiMissionsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/agents/': {
@@ -4554,6 +4622,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentRuntimeEnableRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/missions/$missionId/': {
+      id: '/api/missions/$missionId/'
+      path: '/api/missions/$missionId'
+      fullPath: '/api/missions/$missionId/'
+      preLoaderRoute: typeof ApiMissionsMissionIdIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/sessions/$sessionKey/truncate': {
       id: '/api/sessions/$sessionKey/truncate'
       path: '/$sessionKey/truncate'
@@ -4728,6 +4803,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/rooms/$roomId/messages/$messageId/interaction-response'
       preLoaderRoute: typeof ApiRoomsRoomIdMessagesMessageIdInteractionResponseRouteImport
       parentRoute: typeof ApiRoomsRoomIdMessagesRoute
+    }
+    '/api/missions/$missionId/tasks/$taskId/runtime': {
+      id: '/api/missions/$missionId/tasks/$taskId/runtime'
+      path: '/api/missions/$missionId/tasks/$taskId/runtime'
+      fullPath: '/api/missions/$missionId/tasks/$taskId/runtime'
+      preLoaderRoute: typeof ApiMissionsMissionIdTasksTaskIdRuntimeRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/agents/$agentId/runs/$runId/interrupt': {
       id: '/api/agents/$agentId/runs/$runId/interrupt'
@@ -5266,6 +5348,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPipelinesRoute: ApiPipelinesRoute,
   ApiPluginsRoute: ApiPluginsRoute,
   ApiPreviewFileRoute: ApiPreviewFileRoute,
+  ApiProjectsRoute: ApiProjectsRoute,
   ApiProviderUsageRoute: ApiProviderUsageRoute,
   ApiRoomsRoute: ApiRoomsRouteWithChildren,
   ApiSendRoute: ApiSendRoute,
@@ -5365,6 +5448,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiUsageTrendsRoute: ApiUsageTrendsRoute,
   ChatAgentAgentIdRoute: ChatAgentAgentIdRoute,
   ApiAgentsIndexRoute: ApiAgentsIndexRoute,
+  ApiMissionsIndexRoute: ApiMissionsIndexRoute,
   ApiTasksIndexRoute: ApiTasksIndexRoute,
   ApiAgentsAgentIdChatRoute: ApiAgentsAgentIdChatRoute,
   ApiAgentsAgentIdSessionsRoute: ApiAgentsAgentIdSessionsRouteWithChildren,
@@ -5372,6 +5456,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentsCodexImplConfigRoute: ApiAgentsCodexImplConfigRoute,
   ApiAgentsCodexImplModelsRoute: ApiAgentsCodexImplModelsRoute,
   ApiRunsRunIdSteerRoute: ApiRunsRunIdSteerRoute,
+  ApiMissionsMissionIdIndexRoute: ApiMissionsMissionIdIndexRoute,
   ApiAgentsAgentIdActivitySessionIdRoute:
     ApiAgentsAgentIdActivitySessionIdRoute,
   ApiAgentsAgentIdEngineActivateRoute: ApiAgentsAgentIdEngineActivateRoute,
@@ -5383,6 +5468,8 @@ const rootRouteChildren: RootRouteChildren = {
     ApiAgentsAgentIdEngineSessionSessionIdRouteWithChildren,
   ApiAgentsAgentIdRunsRunIdInterruptRoute:
     ApiAgentsAgentIdRunsRunIdInterruptRoute,
+  ApiMissionsMissionIdTasksTaskIdRuntimeRoute:
+    ApiMissionsMissionIdTasksTaskIdRuntimeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -7,6 +7,8 @@ metadata:
   hermes:
     tags: [swarm, researcher, facts, sources]
     category: swarm
+    pipeline_stages: [research]
+    outcomes: []
 ---
 
 # Researcher Core

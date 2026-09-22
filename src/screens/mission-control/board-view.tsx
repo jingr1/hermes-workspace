@@ -235,11 +235,26 @@ export function BoardView({
                       className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3 text-left transition-colors hover:border-[var(--theme-accent)] hover:bg-[var(--theme-hover)]"
                     >
                       <div className="text-xs font-medium">{task.title}</div>
-                      <div className="mt-1 flex items-center gap-2 text-[10px] text-[var(--theme-muted)]">
-                        {task.currentAssignee && (
-                          <span>{task.currentAssignee}</span>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]">
+                        {task.currentAssignee ? (
+                          <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-medium text-amber-800">
+                            {task.currentAssignee}
+                            {task.currentStage
+                              ? ` · ${task.currentStage}`
+                              : ''}
+                          </span>
+                        ) : task.currentStage ? (
+                          <span className="rounded bg-slate-500/10 px-1.5 py-0.5 text-slate-600">
+                            {task.currentStage}
+                          </span>
+                        ) : (
+                          <span className="text-[var(--theme-muted)]">
+                            No active worker
+                          </span>
                         )}
-                        <span>{task.progress}%</span>
+                        <span className="text-[var(--theme-muted)]">
+                          {task.progress}%
+                        </span>
                       </div>
                     </button>
                   ))}

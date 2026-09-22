@@ -1,15 +1,19 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { PlusSignIcon } from '@hugeicons/core-free-icons'
 import { cn } from '@/lib/utils'
 import { toast } from '@/components/ui/toast'
-import { createRoomFromMission } from '@/lib/group-chat-api'
+import { fetchAgentsStatus, fetchProjects } from '@/lib/mission-control-api'
 
 const PIPELINES_QUERY_KEY = ['mission-control', 'pipelines'] as const
+const ROOMS_QUERY_KEY = ['mission-control', 'rooms'] as const
+
+type ExecutionMode = 'pipeline' | 'assignee'
+type AssigneeKind = 'agent' | 'chat_group'
 
 async function fetchPipelines(): Promise<
   Array<{ id: string; name: string; stages: number }>
@@ -24,14 +28,21 @@ async function fetchPipelines(): Promise<
   return data.pipelines ?? []
 }
 
-async function createTask(payload: {
-  title: string
-  spec: string
-  pipelineId: string
-  acceptanceCriteria: Array<string>
-  autoDispatch: boolean
-}): Promise<{ missionId?: string | null; cardId?: string; dispatched?: Array<unknown> }> {
-  const res = await fetch('/api/tasks', {
+async function fetchRooms(): Promise<Array<{ id: string; title: string }>> {
+  const res = await fetch('/api/rooms')
+  if (!res.ok) return []
+  const data = (await res.json()) as {
+    rooms?: Array<{ id: string; title: string }>
+  }
+  return data.rooms ?? []
+}
+
+async function createMission(payload: Record<string, unknown>): Promise<{
+  missionId?: string | null
+  cardId?: string
+  roomId?: string | null
+}> {
+  const res = await fetch('/api/missions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -40,250 +51,302 @@ async function createTask(payload: {
     error?: string
     missionId?: string | null
     cardId?: string
-    dispatched?: Array<unknown>
+    roomId?: string | null
   }
   if (!res.ok || data.error) {
-    throw new Error(data.error || `Failed to create task: ${res.status}`)
+    throw new Error(data.error || `Failed to create mission: ${res.status}`)
   }
   return data
 }
 
-function CreateRoomAction({
-  missionId,
-  onDone,
-}: {
-  missionId: string
-  onDone: () => void
-}) {
-  const [busy, setBusy] = useState(false)
-  const navigate = useNavigate()
-  return (
-    <button
-      type="button"
-      disabled={busy}
-      onClick={async () => {
-        setBusy(true)
-        try {
-          const result = await createRoomFromMission(missionId)
-          if (result.room.id) {
-            navigate({ to: '/group-chat/$roomId', params: { roomId: result.room.id } })
-          }
-        } finally {
-          setBusy(false)
-          onDone()
-        }
-      }}
-      className="rounded-md border border-[var(--theme-border)] px-3 py-1.5 text-xs font-medium text-[var(--theme-text)] hover:bg-[var(--theme-hover)] disabled:opacity-50"
-    >
-      {busy ? 'Opening…' : 'Open room'}
-    </button>
-  )
-}
-
-type CreateTaskButtonProps = {
+type CreateMissionButtonProps = {
   variant?: 'header' | 'inline'
 }
 
-export function CreateTaskButton({
+export function CreateMissionButton({
   variant = 'header',
-}: CreateTaskButtonProps) {
+}: CreateMissionButtonProps) {
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState('')
   const [spec, setSpec] = useState('')
   const [criteria, setCriteria] = useState('')
+  const [mode, setMode] = useState<ExecutionMode>('pipeline')
   const [selectedPipelineId, setSelectedPipelineId] = useState('')
+  const [assigneeKind, setAssigneeKind] = useState<AssigneeKind>('agent')
+  const [assigneeId, setAssigneeId] = useState('')
   const [autoDispatch, setAutoDispatch] = useState(true)
+  const [projectId, setProjectId] = useState('')
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
 
   const pipelinesQuery = useQuery({
     queryKey: PIPELINES_QUERY_KEY,
     queryFn: fetchPipelines,
     enabled: open,
   })
+  const projectsQuery = useQuery({
+    queryKey: ['mission-control', 'projects'],
+    queryFn: fetchProjects,
+    enabled: open,
+  })
+  const agentsQuery = useQuery({
+    queryKey: ['mission-control', 'agents-status'],
+    queryFn: fetchAgentsStatus,
+    enabled: open && mode === 'assignee' && assigneeKind === 'agent',
+  })
+  const roomsQuery = useQuery({
+    queryKey: ROOMS_QUERY_KEY,
+    queryFn: fetchRooms,
+    enabled: open && mode === 'assignee' && assigneeKind === 'chat_group',
+  })
 
-  const createMutation = useMutation({
-    mutationFn: createTask,
+  const agentOptions = useMemo(
+    () => agentsQuery.data?.agents.map((a) => a.agentId) ?? [],
+    [agentsQuery.data],
+  )
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const acceptanceCriteria = criteria
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean)
+      const project = projectId.trim() || undefined
+      if (mode === 'pipeline') {
+        if (!selectedPipelineId) throw new Error('Select a pipeline')
+        return createMission({
+          title,
+          spec,
+          executionMode: 'pipeline',
+          pipelineId: selectedPipelineId,
+          acceptanceCriteria,
+          autoDispatch,
+          projectId: project,
+        })
+      }
+      if (!assigneeId) throw new Error('Select an assignee')
+      return createMission({
+        title,
+        spec,
+        executionMode: 'assignee',
+        assignee: { type: assigneeKind, id: assigneeId },
+        acceptanceCriteria,
+        autoDispatch: assigneeKind === 'agent' ? autoDispatch : false,
+        projectId: project,
+      })
+    },
     onSuccess: (data) => {
-      setOpen(false)
-      setTitle('')
-      setSpec('')
-      setCriteria('')
-      setSelectedPipelineId('')
-      setAutoDispatch(true)
       void queryClient.invalidateQueries({
         queryKey: ['mission-control', 'tasks'],
       })
       void queryClient.invalidateQueries({
-        queryKey: ['mission-control', 'agents'],
+        queryKey: ['mission-control', 'missions'],
       })
-      toast('Task created and started', {
-        type: 'success',
-        action: data.missionId ? (
-          <CreateRoomAction
-            missionId={data.missionId}
-            onDone={() => {
-              /* toast auto-dismisses */
-            }}
-          />
-        ) : undefined,
-      })
+      toast('Mission created', { type: 'success' })
+      setOpen(false)
+      setTitle('')
+      setSpec('')
+      setCriteria('')
+      setProjectId('')
+      const id = data.cardId ?? data.missionId
+      if (id) {
+        void navigate({
+          to: '/missions',
+          search: { missionId: id },
+        })
+      }
     },
     onError: (error: Error) => {
-      toast(error.message || 'Failed to create task', { type: 'error' })
+      toast(error.message || 'Failed to create mission', { type: 'error' })
     },
   })
 
-  const pipelines = pipelinesQuery.data ?? []
-
   return (
     <>
-      {variant === 'header' ? (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="flex items-center gap-1.5 rounded-md bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[var(--theme-accent-strong)]"
-        >
-          <HugeiconsIcon icon={PlusSignIcon} size={14} />
-          New task
-        </button>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="text-xs text-[var(--theme-accent-strong)] hover:underline"
-        >
-          + New task
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className={cn(
+          'inline-flex items-center gap-1.5 rounded-md bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[var(--theme-accent-strong)]',
+          variant === 'inline' && 'w-full justify-center',
+        )}
+      >
+        <HugeiconsIcon icon={PlusSignIcon} size={14} />
+        Create Mission
+      </button>
 
-      {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div
-            className={cn(
-              'w-full max-w-lg rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-5 text-[var(--theme-text)] shadow-xl',
-            )}
-          >
-            <h2 className="text-sm font-semibold">Create task</h2>
-            <p className="text-xs text-[var(--theme-muted)]">
-              Create a kanban card and instantiate a pipeline mission.
+      {open ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 shadow-xl">
+            <h2 className="text-sm font-semibold">Create Mission</h2>
+            <p className="mt-1 text-[11px] text-[var(--theme-muted)]">
+              Pipeline auto-runs tasks. Group chat is optional later.
             </p>
 
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-[var(--theme-muted)]">
-                  Title
-                </label>
+            <div className="mt-3 flex gap-1 rounded-lg border border-[var(--theme-border)] p-0.5">
+              {(['pipeline', 'assignee'] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMode(m)}
+                  className={cn(
+                    'flex-1 rounded-md px-2 py-1.5 text-xs font-medium capitalize',
+                    mode === m
+                      ? 'bg-[var(--theme-accent)] text-white'
+                      : 'text-[var(--theme-muted)] hover:bg-[var(--theme-hover)]',
+                  )}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-3 space-y-3">
+              <label className="block text-xs">
+                <span className="text-[var(--theme-muted)]">Title</span>
                 <input
-                  type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. Refactor auth layer"
-                  className="w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-xs outline-none focus:border-[var(--theme-accent)]"
+                  className="mt-1 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1.5 text-sm"
                 />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-[var(--theme-muted)]">
-                  Pipeline
-                </label>
-                <select
-                  value={selectedPipelineId}
-                  onChange={(e) => setSelectedPipelineId(e.target.value)}
-                  className="w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-xs outline-none focus:border-[var(--theme-accent)]"
-                >
-                  <option value="">Select a pipeline…</option>
-                  {pipelines.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.stages} stage{p.stages === 1 ? '' : 's'})
-                    </option>
-                  ))}
-                </select>
-                {pipelinesQuery.isLoading && (
-                  <p className="mt-1 text-[10px] text-[var(--theme-muted)]">
-                    Loading pipelines…
-                  </p>
-                )}
-                {pipelinesQuery.isError && (
-                  <p className="mt-1 text-[10px] text-red-500">
-                    {pipelinesQuery.error instanceof Error
-                      ? pipelinesQuery.error.message
-                      : 'Failed to load pipelines'}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-[var(--theme-muted)]">
-                  Spec
-                </label>
+              </label>
+              <label className="block text-xs">
+                <span className="text-[var(--theme-muted)]">Spec</span>
                 <textarea
                   value={spec}
                   onChange={(e) => setSpec(e.target.value)}
                   rows={4}
-                  placeholder="What should the agents do?"
-                  className="w-full resize-none rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-xs outline-none focus:border-[var(--theme-accent)]"
+                  className="mt-1 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1.5 text-sm"
                 />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-[var(--theme-muted)]">
-                  Acceptance criteria
-                </label>
+              </label>
+              <label className="block text-xs">
+                <span className="text-[var(--theme-muted)]">
+                  Acceptance criteria (one per line)
+                </span>
                 <textarea
                   value={criteria}
                   onChange={(e) => setCriteria(e.target.value)}
-                  rows={3}
-                  placeholder="One per line"
-                  className="w-full resize-none rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-xs outline-none focus:border-[var(--theme-accent)]"
+                  rows={2}
+                  className="mt-1 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1.5 text-sm"
                 />
-              </div>
+              </label>
 
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={autoDispatch}
-                  onChange={(e) => setAutoDispatch(e.target.checked)}
-                  className="h-3.5 w-3.5 accent-[var(--theme-accent)]"
-                />
-                <span className="text-xs">Start immediately</span>
+              {mode === 'pipeline' ? (
+                <label className="block text-xs">
+                  <span className="text-[var(--theme-muted)]">Pipeline</span>
+                  <select
+                    value={selectedPipelineId}
+                    onChange={(e) => setSelectedPipelineId(e.target.value)}
+                    className="mt-1 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1.5 text-sm"
+                  >
+                    <option value="">Select…</option>
+                    {(pipelinesQuery.data ?? []).map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.stages} stages)
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex gap-1 rounded-lg border border-[var(--theme-border)] p-0.5">
+                    {(['agent', 'chat_group'] as const).map((k) => (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => {
+                          setAssigneeKind(k)
+                          setAssigneeId('')
+                        }}
+                        className={cn(
+                          'flex-1 rounded-md px-2 py-1 text-[11px] font-medium',
+                          assigneeKind === k
+                            ? 'bg-[var(--theme-hover)] text-[var(--theme-text)]'
+                            : 'text-[var(--theme-muted)]',
+                        )}
+                      >
+                        {k === 'agent' ? 'Agent' : 'Chat group'}
+                      </button>
+                    ))}
+                  </div>
+                  <label className="block text-xs">
+                    <span className="text-[var(--theme-muted)]">Assignee</span>
+                    <select
+                      value={assigneeId}
+                      onChange={(e) => setAssigneeId(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1.5 text-sm"
+                    >
+                      <option value="">Select…</option>
+                      {assigneeKind === 'agent'
+                        ? agentOptions.map((id) => (
+                            <option key={id} value={id}>
+                              {id}
+                            </option>
+                          ))
+                        : (roomsQuery.data ?? []).map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.title || r.id}
+                            </option>
+                          ))}
+                    </select>
+                  </label>
+                </div>
+              )}
+
+              {(mode === 'pipeline' ||
+                (mode === 'assignee' && assigneeKind === 'agent')) && (
+                <label className="flex items-center gap-2 text-xs text-[var(--theme-muted)]">
+                  <input
+                    type="checkbox"
+                    checked={autoDispatch}
+                    onChange={(e) => setAutoDispatch(e.target.checked)}
+                  />
+                  Auto-start tasks
+                </label>
+              )}
+
+              <label className="block text-xs">
+                <span className="text-[var(--theme-muted)]">
+                  Project (optional)
+                </span>
+                <select
+                  value={projectId}
+                  onChange={(e) => setProjectId(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1.5 text-sm"
+                >
+                  <option value="">None</option>
+                  {(projectsQuery.data ?? []).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.id}
+                    </option>
+                  ))}
+                </select>
               </label>
             </div>
 
-            <div className="mt-5 flex justify-end gap-2">
+            <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="rounded-md border border-[var(--theme-border)] px-3 py-1.5 text-xs font-medium text-[var(--theme-muted)] hover:bg-[var(--theme-hover)]"
+                className="rounded-md border border-[var(--theme-border)] px-3 py-1.5 text-xs"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                disabled={
-                  !title.trim() ||
-                  !selectedPipelineId ||
-                  createMutation.isPending
-                }
-                onClick={() => {
-                  createMutation.mutate({
-                    title: title.trim(),
-                    spec: spec.trim(),
-                    pipelineId: selectedPipelineId,
-                    acceptanceCriteria: criteria
-                      .split('\n')
-                      .map((s) => s.trim())
-                      .filter(Boolean),
-                    autoDispatch,
-                  })
-                }}
-                className="rounded-md bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[var(--theme-accent-strong)] disabled:opacity-50"
+                disabled={!title.trim() || mutation.isPending}
+                onClick={() => mutation.mutate()}
+                className="rounded-md bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
               >
-                {createMutation.isPending ? 'Creating…' : 'Create'}
+                {mutation.isPending ? 'Creating…' : 'Create'}
               </button>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </>
   )
 }
+
+/** @deprecated Prefer CreateMissionButton */
+export const CreateTaskButton = CreateMissionButton

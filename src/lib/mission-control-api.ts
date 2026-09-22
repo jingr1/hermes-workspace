@@ -1,11 +1,5 @@
 /**
- * Mission Control API client — P3 三视图数据源.
- *
- * 数据来源:
- *   GET /api/agents/status   — Agent 列表 + probe + 实时 snapshot
- *   GET /api/tasks           — 任务概要（卡片 + mission + lane + 进度）
- *   GET /api/tasks/:taskId   — 单任务详情（卡片 + 流水线 stages + runs + events）
- *   GET /api/collab-events?scope=global — SSE 增量更新
+ * Mission Control API client — Missions list (entity=Mission) + detail Tasks.
  */
 
 export type AgentRuntimeLabel =
@@ -44,7 +38,6 @@ export type AgentStatusEntry = {
     checkpointStatus: string
     lastSummary: string | null
     updatedAt: number
-    /** Unified status derived from runtime, probe, group-chat and model config. */
     unifiedStatus: UnifiedAgentStatus
     needsSetup: boolean
   } | null
@@ -65,7 +58,12 @@ export type KanbanLane =
   | 'blocked'
   | 'done'
 
-export type TaskSummary = {
+export type MissionAssignee = {
+  type: 'agent' | 'chat_group'
+  id: string
+}
+
+export type MissionSummary = {
   cardId: string
   title: string
   lane: KanbanLane
@@ -73,11 +71,29 @@ export type TaskSummary = {
   missionState: string | null
   derivedLane: KanbanLane | null
   currentAssignee: string | null
+  currentStage: string | null
   progress: number
+  executionMode: string | null
+  assignee: MissionAssignee | null
+  roomId: string | null
+  pipelineId: string | null
+  projectId: string | null
+  priority: number | null
+  labels: Array<string>
+  taskCount: number
+}
+
+/** @deprecated Prefer MissionSummary */
+export type TaskSummary = MissionSummary
+
+export type MissionsResponse = {
+  missions: Array<MissionSummary>
+  tasks?: Array<MissionSummary>
 }
 
 export type TasksResponse = {
-  tasks: Array<TaskSummary>
+  tasks: Array<MissionSummary>
+  missions?: Array<MissionSummary>
 }
 
 export type PipelineStage = {
@@ -87,6 +103,24 @@ export type PipelineStage = {
   state: string
   stale: boolean
   dependsOn: Array<string>
+  dispatchedAt: number | null
+  completedAt: number | null
+  createdByWorkerId?: string | null
+  dispatchable?: boolean
+}
+
+export type MissionTaskRow = {
+  id: string
+  workerId: string
+  task: string
+  rationale: string | null
+  state: string
+  stageKey: string | null
+  dependsOn: Array<string>
+  createdByWorkerId: string | null
+  dispatchable: boolean
+  externalRef: unknown
+  workspacePath: string | null
   dispatchedAt: number | null
   completedAt: number | null
 }
@@ -102,7 +136,8 @@ export type TaskRun = {
   finished_at: number | null
 }
 
-export type TaskDetail = {
+export type MissionDetail = {
+  mission: MissionSummary
   task: {
     id: string
     title: string
@@ -111,7 +146,8 @@ export type TaskDetail = {
     status: KanbanLane
     missionId: string | null
     [key: string]: unknown
-  }
+  } | null
+  tasks: Array<MissionTaskRow>
   pipeline: {
     id: string | null
     specVersion: number
@@ -125,37 +161,232 @@ export type TaskDetail = {
   }>
 }
 
+/** @deprecated Prefer MissionDetail */
+export type TaskDetail = {
+  task: NonNullable<MissionDetail['task']>
+  pipeline: MissionDetail['pipeline']
+  runs: Array<TaskRun>
+  events: MissionDetail['events']
+}
+
 export async function fetchAgentsStatus(): Promise<AgentsStatusResponse> {
   const res = await fetch('/api/agents/status')
   if (!res.ok) throw new Error(`Failed to fetch agents status: ${res.status}`)
   return res.json()
 }
 
+export async function fetchMissions(): Promise<MissionsResponse> {
+  const res = await fetch('/api/missions')
+  if (!res.ok) {
+    // Compat fallback during rollout
+    const legacy = await fetch('/api/tasks')
+    if (!legacy.ok) throw new Error(`Failed to fetch missions: ${res.status}`)
+    const data = (await legacy.json()) as TasksResponse
+    return { missions: data.tasks ?? [], tasks: data.tasks }
+  }
+  const data = (await res.json()) as MissionsResponse
+  return {
+    missions: data.missions ?? data.tasks ?? [],
+    tasks: data.tasks ?? data.missions,
+  }
+}
+
 export async function fetchTasks(): Promise<TasksResponse> {
-  const res = await fetch('/api/tasks')
-  if (!res.ok) throw new Error(`Failed to fetch tasks: ${res.status}`)
+  const data = await fetchMissions()
+  return { tasks: data.missions, missions: data.missions }
+}
+
+export async function fetchMissionDetail(
+  missionOrCardId: string,
+): Promise<MissionDetail> {
+  const res = await fetch(`/api/missions/${missionOrCardId}`)
+  if (!res.ok) {
+    // Legacy card id path
+    const legacy = await fetch(`/api/tasks/${missionOrCardId}`)
+    if (!legacy.ok)
+      throw new Error(`Failed to fetch mission detail: ${res.status}`)
+    const data = (await legacy.json()) as TaskDetail & {
+      tasks?: Array<MissionTaskRow>
+      mission?: MissionSummary
+    }
+    return {
+      mission: data.mission ?? {
+        cardId: data.task.id,
+        title: data.task.title,
+        lane: data.task.status,
+        missionId: data.task.missionId,
+        missionState: null,
+        derivedLane: null,
+        currentAssignee: null,
+        currentStage: null,
+        progress: 0,
+        executionMode: null,
+        assignee: null,
+        roomId: null,
+        pipelineId: data.pipeline?.id ?? null,
+        projectId: null,
+        priority: null,
+        labels: [],
+        taskCount: data.pipeline?.stages.length ?? 0,
+      },
+      task: data.task,
+      tasks:
+        data.tasks ??
+        (data.pipeline?.stages.map((s) => ({
+          id: s.assignmentId,
+          workerId: s.agent,
+          task: '',
+          rationale: null,
+          state: s.state,
+          stageKey: s.stageKey,
+          dependsOn: s.dependsOn,
+          createdByWorkerId: s.createdByWorkerId ?? null,
+          dispatchable: true,
+          externalRef: null,
+          workspacePath: null,
+          dispatchedAt: s.dispatchedAt,
+          completedAt: s.completedAt,
+        })) ??
+          []),
+      pipeline: data.pipeline,
+      runs: data.runs,
+      events: data.events,
+    }
+  }
   return res.json()
 }
 
 export async function fetchTaskDetail(taskId: string): Promise<TaskDetail> {
-  const res = await fetch(`/api/tasks/${taskId}`)
-  if (!res.ok) throw new Error(`Failed to fetch task detail: ${res.status}`)
-  return res.json()
+  const detail = await fetchMissionDetail(taskId)
+  return {
+    task: detail.task ?? {
+      id: detail.mission.cardId,
+      title: detail.mission.title,
+      spec: '',
+      acceptanceCriteria: [],
+      status: detail.mission.lane,
+      missionId: detail.mission.missionId,
+    },
+    pipeline: detail.pipeline,
+    runs: detail.runs,
+    events: detail.events,
+  }
 }
 
-export async function startTask(taskId: string): Promise<{
+export async function startMission(missionOrCardId: string): Promise<{
   ok: boolean
-  dispatched: Array<{ assignmentId: string; workerId: string; ok: boolean; error?: string }>
+  dispatched: Array<{
+    assignmentId: string
+    workerId: string
+    ok: boolean
+    error?: string
+  }>
 }> {
-  const res = await fetch(`/api/tasks/${taskId}/start`, { method: 'POST' })
-  const data = (await res.json().catch(() => ({}))) as { error?: string; dispatched?: unknown }
-  if (!res.ok || data.error) {
-    throw new Error(data.error || `Failed to start task: ${res.status}`)
+  const res = await fetch(`/api/missions/${missionOrCardId}`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    const legacy = await fetch(`/api/tasks/${missionOrCardId}`, {
+      method: 'POST',
+    })
+    const data = (await legacy.json().catch(() => ({}))) as {
+      error?: string
+      dispatched?: unknown
+    }
+    if (!legacy.ok || data.error) {
+      throw new Error(data.error || `Failed to start mission: ${legacy.status}`)
+    }
+    return {
+      ok: true,
+      dispatched: Array.isArray(data.dispatched) ? data.dispatched : [],
+    }
   }
+  const data = (await res.json().catch(() => ({}))) as {
+    error?: string
+    dispatched?: unknown
+  }
+  if (data.error) throw new Error(data.error)
   return {
     ok: true,
     dispatched: Array.isArray(data.dispatched) ? data.dispatched : [],
   }
+}
+
+/** @deprecated Prefer startMission */
+export async function startTask(taskId: string) {
+  return startMission(taskId)
+}
+
+export type PatchMissionInput = {
+  title?: string
+  assignee?: MissionAssignee | null
+  roomId?: string | null
+  projectId?: string | null
+  priority?: number | null
+  labels?: Array<string>
+}
+
+export async function patchMission(
+  missionOrCardId: string,
+  patch: PatchMissionInput,
+): Promise<MissionSummary> {
+  const res = await fetch(`/api/missions/${missionOrCardId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  })
+  const data = (await res.json().catch(() => ({}))) as {
+    error?: string
+    mission?: MissionSummary
+  }
+  if (!res.ok || data.error || !data.mission) {
+    throw new Error(data.error || `Failed to patch mission: ${res.status}`)
+  }
+  return data.mission
+}
+
+export async function deleteMission(missionOrCardId: string): Promise<{
+  ok: boolean
+  missionId: string | null
+  cardId: string | null
+}> {
+  const res = await fetch(`/api/missions/${missionOrCardId}`, {
+    method: 'DELETE',
+  })
+  const data = (await res.json().catch(() => ({}))) as {
+    error?: string
+    ok?: boolean
+    missionId?: string | null
+    cardId?: string | null
+  }
+  if (!res.ok || data.error) {
+    throw new Error(data.error || `Failed to delete mission: ${res.status}`)
+  }
+  return {
+    ok: true,
+    missionId: data.missionId ?? null,
+    cardId: data.cardId ?? null,
+  }
+}
+
+export type ProjectOption = {
+  id: string
+  repo: string
+  defaultBranch: string
+  selfHosted: boolean
+}
+
+export async function fetchProjects(): Promise<Array<ProjectOption>> {
+  const res = await fetch('/api/projects')
+  if (!res.ok) throw new Error(`Failed to fetch projects: ${res.status}`)
+  const data = (await res.json()) as {
+    projects?: Array<ProjectOption>
+    error?: string
+  }
+  if (data.error && (!data.projects || data.projects.length === 0)) {
+    throw new Error(data.error)
+  }
+  return data.projects ?? []
 }
 
 export type CollabEvent = {
@@ -163,9 +394,6 @@ export type CollabEvent = {
   data: Record<string, unknown>
 }
 
-/**
- * 订阅 /api/collab-events SSE，支持 scope / roomId / sessionKey 过滤.
- */
 export function subscribeCollabEvents(
   params: { scope?: string; roomId?: string; sessionKey?: string },
   onEvent: (event: CollabEvent) => void,

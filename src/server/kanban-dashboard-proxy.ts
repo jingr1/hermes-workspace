@@ -157,6 +157,25 @@ export async function updateDashboardKanbanTask(
   return wrapped.task
 }
 
+/** Delete a task on the dashboard board when the plugin supports DELETE. */
+export async function deleteDashboardKanbanTask(
+  taskId: string,
+  board?: string,
+): Promise<void> {
+  const path = `/api/plugins/kanban/tasks/${encodeURIComponent(taskId)}`
+  const res = await dashboardFetch(withQuery(path, board ? { board } : {}), {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(
+      `Dashboard kanban proxy: DELETE ${path} → ${res.status}${body ? ` — ${body.slice(0, 200)}` : ''}`,
+    )
+  }
+}
+
 /**
  * List boards. The dashboard kanban plugin supports multi-board (project
  * scoping); each board is a separate SQLite file under

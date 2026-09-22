@@ -24,6 +24,11 @@ import type { AgentDeclaration } from '../agent-runtime/agents-config'
 
 export type WorkspaceMode = 'canonical' | 'worktree'
 
+export type PipelineStageOutcome = {
+  name: string
+  values: Array<string>
+}
+
 export type PipelineStage = {
   key: string
   agent: string // agents.yaml id, or human:<userId>
@@ -32,6 +37,25 @@ export type PipelineStage = {
   reworkTarget: string | null
   maxRework: number // review stage retry limit; defaults to 2
   requires: Array<string> // capability routing (P2b)
+  /** Optional inline prompt template (WORKFLOW-style body). */
+  prompt?: string | null
+  /** Relative path under pipelines/<id>/ or repo root. */
+  promptFile?: string | null
+  /** Skill ids to emphasize for this stage. */
+  skillRefs?: Array<string>
+  /** Expected checkpoint outcome tokens. */
+  outcomes?: Array<PipelineStageOutcome>
+}
+
+export type PipelineRuntimeConfig = {
+  maxConcurrentTasks?: number
+  maxRetryBackoffMs?: number
+  stallTimeoutMs?: number
+  hooks?: {
+    before_stage?: string | null
+    after_stage?: string | null
+    timeout_ms?: number
+  }
 }
 
 export type PipelineTemplate = {
@@ -39,6 +63,7 @@ export type PipelineTemplate = {
   name: string
   workspaceMode: WorkspaceMode
   stages: Array<PipelineStage>
+  runtime?: PipelineRuntimeConfig
 }
 
 export type PipelinesFile = {
@@ -177,34 +202,117 @@ export function loadPipelineTemplates(input?: {
     input?.agentIds ?? new Set(registry.agents.map((a) => a.id))
 
   const pipelines: Array<PipelineTemplate> = (doc?.pipelines ?? []).map(
-    (p) => ({
-      id: String(p.id ?? ''),
-      name: String(p.name ?? p.id ?? ''),
-      workspaceMode: (p.workspaceMode === 'worktree'
-        ? 'worktree'
-        : 'canonical') as WorkspaceMode,
-      stages: (
-        (p.stages as Array<Record<string, unknown>> | undefined) ?? []
-      ).map((s) => {
-        const rawMaxRework = s.maxRework
-        let maxRework = 2
-        if (rawMaxRework !== undefined && rawMaxRework !== null) {
-          const parsed = Number(rawMaxRework)
-          if (Number.isFinite(parsed) && parsed >= 0) {
-            maxRework = Math.floor(parsed)
+    (p) => {
+      const runtimeRaw = (p.runtime as Record<string, unknown> | undefined) ?? {}
+      const hooksRaw =
+        (runtimeRaw.hooks as Record<string, unknown> | undefined) ?? {}
+      const runtime: PipelineRuntimeConfig | undefined =
+        Object.keys(runtimeRaw).length > 0
+          ? {
+              maxConcurrentTasks:
+                typeof runtimeRaw.maxConcurrentTasks === 'number'
+                  ? runtimeRaw.maxConcurrentTasks
+                  : undefined,
+              maxRetryBackoffMs:
+                typeof runtimeRaw.maxRetryBackoffMs === 'number'
+                  ? runtimeRaw.maxRetryBackoffMs
+                  : undefined,
+              stallTimeoutMs:
+                typeof runtimeRaw.stallTimeoutMs === 'number'
+                  ? runtimeRaw.stallTimeoutMs
+                  : undefined,
+              hooks: {
+                before_stage:
+                  typeof hooksRaw.before_stage === 'string'
+                    ? hooksRaw.before_stage
+                    : null,
+                after_stage:
+                  typeof hooksRaw.after_stage === 'string'
+                    ? hooksRaw.after_stage
+                    : null,
+                timeout_ms:
+                  typeof hooksRaw.timeout_ms === 'number'
+                    ? hooksRaw.timeout_ms
+                    : undefined,
+              },
+            }
+          : undefined
+
+      const pipelineId = String(p.id ?? '')
+      return {
+        id: pipelineId,
+        name: String(p.name ?? p.id ?? ''),
+        workspaceMode: (p.workspaceMode === 'worktree'
+          ? 'worktree'
+          : 'canonical') as WorkspaceMode,
+        runtime,
+        stages: (
+          (p.stages as Array<Record<string, unknown>> | undefined) ?? []
+        ).map((s) => {
+          const rawMaxRework = s.maxRework
+          let maxRework = 2
+          if (rawMaxRework !== undefined && rawMaxRework !== null) {
+            const parsed = Number(rawMaxRework)
+            if (Number.isFinite(parsed) && parsed >= 0) {
+              maxRework = Math.floor(parsed)
+            }
           }
-        }
-        return {
-          key: String(s.key ?? ''),
-          agent: String(s.agent ?? ''),
-          kind: s.kind === 'review' ? 'review' : 'work',
-          dependsOn: Array.isArray(s.dependsOn) ? s.dependsOn.map(String) : [],
-          reworkTarget: s.reworkTarget ? String(s.reworkTarget) : null,
-          maxRework,
-          requires: Array.isArray(s.requires) ? s.requires.map(String) : [],
-        }
-      }),
-    }),
+          const promptFile = s.promptFile ? String(s.promptFile) : null
+          let prompt =
+            typeof s.prompt === 'string' ? (s.prompt as string) : null
+          if (!prompt && promptFile) {
+            const abs = path.isAbsolute(promptFile)
+              ? promptFile
+              : path.join(
+                  input?.repoRoot ?? process.cwd(),
+                  'pipelines',
+                  pipelineId,
+                  promptFile.replace(/^\.\//, ''),
+                )
+            const alt = path.join(
+              input?.repoRoot ?? process.cwd(),
+              promptFile.replace(/^\.\//, ''),
+            )
+            const filePath = fs.existsSync(abs)
+              ? abs
+              : fs.existsSync(alt)
+                ? alt
+                : null
+            if (filePath) {
+              const rawPrompt = fs.readFileSync(filePath, 'utf-8')
+              // Strip optional YAML front matter
+              prompt = rawPrompt.replace(/^---\n[\s\S]*?\n---\n?/, '').trim()
+            }
+          }
+          const outcomesRaw = Array.isArray(s.outcomes) ? s.outcomes : []
+          return {
+            key: String(s.key ?? ''),
+            agent: String(s.agent ?? ''),
+            kind: s.kind === 'review' ? ('review' as const) : ('work' as const),
+            dependsOn: Array.isArray(s.dependsOn)
+              ? s.dependsOn.map(String)
+              : [],
+            reworkTarget: s.reworkTarget ? String(s.reworkTarget) : null,
+            maxRework,
+            requires: Array.isArray(s.requires) ? s.requires.map(String) : [],
+            prompt,
+            promptFile,
+            skillRefs: Array.isArray(s.skillRefs)
+              ? s.skillRefs.map(String)
+              : [],
+            outcomes: outcomesRaw.map((o) => {
+              const row = o as Record<string, unknown>
+              return {
+                name: String(row.name ?? ''),
+                values: Array.isArray(row.values)
+                  ? row.values.map(String)
+                  : [],
+              }
+            }),
+          }
+        }),
+      }
+    },
   )
 
   const allErrors: Array<string> = []

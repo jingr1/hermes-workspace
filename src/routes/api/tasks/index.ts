@@ -2,64 +2,14 @@ import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../server/auth-middleware'
 import { listKanbanCards } from '../../../server/kanban-backend'
-import { createTask } from '../../../server/task-pipeline/task-service'
+import { createMission } from '../../../server/task-pipeline/task-service'
 import { listSwarmMissions } from '../../../server/swarm-missions'
-import { laneFromMission } from '../../../server/task-pipeline/lane-sync'
-import type {
-  SwarmMission,
-  SwarmMissionAssignmentState,
-} from '../../../server/swarm-missions'
-
-// Fallback progress for cards that are not yet bound to a local Swarm mission.
-// This prevents every dashboard task from showing 0% in Mission Control.
-const FALLBACK_PROGRESS_BY_LANE: Record<string, number> = {
-  done: 100,
-  complete: 100,
-  review: 75,
-  running: 50,
-  blocked: 50,
-  ready: 25,
-  todo: 10,
-  backlog: 0,
-}
-
-function assignmentProgressWeight(state: SwarmMissionAssignmentState): number {
-  switch (state) {
-    case 'done':
-    case 'checkpointed':
-      return 1
-    case 'reviewing':
-      return 0.8
-    case 'blocked':
-    case 'needs_input':
-      return 0.5
-    case 'dispatched':
-      return 0.5
-    case 'queued':
-    case 'cancelled':
-    default:
-      return 0
-  }
-}
-
-function computeTaskProgress(
-  mission: SwarmMission | null,
-  lane: string,
-): number {
-  if (mission && mission.assignments.length > 0) {
-    const weighted = mission.assignments.reduce(
-      (sum, assignment) => sum + assignmentProgressWeight(assignment.state),
-      0,
-    )
-    return Math.round((weighted / mission.assignments.length) * 100)
-  }
-  return FALLBACK_PROGRESS_BY_LANE[lane] ?? FALLBACK_PROGRESS_BY_LANE.backlog
-}
+import { buildMissionSummary } from '../../../server/task-pipeline/mission-serialize'
+import type { MissionAssignee } from '../../../server/swarm-missions'
 
 /**
- * GET  /api/tasks           → TaskSummary[] (card + mission + lane + progress)
- * POST /api/tasks           → create card + instantiate pipeline + mission
- * GET  /api/tasks/:taskId   → card + pipeline stages + runs + events
+ * GET  /api/tasks           → MissionSummary[] (compat; prefer /api/missions)
+ * POST /api/tasks           → create mission (pipeline | assignee XOR)
  */
 export const Route = createFileRoute('/api/tasks/')({
   server: {
@@ -77,21 +27,14 @@ export const Route = createFileRoute('/api/tasks/')({
           const mission = card.missionId
             ? (missionById.get(card.missionId) ?? null)
             : (missionByTaskId.get(card.id) ?? null)
-          const effectiveLane = mission ? laneFromMission(mission) : card.status
-          return {
+          return buildMissionSummary({
             cardId: card.id,
-            title: mission && mission.title.trim() ? mission.title.trim() : card.title,
-            lane: card.status,
-            missionId: mission?.id ?? null,
-            missionState: mission?.state ?? null,
-            derivedLane: mission ? laneFromMission(mission) : null,
-            currentAssignee:
-              mission?.assignments.find((a) => a.state === 'dispatched')
-                ?.workerId ?? null,
-            progress: computeTaskProgress(mission, effectiveLane),
-          }
+            cardTitle: card.title,
+            cardStatus: card.status,
+            mission,
+          })
         })
-        return json({ tasks })
+        return json({ tasks, missions: tasks })
       },
 
       POST: async ({ request }) => {
@@ -101,9 +44,13 @@ export const Route = createFileRoute('/api/tasks/')({
           title?: string
           spec?: string
           pipelineId?: string
+          executionMode?: 'pipeline' | 'assignee'
+          assignee?: MissionAssignee
           acceptanceCriteria?: Array<string>
           projectId?: string
           autoDispatch?: boolean
+          priority?: number | null
+          labels?: Array<string>
         }
         try {
           body = await request.json()
@@ -112,16 +59,40 @@ export const Route = createFileRoute('/api/tasks/')({
         }
         if (!body.title?.trim())
           return json({ error: 'Missing title' }, { status: 400 })
-        if (!body.pipelineId)
-          return json({ error: 'Missing pipelineId' }, { status: 400 })
+
+        const hasPipeline = Boolean(body.pipelineId)
+        const hasAssignee = Boolean(body.assignee?.id)
+        if (hasPipeline && hasAssignee) {
+          return json(
+            { error: 'pipelineId and assignee are mutually exclusive' },
+            { status: 400 },
+          )
+        }
+        if (!hasPipeline && !hasAssignee) {
+          return json(
+            { error: 'Provide pipelineId or assignee' },
+            { status: 400 },
+          )
+        }
+
         try {
-          const created = await createTask({
+          const created = await createMission({
             title: body.title,
             spec: body.spec ?? '',
-            pipelineId: body.pipelineId,
             acceptanceCriteria: body.acceptanceCriteria ?? [],
             projectId: body.projectId ?? null,
             autoDispatch: body.autoDispatch,
+            priority: body.priority,
+            labels: body.labels,
+            ...(hasAssignee
+              ? {
+                  executionMode: 'assignee' as const,
+                  assignee: body.assignee!,
+                }
+              : {
+                  executionMode: 'pipeline' as const,
+                  pipelineId: body.pipelineId!,
+                }),
           })
           return json(created, { status: 201 })
         } catch (error) {

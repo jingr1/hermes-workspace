@@ -1,20 +1,10 @@
 /**
- * stage-brief — per-task instruction text for each pipeline stage.
+ * stage-brief — per-stage instruction text (WORKFLOW-style templates).
  *
- * Plan «模板只定流程，内容由 decompose 填»: the template gives the stage
- * skeleton (key + agent + dependsOn); this module produces the concrete,
- * self-contained instruction text the agent receives at dispatch time.
+ * Prefer stage.prompt / stage.promptFile from pipelines.yaml; fall back to
+ * built-in role guidance for stages without a template.
  *
- * Staleness rule (plan): the spec can be edited after briefs are generated.
- * Each assignment records briefSpecVersion; the mission carries specVersion
- * (bumped on every spec edit). Before dispatch, a stage whose
- * briefSpecVersion !== mission.specVersion is STALE and must be regenerated
- * or human-confirmed — never silently dispatched with old text. Already
- * dispatched/completed stages are unaffected (history reflects its time).
- *
- * P2a minimal generation: structured template text per stage kind. The full
- * LLM-backed decompose (model writes content per stage) is a follow-up; the
- * fallback here IS the plan's «模板措辞 + spec 全文» heuristic floor.
+ * Strict mode: unknown {{variables}} throw (Symphony WORKFLOW semantics).
  */
 import type { PipelineStage } from './pipeline-templates'
 
@@ -25,72 +15,97 @@ export type StageBrief = {
   specVersion: number
 }
 
-const ROLE_GUIDANCE: Record<string, string> = {
+const FALLBACK_GUIDANCE: Record<string, string> = {
   research:
     'Establish facts only: competitive analysis, data validation, source tracing. ' +
     'No strategy, no recommendations. Cite evidence for every claim.',
-  spec:
+  design:
     'Produce the technical/content spec: wedge, bets, kill criteria, interface ' +
     'definitions, file-level plan. Choose exactly one build executor lane.',
   build:
     'Implement per the spec. Code + tests + build verification. No architecture ' +
     'changes; escalate spec gaps back to the architect.',
+  draft:
+    'Produce the content deliverable per the spec. No unverified claims.',
   review:
     'Review the build output against the spec. Output REVIEW_OUTCOME: approved ' +
     'or REVIEW_OUTCOME: changes_requested with concrete file/line feedback.',
-  retro:
-    'Document lessons learned; ingest durable knowledge. Mission wrap-up only.',
+  harden:
+    'Run harden checklist. Emit HARDEN_OUTCOME: pass or HARDEN_OUTCOME: fail with evidence.',
+  execute: 'Execute the mission spec as the assigned agent.',
 }
 
-function guidanceFor(stage: PipelineStage): string {
-  if (stage.kind === 'review') return ROLE_GUIDANCE.review
+type TemplateContext = Record<string, unknown>
+
+function lookupPath(ctx: TemplateContext, pathExpr: string): unknown {
+  const parts = pathExpr.split('.')
+  let cur: unknown = ctx
+  for (const part of parts) {
+    if (cur == null || typeof cur !== 'object') return undefined
+    cur = (cur as Record<string, unknown>)[part]
+  }
+  return cur
+}
+
+/** Strict Liquid-lite: {{ path }} only; unknown paths fail. */
+export function renderStrictTemplate(
+  template: string,
+  ctx: TemplateContext,
+): string {
+  return template.replace(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g, (_m, pathExpr) => {
+    const value = lookupPath(ctx, pathExpr)
+    if (value === undefined) {
+      throw new Error(`template_render_error: unknown variable "${pathExpr}"`)
+    }
+    if (value === null) return ''
+    if (typeof value === 'object') return JSON.stringify(value)
+    return String(value)
+  })
+}
+
+function fallbackGuidance(stage: PipelineStage): string {
+  if (stage.kind === 'review' && stage.key === 'harden')
+    return FALLBACK_GUIDANCE.harden
+  if (stage.kind === 'review') return FALLBACK_GUIDANCE.review
   return (
-    ROLE_GUIDANCE[stage.key] ??
+    FALLBACK_GUIDANCE[stage.key] ??
     `Execute stage "${stage.key}" per the task spec.`
   )
 }
 
-/**
- * Generate the brief for one stage. Self-contained: spec text + stage role
- * guidance + dependency context line. Deterministic (no model call) in P2a.
- */
-export function generateStageBrief(input: {
-  stage: PipelineStage
-  taskTitle: string
-  spec: string
-  acceptanceCriteria: Array<string>
-  specVersion: number
-  upstreamSummary?: string | null
-}): StageBrief {
-  const { stage } = input
-  const lines: Array<string> = [
-    `# Stage: ${stage.key} (agent: ${stage.agent})`,
+function buildDefaultTemplate(stage: PipelineStage): string {
+  const lines = [
+    `# Stage: {{ stage.key }} (agent: {{ stage.agent }})`,
     ``,
     `## Task`,
-    input.taskTitle,
+    `{{ mission.title }}`,
     ``,
-    `## Spec (authoritative, specVersion=${input.specVersion})`,
-    input.spec.trim() || '(no spec text)',
+    `## Spec (authoritative, specVersion={{ mission.specVersion }})`,
+    `{{ mission.spec }}`,
     ``,
     `## Acceptance criteria`,
-    ...(input.acceptanceCriteria.length > 0
-      ? input.acceptanceCriteria.map((c) => `- ${c}`)
-      : ['- (none declared)']),
+    `{{ mission.acceptanceCriteriaText }}`,
     ``,
     `## Your role at this stage`,
-    guidanceFor(stage),
+    fallbackGuidance(stage),
   ]
   if (stage.dependsOn.length > 0) {
+    lines.push(``, `## Depends on (must be complete)`, `{{ stage.dependsOnText }}`)
+  }
+  lines.push(``, `{{ upstream.section }}`)
+  if (stage.skillRefs && stage.skillRefs.length > 0) {
     lines.push(
       ``,
-      `## Depends on (must be complete)`,
-      ...stage.dependsOn.map((d) => `- ${d}`),
+      `## Required skills`,
+      `Load and follow: {{ stage.skillRefsText }}`,
     )
   }
-  if (input.upstreamSummary) {
-    lines.push(``, `## Upstream handoff`, input.upstreamSummary)
-  }
-  if (stage.kind === 'review') {
+  if (stage.outcomes && stage.outcomes.length > 0) {
+    lines.push(``, `## Required outcomes`)
+    for (const o of stage.outcomes) {
+      lines.push(`- ${o.name}: ${o.values.join(' | ')}`)
+    }
+  } else if (stage.kind === 'review') {
     lines.push(
       ``,
       `## Review protocol`,
@@ -99,21 +114,92 @@ export function generateStageBrief(input: {
       `  REVIEW_OUTCOME: changes_requested  (with concrete file/line feedback)`,
     )
   }
+  if (stage.key === 'harden' || stage.outcomes?.some((o) => o.name === 'HARDEN_OUTCOME')) {
+    lines.push(
+      ``,
+      `## Harden protocol`,
+      `End with exactly one of:`,
+      `  HARDEN_OUTCOME: pass`,
+      `  HARDEN_OUTCOME: fail`,
+    )
+  }
+  return lines.join('\n')
+}
+
+/**
+ * Generate the brief for one stage.
+ */
+export function generateStageBrief(input: {
+  stage: PipelineStage
+  taskTitle: string
+  spec: string
+  acceptanceCriteria: Array<string>
+  specVersion: number
+  upstreamSummary?: string | null
+  attempt?: number | null
+  missionId?: string | null
+  taskId?: string | null
+  workerId?: string | null
+}): StageBrief {
+  const { stage } = input
+  const acceptanceCriteriaText =
+    input.acceptanceCriteria.length > 0
+      ? input.acceptanceCriteria.map((c) => `- ${c}`).join('\n')
+      : '- (none declared)'
+  const dependsOnText = stage.dependsOn.map((d) => `- ${d}`).join('\n')
+  const skillRefsText = (stage.skillRefs ?? []).join(', ')
+  const upstreamSection = input.upstreamSummary
+    ? `## Upstream handoff\n${input.upstreamSummary}`
+    : ''
+
+  const ctx: TemplateContext = {
+    mission: {
+      id: input.missionId ?? '',
+      title: input.taskTitle,
+      spec: input.spec.trim() || '(no spec text)',
+      acceptanceCriteria: input.acceptanceCriteria,
+      acceptanceCriteriaText,
+      specVersion: input.specVersion,
+      executionMode: 'pipeline',
+    },
+    task: {
+      id: input.taskId ?? '',
+      workerId: input.workerId ?? stage.agent,
+      stageKey: stage.key,
+      state: 'queued',
+    },
+    stage: {
+      key: stage.key,
+      agent: stage.agent,
+      kind: stage.kind,
+      dependsOn: stage.dependsOn,
+      dependsOnText,
+      skillRefs: stage.skillRefs ?? [],
+      skillRefsText,
+    },
+    attempt: input.attempt ?? null,
+    upstream: {
+      summary: input.upstreamSummary ?? '',
+      section: upstreamSection,
+    },
+  }
+
+  const template = stage.prompt?.trim() || buildDefaultTemplate(stage)
+  const instruction = renderStrictTemplate(template, ctx).trim()
+
   return {
     stageKey: stage.key,
     agent: stage.agent,
-    instruction: lines.join('\n'),
+    instruction,
     specVersion: input.specVersion,
   }
 }
 
-/**
- * Is this stage's brief stale relative to the mission's current specVersion?
- * Stale briefs must NOT be dispatched silently.
- */
+/** True when briefSpecVersion lags mission.specVersion. */
 export function isBriefStale(
-  briefSpecVersion: number,
-  missionSpecVersion: number,
+  briefSpecVersion: number | null | undefined,
+  missionSpecVersion: number | null | undefined,
 ): boolean {
+  if (briefSpecVersion == null || missionSpecVersion == null) return false
   return briefSpecVersion !== missionSpecVersion
 }

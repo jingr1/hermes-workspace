@@ -10,6 +10,7 @@ import {
   type CSSProperties,
 } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   AlarmClockIcon,
@@ -1214,6 +1215,7 @@ export const __runtimeTabInternals = {
 }
 
 export function Swarm2Screen() {
+  const navigate = useNavigate()
   const { crew, lastUpdated } = useCrewStatus()
   useUpdatedAgo(lastUpdated)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -2023,7 +2025,19 @@ export function Swarm2Screen() {
             }}
             onOpenTasks={(workerId) => {
               setSelectedId(workerId)
-              scrollToRouter()
+              const mission = (missionsQuery.data ?? []).find((m) =>
+                (m.assignments ?? []).some(
+                  (a) =>
+                    a.workerId === workerId &&
+                    (a.state === 'dispatched' ||
+                      a.state === 'queued' ||
+                      a.state === 'reviewing'),
+                ),
+              )
+              void navigate({
+                to: '/missions',
+                search: mission?.id ? { missionId: mission.id } : {},
+              })
             }}
             runtimeByWorker={runtimeByWorker}
             recentUpdates={recentUpdates}

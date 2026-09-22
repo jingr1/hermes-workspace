@@ -1,19 +1,27 @@
 'use client'
 
-import { BoardView } from './board-view'
+import { MissionSurface } from './mission-surface'
 import { PipelineView } from './pipeline-view'
-import { CreateTaskButton } from './components/create-task-button'
+import { CreateMissionButton } from './components/create-task-button'
 
 type MissionsLayoutProps = {
-  selectedTaskId: string | null
-  onSelectTask: (taskId: string | null) => void
+  selectedMissionId: string | null
+  onSelectMission: (missionId: string | null) => void
+  /** @deprecated Prefer selectedMissionId */
+  selectedTaskId?: string | null
+  /** @deprecated Prefer onSelectMission */
+  onSelectTask?: (taskId: string | null) => void
 }
 
 export function MissionsLayout({
+  selectedMissionId,
+  onSelectMission,
   selectedTaskId,
   onSelectTask,
 }: MissionsLayoutProps) {
-  const showPipeline = Boolean(selectedTaskId)
+  const id = selectedMissionId ?? selectedTaskId ?? null
+  const select = onSelectMission ?? onSelectTask ?? (() => {})
+  const showDetail = Boolean(id)
 
   return (
     <div className="flex h-full flex-col bg-[var(--theme-bg)] text-[var(--theme-text)]">
@@ -22,40 +30,40 @@ export function MissionsLayout({
           <div>
             <h1 className="text-lg font-semibold">Missions</h1>
             <p className="text-xs text-[var(--theme-muted)]">
-              {showPipeline
-                ? 'Pipeline drill-down for the selected task.'
-                : 'Task board and pipeline progress.'}
+              {showDetail
+                ? 'Mission detail — tasks decomposed for agents.'
+                : 'Mission board · list · table · swimlane (no Gantt).'}
             </p>
           </div>
           <div className="flex items-center gap-3">
-            {showPipeline ? (
+            {showDetail ? (
               <button
                 type="button"
-                onClick={() => onSelectTask(null)}
+                onClick={() => select(null)}
                 className="rounded-md border border-[var(--theme-border)] px-3 py-1.5 text-xs font-medium text-[var(--theme-muted)] transition-colors hover:bg-[var(--theme-hover)] hover:text-[var(--theme-text)]"
               >
-                Back to Board
+                Back to list
               </button>
             ) : null}
-            <CreateTaskButton />
+            <CreateMissionButton />
           </div>
         </div>
       </header>
 
       <main className="min-h-0 flex-1 overflow-hidden">
-        {showPipeline ? (
+        {showDetail ? (
           <PipelineView
-            selectedTaskId={selectedTaskId}
-            onSelectTask={onSelectTask}
+            selectedMissionId={id}
+            onSelectMission={select}
           />
         ) : (
-          <BoardView onSelectTask={onSelectTask} />
+          <MissionSurface onSelectMission={select} />
         )}
       </main>
     </div>
   )
 }
 
-/** @deprecated Use MissionsLayout. Kept for any residual imports. */
+/** @deprecated Use MissionsLayout. */
 export const MissionControlLayout = MissionsLayout
 export type MissionControlTab = 'board' | 'pipeline'

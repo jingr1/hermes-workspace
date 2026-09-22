@@ -1,24 +1,34 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import type {
+  MissionDetail,
+  MissionSummary,
+  MissionTaskRow,
   PipelineStage,
-  TaskDetail,
   TaskRun,
-  TaskSummary,
 } from '@/lib/mission-control-api'
 import { cn } from '@/lib/utils'
 import {
-  fetchTaskDetail,
-  fetchTasks,
-  startTask,
+  deleteMission,
+  fetchAgentsStatus,
+  fetchMissionDetail,
+  fetchMissions,
+  fetchProjects,
+  patchMission,
+  startMission,
 } from '@/lib/mission-control-api'
+import {
+  buildTimelineFromEvents,
+  taskSummaryLine,
+} from '@/lib/mission-detail-format'
 import { createRoomFromMission } from '@/lib/group-chat-api'
 import { toast } from '@/components/ui/toast'
 
-const TASKS_QUERY_KEY = ['mission-control', 'tasks'] as const
+const MISSIONS_QUERY_KEY = ['mission-control', 'missions'] as const
+const PROJECTS_QUERY_KEY = ['mission-control', 'projects'] as const
 
 function StageBar({
   stages,
@@ -39,7 +49,7 @@ function StageBar({
           <div key={stage.assignmentId} className="flex items-center">
             <div
               className={cn(
-                'flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-medium transition-colors',
+                'flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-medium',
                 isCurrent
                   ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)] text-white'
                   : isDone
@@ -49,18 +59,6 @@ function StageBar({
                       : 'border-[var(--theme-border)] bg-[var(--theme-card)] text-[var(--theme-muted)]',
               )}
             >
-              <span
-                className={cn(
-                  'h-1.5 w-1.5 rounded-full',
-                  isCurrent
-                    ? 'bg-white'
-                    : isDone
-                      ? 'bg-emerald-500'
-                      : isBlocked
-                        ? 'bg-red-500'
-                        : 'bg-slate-400',
-                )}
-              />
               {stage.stageKey ?? stage.agent}
             </div>
             {index < stages.length - 1 && (
@@ -73,114 +71,103 @@ function StageBar({
   )
 }
 
-function PipelineActions({
-  activeTask,
-  detail,
-}: {
-  activeTask: TaskSummary
-  detail: TaskDetail | null | undefined
-}) {
-  const queryClient = useQueryClient()
-  const navigate = useNavigate()
-  const [roomBusy, setRoomBusy] = useState(false)
+function TasksTable({ tasks }: { tasks: Array<MissionTaskRow> }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
-  const startMutation = useMutation({
-    mutationFn: () => startTask(activeTask.cardId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: ['mission-control', 'task', activeTask.cardId],
-      })
-      void queryClient.invalidateQueries({
-        queryKey: ['mission-control', 'tasks'],
-      })
-      toast('Task started', { type: 'success' })
-    },
-    onError: (error: Error) => {
-      toast(error.message || 'Failed to start task', { type: 'error' })
-    },
-  })
-
-  const missionId = detail?.task.missionId ?? activeTask.missionId
-  const stages = detail?.pipeline?.stages ?? []
-  const hasReady = stages.some((s) => s.state === 'queued')
-  const isRunning = stages.some(
-    (s) => s.state === 'dispatched' || s.state === 'running',
-  )
-  const startLabel = isRunning ? 'Running' : hasReady ? 'Start / Continue' : 'No ready stage'
-
+  if (tasks.length === 0) {
+    return (
+      <p className="rounded-lg border border-dashed border-[var(--theme-border)] p-4 text-xs text-[var(--theme-muted)]">
+        No tasks decomposed yet. Pipeline stages or an agent assignee will
+        create tasks automatically.
+      </p>
+    )
+  }
   return (
-    <div className="flex shrink-0 items-center gap-2">
-      <button
-        type="button"
-        disabled={startMutation.isPending || !hasReady || isRunning}
-        onClick={() => startMutation.mutate()}
-        className="rounded-md bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[var(--theme-accent-strong)] disabled:opacity-50"
-      >
-        {startMutation.isPending ? 'Starting…' : startLabel}
-      </button>
-      {missionId && (
-        <button
-          type="button"
-          disabled={roomBusy}
-          onClick={async () => {
-            setRoomBusy(true)
-            try {
-              const result = await createRoomFromMission(missionId)
-              if (result.room.id) {
-                navigate({
-                  to: '/group-chat/$roomId',
-                  params: { roomId: result.room.id },
-                })
-              }
-            } finally {
-              setRoomBusy(false)
-            }
-          }}
-          className="rounded-md border border-[var(--theme-border)] px-3 py-1.5 text-xs font-medium text-[var(--theme-text)] hover:bg-[var(--theme-hover)] disabled:opacity-50"
-        >
-          {roomBusy ? 'Opening…' : 'Enter room'}
-        </button>
-      )}
+    <div className="overflow-x-auto rounded-lg border border-[var(--theme-border)]">
+      <table className="w-full min-w-[520px] text-left text-xs">
+        <thead className="border-b border-[var(--theme-border)] bg-[var(--theme-card)] text-[var(--theme-muted)]">
+          <tr>
+            <th className="px-3 py-2 font-medium">Created by</th>
+            <th className="px-3 py-2 font-medium">→ Worker</th>
+            <th className="px-3 py-2 font-medium">Stage</th>
+            <th className="px-3 py-2 font-medium">State</th>
+            <th className="px-3 py-2 font-medium">Summary</th>
+          </tr>
+        </thead>
+        <tbody>
+          {tasks.map((t) => {
+            const expanded = expandedId === t.id
+            const summary = taskSummaryLine(t.task)
+            return (
+              <tr
+                key={t.id}
+                className="border-b border-[var(--theme-border)] align-top"
+              >
+                <td className="whitespace-nowrap px-3 py-2 font-mono text-[10px]">
+                  {t.createdByWorkerId ?? '—'}
+                </td>
+                <td className="whitespace-nowrap px-3 py-2 font-medium">
+                  {t.workerId}
+                </td>
+                <td className="whitespace-nowrap px-3 py-2">
+                  {t.stageKey ?? '—'}
+                </td>
+                <td className="whitespace-nowrap px-3 py-2">
+                  <span
+                    className={cn(
+                      'rounded px-1.5 py-0.5 text-[10px] font-medium',
+                      t.state === 'done' || t.state === 'checkpointed'
+                        ? 'bg-emerald-500/15 text-emerald-700'
+                        : t.state === 'dispatched'
+                          ? 'bg-amber-500/15 text-amber-700'
+                          : t.state === 'blocked' || t.state === 'needs_input'
+                            ? 'bg-red-500/15 text-red-700'
+                            : 'bg-slate-500/10 text-slate-600',
+                    )}
+                  >
+                    {t.state}
+                  </span>
+                </td>
+                <td className="min-w-[12rem] px-3 py-2 text-[var(--theme-muted)]">
+                  <button
+                    type="button"
+                    className="w-full text-left hover:text-[var(--theme-text)]"
+                    onClick={() =>
+                      setExpandedId(expanded ? null : t.id)
+                    }
+                  >
+                    <span className="block break-words">{summary}</span>
+                    {expanded ? (
+                      <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded border border-[var(--theme-border)] bg-[var(--theme-bg)] p-2 text-[10px] text-[var(--theme-text)]">
+                        {t.task}
+                      </pre>
+                    ) : t.task.length > summary.length ? (
+                      <span className="mt-0.5 block text-[10px] text-[var(--theme-accent)]">
+                        Expand
+                      </span>
+                    ) : null}
+                  </button>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
     </div>
   )
 }
 
 function Timeline({
-  stages,
   runs,
   events,
 }: {
-  stages: Array<PipelineStage>
   runs: Array<TaskRun>
   events: Array<{ type: string; at: number; [key: string]: unknown }>
 }) {
-  const items = useMemo(() => {
-    const list: Array<{
-      id: string
-      kind: 'run' | 'event'
-      title: string
-      subtitle?: string
-      at: number
-    }> = []
-    for (const run of runs) {
-      list.push({
-        id: run.id,
-        kind: 'run',
-        title: `${run.agent_id} · ${run.status}`,
-        subtitle: run.summary ?? undefined,
-        at: run.started_at ?? 0,
-      })
-    }
-    for (const event of events) {
-      list.push({
-        id: `${event.type}-${event.at}`,
-        kind: 'event',
-        title: event.type,
-        at: typeof event.at === 'number' ? event.at : 0,
-      })
-    }
-    return list.sort((a, b) => b.at - a.at)
-  }, [runs, events])
+  const items = useMemo(
+    () => buildTimelineFromEvents(events, runs),
+    [runs, events],
+  )
 
   return (
     <div className="space-y-2">
@@ -189,67 +176,112 @@ function Timeline({
           key={item.id}
           className="flex items-start gap-3 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card)] p-3"
         >
-          <div
-            className={cn(
-              'mt-0.5 h-2 w-2 rounded-full',
-              item.kind === 'run' ? 'bg-blue-400' : 'bg-slate-400',
-            )}
-          />
           <div className="min-w-0 flex-1">
-            <div className="text-xs font-medium">{item.title}</div>
-            {item.subtitle && (
-              <div className="mt-0.5 truncate text-[11px] text-[var(--theme-muted)]">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
+              <span className="break-words">{item.title}</span>
+              {item.count ? (
+                <span className="rounded bg-slate-500/15 px-1.5 py-0.5 text-[10px] text-slate-600">
+                  ×{item.count}
+                </span>
+              ) : null}
+            </div>
+            {item.subtitle ? (
+              <div className="mt-0.5 break-words text-[11px] text-[var(--theme-muted)]">
                 {item.subtitle}
               </div>
-            )}
+            ) : null}
           </div>
           <div className="shrink-0 text-[10px] text-[var(--theme-muted)]">
             {item.at ? new Date(item.at).toLocaleTimeString() : ''}
           </div>
         </div>
       ))}
-      {items.length === 0 && (
+      {items.length === 0 ? (
         <p className="text-xs text-[var(--theme-muted)]">No activity yet.</p>
-      )}
+      ) : null}
     </div>
   )
 }
 
-export function PipelineView({
-  selectedTaskId,
-  onSelectTask,
+function PropRow({
+  label,
+  children,
 }: {
-  selectedTaskId: string | null
-  onSelectTask: (taskId: string | null) => void
+  label: string
+  children: ReactNode
 }) {
-  const tasksQuery = useQuery({
-    queryKey: TASKS_QUERY_KEY,
-    queryFn: fetchTasks,
+  return (
+    <div className="grid grid-cols-[5.5rem_minmax(0,1fr)] items-start gap-2 text-xs">
+      <dt className="pt-1.5 text-[var(--theme-muted)]">{label}</dt>
+      <dd className="min-w-0">{children}</dd>
+    </div>
+  )
+}
+
+function fieldClassName() {
+  return 'w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1 text-xs'
+}
+
+export function PipelineView({
+  selectedMissionId,
+  onSelectMission,
+}: {
+  selectedMissionId: string | null
+  onSelectMission: (id: string | null) => void
+  /** @deprecated */
+  selectedTaskId?: string | null
+  /** @deprecated */
+  onSelectTask?: (id: string | null) => void
+}) {
+  const activeId = selectedMissionId
+  const select = onSelectMission
+  const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const [roomBusy, setRoomBusy] = useState(false)
+  const [labelsDraft, setLabelsDraft] = useState('')
+
+  const missionsQuery = useQuery({
+    queryKey: MISSIONS_QUERY_KEY,
+    queryFn: fetchMissions,
     refetchInterval: 30_000,
   })
-  const tasks = tasksQuery.data?.tasks ?? []
+  const missions = missionsQuery.data?.missions ?? []
 
-  const [activeTaskId, setActiveTaskId] = useState<string | null>(
-    selectedTaskId,
-  )
+  const [activeCardId, setActiveCardId] = useState<string | null>(activeId)
   useEffect(() => {
-    if (selectedTaskId) setActiveTaskId(selectedTaskId)
-  }, [selectedTaskId])
+    if (activeId) setActiveCardId(activeId)
+  }, [activeId])
 
-  const activeTask = useMemo(() => {
-    if (tasks.length === 0) return null
-    return tasks.find((t) => t.cardId === activeTaskId) ?? tasks[0]
-  }, [tasks, activeTaskId])
+  const activeMission: MissionSummary | null = useMemo(() => {
+    if (missions.length === 0) return null
+    return (
+      missions.find(
+        (t) => t.cardId === activeCardId || t.missionId === activeCardId,
+      ) ?? missions[0]
+    )
+  }, [missions, activeCardId])
 
+  const detailKey = activeMission?.missionId ?? activeMission?.cardId
   const detailQuery = useQuery({
-    queryKey: ['mission-control', 'task', activeTask?.cardId],
-    queryFn: () => fetchTaskDetail(activeTask!.cardId),
-    enabled: Boolean(activeTask),
+    queryKey: ['mission-control', 'mission', detailKey],
+    queryFn: () => fetchMissionDetail(detailKey!),
+    enabled: Boolean(detailKey),
   })
 
-  const detail = detailQuery.data
+  const projectsQuery = useQuery({
+    queryKey: PROJECTS_QUERY_KEY,
+    queryFn: fetchProjects,
+  })
+  const agentsQuery = useQuery({
+    queryKey: ['mission-control', 'agents-status'],
+    queryFn: fetchAgentsStatus,
+  })
+
+  const detail: MissionDetail | undefined = detailQuery.data
+  const missionView = detail?.mission ?? activeMission
   const stages = detail?.pipeline?.stages ?? []
-  const currentStage: PipelineStage | null =
+  const tasks = detail?.tasks ?? []
+  const currentStage =
     stages.find(
       (s) =>
         s.state === 'dispatched' ||
@@ -259,106 +291,367 @@ export function PipelineView({
     stages.find((s) => s.state === 'queued') ??
     null
 
+  const labelsKey = (missionView?.labels ?? []).join(',')
+  useEffect(() => {
+    setLabelsDraft(labelsKey)
+  }, [missionView?.missionId, missionView?.cardId, labelsKey])
+
+  const invalidateMission = () => {
+    void queryClient.invalidateQueries({
+      queryKey: ['mission-control', 'mission', detailKey],
+    })
+    void queryClient.invalidateQueries({ queryKey: MISSIONS_QUERY_KEY })
+  }
+
+  const startMutation = useMutation({
+    mutationFn: () => startMission(activeMission!.cardId),
+    onSuccess: () => {
+      invalidateMission()
+      toast('Mission continued', { type: 'success' })
+    },
+    onError: (error: Error) => {
+      toast(error.message || 'Failed to start', { type: 'error' })
+    },
+  })
+
+  const patchMutation = useMutation({
+    mutationFn: (patch: Parameters<typeof patchMission>[1]) =>
+      patchMission(detailKey!, patch),
+    onSuccess: () => {
+      invalidateMission()
+      toast('Mission updated', { type: 'success' })
+    },
+    onError: (error: Error) => {
+      toast(error.message || 'Failed to update', { type: 'error' })
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () =>
+      deleteMission(
+        activeMission?.missionId ??
+          activeMission?.cardId ??
+          detailKey!,
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: MISSIONS_QUERY_KEY })
+      select(null)
+      setActiveCardId(null)
+      toast('Mission deleted', { type: 'success' })
+    },
+    onError: (error: Error) => {
+      toast(error.message || 'Failed to delete', { type: 'error' })
+    },
+  })
+
+  const roomId = detail?.mission.roomId ?? activeMission?.roomId
+  const missionIdForRoom =
+    detail?.mission.missionId ?? activeMission?.missionId
+  const nowWorker =
+    missionView?.currentAssignee ??
+    (currentStage ? currentStage.agent : null)
+  const nowStage = currentStage?.stageKey ?? currentStage?.agent ?? null
+  const agentOptions = agentsQuery.data?.agents.map((a) => a.agentId) ?? []
+
   return (
     <div className="flex h-full min-h-0">
-      {/* Task list */}
       <aside className="w-64 shrink-0 overflow-y-auto border-r border-[var(--theme-border)] bg-[var(--theme-card)] p-3">
         <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--theme-muted)]">
-          Tasks
+          Missions
         </h2>
-        {tasks.map((task) => (
+        {missions.map((m) => (
           <button
-            key={task.cardId}
+            key={m.cardId}
             type="button"
             onClick={() => {
-              setActiveTaskId(task.cardId)
-              onSelectTask(task.cardId)
+              setActiveCardId(m.cardId)
+              select(m.cardId)
             }}
             className={cn(
               'mb-1 w-full rounded-lg px-2.5 py-2 text-left text-xs transition-colors',
-              activeTask?.cardId === task.cardId
+              activeMission?.cardId === m.cardId
                 ? 'bg-[var(--theme-accent)] text-white'
                 : 'hover:bg-[var(--theme-hover)]',
             )}
           >
-            <div className="truncate font-medium">{task.title}</div>
-            <div className="mt-0.5 text-[10px] opacity-80">
-              {task.progress}% · {task.derivedLane ?? task.lane}
+            <div className="break-words font-medium">{m.title}</div>
+            <div
+              className={cn(
+                'mt-0.5 text-[10px]',
+                activeMission?.cardId === m.cardId
+                  ? 'text-white/70'
+                  : 'text-[var(--theme-muted)]',
+              )}
+            >
+              {m.currentAssignee
+                ? `${m.currentAssignee} · `
+                : ''}
+              {m.taskCount} tasks · {m.progress}%
             </div>
           </button>
         ))}
-        {tasks.length === 0 && (
-          <p className="text-xs text-[var(--theme-muted)]">No tasks.</p>
-        )}
       </aside>
 
-      {/* Detail */}
-      <section className="flex min-w-0 flex-1 flex-col overflow-y-auto p-5">
-        {activeTask ? (
-          <>
-            <div className="mb-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-semibold">{activeTask.title}</h2>
-                  <div className="mt-1 flex items-center gap-3 text-xs text-[var(--theme-muted)]">
-                    <span>进度 {activeTask.progress}%</span>
-                    <span>状态 {activeTask.derivedLane ?? activeTask.lane}</span>
-                    {activeTask.currentAssignee && (
-                      <span>执行 {activeTask.currentAssignee}</span>
-                    )}
-                  </div>
-                </div>
-                <PipelineActions activeTask={activeTask} detail={detail} />
-              </div>
-            </div>
-
-            <div className="mb-6 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4">
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--theme-muted)]">
-                Pipeline
-              </h3>
-              {stages.length > 0 ? (
-                <StageBar
-                  stages={stages}
-                  currentStageId={currentStage?.assignmentId ?? null}
-                />
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--theme-border)] px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <h2 className="break-words text-sm font-semibold">
+              {activeMission?.title ?? 'Mission'}
+            </h2>
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              {activeMission?.executionMode ? (
+                <span className="rounded bg-slate-500/10 px-1.5 py-0.5 text-[10px] font-medium capitalize text-slate-600">
+                  {activeMission.executionMode}
+                </span>
+              ) : null}
+              {activeMission?.pipelineId ? (
+                <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] text-blue-700">
+                  {activeMission.pipelineId}
+                </span>
+              ) : null}
+              {nowWorker ? (
+                <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                  Now: {nowWorker}
+                  {nowStage ? ` · ${nowStage}` : ''}
+                </span>
               ) : (
-                <p className="text-sm text-[var(--theme-muted)]">
-                  此任务未关联 Mission 流水线，暂无 Pipeline。
-                </p>
+                <span className="rounded bg-slate-500/10 px-1.5 py-0.5 text-[10px] text-slate-600">
+                  No active worker
+                </span>
               )}
             </div>
-
-            {currentStage &&
-            (currentStage.state === 'blocked' ||
-              currentStage.state === 'needs_input') ? (
-              <div className="mb-6 rounded-xl border border-red-400/40 bg-red-500/10 p-4 text-red-700">
-                <h3 className="text-xs font-semibold uppercase tracking-wide">
-                  Blocker
-                </h3>
-                <p className="mt-1 text-xs">
-                  Stage {currentStage.stageKey ?? currentStage.agent} is waiting
-                  for input or intervention.
-                </p>
-              </div>
-            ) : null}
-
-            <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4">
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-[var(--theme-muted)]">
-                Timeline
-              </h3>
-              <Timeline
-                stages={stages}
-                runs={detail?.runs ?? []}
-                events={detail?.events ?? []}
-              />
-            </div>
-          </>
-        ) : (
-          <div className="flex h-full items-center justify-center text-sm text-[var(--theme-muted)]">
-            Select a task to view its pipeline.
           </div>
-        )}
-      </section>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              disabled={
+                startMutation.isPending ||
+                !stages.some((s) => s.state === 'queued')
+              }
+              onClick={() => startMutation.mutate()}
+              className="rounded-md bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+            >
+              {startMutation.isPending ? 'Starting…' : 'Start / Continue'}
+            </button>
+            {missionIdForRoom ? (
+              <button
+                type="button"
+                disabled={roomBusy}
+                onClick={async () => {
+                  setRoomBusy(true)
+                  try {
+                    const result = await createRoomFromMission(missionIdForRoom)
+                    if (result.room.id) {
+                      invalidateMission()
+                      navigate({
+                        to: '/group-chat/$roomId',
+                        params: { roomId: result.room.id },
+                      })
+                    }
+                  } finally {
+                    setRoomBusy(false)
+                  }
+                }}
+                className="rounded-md border border-[var(--theme-border)] px-3 py-1.5 text-xs font-medium hover:bg-[var(--theme-hover)] disabled:opacity-50"
+              >
+                {roomBusy
+                  ? 'Opening…'
+                  : roomId
+                    ? 'Enter room'
+                    : 'Create room'}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              disabled={deleteMutation.isPending || !detailKey}
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    `Delete mission “${activeMission?.title ?? detailKey}”? This cannot be undone.`,
+                  )
+                ) {
+                  return
+                }
+                deleteMutation.mutate()
+              }}
+              className="rounded-md border border-red-400/40 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-500/10 disabled:opacity-50"
+            >
+              {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
+            </button>
+          </div>
+        </div>
+
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          <div className="min-w-0 flex-1 overflow-y-auto p-4">
+            {stages.length > 0 ? (
+              <StageBar
+                stages={stages}
+                currentStageId={currentStage?.assignmentId ?? null}
+              />
+            ) : null}
+            <h3 className="mb-2 mt-2 text-xs font-semibold uppercase tracking-wide text-[var(--theme-muted)]">
+              Tasks
+            </h3>
+            <TasksTable tasks={tasks} />
+            <h3 className="mb-2 mt-6 text-xs font-semibold uppercase tracking-wide text-[var(--theme-muted)]">
+              Timeline
+            </h3>
+            <Timeline
+              runs={detail?.runs ?? []}
+              events={detail?.events ?? []}
+            />
+          </div>
+
+          <aside className="hidden w-64 shrink-0 overflow-y-auto border-l border-[var(--theme-border)] p-3 lg:block">
+            <h3 className="mb-3 text-[10px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">
+              Properties
+            </h3>
+            <dl className="space-y-3">
+              <PropRow label="Lane">
+                <span className="block pt-1.5 font-medium">
+                  {missionView?.derivedLane ?? missionView?.lane ?? '—'}
+                </span>
+              </PropRow>
+              <PropRow label="State">
+                <span className="block pt-1.5 font-medium">
+                  {missionView?.missionState ?? '—'}
+                </span>
+              </PropRow>
+              <PropRow label="Now">
+                <span className="block break-words pt-1.5 font-medium">
+                  {nowWorker ?? '—'}
+                  {nowStage ? ` (${nowStage})` : ''}
+                </span>
+              </PropRow>
+              <PropRow label="Assignee">
+                {missionView?.executionMode === 'assignee' ? (
+                  <select
+                    className={fieldClassName()}
+                    disabled={patchMutation.isPending || !detailKey}
+                    value={
+                      missionView.assignee
+                        ? `${missionView.assignee.type}:${missionView.assignee.id}`
+                        : ''
+                    }
+                    onChange={(e) => {
+                      const value = e.target.value
+                      if (!value) {
+                        patchMutation.mutate({ assignee: null })
+                        return
+                      }
+                      const [type, ...rest] = value.split(':')
+                      const id = rest.join(':')
+                      if (type !== 'agent' && type !== 'chat_group') return
+                      patchMutation.mutate({
+                        assignee: { type, id },
+                      })
+                    }}
+                  >
+                    <option value="">Unassigned</option>
+                    {agentOptions.map((id) => (
+                      <option key={id} value={`agent:${id}`}>
+                        agent:{id}
+                      </option>
+                    ))}
+                    {missionView.assignee?.type === 'chat_group' ? (
+                      <option
+                        value={`chat_group:${missionView.assignee.id}`}
+                      >
+                        chat_group:{missionView.assignee.id}
+                      </option>
+                    ) : null}
+                  </select>
+                ) : (
+                  <span className="block break-words pt-1.5 font-medium">
+                    {missionView?.assignee
+                      ? `${missionView.assignee.type}:${missionView.assignee.id}`
+                      : missionView?.pipelineId
+                        ? `pipeline:${missionView.pipelineId}`
+                        : '—'}
+                  </span>
+                )}
+              </PropRow>
+              <PropRow label="Pipeline">
+                <span className="block break-words pt-1.5 font-medium">
+                  {missionView?.pipelineId ?? '—'}
+                </span>
+              </PropRow>
+              <PropRow label="Priority">
+                <select
+                  className={fieldClassName()}
+                  disabled={patchMutation.isPending || !detailKey}
+                  value={
+                    missionView?.priority == null
+                      ? ''
+                      : String(missionView.priority)
+                  }
+                  onChange={(e) => {
+                    const raw = e.target.value
+                    patchMutation.mutate({
+                      priority: raw === '' ? null : Number(raw),
+                    })
+                  }}
+                >
+                  <option value="">None</option>
+                  {[0, 1, 2, 3, 4].map((n) => (
+                    <option key={n} value={n}>
+                      P{n}
+                    </option>
+                  ))}
+                </select>
+              </PropRow>
+              <PropRow label="Labels">
+                <input
+                  className={fieldClassName()}
+                  disabled={patchMutation.isPending || !detailKey}
+                  value={labelsDraft}
+                  placeholder="a, b, c"
+                  onChange={(e) => setLabelsDraft(e.target.value)}
+                  onBlur={() => {
+                    const next = labelsDraft
+                      .split(',')
+                      .map((s) => s.trim())
+                      .filter(Boolean)
+                    const prev = missionView?.labels ?? []
+                    if (next.join('\0') === prev.join('\0')) return
+                    patchMutation.mutate({ labels: next })
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      ;(e.target as HTMLInputElement).blur()
+                    }
+                  }}
+                />
+              </PropRow>
+              <PropRow label="Project">
+                <select
+                  className={fieldClassName()}
+                  disabled={patchMutation.isPending || !detailKey}
+                  value={missionView?.projectId ?? ''}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    patchMutation.mutate({
+                      projectId: value === '' ? null : value,
+                    })
+                  }}
+                >
+                  <option value="">None</option>
+                  {(projectsQuery.data ?? []).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.id}
+                    </option>
+                  ))}
+                </select>
+              </PropRow>
+              <PropRow label="Room">
+                <span className="block break-all pt-1.5 font-medium">
+                  {roomId ?? '—'}
+                </span>
+              </PropRow>
+            </dl>
+          </aside>
+        </div>
+      </div>
     </div>
   )
 }

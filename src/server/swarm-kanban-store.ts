@@ -248,3 +248,11 @@ export function updateSwarmKanbanCard(
   writeKanbanFile(file)
   return next
 }
+
+export function deleteSwarmKanbanCard(cardId: string): boolean {
+  const file = readKanbanFile()
+  const next = file.cards.filter((card) => card.id !== cardId)
+  if (next.length === file.cards.length) return false
+  writeKanbanFile({ cards: next })
+  return true
+}

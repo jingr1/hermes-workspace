@@ -7,6 +7,10 @@ metadata:
   hermes:
     tags: [swarm, architect, design, review]
     category: swarm
+    pipeline_stages: [design, review, harden]
+    outcomes:
+      - name: REVIEW_OUTCOME
+        values: [approved, changes_requested]
 ---
 
 # Architect Core

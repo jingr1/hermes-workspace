@@ -435,8 +435,7 @@ export function SwarmScreen() {
                         }}
                         onOpenTasks={() =>
                           void navigate({
-                            to: '/tasks',
-                            search: { assignee: member.id },
+                            to: '/missions',
                           })
                         }
                       />
