@@ -15,7 +15,7 @@ export type TaskColumn =
   | 'done'
 export type TaskPriority = 'high' | 'medium' | 'low'
 
-export type ClaudeTaskRecord = {
+export type HermesTaskRecord = {
   id: string
   title: string
   description: string
@@ -101,7 +101,7 @@ function mapCardToTask(card: {
   createdBy: string
   createdAt: number
   updatedAt: number
-}): ClaudeTaskRecord {
+}): HermesTaskRecord {
   return {
     id: card.id,
     title: card.title,
@@ -118,13 +118,13 @@ function mapCardToTask(card: {
   }
 }
 
-export function getClaudeTasksBackendMeta(): KanbanBackendMeta {
+export function getHermesTasksBackendMeta(): KanbanBackendMeta {
   return getKanbanBackendMeta()
 }
 
-export async function listClaudeTasks(
+export async function listHermesTasks(
   filters: TaskFilters = {},
-): Promise<ClaudeTaskRecord[]> {
+): Promise<HermesTaskRecord[]> {
   let tasks = (await listKanbanCards()).map(mapCardToTask)
   if (!filters.includeDone) {
     tasks = tasks.filter((task) => task.column !== 'done')
@@ -143,17 +143,17 @@ export async function listClaudeTasks(
   )
 }
 
-export async function getClaudeTask(
+export async function getHermesTask(
   taskId: string,
-): Promise<ClaudeTaskRecord | null> {
+): Promise<HermesTaskRecord | null> {
   const tasks = await listKanbanCards()
   const card = tasks.find((entry) => entry.id === taskId)
   return card ? mapCardToTask(card) : null
 }
 
-export async function createClaudeTask(
+export async function createHermesTask(
   input: CreateTaskInput,
-): Promise<ClaudeTaskRecord> {
+): Promise<HermesTaskRecord> {
   const card = await createKanbanCard({
     title: input.title,
     spec: input.description ?? '',
@@ -164,10 +164,10 @@ export async function createClaudeTask(
   return mapCardToTask(card)
 }
 
-export async function updateClaudeTask(
+export async function updateHermesTask(
   taskId: string,
   updates: UpdateTaskInput,
-): Promise<ClaudeTaskRecord | null> {
+): Promise<HermesTaskRecord | null> {
   const card = await updateKanbanCard(taskId, {
     title: typeof updates.title === 'string' ? updates.title : undefined,
     spec:
@@ -183,9 +183,9 @@ export async function updateClaudeTask(
   return card ? mapCardToTask(card) : null
 }
 
-export async function moveClaudeTask(
+export async function moveHermesTask(
   taskId: string,
   column: TaskColumn,
-): Promise<ClaudeTaskRecord | null> {
-  return updateClaudeTask(taskId, { column })
+): Promise<HermesTaskRecord | null> {
+  return updateHermesTask(taskId, { column })
 }

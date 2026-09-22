@@ -36,7 +36,7 @@ const PER_SOURCE_TIMEOUT_MS = 8_000
 async function getInstalledNames(): Promise<Set<string>> {
   try {
     // Lazy import to avoid circular deps and keep server-only
-    const { getConfig } = await import('../claude-dashboard-api')
+    const { getConfig } = await import('../hermes-dashboard-api')
     const config = await getConfig()
 
     // Config may be wrapped in { config: {...} } shape

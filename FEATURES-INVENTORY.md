@@ -180,8 +180,8 @@
 | Endpoint             | Method | Description                                  |
 | -------------------- | ------ | -------------------------------------------- |
 | `/api/models`        | GET    | List available models (gateway + auth store) |
-| `/api/claude-config` | GET    | Read Hermes config.yaml and .env             |
-| `/api/claude-config` | PATCH  | Update config.yaml and .env                  |
+| `/api/hermes-config` | GET    | Read Hermes config.yaml and .env             |
+| `/api/hermes-config` | PATCH  | Update config.yaml and .env                  |
 | `/api/context-usage` | GET    | Token/context usage for a session            |
 
 ### 2.7 Jobs

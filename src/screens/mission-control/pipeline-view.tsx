@@ -248,18 +248,24 @@ export function PipelineView({
   const missions = missionsQuery.data?.missions ?? []
 
   const [activeMissionKey, setActiveMissionKey] = useState<string | null>(activeId)
+  const [selectionCleared, setSelectionCleared] = useState(false)
   useEffect(() => {
-    if (activeId) setActiveMissionKey(activeId)
+    if (activeId) {
+      setActiveMissionKey(activeId)
+      setSelectionCleared(false)
+    }
   }, [activeId])
 
   const activeMission: MissionSummary | null = useMemo(() => {
     if (missions.length === 0) return null
-    return (
-      missions.find(
-        (t) => t.missionId === activeMissionKey,
-      ) ?? missions[0]
-    )
-  }, [missions, activeMissionKey])
+    if (selectionCleared) return null
+    if (activeMissionKey) {
+      return (
+        missions.find((t) => t.missionId === activeMissionKey) ?? null
+      )
+    }
+    return missions[0] ?? null
+  }, [missions, activeMissionKey, selectionCleared])
 
   const detailKey = activeMission?.missionId ?? null
   const detailQuery = useQuery({
@@ -328,14 +334,29 @@ export function PipelineView({
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteMission(detailKey!),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: MISSIONS_QUERY_KEY })
+    onSuccess: async () => {
+      const deletedId = detailKey
       select(null)
       setActiveMissionKey(null)
+      setSelectionCleared(true)
+      await queryClient.invalidateQueries({ queryKey: MISSIONS_QUERY_KEY })
+      if (deletedId) {
+        queryClient.removeQueries({
+          queryKey: ['mission-control', 'mission', deletedId],
+        })
+      }
       toast('Mission deleted', { type: 'success' })
     },
     onError: (error: Error) => {
-      toast(error.message || 'Failed to delete', { type: 'error' })
+      const timedOut =
+        error.name === 'TimeoutError' ||
+        /aborted|timeout/i.test(error.message)
+      toast(
+        timedOut
+          ? 'Delete timed out — workspace may be stuck; restart pnpm start:all'
+          : error.message || 'Failed to delete',
+        { type: 'error' },
+      )
     },
   })
 
@@ -361,6 +382,7 @@ export function PipelineView({
             onClick={() => {
               const id = m.missionId
               if (!id) return
+              setSelectionCleared(false)
               setActiveMissionKey(id)
               select(id)
             }}

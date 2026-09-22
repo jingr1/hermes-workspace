@@ -1135,7 +1135,7 @@ function ChatComposerComponent({
   const sttConfigQuery = useQuery({
     queryKey: ['claude', 'config', 'stt'],
     queryFn: async () => {
-      const response = await fetch('/api/claude-config')
+      const response = await fetch('/api/hermes-config')
       if (!response.ok) {
         throw new Error(`Config request failed (${response.status})`)
       }

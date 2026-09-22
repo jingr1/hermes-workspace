@@ -185,7 +185,7 @@ describe('Phase 1.5 fallback — capability gating shape', () => {
     vi.doMock('../../server/auth-middleware', () => ({
       isAuthenticated: () => true,
     }))
-    vi.doMock('../../server/claude-dashboard-api', () => ({
+    vi.doMock('../../server/hermes-dashboard-api', () => ({
       getConfig: () =>
         Promise.resolve({
           mcp_servers: {

@@ -17,7 +17,7 @@
  * - Self-heals once when a poisoned Hermes session yields
  *   "No LLM provider configured".
  */
-import { getClaudeApiClient } from '../claude-api-profile'
+import { getHermesApiClient } from '../hermes-api-profile'
 import { runManagedTurn } from '../agent-runtime/run-managed-turn'
 import {
   ensureManagedChatSession,
@@ -177,7 +177,7 @@ async function streamOnce(
 ): Promise<StreamCapture> {
   const client =
     opts.member.runtime === 'hermes' && profile
-      ? getClaudeApiClient(profile)
+      ? getHermesApiClient(profile)
       : undefined
 
   let replyAccum = ''
@@ -235,7 +235,7 @@ async function streamOnce(
               handleStreamEvent(payload.event, payload.data),
           },
         )
-      : import('../claude-api').then((m) =>
+      : import('../hermes-api').then((m) =>
           m.streamChat(
             sessionId,
             {
@@ -312,11 +312,11 @@ async function pickReplyFromSession(
   try {
     const client =
       opts.member.runtime === 'hermes' && profile
-        ? getClaudeApiClient(profile)
+        ? getHermesApiClient(profile)
         : undefined
     const messages = client
       ? await client.getMessages(sessionId)
-      : await import('../claude-api').then((m) => m.getMessages(sessionId))
+      : await import('../hermes-api').then((m) => m.getMessages(sessionId))
     const picked = pickGroupTurnReply(
       messages.map((m) => ({ role: m.role, content: m.content })),
       before,
@@ -406,11 +406,11 @@ async function executeHermesMemberTurn(
     try {
       const client =
         opts.member.runtime === 'hermes' && profile
-          ? getClaudeApiClient(profile)
+          ? getHermesApiClient(profile)
           : undefined
       const pre = client
         ? await client.getMessages(sessionId)
-        : await import('../claude-api').then((m) => m.getMessages(sessionId))
+        : await import('../hermes-api').then((m) => m.getMessages(sessionId))
       before = pre.length
     } catch {
       before = 0
@@ -431,7 +431,7 @@ async function executeHermesMemberTurn(
       )
       const client =
         opts.member.runtime === 'hermes' && profile
-          ? getClaudeApiClient(profile)
+          ? getHermesApiClient(profile)
           : undefined
       forgetSession(opts.roomId, opts.member.participantId)
       await client?.deleteSession(sessionId).catch(() => undefined)

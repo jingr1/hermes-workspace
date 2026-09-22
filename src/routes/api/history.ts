@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
-import { getMessages, toChatMessage } from '../../server/claude-api'
+import { getMessages, toChatMessage } from '../../server/hermes-api'
 import {
   resolveMainChatSessionId,
   resolveSessionKey,

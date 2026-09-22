@@ -41,7 +41,7 @@ async function loadBackend(options?: {
     getKanbanBackendMeta,
   }))
 
-  const mod = await import('./claude-tasks-backend')
+  const mod = await import('./hermes-tasks-backend')
   return {
     mod,
     listKanbanCards,
@@ -51,7 +51,7 @@ async function loadBackend(options?: {
   }
 }
 
-describe('claude-tasks-backend', () => {
+describe('hermes-tasks-backend', () => {
   it('maps shared kanban cards into /tasks records and preserves blocked cards', async () => {
     const { mod } = await loadBackend({
       cards: [
@@ -72,7 +72,7 @@ describe('claude-tasks-backend', () => {
       ],
     })
 
-    const tasks = await mod.listClaudeTasks({ includeDone: true })
+    const tasks = await mod.listHermesTasks({ includeDone: true })
     expect(tasks).toHaveLength(1)
     expect(tasks[0]).toMatchObject({
       id: 'card-1',
@@ -87,7 +87,7 @@ describe('claude-tasks-backend', () => {
   it('creates tasks in the shared kanban backend instead of tasks.json', async () => {
     const { mod, createKanbanCard } = await loadBackend()
 
-    const task = await mod.createClaudeTask({
+    const task = await mod.createHermesTask({
       title: 'Wire workspace board to shared kanban',
       description: 'Proxy through Agent API',
       column: 'todo',
@@ -129,7 +129,7 @@ describe('claude-tasks-backend', () => {
       },
     })
 
-    const task = await mod.moveClaudeTask('card-2', 'blocked')
+    const task = await mod.moveHermesTask('card-2', 'blocked')
     expect(updateKanbanCard).toHaveBeenCalledWith(
       'card-2',
       expect.objectContaining({ status: 'blocked' }),

@@ -43,7 +43,7 @@ import {
   getMessages as getSessionMessagesFromAgent,
   listSessions,
   streamChat,
-} from '../../server/claude-api'
+} from '../../server/hermes-api'
 import { loadWorkspaceCatalog } from './workspace'
 import {
   collectSyntheticLiveToolEvents,

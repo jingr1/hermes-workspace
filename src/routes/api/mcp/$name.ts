@@ -11,7 +11,7 @@ import {
   requireJsonContentType,
   safeErrorMessage,
 } from '../../../server/rate-limit'
-import { getConfig, saveConfig } from '../../../server/claude-dashboard-api'
+import { getConfig, saveConfig } from '../../../server/hermes-dashboard-api'
 import { createCapabilityUnavailablePayload } from '@/lib/feature-gates'
 
 const REQUEST_TIMEOUT_MS = 30_000

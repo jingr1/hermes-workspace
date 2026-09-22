@@ -22,8 +22,8 @@ const { createSession, sendChat, getMessages, ensureProfileGateway } =
     ensureProfileGateway: vi.fn(async () => undefined),
   }))
 
-vi.mock('../../claude-api-profile', () => ({
-  getClaudeApiClient: () => ({
+vi.mock('../../hermes-api-profile', () => ({
+  getHermesApiClient: () => ({
     createSession,
     sendChat,
     getMessages,
@@ -31,7 +31,7 @@ vi.mock('../../claude-api-profile', () => ({
   }),
 }))
 
-vi.mock('../../claude-api', () => ({
+vi.mock('../../hermes-api', () => ({
   createSession,
   sendChat,
   getMessages,

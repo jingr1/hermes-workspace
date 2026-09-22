@@ -137,7 +137,7 @@ async function fetchJson(url: string): Promise<unknown | null> {
   }
 }
 
-export const Route = createFileRoute('/api/claude-tasks-assignees')({
+export const Route = createFileRoute('/api/hermes-tasks-assignees')({
   server: {
     handlers: {
       GET: async ({ request }) => {

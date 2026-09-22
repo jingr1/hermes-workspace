@@ -16,7 +16,7 @@ import {
   normalizeMcpServer,
   normalizeMcpServerFromConfig,
 } from '../../../server/mcp-normalize'
-import { getConfig, saveConfig } from '../../../server/claude-dashboard-api'
+import { getConfig, saveConfig } from '../../../server/hermes-dashboard-api'
 import type { McpConfigureInput } from '../../../types/mcp-input'
 import { createCapabilityUnavailablePayload } from '@/lib/feature-gates'
 

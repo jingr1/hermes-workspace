@@ -180,7 +180,7 @@ export function ClaudeOnboarding() {
 
   const loadCurrentConfig = useCallback(async () => {
     try {
-      const res = await fetch('/api/claude-config')
+      const res = await fetch('/api/hermes-config')
       if (!res.ok) return
       const data = (await res.json()) as {
         activeModel?: string
@@ -289,7 +289,7 @@ export function ClaudeOnboarding() {
         }
       }
 
-      const res = await fetch('/api/claude-config', {
+      const res = await fetch('/api/hermes-config', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -323,7 +323,7 @@ export function ClaudeOnboarding() {
     if (!canEditConfig || !selectedProvider) return true
 
     try {
-      const res = await fetch('/api/claude-config', {
+      const res = await fetch('/api/hermes-config', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

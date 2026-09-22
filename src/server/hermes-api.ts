@@ -26,7 +26,7 @@ import {
   listSessions as listDashboardSessions,
   searchSessions as searchDashboardSessions,
   updateSession as updateDashboardSession,
-} from './claude-dashboard-api'
+} from './hermes-dashboard-api'
 
 const _authHeaders = (): Record<string, string> => {
   const token = getGatewayBearerToken()
@@ -37,7 +37,7 @@ console.log(`[hermes-api] Configured API: ${CLAUDE_API}`)
 
 // ── Types ─────────────────────────────────────────────────────────
 
-export type ClaudeSession = {
+export type HermesSession = {
   id: string
   source?: string
   user_id?: string | null
@@ -55,7 +55,7 @@ export type ClaudeSession = {
   preview?: string | null
 }
 
-export type ClaudeMessage = {
+export type HermesMessage = {
   id: number
   session_id: string
   role: string
@@ -68,7 +68,7 @@ export type ClaudeMessage = {
   finish_reason?: string | null
 }
 
-export type ClaudeConfig = {
+export type HermesConfig = {
   model?: string
   provider?: string
   [key: string]: unknown
@@ -76,7 +76,7 @@ export type ClaudeConfig = {
 
 // ── Helpers ───────────────────────────────────────────────────────
 
-async function claudeGet<T>(path: string): Promise<T> {
+async function hermesGet<T>(path: string): Promise<T> {
   const res = await fetch(`${CLAUDE_API}${path}`, { headers: _authHeaders() })
   if (!res.ok) {
     const body = await res.text().catch(() => '')
@@ -85,7 +85,7 @@ async function claudeGet<T>(path: string): Promise<T> {
   return res.json() as Promise<T>
 }
 
-async function claudePost<T>(path: string, body?: unknown): Promise<T> {
+async function hermesPost<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${CLAUDE_API}${path}`, {
     method: 'POST',
     headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
@@ -98,7 +98,7 @@ async function claudePost<T>(path: string, body?: unknown): Promise<T> {
   return res.json() as Promise<T>
 }
 
-async function claudePatch<T>(path: string, body: unknown): Promise<T> {
+async function hermesPatch<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${CLAUDE_API}${path}`, {
     method: 'PATCH',
     headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
@@ -111,7 +111,7 @@ async function claudePatch<T>(path: string, body: unknown): Promise<T> {
   return res.json() as Promise<T>
 }
 
-async function claudeDeleteReq(path: string): Promise<void> {
+async function hermesDeleteReq(path: string): Promise<void> {
   const res = await fetch(`${CLAUDE_API}${path}`, {
     method: 'DELETE',
     headers: _authHeaders(),
@@ -125,7 +125,7 @@ async function claudeDeleteReq(path: string): Promise<void> {
 // ── Health ────────────────────────────────────────────────────────
 
 export async function checkHealth(): Promise<{ status: string }> {
-  return claudeGet('/health')
+  return hermesGet('/health')
 }
 
 // ── Sessions ─────────────────────────────────────────────────────
@@ -141,14 +141,14 @@ function useDashboardSessions(): boolean {
 export async function listSessions(
   limit = 50,
   offset = 0,
-): Promise<Array<ClaudeSession>> {
+): Promise<Array<HermesSession>> {
   if (useDashboardSessions()) {
     const resp = await listDashboardSessions(limit, offset)
-    return resp.sessions as Array<ClaudeSession>
+    return resp.sessions as Array<HermesSession>
   }
-  const resp = await claudeGet<{
-    items?: Array<ClaudeSession>
-    data?: Array<ClaudeSession>
+  const resp = await hermesGet<{
+    items?: Array<HermesSession>
+    data?: Array<HermesSession>
     total?: number
   }>(`/api/sessions?limit=${limit}&offset=${offset}`)
   // The gateway (OpenAI-compat) returns { object: 'list', data: [...] }, while the
@@ -157,11 +157,11 @@ export async function listSessions(
   return resp.items ?? resp.data ?? []
 }
 
-export async function getSession(sessionId: string): Promise<ClaudeSession> {
+export async function getSession(sessionId: string): Promise<HermesSession> {
   if (useDashboardSessions()) {
-    return getDashboardSession(sessionId) as Promise<ClaudeSession>
+    return getDashboardSession(sessionId) as Promise<HermesSession>
   }
-  const resp = await claudeGet<{ session: ClaudeSession }>(
+  const resp = await hermesGet<{ session: HermesSession }>(
     `/api/sessions/${sessionId}`,
   )
   return resp.session
@@ -171,17 +171,17 @@ export async function createSession(opts?: {
   id?: string
   title?: string
   model?: string
-}): Promise<ClaudeSession> {
+}): Promise<HermesSession> {
   if (useDashboardSessions()) {
     const resp = await createDashboardSession(opts || {})
-    return resp.session as ClaudeSession
+    return resp.session as HermesSession
   }
-  const resp = await claudePost<{
-    session?: ClaudeSession
-    data?: ClaudeSession
+  const resp = await hermesPost<{
+    session?: HermesSession
+    data?: HermesSession
     id?: string
   }>('/api/sessions', opts || {})
-  const session = resp.session ?? resp.data ?? (resp as ClaudeSession)
+  const session = resp.session ?? resp.data ?? (resp as HermesSession)
   if (!session?.id) {
     if (opts?.id) {
       return { id: opts.id, title: opts.title, model: opts.model }
@@ -194,12 +194,12 @@ export async function createSession(opts?: {
 export async function updateSession(
   sessionId: string,
   updates: { title?: string },
-): Promise<ClaudeSession> {
+): Promise<HermesSession> {
   if (useDashboardSessions()) {
     const resp = await updateDashboardSession(sessionId, updates)
-    return resp.session as ClaudeSession
+    return resp.session as HermesSession
   }
-  const resp = await claudePatch<{ session: ClaudeSession }>(
+  const resp = await hermesPatch<{ session: HermesSession }>(
     `/api/sessions/${sessionId}`,
     updates,
   )
@@ -211,20 +211,20 @@ export async function deleteSession(sessionId: string): Promise<void> {
     await deleteDashboardSession(sessionId)
     return
   }
-  return claudeDeleteReq(`/api/sessions/${sessionId}`)
+  return hermesDeleteReq(`/api/sessions/${sessionId}`)
 }
 
 export async function getMessages(
   sessionId: string,
-): Promise<Array<ClaudeMessage>> {
+): Promise<Array<HermesMessage>> {
   if (useDashboardSessions()) {
     const resp = await getDashboardSessionMessages(sessionId)
-    return resp.messages as Array<ClaudeMessage>
+    return resp.messages as Array<HermesMessage>
   }
-  const resp = await claudeGet<{
-    items?: Array<ClaudeMessage>
-    data?: Array<ClaudeMessage>
-    messages?: Array<ClaudeMessage>
+  const resp = await hermesGet<{
+    items?: Array<HermesMessage>
+    data?: Array<HermesMessage>
+    messages?: Array<HermesMessage>
     total?: number
   }>(`/api/sessions/${sessionId}/messages`)
   // Gateway (OpenAI-compat) returns { object: 'list', data: [...] }; dashboard / older
@@ -240,21 +240,21 @@ export async function searchSessions(
   if (useDashboardSessions()) {
     return searchDashboardSessions(query)
   }
-  return claudeGet(
+  return hermesGet(
     `/api/sessions/search?q=${encodeURIComponent(query)}&limit=${limit}`,
   )
 }
 
 export async function forkSession(
   sessionId: string,
-): Promise<{ session: ClaudeSession; forked_from: string }> {
+): Promise<{ session: HermesSession; forked_from: string }> {
   if (useDashboardSessions()) {
     return forkDashboardSession(sessionId) as Promise<{
-      session: ClaudeSession
+      session: HermesSession
       forked_from: string
     }>
   }
-  return claudePost(`/api/sessions/${sessionId}/fork`)
+  return hermesPost(`/api/sessions/${sessionId}/fork`)
 }
 
 export async function truncateSession(
@@ -267,7 +267,7 @@ export async function truncateSession(
   if (useDashboardSessions()) {
     throw new Error('Session truncate is not available on dashboard sessions')
   }
-  const resp = await claudePost<{
+  const resp = await hermesPost<{
     keep_count?: number
     removed_count?: number
   }>(`/api/sessions/${sessionId}/truncate`, { keep_count: keepCount })
@@ -293,7 +293,7 @@ export async function compressSession(
   if (useDashboardSessions()) {
     throw new Error('Session compress is not available on dashboard sessions')
   }
-  return claudePost(`/api/sessions/${sessionId}/compress`, {
+  return hermesPost(`/api/sessions/${sessionId}/compress`, {
     summary,
     keep_count: input.keepCount ?? 6,
     focus_topic: input.focusTopic || undefined,
@@ -305,7 +305,7 @@ export async function oneshotCompletion(input: {
   messages: Array<{ role: string; content: string }>
   model?: string
 }): Promise<string> {
-  const resp = await claudePost<{
+  const resp = await hermesPost<{
     choices?: Array<{ message?: { content?: string } }>
     message?: { content?: string }
     content?: string
@@ -330,16 +330,16 @@ export async function steerRun(
   const trimmedText = text.trim()
   if (!trimmedRunId) throw new Error('runId required')
   if (!trimmedText) throw new Error('steer text required')
-  return claudePost(`/v1/runs/${encodeURIComponent(trimmedRunId)}/steer`, {
+  return hermesPost(`/v1/runs/${encodeURIComponent(trimmedRunId)}/steer`, {
     text: trimmedText,
   })
 }
 
 // ── Conversion helpers (Claude → Chat format) ─────────────────
 
-/** Convert a ClaudeMessage to the ChatMessage format the frontend expects */
+/** Convert a HermesMessage to the ChatMessage format the frontend expects */
 export function toChatMessage(
-  msg: ClaudeMessage,
+  msg: HermesMessage,
   options?: { historyIndex?: number },
 ): Record<string, unknown> {
   // Accept either parsed arrays from FastAPI or legacy JSON strings.
@@ -442,9 +442,9 @@ export function toChatMessage(
   }
 }
 
-/** Convert a ClaudeSession to the session summary format the frontend expects */
+/** Convert a HermesSession to the session summary format the frontend expects */
 export function toSessionSummary(
-  session: ClaudeSession,
+  session: HermesSession,
 ): Record<string, unknown> {
   return {
     key: session.id,
@@ -602,7 +602,7 @@ export async function sendChat(
   const msg =
     typeof messageOrOpts === 'string' ? messageOrOpts : messageOrOpts.message
   const mdl = typeof messageOrOpts === 'string' ? model : messageOrOpts.model
-  return claudePost(`/api/sessions/${sessionId}/chat`, {
+  return hermesPost(`/api/sessions/${sessionId}/chat`, {
     message: msg,
     model: mdl,
   })
@@ -611,35 +611,35 @@ export async function sendChat(
 // ── Memory ───────────────────────────────────────────────────────
 
 export async function getMemory(): Promise<unknown> {
-  return claudeGet('/api/memory')
+  return hermesGet('/api/memory')
 }
 
 // ── Skills ───────────────────────────────────────────────────────
 
 export async function listSkills(): Promise<unknown> {
-  return claudeGet('/api/skills')
+  return hermesGet('/api/skills')
 }
 
 export async function getSkill(name: string): Promise<unknown> {
-  return claudeGet(`/api/skills/${encodeURIComponent(name)}`)
+  return hermesGet(`/api/skills/${encodeURIComponent(name)}`)
 }
 
 export async function getSkillCategories(): Promise<unknown> {
-  return claudeGet('/api/skills/categories')
+  return hermesGet('/api/skills/categories')
 }
 
 // ── Config ───────────────────────────────────────────────────────
 
-export async function getConfig(): Promise<ClaudeConfig> {
+export async function getConfig(): Promise<HermesConfig> {
   // Control-plane refactor: prefer gateway, dashboard is optional fallback
-  return claudeGet<ClaudeConfig>('/api/config')
+  return hermesGet<HermesConfig>('/api/config')
 }
 
 export async function patchConfig(
   patch: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   // Control-plane refactor: prefer gateway, dashboard is optional fallback
-  return claudePatch<Record<string, unknown>>('/api/config', patch)
+  return hermesPatch<Record<string, unknown>>('/api/config', patch)
 }
 
 // ── Models ───────────────────────────────────────────────────────
@@ -648,12 +648,12 @@ export async function listModels(): Promise<{
   object: string
   data: Array<{ id: string; object: string }>
 }> {
-  return claudeGet('/v1/models')
+  return hermesGet('/v1/models')
 }
 
 // ── Connection check ─────────────────────────────────────────────
 
-export async function isClaudeAvailable(): Promise<boolean> {
+export async function isHermesAvailable(): Promise<boolean> {
   try {
     const res = await fetch(`${CLAUDE_API}/health`, {
       signal: AbortSignal.timeout(3000),

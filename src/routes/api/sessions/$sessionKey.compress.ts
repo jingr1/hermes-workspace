@@ -6,7 +6,7 @@ import {
   compressSession,
   getMessages,
   oneshotCompletion,
-} from '../../../server/claude-api'
+} from '../../../server/hermes-api'
 import { ensureActiveProfileGateway } from '../../../server/gateway-pool'
 import {
   ensureGatewayProbed,

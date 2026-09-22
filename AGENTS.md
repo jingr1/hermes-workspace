@@ -171,7 +171,7 @@ set -g exit-unattached off
 - **桌面端**：`electron/main.cjs`；`electron:build:win` 产出 NSIS 到 `release/`。
 - **两套/三套 `.env`：** Gateway 读 `%LOCALAPPDATA%\hermes\.env`；CLI 读 `%USERPROFILE%\.hermes\.env`；Workspace 读仓库 `.env`。API key 需保持一致。
 - Gateway API 需 `API_SERVER_ENABLED=true` + `API_SERVER_KEY`，否则无已连接平台。
-- Workspace 运行时读 `CLAUDE_API_URL` / `CLAUDE_API_TOKEN` / `CLAUDE_DASHBOARD_URL`（不是 `HERMES_*` 变体）。
+- Workspace 运行时优先读 `HERMES_API_URL` / `HERMES_API_TOKEN` / `HERMES_DASHBOARD_URL`；`CLAUDE_*` 同名变量仅作兼容回退。
 - Windows 无自带 `sqlite3` CLI：`winget install SQLite.SQLite`，并把 `sqlite3.exe` 放进 PATH。
 - Claude Tasks / Conductor 需要 `claude` CLI：`npm install -g @anthropic-ai/claude-code`。
 - 端口冲突：PowerShell `netstat -ano | findstr :<port>` + `Stop-Process -Id <PID> -Force`。

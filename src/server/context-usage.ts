@@ -5,7 +5,7 @@ import {
   ensureGatewayProbed,
   getCapabilities,
 } from '@/server/gateway-capabilities'
-import { listSessions } from '@/server/claude-api'
+import { listSessions } from '@/server/hermes-api'
 import {
   readHermesConfigFiles,
   resolveHermesConfigPaths,

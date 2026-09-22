@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../server/auth-middleware'
-import { ensureGatewayProbed, searchSessions } from '../../../server/claude-api'
+import { ensureGatewayProbed, searchSessions } from '../../../server/hermes-api'
 import { searchLocalSessions } from '../../../server/local-session-store'
 
 type NormalizedSessionSearchResult = {

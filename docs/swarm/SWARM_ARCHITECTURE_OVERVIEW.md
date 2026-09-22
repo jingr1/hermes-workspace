@@ -599,7 +599,7 @@ type SwarmKanbanCard = {
 | `src/server/kanban-backend.ts`               | 629  | 三层看板后端（local / claude / hermes-proxy）                                                                      |
 | `src/server/swarm-kanban-store.ts`           | 161  | 本地 JSON 看板存储                                                                                                 |
 | `src/server/kanban-dashboard-proxy.ts`       | 203  | Hermes Dashboard Kanban 插件 HTTP 代理                                                                             |
-| `src/server/claude-tasks-backend.ts`         | 166  | Claude Tasks 兼容层                                                                                                |
+| `src/server/hermes-tasks-backend.ts`         | 166  | Claude Tasks 兼容层                                                                                                |
 | `src/screens/swarm2/swarm2-screen.tsx`       | 1774 | Swarm2 主界面                                                                                                      |
 | `src/screens/swarm2/swarm2-kanban-board.tsx` | 503  | 看板 UI 组件                                                                                                       |
 | `src/lib/tasks-api.ts`                       | 263  | 任务 API 客户端（自动后端检测）                                                                                    |

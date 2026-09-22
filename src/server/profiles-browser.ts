@@ -1126,7 +1126,7 @@ export function updateProfileConfig(
   const configPath = path.join(profilePath, 'config.yaml')
   const current = readYamlConfig(configPath)
 
-  // Deep merge helper (same logic as claude-config.ts)
+  // Deep merge helper (same deep-merge as hermes-config-route)
   function deepMerge(
     target: Record<string, unknown>,
     source: Record<string, unknown>,

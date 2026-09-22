@@ -8,8 +8,8 @@ const forgetSession = vi.fn()
 const ensureProfileGateway = vi.fn(async () => undefined)
 const runManagedTurn = vi.fn()
 
-vi.mock('../../claude-api-profile', () => ({
-  getClaudeApiClient: () => ({
+vi.mock('../../hermes-api-profile', () => ({
+  getHermesApiClient: () => ({
     baseUrl: 'http://127.0.0.1:8644',
     streamChat,
     getMessages,
@@ -17,7 +17,7 @@ vi.mock('../../claude-api-profile', () => ({
   }),
 }))
 
-vi.mock('../../claude-api', () => ({
+vi.mock('../../hermes-api', () => ({
   streamChat,
   getMessages,
 }))

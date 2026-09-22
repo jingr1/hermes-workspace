@@ -168,7 +168,7 @@ export function ModelConfigurationStep({
 
     async function loadConfig() {
       try {
-        const response = await fetch('/api/claude-config', {
+        const response = await fetch('/api/hermes-config', {
           signal: AbortSignal.timeout(5000),
         })
         if (!response.ok) {

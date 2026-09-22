@@ -98,6 +98,7 @@ import { Route as ApiJobDeliveryTargetsRouteImport } from './routes/api/job-deli
 import { Route as ApiIntegrationsRouteImport } from './routes/api/integrations'
 import { Route as ApiHistoryRouteImport } from './routes/api/history'
 import { Route as ApiHermesUpdateRouteImport } from './routes/api/hermes-update'
+import { Route as ApiHermesTasksAssigneesRouteImport } from './routes/api/hermes-tasks-assignees'
 import { Route as ApiHermesTasksRouteImport } from './routes/api/hermes-tasks'
 import { Route as ApiHermesConfigRouteImport } from './routes/api/hermes-config'
 import { Route as ApiGatewayStatusRouteImport } from './routes/api/gateway-status'
@@ -114,10 +115,7 @@ import { Route as ApiConductorStopRouteImport } from './routes/api/conductor-sto
 import { Route as ApiConductorSpawnRouteImport } from './routes/api/conductor-spawn'
 import { Route as ApiCommandsRouteImport } from './routes/api/commands'
 import { Route as ApiCollabEventsRouteImport } from './routes/api/collab-events'
-import { Route as ApiClaudeTasksAssigneesRouteImport } from './routes/api/claude-tasks-assignees'
-import { Route as ApiClaudeTasksRouteImport } from './routes/api/claude-tasks'
 import { Route as ApiClaudeJobsRouteImport } from './routes/api/claude-jobs'
-import { Route as ApiClaudeConfigRouteImport } from './routes/api/claude-config'
 import { Route as ApiChatEventsRouteImport } from './routes/api/chat-events'
 import { Route as ApiBtwRouteImport } from './routes/api/btw'
 import { Route as ApiBackgroundRouteImport } from './routes/api/background'
@@ -201,7 +199,6 @@ import { Route as ApiExternalMemorySearchRouteImport } from './routes/api/extern
 import { Route as ApiExternalMemoryProvidersRouteImport } from './routes/api/external-memory/providers'
 import { Route as ApiExternalMemoryCandidatesRouteImport } from './routes/api/external-memory/candidates'
 import { Route as ApiDashboardOverviewRouteImport } from './routes/api/dashboard/overview'
-import { Route as ApiClaudeTasksTaskIdRouteImport } from './routes/api/claude-tasks.$taskId'
 import { Route as ApiClaudeProxySplatRouteImport } from './routes/api/claude-proxy/$'
 import { Route as ApiClaudeJobsJobIdRouteImport } from './routes/api/claude-jobs.$jobId'
 import { Route as ApiClaudeCodeSettingsRouteImport } from './routes/api/claude-code/settings'
@@ -702,6 +699,11 @@ const ApiHermesUpdateRoute = ApiHermesUpdateRouteImport.update({
   path: '/api/hermes-update',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiHermesTasksAssigneesRoute = ApiHermesTasksAssigneesRouteImport.update({
+  id: '/api/hermes-tasks-assignees',
+  path: '/api/hermes-tasks-assignees',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiHermesTasksRoute = ApiHermesTasksRouteImport.update({
   id: '/api/hermes-tasks',
   path: '/api/hermes-tasks',
@@ -782,24 +784,9 @@ const ApiCollabEventsRoute = ApiCollabEventsRouteImport.update({
   path: '/api/collab-events',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiClaudeTasksAssigneesRoute = ApiClaudeTasksAssigneesRouteImport.update({
-  id: '/api/claude-tasks-assignees',
-  path: '/api/claude-tasks-assignees',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiClaudeTasksRoute = ApiClaudeTasksRouteImport.update({
-  id: '/api/claude-tasks',
-  path: '/api/claude-tasks',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiClaudeJobsRoute = ApiClaudeJobsRouteImport.update({
   id: '/api/claude-jobs',
   path: '/api/claude-jobs',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiClaudeConfigRoute = ApiClaudeConfigRouteImport.update({
-  id: '/api/claude-config',
-  path: '/api/claude-config',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiChatEventsRoute = ApiChatEventsRouteImport.update({
@@ -1222,11 +1209,6 @@ const ApiDashboardOverviewRoute = ApiDashboardOverviewRouteImport.update({
   path: '/api/dashboard/overview',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiClaudeTasksTaskIdRoute = ApiClaudeTasksTaskIdRouteImport.update({
-  id: '/$taskId',
-  path: '/$taskId',
-  getParentRoute: () => ApiClaudeTasksRoute,
-} as any)
 const ApiClaudeProxySplatRoute = ApiClaudeProxySplatRouteImport.update({
   id: '/api/claude-proxy/$',
   path: '/api/claude-proxy/$',
@@ -1552,10 +1534,7 @@ export interface FileRoutesByFullPath {
   '/api/background': typeof ApiBackgroundRoute
   '/api/btw': typeof ApiBtwRoute
   '/api/chat-events': typeof ApiChatEventsRoute
-  '/api/claude-config': typeof ApiClaudeConfigRoute
   '/api/claude-jobs': typeof ApiClaudeJobsRouteWithChildren
-  '/api/claude-tasks': typeof ApiClaudeTasksRouteWithChildren
-  '/api/claude-tasks-assignees': typeof ApiClaudeTasksAssigneesRoute
   '/api/collab-events': typeof ApiCollabEventsRoute
   '/api/commands': typeof ApiCommandsRoute
   '/api/conductor-spawn': typeof ApiConductorSpawnRoute
@@ -1572,6 +1551,7 @@ export interface FileRoutesByFullPath {
   '/api/gateway-status': typeof ApiGatewayStatusRoute
   '/api/hermes-config': typeof ApiHermesConfigRoute
   '/api/hermes-tasks': typeof ApiHermesTasksRouteWithChildren
+  '/api/hermes-tasks-assignees': typeof ApiHermesTasksAssigneesRoute
   '/api/hermes-update': typeof ApiHermesUpdateRoute
   '/api/history': typeof ApiHistoryRoute
   '/api/integrations': typeof ApiIntegrationsRoute
@@ -1650,7 +1630,6 @@ export interface FileRoutesByFullPath {
   '/api/claude-code/settings': typeof ApiClaudeCodeSettingsRoute
   '/api/claude-jobs/$jobId': typeof ApiClaudeJobsJobIdRoute
   '/api/claude-proxy/$': typeof ApiClaudeProxySplatRoute
-  '/api/claude-tasks/$taskId': typeof ApiClaudeTasksTaskIdRoute
   '/api/dashboard/overview': typeof ApiDashboardOverviewRoute
   '/api/external-memory/candidates': typeof ApiExternalMemoryCandidatesRoute
   '/api/external-memory/providers': typeof ApiExternalMemoryProvidersRoute
@@ -1796,10 +1775,7 @@ export interface FileRoutesByTo {
   '/api/background': typeof ApiBackgroundRoute
   '/api/btw': typeof ApiBtwRoute
   '/api/chat-events': typeof ApiChatEventsRoute
-  '/api/claude-config': typeof ApiClaudeConfigRoute
   '/api/claude-jobs': typeof ApiClaudeJobsRouteWithChildren
-  '/api/claude-tasks': typeof ApiClaudeTasksRouteWithChildren
-  '/api/claude-tasks-assignees': typeof ApiClaudeTasksAssigneesRoute
   '/api/collab-events': typeof ApiCollabEventsRoute
   '/api/commands': typeof ApiCommandsRoute
   '/api/conductor-spawn': typeof ApiConductorSpawnRoute
@@ -1816,6 +1792,7 @@ export interface FileRoutesByTo {
   '/api/gateway-status': typeof ApiGatewayStatusRoute
   '/api/hermes-config': typeof ApiHermesConfigRoute
   '/api/hermes-tasks': typeof ApiHermesTasksRouteWithChildren
+  '/api/hermes-tasks-assignees': typeof ApiHermesTasksAssigneesRoute
   '/api/hermes-update': typeof ApiHermesUpdateRoute
   '/api/history': typeof ApiHistoryRoute
   '/api/integrations': typeof ApiIntegrationsRoute
@@ -1894,7 +1871,6 @@ export interface FileRoutesByTo {
   '/api/claude-code/settings': typeof ApiClaudeCodeSettingsRoute
   '/api/claude-jobs/$jobId': typeof ApiClaudeJobsJobIdRoute
   '/api/claude-proxy/$': typeof ApiClaudeProxySplatRoute
-  '/api/claude-tasks/$taskId': typeof ApiClaudeTasksTaskIdRoute
   '/api/dashboard/overview': typeof ApiDashboardOverviewRoute
   '/api/external-memory/candidates': typeof ApiExternalMemoryCandidatesRoute
   '/api/external-memory/providers': typeof ApiExternalMemoryProvidersRoute
@@ -2043,10 +2019,7 @@ export interface FileRoutesById {
   '/api/background': typeof ApiBackgroundRoute
   '/api/btw': typeof ApiBtwRoute
   '/api/chat-events': typeof ApiChatEventsRoute
-  '/api/claude-config': typeof ApiClaudeConfigRoute
   '/api/claude-jobs': typeof ApiClaudeJobsRouteWithChildren
-  '/api/claude-tasks': typeof ApiClaudeTasksRouteWithChildren
-  '/api/claude-tasks-assignees': typeof ApiClaudeTasksAssigneesRoute
   '/api/collab-events': typeof ApiCollabEventsRoute
   '/api/commands': typeof ApiCommandsRoute
   '/api/conductor-spawn': typeof ApiConductorSpawnRoute
@@ -2063,6 +2036,7 @@ export interface FileRoutesById {
   '/api/gateway-status': typeof ApiGatewayStatusRoute
   '/api/hermes-config': typeof ApiHermesConfigRoute
   '/api/hermes-tasks': typeof ApiHermesTasksRouteWithChildren
+  '/api/hermes-tasks-assignees': typeof ApiHermesTasksAssigneesRoute
   '/api/hermes-update': typeof ApiHermesUpdateRoute
   '/api/history': typeof ApiHistoryRoute
   '/api/integrations': typeof ApiIntegrationsRoute
@@ -2141,7 +2115,6 @@ export interface FileRoutesById {
   '/api/claude-code/settings': typeof ApiClaudeCodeSettingsRoute
   '/api/claude-jobs/$jobId': typeof ApiClaudeJobsJobIdRoute
   '/api/claude-proxy/$': typeof ApiClaudeProxySplatRoute
-  '/api/claude-tasks/$taskId': typeof ApiClaudeTasksTaskIdRoute
   '/api/dashboard/overview': typeof ApiDashboardOverviewRoute
   '/api/external-memory/candidates': typeof ApiExternalMemoryCandidatesRoute
   '/api/external-memory/providers': typeof ApiExternalMemoryProvidersRoute
@@ -2291,10 +2264,7 @@ export interface FileRouteTypes {
     | '/api/background'
     | '/api/btw'
     | '/api/chat-events'
-    | '/api/claude-config'
     | '/api/claude-jobs'
-    | '/api/claude-tasks'
-    | '/api/claude-tasks-assignees'
     | '/api/collab-events'
     | '/api/commands'
     | '/api/conductor-spawn'
@@ -2311,6 +2281,7 @@ export interface FileRouteTypes {
     | '/api/gateway-status'
     | '/api/hermes-config'
     | '/api/hermes-tasks'
+    | '/api/hermes-tasks-assignees'
     | '/api/hermes-update'
     | '/api/history'
     | '/api/integrations'
@@ -2389,7 +2360,6 @@ export interface FileRouteTypes {
     | '/api/claude-code/settings'
     | '/api/claude-jobs/$jobId'
     | '/api/claude-proxy/$'
-    | '/api/claude-tasks/$taskId'
     | '/api/dashboard/overview'
     | '/api/external-memory/candidates'
     | '/api/external-memory/providers'
@@ -2535,10 +2505,7 @@ export interface FileRouteTypes {
     | '/api/background'
     | '/api/btw'
     | '/api/chat-events'
-    | '/api/claude-config'
     | '/api/claude-jobs'
-    | '/api/claude-tasks'
-    | '/api/claude-tasks-assignees'
     | '/api/collab-events'
     | '/api/commands'
     | '/api/conductor-spawn'
@@ -2555,6 +2522,7 @@ export interface FileRouteTypes {
     | '/api/gateway-status'
     | '/api/hermes-config'
     | '/api/hermes-tasks'
+    | '/api/hermes-tasks-assignees'
     | '/api/hermes-update'
     | '/api/history'
     | '/api/integrations'
@@ -2633,7 +2601,6 @@ export interface FileRouteTypes {
     | '/api/claude-code/settings'
     | '/api/claude-jobs/$jobId'
     | '/api/claude-proxy/$'
-    | '/api/claude-tasks/$taskId'
     | '/api/dashboard/overview'
     | '/api/external-memory/candidates'
     | '/api/external-memory/providers'
@@ -2781,10 +2748,7 @@ export interface FileRouteTypes {
     | '/api/background'
     | '/api/btw'
     | '/api/chat-events'
-    | '/api/claude-config'
     | '/api/claude-jobs'
-    | '/api/claude-tasks'
-    | '/api/claude-tasks-assignees'
     | '/api/collab-events'
     | '/api/commands'
     | '/api/conductor-spawn'
@@ -2801,6 +2765,7 @@ export interface FileRouteTypes {
     | '/api/gateway-status'
     | '/api/hermes-config'
     | '/api/hermes-tasks'
+    | '/api/hermes-tasks-assignees'
     | '/api/hermes-update'
     | '/api/history'
     | '/api/integrations'
@@ -2879,7 +2844,6 @@ export interface FileRouteTypes {
     | '/api/claude-code/settings'
     | '/api/claude-jobs/$jobId'
     | '/api/claude-proxy/$'
-    | '/api/claude-tasks/$taskId'
     | '/api/dashboard/overview'
     | '/api/external-memory/candidates'
     | '/api/external-memory/providers'
@@ -3028,10 +2992,7 @@ export interface RootRouteChildren {
   ApiBackgroundRoute: typeof ApiBackgroundRoute
   ApiBtwRoute: typeof ApiBtwRoute
   ApiChatEventsRoute: typeof ApiChatEventsRoute
-  ApiClaudeConfigRoute: typeof ApiClaudeConfigRoute
   ApiClaudeJobsRoute: typeof ApiClaudeJobsRouteWithChildren
-  ApiClaudeTasksRoute: typeof ApiClaudeTasksRouteWithChildren
-  ApiClaudeTasksAssigneesRoute: typeof ApiClaudeTasksAssigneesRoute
   ApiCollabEventsRoute: typeof ApiCollabEventsRoute
   ApiCommandsRoute: typeof ApiCommandsRoute
   ApiConductorSpawnRoute: typeof ApiConductorSpawnRoute
@@ -3048,6 +3009,7 @@ export interface RootRouteChildren {
   ApiGatewayStatusRoute: typeof ApiGatewayStatusRoute
   ApiHermesConfigRoute: typeof ApiHermesConfigRoute
   ApiHermesTasksRoute: typeof ApiHermesTasksRouteWithChildren
+  ApiHermesTasksAssigneesRoute: typeof ApiHermesTasksAssigneesRoute
   ApiHermesUpdateRoute: typeof ApiHermesUpdateRoute
   ApiHistoryRoute: typeof ApiHistoryRoute
   ApiIntegrationsRoute: typeof ApiIntegrationsRoute
@@ -3810,6 +3772,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiHermesUpdateRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/hermes-tasks-assignees': {
+      id: '/api/hermes-tasks-assignees'
+      path: '/api/hermes-tasks-assignees'
+      fullPath: '/api/hermes-tasks-assignees'
+      preLoaderRoute: typeof ApiHermesTasksAssigneesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/hermes-tasks': {
       id: '/api/hermes-tasks'
       path: '/api/hermes-tasks'
@@ -3922,32 +3891,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCollabEventsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/claude-tasks-assignees': {
-      id: '/api/claude-tasks-assignees'
-      path: '/api/claude-tasks-assignees'
-      fullPath: '/api/claude-tasks-assignees'
-      preLoaderRoute: typeof ApiClaudeTasksAssigneesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/claude-tasks': {
-      id: '/api/claude-tasks'
-      path: '/api/claude-tasks'
-      fullPath: '/api/claude-tasks'
-      preLoaderRoute: typeof ApiClaudeTasksRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/claude-jobs': {
       id: '/api/claude-jobs'
       path: '/api/claude-jobs'
       fullPath: '/api/claude-jobs'
       preLoaderRoute: typeof ApiClaudeJobsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/claude-config': {
-      id: '/api/claude-config'
-      path: '/api/claude-config'
-      fullPath: '/api/claude-config'
-      preLoaderRoute: typeof ApiClaudeConfigRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/chat-events': {
@@ -4531,13 +4479,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiDashboardOverviewRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/claude-tasks/$taskId': {
-      id: '/api/claude-tasks/$taskId'
-      path: '/$taskId'
-      fullPath: '/api/claude-tasks/$taskId'
-      preLoaderRoute: typeof ApiClaudeTasksTaskIdRouteImport
-      parentRoute: typeof ApiClaudeTasksRoute
-    }
     '/api/claude-proxy/$': {
       id: '/api/claude-proxy/$'
       path: '/api/claude-proxy/$'
@@ -4965,18 +4906,6 @@ const ApiClaudeJobsRouteWithChildren = ApiClaudeJobsRoute._addFileChildren(
   ApiClaudeJobsRouteChildren,
 )
 
-interface ApiClaudeTasksRouteChildren {
-  ApiClaudeTasksTaskIdRoute: typeof ApiClaudeTasksTaskIdRoute
-}
-
-const ApiClaudeTasksRouteChildren: ApiClaudeTasksRouteChildren = {
-  ApiClaudeTasksTaskIdRoute: ApiClaudeTasksTaskIdRoute,
-}
-
-const ApiClaudeTasksRouteWithChildren = ApiClaudeTasksRoute._addFileChildren(
-  ApiClaudeTasksRouteChildren,
-)
-
 interface ApiHermesTasksRouteChildren {
   ApiHermesTasksTaskIdRoute: typeof ApiHermesTasksTaskIdRoute
 }
@@ -5309,10 +5238,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBackgroundRoute: ApiBackgroundRoute,
   ApiBtwRoute: ApiBtwRoute,
   ApiChatEventsRoute: ApiChatEventsRoute,
-  ApiClaudeConfigRoute: ApiClaudeConfigRoute,
   ApiClaudeJobsRoute: ApiClaudeJobsRouteWithChildren,
-  ApiClaudeTasksRoute: ApiClaudeTasksRouteWithChildren,
-  ApiClaudeTasksAssigneesRoute: ApiClaudeTasksAssigneesRoute,
   ApiCollabEventsRoute: ApiCollabEventsRoute,
   ApiCommandsRoute: ApiCommandsRoute,
   ApiConductorSpawnRoute: ApiConductorSpawnRoute,
@@ -5329,6 +5255,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiGatewayStatusRoute: ApiGatewayStatusRoute,
   ApiHermesConfigRoute: ApiHermesConfigRoute,
   ApiHermesTasksRoute: ApiHermesTasksRouteWithChildren,
+  ApiHermesTasksAssigneesRoute: ApiHermesTasksAssigneesRoute,
   ApiHermesUpdateRoute: ApiHermesUpdateRoute,
   ApiHistoryRoute: ApiHistoryRoute,
   ApiIntegrationsRoute: ApiIntegrationsRoute,

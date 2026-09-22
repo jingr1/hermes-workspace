@@ -30,7 +30,7 @@ import { cn } from '@/lib/utils'
 // FIX: replaced direct server module imports with workspace API calls to avoid
 // bundling Node.js-only modules (node:sqlite, node:fs) into the client bundle.
 async function getConfig(): Promise<Record<string, unknown>> {
-  const res = await fetch('/api/claude-config')
+  const res = await fetch('/api/hermes-config')
   if (!res.ok) throw new Error(`Failed to load config: HTTP ${res.status}`)
   const data = (await res.json()) as { config?: Record<string, unknown> }
   return data.config ?? {}
@@ -39,7 +39,7 @@ async function getConfig(): Promise<Record<string, unknown>> {
 async function patchConfig(
   patch: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  const res = await fetch('/api/claude-config', {
+  const res = await fetch('/api/hermes-config', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ config: patch }),
@@ -1082,7 +1082,7 @@ function ActiveModelCard({
           queryKey: ['claude', 'active-config'],
         }),
         queryClient.invalidateQueries({ queryKey: ['claude', 'config'] }),
-        queryClient.invalidateQueries({ queryKey: ['claude-config'] }),
+        queryClient.invalidateQueries({ queryKey: ['hermes-config'] }),
       ])
       toast('Model config saved — takes effect on next message', {
         type: 'success',
@@ -1550,7 +1550,7 @@ export function ProvidersScreen({ embedded = false }: ProvidersScreenProps) {
 
     setDeletingId(provider.id)
     try {
-      const res = await fetch('/api/claude-config', {
+      const res = await fetch('/api/hermes-config', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({

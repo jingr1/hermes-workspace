@@ -1232,7 +1232,7 @@ function ClaudeConfigSection({
       profileName && profileName !== 'default'
         ? `?profile=${encodeURIComponent(profileName)}`
         : ''
-    const res = await fetch(`/api/claude-config${params}`)
+    const res = await fetch(`/api/hermes-config${params}`)
     const configData = (await res.json()) as ClaudeConfigData
     setData(configData)
     return configData
@@ -1320,7 +1320,7 @@ function ClaudeConfigSection({
         ...updates,
         ...(scope && scope !== 'default' ? { profile: scope } : {}),
       }
-      const res = await fetch('/api/claude-config', {
+      const res = await fetch('/api/hermes-config', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),

@@ -79,8 +79,8 @@ const mockClient = vi.fn((profile: string) => {
   return c
 })
 
-vi.mock('../../claude-api-profile', () => ({
-  getClaudeApiClient: vi.fn((profile: string) => mockClient(profile)),
+vi.mock('../../hermes-api-profile', () => ({
+  getHermesApiClient: vi.fn((profile: string) => mockClient(profile)),
 }))
 
 vi.mock('../../gateway-pool', () => ({
@@ -91,7 +91,7 @@ vi.mock('../../gateway-pool', () => ({
   })),
 }))
 
-vi.mock('../../claude-api', () => ({
+vi.mock('../../hermes-api', () => ({
   createSession: vi.fn(async ({ title }: { title: string }) => {
     backend.set(`global-${title}`, true)
     return { id: `global-${title}` }

@@ -13,13 +13,13 @@
  * Failed / empty LLM replies must NOT be persisted — otherwise
  * through_message_id advances and real history is permanently skipped.
  */
-import { getClaudeApiClient } from '../claude-api-profile'
+import { getHermesApiClient } from '../hermes-api-profile'
 import { ensureProfileGateway } from '../gateway-pool'
 import {
   createSession as globalCreateSession,
   getMessages as globalGetMessages,
   sendChat as globalSendChat,
-} from '../claude-api'
+} from '../hermes-api'
 import { getLatestMessages, getLatestSummary, saveSummary } from './room-store'
 import {
   GROUP_SUMMARY_THRESHOLD,
@@ -140,7 +140,7 @@ async function maybeSummarizeRoomInner(
       )
     })
   }
-  const client = profile ? getClaudeApiClient(profile) : null
+  const client = profile ? getHermesApiClient(profile) : null
   let session
   try {
     session = client

@@ -44,7 +44,7 @@ const POLL_MS = 30_000
 async function fetchAssignedTasks(
   workerId: string,
 ): Promise<Array<WorkerTask>> {
-  const url = `/api/claude-tasks?assignee=${encodeURIComponent(workerId)}&include_done=true`
+  const url = `/api/hermes-tasks?assignee=${encodeURIComponent(workerId)}&include_done=true`
   const res = await fetch(url)
   if (!res.ok) throw new Error(`tasks HTTP ${res.status}`)
   const data = (await res.json()) as TasksResponse
@@ -56,7 +56,7 @@ async function createWorkerTask(
   title: string,
   description = '',
 ): Promise<WorkerTask> {
-  const res = await fetch('/api/claude-tasks', {
+  const res = await fetch('/api/hermes-tasks', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

@@ -352,6 +352,8 @@ export async function deleteMission(missionId: string): Promise<{
 }> {
   const res = await fetch(`/api/missions/${missionId}`, {
     method: 'DELETE',
+    // Avoid infinite "Deleting…" if the workspace SSR process is wedged.
+    signal: AbortSignal.timeout(15_000),
   })
   const data = (await res.json().catch(() => ({}))) as {
     error?: string

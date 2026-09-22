@@ -36,7 +36,8 @@ export const SwarmTerminalKindSchema = z.enum([
 export const SwarmRuntimeSourceSchema = z.enum(['runtime.json', 'fallback'])
 export const SwarmTaskSourceSchema = z.enum([
   'runtime',
-  'claude-api',
+  'hermes-api',
+  'claude-api', // legacy alias kept for stored runtime.json compatibility
   'plugin',
   'inferred',
 ])

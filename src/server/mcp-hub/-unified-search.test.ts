@@ -1,6 +1,6 @@
 /**
  * Tests for unifiedSearch.
- * Mocks source adapters and claude-dashboard-api to avoid I/O.
+ * Mocks source adapters and hermes-dashboard-api to avoid I/O.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
@@ -10,13 +10,13 @@ vi.mock('./sources/local-file', () => ({
 vi.mock('./sources/mcp-get', () => ({
   fetchMcpGet: vi.fn(),
 }))
-vi.mock('../claude-dashboard-api', () => ({
+vi.mock('../hermes-dashboard-api', () => ({
   getConfig: vi.fn(),
 }))
 
 import { fetchLocalFile } from './sources/local-file'
 import { fetchMcpGet } from './sources/mcp-get'
-import { getConfig } from '../claude-dashboard-api'
+import { getConfig } from '../hermes-dashboard-api'
 import { unifiedSearch } from './index'
 import type { HubMcpEntry } from './types'
 

@@ -5,7 +5,6 @@
  * managed by the Hermes Agent gateway. This file-based JSON store is a
  * fallback for truly portable scenarios:
  *   - Local model direct-connect (Ollama, OpenAI-compat without gateway)
- *   - hermes-tasks temporary buffering
  *   - Gateway completely unavailable
  *
  * Long-term goal: portable sessions should also route through the gateway

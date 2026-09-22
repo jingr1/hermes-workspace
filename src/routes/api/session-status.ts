@@ -5,7 +5,7 @@ import {
   getConfig,
   getGatewayCapabilities,
   getSession,
-} from '../../server/claude-api'
+} from '../../server/hermes-api'
 import {
   isSyntheticSessionKey,
   resolveMainChatSessionId,

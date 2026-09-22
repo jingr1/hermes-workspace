@@ -1,12 +1,12 @@
 /**
  * Per-profile Hermes FastAPI client factory.
  *
- * `claude-api.ts` is a process-wide singleton that always points at the
- * current active gateway (`CLAUDE_API`). Group chat needs to talk to the
+ * `hermes-api.ts` is a process-wide singleton that always points at the
+ * current active gateway. Group chat needs to talk to the
  * gateway that owns each participant's profile, so this module builds a
  * lightweight client keyed by profile name.
  *
- * The returned client mirrors the surface of `claude-api.ts` used by the
+ * The returned client mirrors the surface of `hermes-api.ts` used by the
  * group-chat subsystem:
  *   - createSession
  *   - getMessages
@@ -25,9 +25,9 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import YAML from 'yaml'
 
-const PROFILE_CLIENT_CACHE = new Map<string, ClaudeApiClient>()
+const PROFILE_CLIENT_CACHE = new Map<string, HermesApiClient>()
 
-export type ClaudeSession = {
+export type HermesSession = {
   id: string
   source?: string
   user_id?: string | null
@@ -46,7 +46,7 @@ export type ClaudeSession = {
   has_model_config?: boolean
 }
 
-export type ClaudeMessage = {
+export type HermesMessage = {
   id: number
   session_id: string
   role: string
@@ -67,7 +67,7 @@ type StreamChatOptions = {
   }) => void | Promise<void>
 }
 
-export interface ClaudeApiClient {
+export interface HermesApiClient {
   baseUrl: string
   profileName: string
   /** The profile's current default model read from config.yaml, if any. */
@@ -79,9 +79,9 @@ export interface ClaudeApiClient {
     title?: string
     model?: string
     provider?: string
-  }): Promise<ClaudeSession>
-  getMessages(sessionId: string): Promise<Array<ClaudeMessage>>
-  getSession?(sessionId: string): Promise<ClaudeSession>
+  }): Promise<HermesSession>
+  getMessages(sessionId: string): Promise<Array<HermesMessage>>
+  getSession?(sessionId: string): Promise<HermesSession>
   sendChat(
     sessionId: string,
     messageOrOpts:
@@ -103,7 +103,7 @@ export interface ClaudeApiClient {
   updateSession(
     sessionId: string,
     updates: { title?: string },
-  ): Promise<ClaudeSession>
+  ): Promise<HermesSession>
   deleteSession(sessionId: string): Promise<void>
 }
 
@@ -246,7 +246,7 @@ export function readProfileDefaultProvider(profileName: string): string | null {
   return provider || null
 }
 
-function buildClient(profileName: string, baseUrl: string): ClaudeApiClient {
+function buildClient(profileName: string, baseUrl: string): HermesApiClient {
   const url = normalizeUrl(baseUrl)
   const defaultModel = readProfileDefaultModel(profileName)
   const defaultProvider = readProfileDefaultProvider(profileName)
@@ -258,11 +258,11 @@ function buildClient(profileName: string, baseUrl: string): ClaudeApiClient {
 
     createSession: (opts) =>
       profileFetch<{
-        session?: ClaudeSession
-        data?: ClaudeSession
+        session?: HermesSession
+        data?: HermesSession
         id?: string
       }>(profileName, url, 'POST', '/api/sessions', opts || {}).then((resp) => {
-        const session = resp.session ?? resp.data ?? (resp as ClaudeSession)
+        const session = resp.session ?? resp.data ?? (resp as HermesSession)
         if (!session?.id) {
           if (opts?.id) {
             return { id: opts.id, title: opts.title, model: opts.model }
@@ -274,21 +274,21 @@ function buildClient(profileName: string, baseUrl: string): ClaudeApiClient {
 
     getMessages: (sessionId) =>
       profileFetch<{
-        items?: Array<ClaudeMessage>
-        data?: Array<ClaudeMessage>
-        messages?: Array<ClaudeMessage>
+        items?: Array<HermesMessage>
+        data?: Array<HermesMessage>
+        messages?: Array<HermesMessage>
       }>(profileName, url, 'GET', `/api/sessions/${sessionId}/messages`).then(
         (resp) => resp.items ?? resp.data ?? resp.messages ?? [],
       ),
 
     getSession: (sessionId) =>
-      profileFetch<{ session?: ClaudeSession; data?: ClaudeSession }>(
+      profileFetch<{ session?: HermesSession; data?: HermesSession }>(
         profileName,
         url,
         'GET',
         `/api/sessions/${sessionId}`,
       ).then((resp) => {
-        const session = resp.session ?? resp.data ?? (resp as ClaudeSession)
+        const session = resp.session ?? resp.data ?? (resp as HermesSession)
         if (!session?.id) throw new Error('Invalid session response')
         return session
       }),
@@ -315,7 +315,7 @@ function buildClient(profileName: string, baseUrl: string): ClaudeApiClient {
       profileStreamChat(profileName, url, sessionId, body, opts),
 
     updateSession: (sessionId, updates) =>
-      profileFetch<{ session: ClaudeSession }>(
+      profileFetch<{ session: HermesSession }>(
         profileName,
         url,
         'PATCH',
@@ -346,10 +346,10 @@ export function resolveProfileGatewayUrl(profileName: string): string {
 }
 
 /**
- * Get or create a per-profile claude-api client. Cached so repeated turns
+ * Get or create a per-profile hermes-api client. Cached so repeated turns
  * for the same participant reuse headers/URL without recomputing paths.
  */
-export function getClaudeApiClient(profileName: string): ClaudeApiClient {
+export function getHermesApiClient(profileName: string): HermesApiClient {
   const name = (profileName || 'default').trim() || 'default'
   const cached = PROFILE_CLIENT_CACHE.get(name)
   if (cached) return cached
@@ -361,6 +361,6 @@ export function getClaudeApiClient(profileName: string): ClaudeApiClient {
 }
 
 /** Clear the client cache (useful in tests and after gateway reconfiguration). */
-export function clearClaudeApiClientCache(): void {
+export function clearHermesApiClientCache(): void {
   PROFILE_CLIENT_CACHE.clear()
 }

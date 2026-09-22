@@ -5,22 +5,22 @@
  * OWN profile gateway. We create it lazily, cache the session id by
  * (roomId, participantId), and resume it on subsequent turns.
  *
- * This module intentionally does NOT use the global claude-api singleton,
+ * This module intentionally does NOT use the global hermes-api singleton,
  * because that singleton points at the workspace's current active gateway,
  * which may be a different profile than the participant's. Instead it builds a
- * per-profile client via claude-api-profile and routes every session operation
+ * per-profile client via hermes-api-profile and routes every session operation
  * through that client's gateway.
  */
 import {
-  getClaudeApiClient,
-  type ClaudeApiClient,
-  type ClaudeMessage,
-} from '../claude-api-profile'
+  getHermesApiClient,
+  type HermesApiClient,
+  type HermesMessage,
+} from '../hermes-api-profile'
 import {
   createSession as globalCreateSession,
   getMessages as globalGetMessages,
   sendChat as globalSendChat,
-} from '../claude-api'
+} from '../hermes-api'
 import { getCollabDbPath } from '../collab-db'
 import { ensureProfileGateway } from '../gateway-pool'
 import { openSqliteDatabase } from '../sqlite-helper'
@@ -103,9 +103,9 @@ function isHermesGatewayRuntime(runtime: GroupMember['runtime']): boolean {
 
 /** Pick the client surface for a member: per-profile when possible, global
  *  fallback for non-Hermes runtimes. */
-function clientForMember(member: GroupMember): ClaudeApiClient | null {
+function clientForMember(member: GroupMember): HermesApiClient | null {
   const profile = resolveMemberProfile(member)
-  if (profile) return getClaudeApiClient(profile)
+  if (profile) return getHermesApiClient(profile)
   return null
 }
 
@@ -181,7 +181,7 @@ export async function getMemberSessionMessages(
   roomId: string,
   member: GroupMember,
   input?: { dbPath?: string },
-): Promise<{ sessionId: string | null; messages: Array<ClaudeMessage> }> {
+): Promise<{ sessionId: string | null; messages: Array<HermesMessage> }> {
   const sessionId = peekSession(roomId, member.participantId, input)
   if (!sessionId) return { sessionId: null, messages: [] }
   const client = clientForMember(member)
@@ -395,7 +395,7 @@ export async function submitPrompt(
   },
 ): Promise<{
   sessionId: string
-  message?: ClaudeMessage
+  message?: HermesMessage
   profile: string | null
 }> {
   const { sessionId, profile } = await getOrCreateSession(roomId, member, input)
@@ -421,7 +421,7 @@ export async function submitPrompt(
 function extractAssistantMessage(
   result: Record<string, unknown>,
   sessionId: string,
-): ClaudeMessage | undefined {
+): HermesMessage | undefined {
   const messages = Array.isArray(result.messages)
     ? (result.messages as Array<Record<string, unknown>>)
     : []

@@ -120,7 +120,7 @@ export async function handleHermesConfigGet({
     localModels: getDiscoveredModels(),
   })
 
-  // Legacy /api/claude-config consumers read provider.maskedKeys; alias it.
+  // Legacy consumers read provider.maskedKeys; alias it.
   const providers = state.providers.map((p) => ({
     ...p,
     maskedKeys: p.maskedCredentials,

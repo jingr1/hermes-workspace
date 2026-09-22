@@ -3,10 +3,6 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('@tanstack/react-router', () => ({
-  createFileRoute: (_path: string) => (opts: any) => opts,
-}))
-
 vi.mock('../../server/auth-middleware', () => ({
   isAuthenticated: () => true,
 }))
@@ -34,7 +30,6 @@ function setEnv(key: string, value: string | undefined) {
 beforeEach(() => {
   tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-config-route-'))
   setEnv('HERMES_HOME', tmpHome)
-  setEnv('HERMES_HOME', undefined)
   vi.resetModules()
 })
 
@@ -47,9 +42,13 @@ afterEach(() => {
   fs.rmSync(tmpHome, { recursive: true, force: true })
 })
 
-async function loadHandlers(modulePath: string) {
-  const mod = await import(modulePath)
-  return (mod as any).Route.server.handlers
+/** Load handlers from the shared route module (not createFileRoute wrappers). */
+async function loadHandlers() {
+  const mod = await import('../../server/hermes-config-route')
+  return {
+    GET: mod.handleHermesConfigGet,
+    PATCH: mod.handleHermesConfigPatch,
+  }
 }
 
 describe('canonical /api/hermes-config route', () => {
@@ -65,7 +64,7 @@ describe('canonical /api/hermes-config route', () => {
       'utf-8',
     )
 
-    const handlers = await loadHandlers('./hermes-config')
+    const handlers = await loadHandlers()
     const res = await handlers.GET({
       request: new Request('http://localhost/api/hermes-config'),
     })
@@ -81,7 +80,7 @@ describe('canonical /api/hermes-config route', () => {
   })
 
   it('PATCH dispatches set-default-model and returns the action message', async () => {
-    const handlers = await loadHandlers('./hermes-config')
+    const handlers = await loadHandlers()
     const res = await handlers.PATCH({
       request: new Request('http://localhost/api/hermes-config', {
         method: 'PATCH',
@@ -107,7 +106,7 @@ describe('canonical /api/hermes-config route', () => {
       'utf-8',
     )
 
-    const handlers = await loadHandlers('./hermes-config')
+    const handlers = await loadHandlers()
     await handlers.PATCH({
       request: new Request('http://localhost/api/hermes-config', {
         method: 'PATCH',
@@ -121,7 +120,7 @@ describe('canonical /api/hermes-config route', () => {
   })
 
   it('PATCH rejects malformed action bodies with 400', async () => {
-    const handlers = await loadHandlers('./hermes-config')
+    const handlers = await loadHandlers()
     const res = await handlers.PATCH({
       request: new Request('http://localhost/api/hermes-config', {
         method: 'PATCH',
@@ -152,7 +151,7 @@ describe('canonical /api/hermes-config route', () => {
       'utf-8',
     )
 
-    const handlers = await loadHandlers('./hermes-config')
+    const handlers = await loadHandlers()
     const getPromise = handlers.GET({
       request: new Request('http://localhost/api/hermes-config'),
     })
@@ -180,7 +179,7 @@ describe('canonical /api/hermes-config route', () => {
       ensureGatewayProbed: vi.fn(async () => ({ config: false })),
       getCapabilities: () => ({ config: false }),
     }))
-    const handlers = await loadHandlers('./hermes-config')
+    const handlers = await loadHandlers()
     const res = await handlers.PATCH({
       request: new Request('http://localhost/api/hermes-config', {
         method: 'PATCH',
@@ -193,25 +192,5 @@ describe('canonical /api/hermes-config route', () => {
     })
     expect(res.status).toBe(503)
     vi.doUnmock('../../server/gateway-capabilities')
-  })
-})
-
-describe('legacy /api/claude-config alias', () => {
-  it('GET aliases provider.maskedCredentials to provider.maskedKeys for the legacy /settings page', async () => {
-    fs.writeFileSync(
-      path.join(tmpHome, '.env'),
-      'OPENROUTER_API_KEY=sk-test-1234\n',
-      'utf-8',
-    )
-
-    const handlers = await loadHandlers('./claude-config')
-    const res = await handlers.GET({
-      request: new Request('http://localhost/api/claude-config'),
-    })
-    const body = await res.json()
-    const openrouter = body.providers.find((p: any) => p.id === 'openrouter')
-
-    expect(openrouter.maskedKeys).toEqual(openrouter.maskedCredentials)
-    expect(openrouter.maskedKeys.OPENROUTER_API_KEY).toBeTruthy()
   })
 })

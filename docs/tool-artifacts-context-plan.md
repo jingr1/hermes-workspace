@@ -224,7 +224,7 @@ Added in the continuation pass:
 - `src/routes/api/history.ts`
   - externalizes oversized tool/toolResult messages during history normalization
   - applies the same externalization path to local portable-session fallback messages
-- `src/server/claude-api.ts`
+- `src/server/hermes-api.ts`
   - normalizes backend `role: "tool"` to frontend `role: "toolResult"`
   - hoists `toolCallId` / `toolName` so result maps and tool cards can find outputs
 - `src/components/inspector/inspector-panel.tsx`

@@ -15,7 +15,7 @@ vi.mock('./sources/generic-json', () => ({
 vi.mock('../mcp-hub-sources-store', () => ({
   readHubSources: vi.fn(),
 }))
-vi.mock('../claude-dashboard-api', () => ({
+vi.mock('../hermes-dashboard-api', () => ({
   getConfig: vi.fn(),
 }))
 
@@ -23,7 +23,7 @@ import { fetchLocalFile } from './sources/local-file'
 import { fetchMcpGet } from './sources/mcp-get'
 import { fetchGenericJson } from './sources/generic-json'
 import { readHubSources } from '../mcp-hub-sources-store'
-import { getConfig } from '../claude-dashboard-api'
+import { getConfig } from '../hermes-dashboard-api'
 import { unifiedSearch } from './index'
 import type { HubMcpEntry } from './types'
 

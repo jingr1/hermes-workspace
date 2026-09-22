@@ -1,7 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { isAuthenticated } from '../../server/auth-middleware'
-import { createTask, listTasks } from '../../server/tasks-store'
-import type { TaskColumn, TaskPriority } from '../../server/tasks-store'
+import {
+  createHermesTask,
+  listHermesTasks,
+} from '../../server/hermes-tasks-backend'
+import type {
+  TaskColumn,
+  TaskPriority,
+} from '../../server/hermes-tasks-backend'
 
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -17,8 +23,7 @@ function isTaskColumn(value: unknown): value is TaskColumn {
     value === 'in_progress' ||
     value === 'review' ||
     value === 'blocked' ||
-    value === 'done' ||
-    value === 'deleted'
+    value === 'done'
   )
 }
 
@@ -35,7 +40,7 @@ export const Route = createFileRoute('/api/hermes-tasks')({
         }
 
         const url = new URL(request.url)
-        const tasks = listTasks({
+        const tasks = await listHermesTasks({
           column: url.searchParams.get('column'),
           assignee: url.searchParams.get('assignee'),
           priority: url.searchParams.get('priority'),
@@ -56,8 +61,7 @@ export const Route = createFileRoute('/api/hermes-tasks')({
             return jsonResponse({ error: 'title is required' }, 400)
           }
 
-          const task = createTask({
-            id: typeof body.id === 'string' ? body.id : undefined,
+          const task = await createHermesTask({
             title: body.title,
             description:
               typeof body.description === 'string' ? body.description : '',
@@ -70,7 +74,6 @@ export const Route = createFileRoute('/api/hermes-tasks')({
                 )
               : [],
             due_date: typeof body.due_date === 'string' ? body.due_date : null,
-            position: typeof body.position === 'number' ? body.position : 0,
             created_by:
               typeof body.created_by === 'string' ? body.created_by : 'user',
           })

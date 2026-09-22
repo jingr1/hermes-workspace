@@ -50,7 +50,7 @@ import { useDashboardLayout } from './lib/use-dashboard-layout'
 import type { SessionRowData } from './components/sessions-intelligence-card'
 import type { AnalyticsPeriod } from './components/analytics-chart-card'
 import type { ReactNode } from 'react'
-import type { ClaudeSession } from '@/server/claude-api'
+import type { HermesSession } from '@/server/hermes-api'
 import type { DashboardOverview } from '@/server/dashboard-aggregator'
 import { getUnavailableReason } from '@/lib/feature-gates'
 import { cn } from '@/lib/utils'
@@ -258,7 +258,7 @@ function ActivityChart({
   sessions,
   palette,
 }: {
-  sessions: Array<ClaudeSession>
+  sessions: Array<HermesSession>
   palette: ReturnType<typeof readDashboardPalette>
 }) {
   const chartData = useMemo(() => {
@@ -611,7 +611,7 @@ function SessionRow({
   onClick,
   palette,
 }: {
-  session: ClaudeSession
+  session: HermesSession
   maxTokens: number
   onClick: () => void
   palette: ReturnType<typeof readDashboardPalette>
@@ -704,7 +704,7 @@ export function DashboardScreen() {
     sessionsResult?.message ?? getUnavailableReason('sessions')
 
   // Adapter shape kept for the legacy fallbacks that still reference
-  // ClaudeSession (HeroMetrics fallback path, etc.).
+  // HermesSession (HeroMetrics fallback path, etc.).
   const sessions = useMemo(
     () =>
       rawSessions.map((s) => ({
@@ -714,7 +714,7 @@ export function DashboardScreen() {
         tool_call_count: (s.tool_call_count as number | undefined) ?? 0,
         input_tokens: (s.tokenCount as number | undefined) ?? 0,
         output_tokens: 0,
-      })) as Array<ClaudeSession>,
+      })) as Array<HermesSession>,
     [rawSessions],
   )
 

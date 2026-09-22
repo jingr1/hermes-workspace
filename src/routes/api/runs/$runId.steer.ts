@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../server/auth-middleware'
 import { requireJsonContentType } from '../../../server/rate-limit'
-import { steerRun } from '../../../server/claude-api'
+import { steerRun } from '../../../server/hermes-api'
 import { ensureActiveProfileGateway } from '../../../server/gateway-pool'
 
 export const Route = createFileRoute('/api/runs/$runId/steer')({

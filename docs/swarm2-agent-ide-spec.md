@@ -343,7 +343,7 @@ Returns:
 
 Worker cards should consume:
 
-- `GET /api/claude-tasks?assignee=swarm4&include_done=false`
+- `GET /api/hermes-tasks?assignee=swarm4&include_done=false`
 - or existing task endpoint equivalent
 
 ### 4.5 Project Preview API

@@ -8,7 +8,7 @@ vi.mock('../../server/gateway-capabilities', () => ({
   getCapabilities: vi.fn(() => ({ dashboard: { available: false } })),
 }))
 
-vi.mock('../../server/claude-api', () => ({
+vi.mock('../../server/hermes-api', () => ({
   listSessions: vi.fn(async () => []),
 }))
 
@@ -26,7 +26,7 @@ import {
   ensureGatewayProbed,
   getCapabilities,
 } from '../../server/gateway-capabilities'
-import { listSessions } from '../../server/claude-api'
+import { listSessions } from '../../server/hermes-api'
 import {
   getLocalMessages,
   getLocalSession,

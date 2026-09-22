@@ -27,7 +27,7 @@ const FEATURE_PROBES: Record<EnhancedFeature, Array<string>> = {
   sessions: ['/api/sessions'],
   skills: ['/api/gateway-status', '/api/skills'],
   memory: ['/api/gateway-status', '/api/memory/list'],
-  config: ['/api/gateway-status', '/api/claude-config'],
+  config: ['/api/gateway-status', '/api/hermes-config'],
   jobs: ['/api/gateway-status', '/api/claude-jobs'],
   mcp: ['/api/gateway-status', '/api/mcp'],
   mcpFallback: ['/api/gateway-status', '/api/mcp'],
