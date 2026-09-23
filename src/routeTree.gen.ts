@@ -217,7 +217,6 @@ import { Route as ApiAuthAnthropicRouteImport } from './routes/api/auth.anthropi
 import { Route as ApiArtifactsArtifactIdRouteImport } from './routes/api/artifacts.$artifactId'
 import { Route as ApiAgentsStatusRouteImport } from './routes/api/agents/status'
 import { Route as ApiAgentsSnapshotRouteImport } from './routes/api/agents/snapshot'
-import { Route as ApiAgentsOperationsRouteImport } from './routes/api/agents/operations'
 import { Route as ApiAgentRuntimeStatusRouteImport } from './routes/api/agent-runtime/status'
 import { Route as ApiAgentRuntimeInstallRouteImport } from './routes/api/agent-runtime/install'
 import { Route as ApiAgentRuntimeEnableRouteImport } from './routes/api/agent-runtime/enable'
@@ -242,6 +241,7 @@ import { Route as ApiAgentsAgentIdSessionsRouteImport } from './routes/api/agent
 import { Route as ApiAgentsAgentIdMcpRouteImport } from './routes/api/agents/$agentId/mcp'
 import { Route as ApiAgentsAgentIdLocalSkillsRouteImport } from './routes/api/agents/$agentId/local-skills'
 import { Route as ApiAgentsAgentIdChatRouteImport } from './routes/api/agents/$agentId/chat'
+import { Route as ApiAgentsAgentIdCapabilitiesRouteImport } from './routes/api/agents/$agentId/capabilities'
 import { Route as ApiRunsSessionKeyRunIdAbandonRouteImport } from './routes/api/runs/$sessionKey.$runId.abandon'
 import { Route as ApiRoomsRoomIdParticipantsParticipantIdRouteImport } from './routes/api/rooms/$roomId/participants/$participantId'
 import { Route as ApiAgentsAgentIdSkillsComposerRouteImport } from './routes/api/agents/$agentId/skills/composer'
@@ -1318,11 +1318,6 @@ const ApiAgentsSnapshotRoute = ApiAgentsSnapshotRouteImport.update({
   path: '/api/agents/snapshot',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAgentsOperationsRoute = ApiAgentsOperationsRouteImport.update({
-  id: '/api/agents/operations',
-  path: '/api/agents/operations',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiAgentRuntimeStatusRoute = ApiAgentRuntimeStatusRouteImport.update({
   id: '/api/agent-runtime/status',
   path: '/api/agent-runtime/status',
@@ -1457,6 +1452,12 @@ const ApiAgentsAgentIdChatRoute = ApiAgentsAgentIdChatRouteImport.update({
   path: '/api/agents/$agentId/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAgentsAgentIdCapabilitiesRoute =
+  ApiAgentsAgentIdCapabilitiesRouteImport.update({
+    id: '/api/agents/$agentId/capabilities',
+    path: '/api/agents/$agentId/capabilities',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiRunsSessionKeyRunIdAbandonRoute =
   ApiRunsSessionKeyRunIdAbandonRouteImport.update({
     id: '/api/runs/$sessionKey/$runId/abandon',
@@ -1741,7 +1742,6 @@ export interface FileRoutesByFullPath {
   '/api/agent-runtime/enable': typeof ApiAgentRuntimeEnableRoute
   '/api/agent-runtime/install': typeof ApiAgentRuntimeInstallRoute
   '/api/agent-runtime/status': typeof ApiAgentRuntimeStatusRoute
-  '/api/agents/operations': typeof ApiAgentsOperationsRoute
   '/api/agents/snapshot': typeof ApiAgentsSnapshotRoute
   '/api/agents/status': typeof ApiAgentsStatusRoute
   '/api/artifacts/$artifactId': typeof ApiArtifactsArtifactIdRoute
@@ -1829,6 +1829,7 @@ export interface FileRoutesByFullPath {
   '/api/agents/': typeof ApiAgentsIndexRoute
   '/api/missions/': typeof ApiMissionsIndexRoute
   '/api/tasks/': typeof ApiTasksIndexRoute
+  '/api/agents/$agentId/capabilities': typeof ApiAgentsAgentIdCapabilitiesRoute
   '/api/agents/$agentId/chat': typeof ApiAgentsAgentIdChatRoute
   '/api/agents/$agentId/local-skills': typeof ApiAgentsAgentIdLocalSkillsRoute
   '/api/agents/$agentId/mcp': typeof ApiAgentsAgentIdMcpRouteWithChildren
@@ -1999,7 +2000,6 @@ export interface FileRoutesByTo {
   '/api/agent-runtime/enable': typeof ApiAgentRuntimeEnableRoute
   '/api/agent-runtime/install': typeof ApiAgentRuntimeInstallRoute
   '/api/agent-runtime/status': typeof ApiAgentRuntimeStatusRoute
-  '/api/agents/operations': typeof ApiAgentsOperationsRoute
   '/api/agents/snapshot': typeof ApiAgentsSnapshotRoute
   '/api/agents/status': typeof ApiAgentsStatusRoute
   '/api/artifacts/$artifactId': typeof ApiArtifactsArtifactIdRoute
@@ -2087,6 +2087,7 @@ export interface FileRoutesByTo {
   '/api/agents': typeof ApiAgentsIndexRoute
   '/api/missions': typeof ApiMissionsIndexRoute
   '/api/tasks': typeof ApiTasksIndexRoute
+  '/api/agents/$agentId/capabilities': typeof ApiAgentsAgentIdCapabilitiesRoute
   '/api/agents/$agentId/chat': typeof ApiAgentsAgentIdChatRoute
   '/api/agents/$agentId/local-skills': typeof ApiAgentsAgentIdLocalSkillsRoute
   '/api/agents/$agentId/mcp': typeof ApiAgentsAgentIdMcpRouteWithChildren
@@ -2261,7 +2262,6 @@ export interface FileRoutesById {
   '/api/agent-runtime/enable': typeof ApiAgentRuntimeEnableRoute
   '/api/agent-runtime/install': typeof ApiAgentRuntimeInstallRoute
   '/api/agent-runtime/status': typeof ApiAgentRuntimeStatusRoute
-  '/api/agents/operations': typeof ApiAgentsOperationsRoute
   '/api/agents/snapshot': typeof ApiAgentsSnapshotRoute
   '/api/agents/status': typeof ApiAgentsStatusRoute
   '/api/artifacts/$artifactId': typeof ApiArtifactsArtifactIdRoute
@@ -2349,6 +2349,7 @@ export interface FileRoutesById {
   '/api/agents/': typeof ApiAgentsIndexRoute
   '/api/missions/': typeof ApiMissionsIndexRoute
   '/api/tasks/': typeof ApiTasksIndexRoute
+  '/api/agents/$agentId/capabilities': typeof ApiAgentsAgentIdCapabilitiesRoute
   '/api/agents/$agentId/chat': typeof ApiAgentsAgentIdChatRoute
   '/api/agents/$agentId/local-skills': typeof ApiAgentsAgentIdLocalSkillsRoute
   '/api/agents/$agentId/mcp': typeof ApiAgentsAgentIdMcpRouteWithChildren
@@ -2524,7 +2525,6 @@ export interface FileRouteTypes {
     | '/api/agent-runtime/enable'
     | '/api/agent-runtime/install'
     | '/api/agent-runtime/status'
-    | '/api/agents/operations'
     | '/api/agents/snapshot'
     | '/api/agents/status'
     | '/api/artifacts/$artifactId'
@@ -2612,6 +2612,7 @@ export interface FileRouteTypes {
     | '/api/agents/'
     | '/api/missions/'
     | '/api/tasks/'
+    | '/api/agents/$agentId/capabilities'
     | '/api/agents/$agentId/chat'
     | '/api/agents/$agentId/local-skills'
     | '/api/agents/$agentId/mcp'
@@ -2782,7 +2783,6 @@ export interface FileRouteTypes {
     | '/api/agent-runtime/enable'
     | '/api/agent-runtime/install'
     | '/api/agent-runtime/status'
-    | '/api/agents/operations'
     | '/api/agents/snapshot'
     | '/api/agents/status'
     | '/api/artifacts/$artifactId'
@@ -2870,6 +2870,7 @@ export interface FileRouteTypes {
     | '/api/agents'
     | '/api/missions'
     | '/api/tasks'
+    | '/api/agents/$agentId/capabilities'
     | '/api/agents/$agentId/chat'
     | '/api/agents/$agentId/local-skills'
     | '/api/agents/$agentId/mcp'
@@ -3043,7 +3044,6 @@ export interface FileRouteTypes {
     | '/api/agent-runtime/enable'
     | '/api/agent-runtime/install'
     | '/api/agent-runtime/status'
-    | '/api/agents/operations'
     | '/api/agents/snapshot'
     | '/api/agents/status'
     | '/api/artifacts/$artifactId'
@@ -3131,6 +3131,7 @@ export interface FileRouteTypes {
     | '/api/agents/'
     | '/api/missions/'
     | '/api/tasks/'
+    | '/api/agents/$agentId/capabilities'
     | '/api/agents/$agentId/chat'
     | '/api/agents/$agentId/local-skills'
     | '/api/agents/$agentId/mcp'
@@ -3299,7 +3300,6 @@ export interface RootRouteChildren {
   ApiAgentRuntimeEnableRoute: typeof ApiAgentRuntimeEnableRoute
   ApiAgentRuntimeInstallRoute: typeof ApiAgentRuntimeInstallRoute
   ApiAgentRuntimeStatusRoute: typeof ApiAgentRuntimeStatusRoute
-  ApiAgentsOperationsRoute: typeof ApiAgentsOperationsRoute
   ApiAgentsSnapshotRoute: typeof ApiAgentsSnapshotRoute
   ApiAgentsStatusRoute: typeof ApiAgentsStatusRoute
   ApiClaudeCodeSettingsRoute: typeof ApiClaudeCodeSettingsRoute
@@ -3354,6 +3354,7 @@ export interface RootRouteChildren {
   ApiAgentsIndexRoute: typeof ApiAgentsIndexRoute
   ApiMissionsIndexRoute: typeof ApiMissionsIndexRoute
   ApiTasksIndexRoute: typeof ApiTasksIndexRoute
+  ApiAgentsAgentIdCapabilitiesRoute: typeof ApiAgentsAgentIdCapabilitiesRoute
   ApiAgentsAgentIdChatRoute: typeof ApiAgentsAgentIdChatRoute
   ApiAgentsAgentIdLocalSkillsRoute: typeof ApiAgentsAgentIdLocalSkillsRoute
   ApiAgentsAgentIdMcpRoute: typeof ApiAgentsAgentIdMcpRouteWithChildren
@@ -4832,13 +4833,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentsSnapshotRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/agents/operations': {
-      id: '/api/agents/operations'
-      path: '/api/agents/operations'
-      fullPath: '/api/agents/operations'
-      preLoaderRoute: typeof ApiAgentsOperationsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/agent-runtime/status': {
       id: '/api/agent-runtime/status'
       path: '/api/agent-runtime/status'
@@ -5005,6 +4999,13 @@ declare module '@tanstack/react-router' {
       path: '/api/agents/$agentId/chat'
       fullPath: '/api/agents/$agentId/chat'
       preLoaderRoute: typeof ApiAgentsAgentIdChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agents/$agentId/capabilities': {
+      id: '/api/agents/$agentId/capabilities'
+      path: '/api/agents/$agentId/capabilities'
+      fullPath: '/api/agents/$agentId/capabilities'
+      preLoaderRoute: typeof ApiAgentsAgentIdCapabilitiesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/runs/$sessionKey/$runId/abandon': {
@@ -5760,7 +5761,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentRuntimeEnableRoute: ApiAgentRuntimeEnableRoute,
   ApiAgentRuntimeInstallRoute: ApiAgentRuntimeInstallRoute,
   ApiAgentRuntimeStatusRoute: ApiAgentRuntimeStatusRoute,
-  ApiAgentsOperationsRoute: ApiAgentsOperationsRoute,
   ApiAgentsSnapshotRoute: ApiAgentsSnapshotRoute,
   ApiAgentsStatusRoute: ApiAgentsStatusRoute,
   ApiClaudeCodeSettingsRoute: ApiClaudeCodeSettingsRoute,
@@ -5816,6 +5816,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentsIndexRoute: ApiAgentsIndexRoute,
   ApiMissionsIndexRoute: ApiMissionsIndexRoute,
   ApiTasksIndexRoute: ApiTasksIndexRoute,
+  ApiAgentsAgentIdCapabilitiesRoute: ApiAgentsAgentIdCapabilitiesRoute,
   ApiAgentsAgentIdChatRoute: ApiAgentsAgentIdChatRoute,
   ApiAgentsAgentIdLocalSkillsRoute: ApiAgentsAgentIdLocalSkillsRoute,
   ApiAgentsAgentIdMcpRoute: ApiAgentsAgentIdMcpRouteWithChildren,

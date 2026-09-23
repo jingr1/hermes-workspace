@@ -19,29 +19,17 @@ import {
   type CreateAgentInput,
   normalizeAgentId,
 } from '@/lib/create-agent'
+import { agentRuntimeLabel } from '@/lib/managed-agent-runtime/agent-targets'
 
-// Claude-Workspace adapter: Operations is backed by Hermes profiles
-// (each profile = one persistent agent). Profiles live at ~/.hermes/profiles/<name>/
-// with their own config.yaml, sessions, skills.
-type ClaudeProfileSummary = {
-  name: string
-  path: string
-  active: boolean
-  exists: boolean
-  model?: string
-  provider?: string
-  description?: string
-  systemPrompt?: string
-  skillCount: number
-  mcpCount: number
-  sessionCount: number
-  hasEnv: boolean
-  updatedAt?: string
-}
+// Operations is backed by GET /api/agents (agents.yaml registry).
+// Per-agent details: GET /api/agents/:id/capabilities (Hermes + managed).
+// Create / update / delete declarations go through /api/agent-registry.
 
 export type GatewayConfigAgent = {
   id: string
   name: string
+  /** Hermes profile or managed runtime id (claude-code, codex, …). */
+  runtime: string
   model: string
   provider?: string
   workspace?: string
@@ -50,6 +38,8 @@ export type GatewayConfigAgent = {
   systemPrompt?: string
   skillCount?: number
   mcpCount?: number
+  command?: string
+  args?: Array<string>
 }
 
 export type OperationsAgentMeta = {
@@ -123,7 +113,7 @@ export type OperationsAgentCapabilities = {
   toolsets: string[]
 }
 
-/** Aggregated capabilities for Operations (platform + optional profile). */
+/** Aggregated capabilities for Operations (platform + optional Hermes profile). */
 type CapabilitiesResponse = {
   profile: string
   skills: AgentSkillItem[]
@@ -142,6 +132,9 @@ type CapabilitiesResponse = {
   workspace?: string
   envExists: boolean
   envPath?: string
+  /** Hermes profile model from config.yaml (profiles/capabilities only). */
+  defaultModel?: string | null
+  provider?: string | null
 }
 
 export type OperationsAgentUsage = {
@@ -315,6 +308,7 @@ function normalizeAgentList(input: unknown): GatewayConfigAgent[] {
     agents.push({
       id,
       name: readString(row.name) || id,
+      runtime: readString(row.runtime) || 'hermes',
       model: readString(row.model),
       provider: readString(row.provider),
       workspace: readString(row.workspace) || undefined,
@@ -324,6 +318,10 @@ function normalizeAgentList(input: unknown): GatewayConfigAgent[] {
       skillCount:
         typeof row.skillCount === 'number' ? row.skillCount : undefined,
       mcpCount: typeof row.mcpCount === 'number' ? row.mcpCount : undefined,
+      command: readString(row.command) || undefined,
+      args: Array.isArray(row.args)
+        ? row.args.filter((v): v is string => typeof v === 'string')
+        : undefined,
     })
   }
 
@@ -337,55 +335,72 @@ function parseConfigPayload(payload: ConfigPayload): ConfigPayload {
   return payload
 }
 
-async function fetchClaudeProfiles(): Promise<{
-  profiles: ClaudeProfileSummary[]
-  activeProfile: string
-}> {
-  const response = await fetch('/api/profiles/list?light=1')
-  const contentType = response.headers.get('content-type') || ''
-  if (!contentType.includes('json')) {
-    throw new Error('/api/profiles/list returned non-JSON')
-  }
-  const payload = (await response.json().catch(() => ({}))) as {
-    profiles?: ClaudeProfileSummary[]
-    activeProfile?: string
-    error?: string
-  }
-  if (!response.ok || payload.error) {
-    throw new Error(payload.error || `HTTP ${response.status}`)
-  }
-  return {
-    profiles: Array.isArray(payload.profiles) ? payload.profiles : [],
-    activeProfile: payload.activeProfile || 'default',
-  }
-}
-
-// Adapt Hermes profiles into the ConfigPayload shape that the existing
-// Operations UI expects. Each profile becomes one agent.
+// Operations agent list: GET /api/agents (agents.yaml registry).
+// Hermes model/workspace come from /api/profiles/capabilities per agent.
 async function fetchOperationsConfig(): Promise<
   ConfigPayload & { activeProfile: string }
 > {
-  const { profiles, activeProfile } = await fetchClaudeProfiles()
-  const list = profiles.map((profile) => ({
-    id: profile.name,
-    name: profile.name === 'default' ? 'Workspace' : profile.name,
-    model: profile.model || '',
-    provider: profile.provider || '',
-    workspace: profile.path,
-    agentDir: profile.path,
-    description: profile.description || '',
-    systemPrompt: profile.systemPrompt || '',
-    skillCount: profile.skillCount ?? 0,
-    mcpCount: profile.mcpCount ?? 0,
-  }))
-  // Default-profile model becomes the operations defaultModel suggestion
-  const defaultModel = profiles.find((p) => p.name === 'default')?.model || ''
+  const [agentsRes, profilesRes] = await Promise.all([
+    fetch('/api/agents'),
+    fetch('/api/profiles/list?light=1'),
+  ])
+  if (!agentsRes.headers.get('content-type')?.includes('json')) {
+    throw new Error('/api/agents returned non-JSON')
+  }
+  const agentsPayload = (await agentsRes.json().catch(() => ({}))) as {
+    agents?: Array<{
+      agentId: string
+      name?: string
+      runtime?: string
+      runtimeConfig?: {
+        profile?: string
+        command?: string
+        args?: Array<string>
+      }
+    }>
+    error?: string
+  }
+  if (!agentsRes.ok || agentsPayload.error) {
+    throw new Error(agentsPayload.error || `HTTP ${agentsRes.status}`)
+  }
+
+  let activeProfile = 'default'
+  if (profilesRes.ok && profilesRes.headers.get('content-type')?.includes('json')) {
+    const profilesPayload = (await profilesRes.json().catch(() => ({}))) as {
+      activeProfile?: string
+    }
+    if (profilesPayload.activeProfile) {
+      activeProfile = profilesPayload.activeProfile
+    }
+  }
+
+  const list = (agentsPayload.agents ?? [])
+    .filter((a) => Boolean(a.agentId))
+    .map((a) => ({
+      id: a.agentId,
+      name:
+        a.agentId === 'default'
+          ? 'Workspace'
+          : a.name || a.agentId,
+      runtime: a.runtime || 'hermes',
+      model: '',
+      provider: '',
+      workspace: undefined,
+      agentDir: undefined,
+      description: '',
+      systemPrompt: '',
+      skillCount: 0,
+      mcpCount: 0,
+      command: a.runtimeConfig?.command,
+      args: a.runtimeConfig?.args,
+    }))
+
   return {
     ok: true,
     activeProfile,
     parsed: {
       agents: { list },
-      defaultModel,
+      defaultModel: '',
     },
   }
 }
@@ -719,7 +734,7 @@ export function useOperations() {
     refetchInterval: 30_000,
   })
 
-  // Fetch platform skill bindings for every registry agent (Hermes + managed).
+  // Unified capabilities for every registry agent (Hermes + managed).
   const capabilitiesQuery = useQuery({
     queryKey: ['operations', 'capabilities'],
     queryFn: async () => {
@@ -732,68 +747,57 @@ export function useOperations() {
       await Promise.all(
         (agentsPayload.agents ?? []).map(async (agent) => {
           const agentId = agent.agentId
-          if (!agentId || agentId === 'default') return
+          if (!agentId) return
           try {
-            const [skillsRes, mcpRes, profileCapsRes] = await Promise.all([
-              fetch(`/api/agents/${encodeURIComponent(agentId)}/skills`),
-              fetch(`/api/agents/${encodeURIComponent(agentId)}/mcp`),
-              fetch(
-                `/api/profiles/capabilities?name=${encodeURIComponent(agentId)}`,
-              ),
-            ])
-            const skillsPayload = skillsRes.ok
-              ? ((await skillsRes.json()) as {
-                  skills?: Array<{
-                    skillId: string
-                    name: string
-                    description: string
-                    enabled: boolean
-                  }>
-                })
-              : { skills: [] }
-            const mcpPayload = mcpRes.ok
-              ? ((await mcpRes.json()) as {
-                  servers?: Array<{
-                    serverId: string
-                    name: string
-                    enabled: boolean
-                    transport?: string
-                  }>
-                })
-              : { servers: [] }
-            const profileCaps = profileCapsRes.ok
-              ? ((await profileCapsRes.json()) as CapabilitiesResponse)
-              : null
-            const platformMcp = (mcpPayload.servers ?? []).map((s) => ({
-              name: s.name,
-              enabled: s.enabled,
-              status: (s.enabled ? 'connected' : 'disabled') as
-                | 'connected'
-                | 'failed'
-                | 'disabled',
-              serverId: s.serverId,
-              source: 'platform' as const,
-            }))
-            const platformNames = new Set(
-              platformMcp.map((m) => m.name.toLowerCase()),
+            const capsRes = await fetch(
+              `/api/agents/${encodeURIComponent(agentId)}/capabilities`,
             )
-            const profileOnly = (profileCaps?.mcpServers ?? [])
-              .filter((m) => !platformNames.has(m.name.toLowerCase()))
-              .map((m) => ({
-                ...m,
-                source: 'profile' as const,
-              }))
+            if (!capsRes.ok) return
+            const caps = (await capsRes.json()) as {
+              skills?: Array<{
+                name: string
+                skillId?: string
+                description?: string
+                enabled: boolean
+                source?: 'platform' | 'profile'
+              }>
+              mcpServers?: Array<{
+                name: string
+                enabled: boolean
+                status?: string
+                transportType?: string
+                serverId?: string
+                source?: 'platform' | 'profile'
+                error?: string
+              }>
+              toolsets?: string[]
+              workspace?: string
+              envExists?: boolean
+              defaultModel?: string | null
+              provider?: string | null
+            }
             results[agentId] = {
               profile: agentId,
-              skills: (skillsPayload.skills ?? []).map((s) => ({
+              skills: (caps.skills ?? []).map((s) => ({
                 name: s.name,
                 skillId: s.skillId,
                 description: s.description,
                 enabled: s.enabled,
               })),
-              mcpServers: [...platformMcp, ...profileOnly],
-              toolsets: profileCaps?.toolsets ?? [],
-              envExists: profileCaps?.envExists ?? false,
+              mcpServers: (caps.mcpServers ?? []).map((m) => ({
+                name: m.name,
+                enabled: m.enabled,
+                status: m.status,
+                transportType: m.transportType,
+                serverId: m.serverId,
+                source: m.source,
+                error: m.error,
+              })),
+              toolsets: caps.toolsets ?? [],
+              workspace: caps.workspace,
+              envExists: caps.envExists ?? false,
+              defaultModel: caps.defaultModel ?? null,
+              provider: caps.provider ?? null,
             }
           } catch {
             /* ignore */
@@ -898,10 +902,29 @@ export function useOperations() {
           .filter((value): value is number => value !== null)
           .sort((left, right) => right - left)[0] ??
         null
+      const caps = capsMap[agent.id]
+      const resolvedModel =
+        (typeof caps?.defaultModel === 'string' && caps.defaultModel.trim()
+          ? caps.defaultModel.trim()
+          : '') ||
+        agent.model?.trim() ||
+        ''
+      const resolvedProvider =
+        (typeof caps?.provider === 'string' && caps.provider.trim()
+          ? caps.provider.trim()
+          : '') ||
+        agent.provider?.trim() ||
+        ''
+      const resolvedAgent = {
+        ...agent,
+        model: resolvedModel,
+        provider: resolvedProvider || undefined,
+        workspace: caps?.workspace ?? agent.workspace,
+      }
+      const isHermes = (resolvedAgent.runtime || 'hermes') === 'hermes'
       const needsSetup =
         Boolean(snap?.status?.needsSetup) ||
-        !agent.model ||
-        agent.model.trim().length === 0
+        (isHermes && !resolvedModel)
       const status = snap?.status
         ? mapUnifiedToOperationsStatus(
             snap.status.unifiedStatus,
@@ -918,7 +941,6 @@ export function useOperations() {
         .sort((left, right) => right.timestamp - left.timestamp)
         .slice(0, 5)
 
-      const caps = capsMap[agent.id]
       const capabilities: OperationsAgentCapabilities = {
         skills:
           caps?.skills ??
@@ -953,15 +975,15 @@ export function useOperations() {
       }
 
       const resources: OperationsAgentResources = {
-        workspace: caps?.workspace ?? agent.workspace,
+        workspace: resolvedAgent.workspace,
         memoryPaths: [],
         envExists: caps?.envExists ?? false,
       }
 
       const health: OperationsAgentHealth = {
-        hasModel: Boolean(agent.model?.trim()),
-        hasProvider: Boolean(agent.provider?.trim()),
-        hasEnv: resources.envExists,
+        hasModel: Boolean(resolvedModel) || !isHermes,
+        hasProvider: Boolean(resolvedProvider) || !isHermes,
+        hasEnv: isHermes ? resources.envExists : true,
         missingSkills: [],
         disabledMcp: capabilities.mcpServers
           .filter((m) => !m.enabled)
@@ -969,13 +991,17 @@ export function useOperations() {
         issues: [],
       }
 
-      if (!health.hasModel) health.issues.push('No model configured')
-      if (!health.hasProvider) health.issues.push('No provider configured')
+      if (isHermes && !health.hasModel) health.issues.push('No model configured')
+      if (isHermes && !health.hasProvider)
+        health.issues.push('No provider configured')
 
       return {
-        ...agent,
+        ...resolvedAgent,
         meta,
-        shortModel: formatModelName(agent.model || 'Custom'),
+        shortModel: formatModelName(
+          resolvedModel ||
+            (isHermes ? 'Custom' : agentRuntimeLabel(resolvedAgent.runtime)),
+        ),
         status,
         sessionKey: getOperationsSessionKey(agent.id),
         sessions: agentSessions,
@@ -1058,6 +1084,20 @@ export function useOperations() {
 
   const activateAgentMutation = useMutation({
     mutationFn: async (agentId: string) => {
+      const agent = (
+        normalizeAgentList(
+          (
+            queryClient.getQueryData(['operations', 'config']) as
+              | (ConfigPayload & { activeProfile?: string })
+              | undefined
+          )?.parsed?.agents?.list,
+        )
+      ).find((entry) => entry.id === agentId)
+      if (agent && agent.runtime !== 'hermes') {
+        throw new Error(
+          `${agentRuntimeLabel(agent.runtime)} agents do not use Hermes profiles`,
+        )
+      }
       const response = await fetch('/api/profiles/activate', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -1089,6 +1129,20 @@ export function useOperations() {
 
   const renameAgentMutation = useMutation({
     mutationFn: async (input: { oldName: string; newName: string }) => {
+      const agent = (
+        normalizeAgentList(
+          (
+            queryClient.getQueryData(['operations', 'config']) as
+              | (ConfigPayload & { activeProfile?: string })
+              | undefined
+          )?.parsed?.agents?.list,
+        )
+      ).find((entry) => entry.id === input.oldName)
+      if (agent && agent.runtime !== 'hermes') {
+        throw new Error(
+          `${agentRuntimeLabel(agent.runtime)} agents cannot be renamed as Hermes profiles`,
+        )
+      }
       const next = normalizeAgentId(input.newName)
       if (!next) throw new Error('New name is required')
       if (next === 'default') {
@@ -1144,15 +1198,27 @@ export function useOperations() {
       systemPrompt: string
       description?: string
     }) => {
+      const agent = (
+        normalizeAgentList(
+          (
+            queryClient.getQueryData(['operations', 'config']) as
+              | (ConfigPayload & { activeProfile?: string })
+              | undefined
+          )?.parsed?.agents?.list,
+        )
+      ).find((entry) => entry.id === input.agentId)
+      const isHermes = !agent || agent.runtime === 'hermes'
       // Persist model + system prompt + display_name to the profile's config.yaml
-      // so they survive across machines / clients.
-      const patch: Record<string, unknown> = {}
-      if (input.model.trim()) patch.model = input.model.trim()
-      if (input.systemPrompt.trim())
-        patch.system_prompt = input.systemPrompt.trim()
-      if (input.name.trim()) patch.display_name = input.name.trim()
-      if (Object.keys(patch).length > 0) {
-        await updateClaudeProfile(input.agentId, patch)
+      // so they survive across machines / clients. Managed agents keep local meta only.
+      if (isHermes) {
+        const patch: Record<string, unknown> = {}
+        if (input.model.trim()) patch.model = input.model.trim()
+        if (input.systemPrompt.trim())
+          patch.system_prompt = input.systemPrompt.trim()
+        if (input.name.trim()) patch.display_name = input.name.trim()
+        if (Object.keys(patch).length > 0) {
+          await updateClaudeProfile(input.agentId, patch)
+        }
       }
       const currentMeta = loadAgentMeta(input.agentId)
       persistAgentMeta(input.agentId, {
@@ -1181,7 +1247,33 @@ export function useOperations() {
       if (agentId === 'default') {
         throw new Error('Cannot delete the default profile')
       }
-      await deleteClaudeProfile(agentId)
+      const agent = (
+        normalizeAgentList(
+          (
+            queryClient.getQueryData(['operations', 'config']) as
+              | (ConfigPayload & { activeProfile?: string })
+              | undefined
+          )?.parsed?.agents?.list,
+        )
+      ).find((entry) => entry.id === agentId)
+      if (agent && agent.runtime !== 'hermes') {
+        const response = await fetch('/api/agent-registry', {
+          method: 'DELETE',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ agentId }),
+        })
+        const payload = (await response.json().catch(() => ({}))) as {
+          ok?: boolean
+          error?: string
+        }
+        if (!response.ok || payload.ok === false) {
+          throw new Error(
+            payload.error || `Failed to remove agent (${response.status})`,
+          )
+        }
+      } else {
+        await deleteClaudeProfile(agentId)
+      }
       removeAgentMeta(agentId)
       setMetaVersion((value) => value + 1)
       setSelectedAgentId((current) => (current === agentId ? null : current))

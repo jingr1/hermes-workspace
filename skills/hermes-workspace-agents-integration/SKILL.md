@@ -40,7 +40,7 @@ hermes-workspace 的 agent 运行时分为两类：
 - `src/routes/api/agents/codex-impl/config.ts` + `codex-settings-panel.tsx` — Codex Settings UI 与 API。
 - `src/routes/api/agents/$agentId/env-check.ts` + `env-action.ts` — 动态 agent 本地环境检查与生命周期 action。
 - `src/routes/api/agents/claude-code/models.ts` / `src/routes/api/agents/codex-impl/models.ts` — chat/model picker 的模型列表。
-- `src/routes/api/agents/operations.ts` — Mission Control / Operations agent 列表，拼接 Hermes profiles 与外部 agent。
+- `src/routes/api/agents/$agentId/capabilities.ts` — Hermes + managed 统一 capabilities（model / skills / MCP）。
 - `src/routes/api/agents/$agentId/chat.ts` — 1:1 managed chat SSE endpoint。
 
 ## 2. 接入 Claude Code 的必要配置
@@ -100,8 +100,9 @@ Settings panel 会从 `src/server/provider-catalog.ts` 读取已配置的 provid
 | 1:1 Chat | `src/screens/chat/components/managed-agent-chat-view.tsx` | 选择 claude-code / codex agent 后进入 managed chat 界面 |
 | Chat API | `src/routes/api/agents/$agentId/chat.ts` | SSE 推送 `text_delta/thinking/tool/error/run_exited` |
 | Model Picker | `src/routes/api/agents/claude-code/models.ts` / `src/routes/api/agents/codex-impl/models.ts` | 返回当前 agent 的可用模型 + 当前 model/provider |
+| Capabilities | `src/routes/api/agents/$agentId/capabilities.ts` | Hermes + managed 统一 model/skills/MCP |
 | Group Chat | `src/server/agent-runtime/run-managed-turn.ts` | 每个 managed runtime 成员轮次执行，使用统一的 adapter |
-| Mission Control | `src/routes/api/agents/operations.ts` | 列出所有 agent，外部 runtime 读取各自配置文件展示 model/provider |
+| Agents 列表 | `GET /api/agents` | registry 声明 + status（勿再使用已删除的 `/api/agents/operations`） |
 | Status Probe | `src/routes/api/agents/status.ts` + adapter.probe() | 检查 CLI 可执行文件是否可用 |
 
 ## 4. Codex 落地实现
@@ -241,16 +242,16 @@ export type AgentRuntimeKind =
 - Settings panel（可通用化为 `external-agent-settings-panel.tsx` 抽象层）。
 - Provider/model 解析，优先复用 Hermes Provider Catalog 的 `base_url` / `key_env` / `models`。
 
-### 6.5 更新 Operations 列表
+### 6.5 更新 Agents capabilities
 
-`src/routes/api/agents/operations.ts` 中继续扩展 `readExternalAgentConfig`：
+在 `src/server/agent-capabilities.ts` 的 `readManagedModelProvider` 中扩展新 runtime：
 
 ```ts
-function readPiConfig(): { model: string; provider: string } {
-  // 读取 ~/.pi/config 或环境变量
-  return { model: '', provider: '' }
-}
+case 'pi':
+  return readPiConfig() // ~/.pi/config 或环境变量
 ```
+
+Agents 列表继续用 `GET /api/agents`；详情用 `GET /api/agents/:id/capabilities`。
 
 ## 6. 重要约束与常见问题
 

@@ -22,6 +22,7 @@ import { AgentIdentityAvatar } from '@/components/avatars'
 import { Markdown } from '@/components/prompt-kit/markdown'
 import { toast } from '@/components/ui/toast'
 import { runCronJob, toggleCronJob } from '@/lib/cron-api'
+import { agentRuntimeLabel } from '@/lib/managed-agent-runtime/agent-targets'
 import { cn } from '@/lib/utils'
 import {
   useAgentChat,
@@ -471,7 +472,7 @@ export function OperationsAgentCard({
           <div className="absolute inset-0 flex items-center justify-center">
             <AgentIdentityAvatar
               name={displayName}
-              runtime="hermes"
+              runtime={agent.runtime || 'hermes'}
               providerSiblingCount={providerSiblingCount}
               size={40}
             />
@@ -479,7 +480,10 @@ export function OperationsAgentCard({
         </div>
 
         <p className="w-full truncate text-[11px] text-[var(--theme-muted)]">
-          {agent.meta.description || agent.description || 'No description'}
+          {agentRuntimeLabel(agent.runtime || 'hermes')}
+          {agent.meta.description || agent.description
+            ? ` · ${agent.meta.description || agent.description}`
+            : ''}
         </p>
       </button>
 

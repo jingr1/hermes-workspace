@@ -22,6 +22,7 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { Button } from '@/components/ui/button'
 import type { GatewayModelCatalogEntry } from '@/lib/gateway-api'
 import { formatRelativeTime } from '@/screens/dashboard/lib/formatters'
+import { agentRuntimeLabel } from '@/lib/managed-agent-runtime/agent-targets'
 import { cn } from '@/lib/utils'
 import type {
   OperationsAgent,
@@ -222,6 +223,7 @@ function IdentityTab({
   emoji,
   description,
   systemPrompt,
+  runtime,
   isActiveProfile,
   onName,
   onEmoji,
@@ -237,6 +239,7 @@ function IdentityTab({
   emoji: string
   description: string
   systemPrompt: string
+  runtime: string
   isActiveProfile: boolean
   onName: (v: string) => void
   onEmoji: (v: string) => void
@@ -249,6 +252,7 @@ function IdentityTab({
 }) {
   const [renameOpen, setRenameOpen] = useState(false)
   const [renameValue, setRenameValue] = useState(agentId)
+  const isHermes = runtime === 'hermes'
 
   useEffect(() => {
     setRenameValue(agentId)
@@ -258,33 +262,40 @@ function IdentityTab({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        {isActiveProfile ? (
-          <span className="inline-flex items-center rounded-full border border-emerald-300/50 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
-            Active profile
-          </span>
-        ) : (
+        <span className="inline-flex items-center rounded-full border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--theme-muted)]">
+          {agentRuntimeLabel(runtime)}
+        </span>
+        {isHermes ? (
+          isActiveProfile ? (
+            <span className="inline-flex items-center rounded-full border border-emerald-300/50 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+              Active profile
+            </span>
+          ) : (
+            <Button
+              type="button"
+              variant="secondary"
+              className="border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
+              onClick={onActivate}
+              disabled={isActivating || agentId === 'default'}
+            >
+              {isActivating ? 'Activating…' : 'Activate profile'}
+            </Button>
+          )
+        ) : null}
+        {isHermes ? (
           <Button
             type="button"
             variant="secondary"
             className="border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
-            onClick={onActivate}
-            disabled={isActivating || agentId === 'default'}
+            onClick={() => setRenameOpen((v) => !v)}
+            disabled={isRenaming || agentId === 'default'}
           >
-            {isActivating ? 'Activating…' : 'Activate profile'}
+            Rename profile
           </Button>
-        )}
-        <Button
-          type="button"
-          variant="secondary"
-          className="border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
-          onClick={() => setRenameOpen((v) => !v)}
-          disabled={isRenaming || agentId === 'default'}
-        >
-          Rename profile
-        </Button>
+        ) : null}
       </div>
 
-      {renameOpen ? (
+      {isHermes && renameOpen ? (
         <div className="flex flex-col gap-2 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] p-3 sm:flex-row sm:items-center">
           <input
             value={renameValue}
@@ -1342,6 +1353,7 @@ export function OperationsAgentDetail({
               emoji={emoji}
               description={description}
               systemPrompt={systemPrompt}
+              runtime={agent.runtime || 'hermes'}
               isActiveProfile={agent.isActiveProfile}
               onName={setName}
               onEmoji={setEmoji}

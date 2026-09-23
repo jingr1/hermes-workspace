@@ -17,6 +17,10 @@
 
 禁止只为 Hermes profile 列表实现 UI/API 后把 managed 留空。平台库 + `agent_*` 绑定表的 `agent_id` 一律用 registry id（与 Skills 相同）。
 
+**`default` 也是一等 agent：** 只是 Hermes home 路径为 `~/.hermes`（不是 `profiles/default`）。`dispatchable: false` 仅表示 LangGraph / Swarm 不分发到它；**Agents / Skills / MCP 绑定与物化必须支持 `default`**，不得因「非 worker」在 UI/API 里过滤掉。
+
+**Agent 列表读路径：** UI 统一用 `GET /api/agents`（`agents.yaml` + status）。单 agent 能力用 `GET /api/agents/:id/capabilities`（**Hermes + managed**）：Hermes 读 profile FS；managed 读平台绑定 + runtime settings（如 Claude/Codex model）。`GET /api/profiles/capabilities` 仍仅 Hermes profile。声明增删改用 `/api/agent-registry`。
+
 当前版本：`2.4.0`。本地开发：`pnpm dev` 默认 `PORT=3001`（部分文档/Windows 示例仍写 `3000`，以实际 `PORT` 为准）。
 
 ---

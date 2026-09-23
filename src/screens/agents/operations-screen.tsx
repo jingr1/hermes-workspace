@@ -318,9 +318,10 @@ export function OperationsScreen() {
       <OperationsNewAgentModal
         open={newAgentOpen}
         defaultModel={defaultModel}
-        cloneOptions={agents
-          .filter((agent) => agent.id !== 'default')
-          .map((agent) => ({ id: agent.id, name: agent.name }))}
+        cloneOptions={agents.map((agent) => ({
+          id: agent.id,
+          name: agent.name,
+        }))}
         onClose={() => setNewAgentOpen(false)}
         onCreate={createAgent}
         isSaving={isCreatingAgent}

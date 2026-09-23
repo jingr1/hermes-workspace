@@ -73,7 +73,7 @@ export function McpScreen() {
         throw new Error(payload.error || 'Failed to load agents')
       }
       return (payload.agents ?? [])
-        .filter((a) => a.agentId && a.agentId !== 'default')
+        .filter((a) => Boolean(a.agentId))
         .map((a) => ({
           agentId: a.agentId,
           name: a.name || a.agentId,
