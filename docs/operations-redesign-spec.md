@@ -230,7 +230,7 @@ export type OperationsAgent = GatewayConfigAgent & {
 
 #### Bug 2：Model & Provider tab 下拉列表为空
 
-**根因**：`operations-agent-detail.tsx` 直接调用 `import { fetchModels } from '@/lib/gateway-api'`，该函数内部使用 `makeEndpoint('/api/models')` 构造 URL，`makeEndpoint` 把路径拼在 `BASE_URL`（即 `CLAUDE_API_URL`，gateway 地址 `:8642`）上，而不是 workspace 服务器 `:3000`。Operations 所有其他 API（`/api/profiles/*`、`/api/swarm-runtime` 等）都用相对路径走 `:3000`，这里是例外。若 gateway 未响应或未配置，`models` 为空数组，下拉没有任何选项，但组件不报错，表现为"空白下拉"。
+**根因**：`operations-agent-detail.tsx` 直接调用 `import { fetchModels } from '@/lib/gateway-api'`，该函数内部使用 `makeEndpoint('/api/models')` 构造 URL，`makeEndpoint` 把路径拼在 `BASE_URL`（即 `CLAUDE_API_URL`，gateway 地址 `:8642`）上，而不是 workspace 服务器 `:6734`。Operations 所有其他 API（`/api/profiles/*`、`/api/swarm-runtime` 等）都用相对路径走 `:6734`，这里是例外。若 gateway 未响应或未配置，`models` 为空数组，下拉没有任何选项，但组件不报错，表现为"空白下拉"。
 
 **修复**：
 

@@ -1,10 +1,11 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { Conductor } from '@/screens/gateway/conductor'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
-function ConductorRoute() {
-  return <Conductor />
-}
-
+/**
+ * Conductor was removed. Goal launch lives on Missions
+ * (Create Mission → Goal → orchestrator + /api/swarm-dispatch).
+ */
 export const Route = createFileRoute('/conductor')({
-  component: ConductorRoute,
+  beforeLoad: () => {
+    throw redirect({ to: '/missions' })
+  },
 })

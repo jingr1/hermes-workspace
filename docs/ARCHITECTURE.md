@@ -24,7 +24,7 @@ Agorax 是 AI agent 的**公共广场 / 多智能体协作控制面**：把聊�
 
 | 端口 | 进程 | 说明 |
 | --- | --- | --- |
-| 3000 / **3001** | Agorax（`pnpm dev` / `vite dev`） | 主应用；dev 默认 3001（`strictPort`），部分文档仍写 3000 |
+| **6734** | Agorax（`pnpm dev` / `vite dev`） | 主应用；dev 默认 6734（`strictPort`） |
 | **8642** | Hermes Gateway | 规范实例 `hermes gateway run`；worker profile 的 chat/models/MCP/job 运行时 |
 | 8643+ | 按 profile 分配 | `src/server/gateway-ports.ts` 按 profile 名顺序分配并持久化 |
 | 9119 | Hermes Dashboard | **可选**外链，仅分析，不做能力门控 |
@@ -39,7 +39,7 @@ Agorax 是 AI agent 的**公共广场 / 多智能体协作控制面**：把聊�
 │  Browser / Electron                                      │
 │    │  REST + SSE                                         │
 │    ▼                                                     │
-│  Agorax (:3001, Node 22, TanStack Start 全栈)             │
+│  Agorax (:6734, Node 22, TanStack Start 全栈)             │
 │    │  spawn / httpx 回调                                  │
 │    ├──► LangGraph Orchestrator (Python venv, LangGraph)   │
 │    │       checkpoint: ~/.hermes/langgraph-checkpoints.db │
@@ -87,7 +87,7 @@ Agorax 是 AI agent 的**公共广场 / 多智能体协作控制面**：把聊�
 
 ### 4.1 运行时入口
 
-- **Dev**：`pnpm dev` = `PORT=3001 vite dev`。`vite.config.ts`（承载大量运维逻辑）插件链：`vite-tsconfig-paths` → `@tailwindcss/vite` → `tanstackStart()` → `@vitejs/plugin-react`，外加 4 个自写插件（dev no-cache、workspace-daemon 生命周期、客户端 env 替换、构建后拷贝 `pty-helper.py`）。
+- **Dev**：`pnpm dev` = `PORT=6734 vite dev`。`vite.config.ts`（承载大量运维逻辑）插件链：`vite-tsconfig-paths` → `@tailwindcss/vite` → `tanstackStart()` → `@vitejs/plugin-react`，外加 4 个自写插件（dev no-cache、workspace-daemon 生命周期、客户端 env 替换、构建后拷贝 `pty-helper.py`）。
 - **生产**：`pnpm build`（Vite 产出 `dist/client` 静态资源 + `dist/server/server.js` Web 标准 handler）→ `node server-entry.js`（仓库根，原生 `node:http`）：强制加载 `.env`、静态资源优先、其余转 SSR handler、注入 CSP 等安全头；HOST 非回环时强制 `HERMES_PASSWORD`；同时监听 `127.0.0.1` 与 `::1`。
 - **Electron**：`pnpm electron:bundle-server` 用 esbuild 把 `dist/server/server.js` 打成单文件 CJS（`electron/server-bundle.cjs`），桌面壳内嵌运行。
 
@@ -293,11 +293,11 @@ legacy `POST /api/agents/:id/chat`（SSE spawn 路径）仍保留供兼容，前
 | Docker | `Dockerfile` + `docker-compose.yml` + `docker/entrypoint.sh` | 多阶段（node:22-slim 构建 → 运行时含 python3/tini/gosu，非 root `workspace` 用户 UID 10010）；entrypoint 按 `HERMES_UID/GID` 对齐挂载属主后 gosu 降权；compose service `agorax`，预构建镜像 `ghcr.io/outsourc-e/agorax`（过渡期与仓库名镜像双推）+ `nousresearch/hermes-agent`；数据卷 `hermes-workspace-files` 保留旧名（数据连续性） |
 | Nix | `flake.nix` `nix/package.nix` `nix/module.nix` | NixOS module（systemd，依赖独立 hermes-agent gateway） |
 | Electron | `electron/main.cjs` `preload.cjs` `prod-server.cjs` `server-bundle.cjs` | 单实例锁；内嵌后端 :3847 + gateway :8642 健康检查；electron-updater 自动更新状态机经 IPC 广播；Hermes 缺失时一键安装（`window.hermesDesktop`） |
-| 开发容器 | `.devcontainer/` | 基于仓库 docker-compose（service `agorax`），转发 3000/8642 |
+| 开发容器 | `.devcontainer/` | 基于仓库 docker-compose（service `agorax`），转发 6734/8642 |
 | 用户级服务 | `scripts/install-dashboard-service.sh` `macos/*.plist.template` | macOS launchd / Linux systemd --user 跑 `server-entry.js` |
 | CI | `.github/workflows/` | `ci.yml`（build+lint，Node 22/pnpm 10）；`docker-publish.yml`（GHCR 双名推送，tag `v*` 发版本）；`security.yml`（secrets 扫描） |
 
-**端口/环境注意**：Windows 需 Gateway（:8642）+ Agorax（常 :3000，本仓库 Linux dev 默认 :3001）双服务，两套/三套 `.env`（Gateway 读 `%LOCALAPPDATA%\hermes\.env`，CLI 读 `~/.hermes\.env`，Agorax 读仓库 `.env`）；Windows 需自带 sqlite3 CLI。
+**端口/环境注意**：Windows 需 Gateway（:8642）+ Agorax（:6734）双服务，两套/三套 `.env`（Gateway 读 `%LOCALAPPDATA%\hermes\.env`，CLI 读 `~/.hermes\.env`，Agorax 读仓库 `.env`）；Windows 需自带 sqlite3 CLI。
 
 ---
 

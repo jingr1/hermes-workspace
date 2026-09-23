@@ -89,7 +89,7 @@
             echo ""
             echo "  Quick start:"
             echo "     pnpm install"
-            echo "     pnpm dev          # Vite dev server on :3000"
+            echo "     pnpm dev          # Vite dev server on :6734"
             echo "     pnpm build        # Production build → dist/"
             echo "     node server-entry.js  # Serve production build"
             echo ""

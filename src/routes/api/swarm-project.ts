@@ -21,11 +21,6 @@ type ProjectResponse = {
   error?: string
 }
 
-const PORT_CANDIDATES = [
-  3000, 3001, 3002, 3003, 3004, 3005, 3006, 3007, 5173, 5174, 5175, 5176, 5177,
-  8000, 8080, 8888, 4173,
-]
-
 function isValidWorkerId(value: string): boolean {
   return /^[a-z0-9][a-z0-9_-]{0,63}$/i.test(value)
 }

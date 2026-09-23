@@ -3,10 +3,10 @@
  *
  * Polls `/api/connection-status` for the gateway capability map and returns
  * a friendly state for any single feature flag. Use to gate UI surfaces
- * (Conductor, Operations, MCP, etc.) so they show a graceful placeholder
+ * (Missions, Operations, MCP, etc.) so they show a graceful placeholder
  * when the upstream agent build doesn't expose the required endpoints.
  *
- * Refs #262 (Conductor not available on vanilla agent), #270.
+ * Refs #270.
  */
 import { useQuery } from '@tanstack/react-query'
 

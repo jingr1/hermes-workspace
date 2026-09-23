@@ -195,7 +195,6 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
     if (pathname.startsWith('/terminal')) return 'Terminal'
     if (pathname.startsWith('/files')) return 'Files'
     if (pathname.startsWith('/jobs')) return 'Jobs'
-    if (pathname.startsWith('/conductor')) return 'Conductor'
     if (
       pathname.startsWith('/agents') ||
       pathname.startsWith('/operations')

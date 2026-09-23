@@ -150,9 +150,9 @@ Hub / bundled 技能（`gstack-for-hermes`、`llm-wiki`、`obsidian` 等）不�
 同步后若 worker tmux session 已在运行，建议重启 session 使新 toolsets / SOUL 生效：
 
 ```bash
-curl -s -X POST http://localhost:3000/api/swarm-tmux-stop \
+curl -s -X POST http://localhost:6734/api/swarm-tmux-stop \
   -H 'Content-Type: application/json' -d '{"workerId":"researcher"}'
-curl -s -X POST http://localhost:3000/api/swarm-tmux-start \
+curl -s -X POST http://localhost:6734/api/swarm-tmux-start \
   -H 'Content-Type: application/json' -d '{"workerId":"researcher"}'
 ```
 
@@ -160,19 +160,19 @@ curl -s -X POST http://localhost:3000/api/swarm-tmux-start \
 
 ## 重启 Workspace
 
-Workspace 必须运行在 `http://localhost:3000`，LangGraph orchestrator 通过它访问 roster、tmux、dispatch、mission 等 API。
+Workspace 必须运行在 `http://localhost:6734`，LangGraph orchestrator 通过它访问 roster、tmux、dispatch、mission 等 API。
 
 ### 1. 找到当前进程
 
 ```bash
-lsof -i :3000
+lsof -i :6734
 ```
 
 典型输出：
 
 ```text
 COMMAND     PID       USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
-node    1990100 ramon.jing   37u  IPv4 ...    0t0      TCP *:3000 (LISTEN)
+node    1990100 ramon.jing   37u  IPv4 ...    0t0      TCP *:6734 (LISTEN)
 ```
 
 ### 2. 停止并重启
@@ -191,7 +191,7 @@ TMUX_BIN=/usr/bin/tmux pnpm dev
 ```bash
 kill 1990100          # 把 PID 换成 lsof 看到的
 # 确认端口释放
-lsof -i :3000
+lsof -i :6734
 
 # 重新启动
 cd ~/hermes-workspace
@@ -201,8 +201,8 @@ TMUX_BIN=/usr/bin/tmux pnpm dev
 ### 3. 验证 Workspace 已恢复
 
 ```bash
-curl -s http://localhost:3000/api/swarm-roster | python3 -m json.tool
-curl -s -X POST http://localhost:3000/api/swarm-tmux-start \
+curl -s http://localhost:6734/api/swarm-roster | python3 -m json.tool
+curl -s -X POST http://localhost:6734/api/swarm-tmux-start \
   -H 'Content-Type: application/json' \
   -d '{"workerId":"researcher"}' | python3 -m json.tool
 ```
@@ -335,7 +335,7 @@ hermes_langgraph_orchestrator/.venv/bin/python -m hermes_langgraph_orchestrator 
 **HTTP API**（`workflowId` = YAML 路径）：
 
 ```bash
-curl -s -X POST http://127.0.0.1:3000/api/swarm-langgraph/run \
+curl -s -X POST http://127.0.0.1:6734/api/swarm-langgraph/run \
   -H 'Content-Type: application/json' \
   -d '{
     "missionGoal": "调研 JAX 在车辆悬架建模中的实践",
@@ -367,7 +367,7 @@ curl -s -X POST http://127.0.0.1:3000/api/swarm-langgraph/run \
 ```bash
 tmux ls
 ls -t logs/execute_*.json | head -1
-curl -s "http://127.0.0.1:3000/api/orchestrator-state?missionId=<id>" | python3 -m json.tool
+curl -s "http://127.0.0.1:6734/api/orchestrator-state?missionId=<id>" | python3 -m json.tool
 ```
 
 日志里应出现 `[init_mission] workflow=<your_workflow_name>`。
@@ -464,7 +464,7 @@ hermes_langgraph_orchestrator/.venv/bin/python -m hermes_langgraph_orchestrator 
 
 ```bash
 # 继续（可带人工决策）
-curl -s -X POST http://127.0.0.1:3000/api/swarm-langgraph/resume \
+curl -s -X POST http://127.0.0.1:6734/api/swarm-langgraph/resume \
   -H 'Content-Type: application/json' \
   -d '{
     "missionId": "radw-real-001",
@@ -550,7 +550,7 @@ tmux kill-session -t swarm-researcher
 或者通过 Workspace API：
 
 ```bash
-curl -s -X POST http://localhost:3000/api/swarm-tmux-stop \
+curl -s -X POST http://localhost:6734/api/swarm-tmux-stop \
   -H 'Content-Type: application/json' \
   -d '{"workerId":"researcher"}' | python3 -m json.tool
 ```
@@ -577,7 +577,7 @@ sqlite3 ~/.hermes/langgraph-checkpoints.db "SELECT thread_id, checkpoint_id FROM
 ### Mission 状态
 
 ```bash
-curl -s "http://localhost:3000/api/swarm-missions?id=radw-real-001" | python3 -m json.tool
+curl -s "http://localhost:6734/api/swarm-missions?id=radw-real-001" | python3 -m json.tool
 ```
 
 ---
@@ -605,19 +605,19 @@ curl -s "http://localhost:3000/api/swarm-missions?id=radw-real-001" | python3 -m
 
 ### 0. `Failed to fetch roster` / `Workspace timed out` / preflight failed
 
-Phase 2 真实执行依赖 **Agorax**（`:3000`）。常见根因：
+Phase 2 真实执行依赖 **Agorax**（`:6734`）。常见根因：
 
 1. **`pnpm dev` 刚启动**：Vite 首次编译 SSR API 路由可能 **>5s**，旧版 preflight 会误报 timeout。现已自动重试最多 6 次（读超时 12s/次）。
 2. **Workspace 未运行**：先 `pnpm dev`，等 Vite ready 后再跑 LangGraph。
 
 ```bash
 cd agorax && pnpm dev
-curl -s http://127.0.0.1:3000/api/swarm-roster | head
+curl -s http://127.0.0.1:6734/api/swarm-roster | head
 ```
 
 CLI 启动时会自动加载 `hermes-workspace/.env`（不覆盖已有环境变量）。若启用了 `HERMES_PASSWORD`，设置 `AGORAX_TOKEN`。
 
-CLI 会在 `--execute` 前做 preflight；也可手动指定 API 地址：`--swarm-url http://127.0.0.1:3000/api`。
+CLI 会在 `--execute` 前做 preflight；也可手动指定 API 地址：`--swarm-url http://127.0.0.1:6734/api`。
 
 ### 1. `ensure_sessions researcher: error (Server error '500' ... ENOENT)`
 

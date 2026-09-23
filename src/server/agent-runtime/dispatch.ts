@@ -69,7 +69,7 @@ export function getMcpEndpoint(): string {
     }
     return override
   }
-  const port = process.env.PORT ?? process.env.VITE_PORT ?? '3000'
+  const port = process.env.PORT ?? process.env.VITE_PORT ?? '6734'
   return `http://127.0.0.1:${port}/api/mcp-rpc`
 }
 

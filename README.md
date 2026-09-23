@@ -11,7 +11,7 @@
 
 > Not a chat wrapper. A complete workspace — orchestrate agents, browse memory, manage skills, and control everything from one interface.
 
-> **v2 — zero-fork.** Clone, don't fork. Runs on vanilla [`NousResearch/hermes-agent`](https://github.com/NousResearch/hermes-agent) installed via Nous's own installer. Chat, sessions, memory, skills, jobs, MCP, terminal, dashboard, Agent View, and Operations are all in vanilla parity. **Conductor** uses the dashboard mission API when available and falls back to Workspace-native Swarm dispatch (`mode: native-swarm`) when the dashboard endpoint is absent, preserving zero-fork behavior ([#262](https://github.com/jingr1/agorax/issues/262)).
+> **v2 — zero-fork.** Clone, don't fork. Runs on vanilla [`NousResearch/hermes-agent`](https://github.com/NousResearch/hermes-agent) installed via Nous's own installer. Chat, sessions, memory, skills, jobs, MCP, terminal, dashboard, Agent View, and Operations are all in vanilla parity. **Missions** own goal launch: Create Mission → Goal assigns `orchestrator`, which re-dispatches specialists via `/api/swarm-dispatch` on the same `missionId`.
 
 ![Agorax](./docs/screenshots/splash.png)
 
@@ -54,22 +54,22 @@ Details: [hermes_langgraph_orchestrator/README.md](./hermes_langgraph_orchestrat
 - 🔌 **MCP** — Full /mcp page (catalog + marketplace + sources), or fallback to local config CRUD
 - 📁 **Files + Terminal** — Full workspace file browser with Monaco; cross-platform PTY terminal
 - 🎮 **Operations** — Multi-agent dashboard with profile presets (Sage/Trader/Builder/Scribe/Ops) and 'Needs setup' detection
-- 📡 **Conductor** — Mission dispatch + decomposition with dashboard-backed missions when available and Workspace-native Swarm fallback otherwise
+- 🎯 **Missions** — Goal / pipeline / assignee launch; Goal mode routes through orchestrator + `/api/swarm-dispatch`
 - 👥 **Agent View** — Live agent panel in chat with avatar, queue, history, usage meter
 - 🐝 **Swarm Mode** — Persistent tmux-backed Hermes Agent workers with role-based dispatch
 - 🗄️ **Dashboard** — Aggregated overview: sessions, model mix, cost ledger, attention card, ops strip
 - 🎨 **Themes** — Hermes, Nous, Bronze, Slate, Mono (light + dark)
 - 🔒 **Security** — Auth middleware on every route, CSP, path-traversal guard, fail-closed remote bind
 - 📱 **PWA + Tailscale** — Install as a native-feeling app; access from any device on your tailnet
-- ⚙️ **Capability gates** — Features that need upstream endpoints (Conductor) show a clean placeholder instead of failing mid-action
+- ⚙️ **Capability gates** — Features that need upstream endpoints show a clean placeholder instead of failing mid-action
 
 ---
 
 ## 📸 Screenshots
 
-|                 Chat                 |                   Conductor                    |
+|                 Chat                 |                   Missions                    |
 | :----------------------------------: | :--------------------------------------------: |
-| ![Chat](./docs/screenshots/chat.png) | ![Conductor](./docs/screenshots/conductor.png) |
+| ![Chat](./docs/screenshots/chat.png) | ![Missions](./docs/screenshots/tasks.png) |
 
 |                   Dashboard                    |                  Memory                  |
 | :--------------------------------------------: | :--------------------------------------: |
@@ -108,7 +108,7 @@ hermes gateway run                  # terminal 1
 cd ~/hermes-workspace && pnpm dev   # terminal 2
 ```
 
-Open http://localhost:3000. That's it.
+Open http://localhost:6734. That's it.
 
 ---
 
@@ -131,7 +131,7 @@ echo 'HERMES_API_URL=http://127.0.0.1:8642' >> .env
 # If your gateway was started with API_SERVER_KEY (auth enabled), set the same value:
 # echo 'HERMES_API_TOKEN=***' >> .env
 
-pnpm dev                            # http://localhost:3000 (override with PORT=4000 pnpm dev)
+pnpm dev                            # http://localhost:6734 (override with PORT=4000 pnpm dev)
 ```
 
 Requirements on the agent side:
@@ -145,7 +145,7 @@ Verify both services before opening the workspace:
 
 - `curl http://127.0.0.1:8642/health` should return ok.
 - _(Optional)_ `curl http://127.0.0.1:9119/api/status` should return dashboard metadata (only needed if you run the dashboard for analytics).
-- `curl http://127.0.0.1:3000/api/sessions` (after the workspace boots) should return a sessions payload or an empty list.
+- `curl http://127.0.0.1:6734/api/sessions` (after the workspace boots) should return a sessions payload or an empty list.
 
 If `/api/sessions` is already returning data, **do not start another gateway just because the UI still says Offline** — refresh or reprobe the Workspace UI first.
 
@@ -218,10 +218,10 @@ cd agorax
 pnpm install
 cp .env.example .env
 printf '\nHERMES_API_URL=http://127.0.0.1:8642\n' >> .env
-pnpm dev                   # Starts on http://localhost:3000
+pnpm dev                   # Starts on http://localhost:6734
 ```
 
-> **Verify:** Open `http://localhost:3000` and complete the onboarding flow. First connect the backend, then verify chat works. If your gateway exposes Hermes Agent APIs, advanced features appear automatically.
+> **Verify:** Open `http://localhost:6734` and complete the onboarding flow. First connect the backend, then verify chat works. If your gateway exposes Hermes Agent APIs, advanced features appear automatically.
 
 #### Run without an open terminal
 
@@ -344,7 +344,7 @@ Workspace is the UI. **Hermes Agent** is the brain. They talk over two HTTP serv
 ```
 ┌───────────────┐         :8642 gateway          ┌────────────────┐
 │   Workspace    │ ─────────────────────▶ │  Hermes Agent  │
-│   :3000 (UI)   │ ◀───────────────────── │  CLI / brain   │
+│   :6734 (UI)   │ ◀───────────────────── │  CLI / brain   │
 └───────────────┘    (:9119 dashboard — optional)  └────────────────┘
 ```
 
@@ -355,7 +355,7 @@ hermes gateway run     # terminal 1 · :8642 · chat, models, streaming, jobs, s
 hermes dashboard       # (optional) terminal 2 · :9119 · analytics dashboard
 cd ~/hermes-workspace
 pnpm dev:managed-agent # terminal 3 · :8788 · Claude Code, Codex, Cursor, OpenCode, Kimi
-pnpm dev               # terminal 4 · :3000 · the UI
+pnpm dev               # terminal 4 · :6734 · the UI
 ```
 
 Managed Agent Chat requires `AGORAX_MANAGED_AGENT_URL=http://127.0.0.1:8788` and
@@ -370,19 +370,19 @@ If you use Agorax from Windows with the agent running in WSL, use the helper scr
 
 ```powershell
 # from the repo root
-.\scripts\start-hermes-workspace.ps1
+.\scripts\start-agorax.ps1
 ```
 
 To force a clean relaunch of the tmux session:
 
 ```powershell
-.\scripts\start-hermes-workspace.ps1 -Restart
+.\scripts\start-agorax.ps1 -Restart
 ```
 
 Optional parameters:
 
 - `-Distro <name>` to target a non-default WSL distro
-- `-WorkspacePath </path/in/wsl>` if your clone is not at `~/hermes-workspace`
+- `-WorkspacePath </path/in/wsl>` if your clone is not at `~/agorax`
 - `-SessionName <name>` to use a custom tmux session name
 
 ### Verify the pairing
@@ -480,7 +480,7 @@ If you've already started the workspace, change either URL from **Settings → C
 - **`Could not reach Hermes gateway on 8645, 8642, or 8643`** — gateway isn't running, or `HERMES_API_URL` points somewhere unreachable. Run `hermes gateway run` and re-check.
 - **`api_server_port_in_use` / Port 8642 already in use** — more than one profile has `API_SERVER_ENABLED=true` without unique `API_SERVER_PORT`s. Disable API server on unused profiles, or assign distinct ports / use multiplex. See [API server & multi-profile gateways](#api-server--multi-profile-gateways).
 - **Workspace shows "portable mode" / extended APIs missing** — the gateway is not serving control-plane APIs. Verify `hermes gateway run` is up-to-date. Optionally start `hermes dashboard` for analytics.
-- **Sessions probe says unavailable / UI claims Offline but pairing should be live** — verify `curl http://localhost:3000/api/sessions` before starting another gateway. If it returns sessions (or an empty array), the backend pairing is alive and the UI needs a refresh/reprobe.
+- **Sessions probe says unavailable / UI claims Offline but pairing should be live** — verify `curl http://localhost:6734/api/sessions` before starting another gateway. If it returns sessions (or an empty array), the backend pairing is alive and the UI needs a refresh/reprobe.
 - **Chat send fails on `gpt-5.4` / Codex** — Codex CLI auth is stale. Run `codex login`, then retry the chat without starting another gateway.
 - **`Unauthorized` on every API call** — gateway has `API_SERVER_KEY` set but workspace is missing `HERMES_API_TOKEN`. Match them.
 - **`Could not connect` from your phone over Tailscale** — gateway is bound to loopback. Set `API_SERVER_HOST=0.0.0.0` in `~/.hermes/.env` and restart it.
@@ -529,7 +529,7 @@ docker compose up
 This pulls two pre-built images and starts them:
 
 - **hermes-agent** → `nousresearch/hermes-agent:latest` on port **8642**
-- **hermes-workspace** → `ghcr.io/outsourc-e/hermes-workspace:latest` on port **3000**
+- **hermes-workspace** → `ghcr.io/outsourc-e/hermes-workspace:latest` on port **6734**
 
 No local build. First run takes a minute to pull; subsequent starts are instant.
 Agent state (config, sessions, skills, memory, credentials) persists in the
@@ -537,7 +537,7 @@ legacy-named `claude-data` Docker volume, so containers can be recreated without
 
 ### Step 3: Access the Workspace
 
-Open `http://localhost:3000` and complete the onboarding.
+Open `http://localhost:6734` and complete the onboarding.
 
 > **Verify:** Check the Docker logs for `[gateway] Connected to Hermes Agent` — this confirms the workspace successfully connected to the agent.
 
@@ -554,7 +554,7 @@ services:
       - '8642:8642'
   hermes-workspace:
     ports:
-      - '3000:3000'
+      - '6734:6734'
 ```
 
 **2. Add these env vars to `.env`:**
@@ -630,7 +630,7 @@ Minimal Coolify / Easypanel config:
 ```yaml
 service: hermes-workspace
 image: ghcr.io/outsourc-e/hermes-workspace:latest
-port: 3000
+port: 6734
 env:
   HERMES_API_URL: http://hermes-agent:8642 # point at your gateway
   HERMES_API_TOKEN: ${API_SERVER_KEY} # if gateway auth is enabled
@@ -648,7 +648,7 @@ Agorax is a **Progressive Web App (PWA)** — install it for the full native app
 
 ### 🖥️ Desktop (macOS / Windows / Linux)
 
-1. Open Agorax in **Chrome** or **Edge** at `http://localhost:3000`
+1. Open Agorax in **Chrome** or **Edge** at `http://localhost:6734`
 2. Click the **install icon** (⊕) in the address bar
 3. Click **Install** — Agorax opens as a standalone desktop app
 4. Pin to Dock / Taskbar for quick access
@@ -693,7 +693,7 @@ Access Agorax from anywhere on your devices — no port forwarding, no VPN compl
 4. **Open Agorax on your phone:**
 
    ```
-   http://100.x.x.x:3000
+   http://100.x.x.x:6734
    ```
 
 5. **Add to Home Screen** using the steps above for the full app experience
@@ -813,7 +813,7 @@ Verify: `curl http://localhost:8642/health` should return `{"status": "ok"}`.
 
 v2+ runs on vanilla `hermes-agent`. **No fork required.** The upstream ships every endpoint the workspace needs for chat, sessions, memory, skills, config, jobs, MCP, terminal, and Agent View.
 
-**Conductor note:** when the dashboard mission API is available, Workspace uses it directly. When that endpoint is absent, Workspace uses its native Swarm fallback and returns `mode: native-swarm`. The fallback dispatches through Workspace Swarm workers, keeps status available through `/api/conductor-spawn?missionId=...`, and cancels through `/api/conductor-stop`.
+**Mission goal launch:** Create Mission → Goal assigns `orchestrator`, which decomposes the goal and re-dispatches specialists with `POST /api/swarm-dispatch` using the same `missionId`. `/conductor` redirects to `/missions`.
 
 If you're pinned to an older `hermes-agent` version and missing core endpoints, the workspace will degrade gracefully to **portable mode** with basic chat — upgrade upstream to restore full features.
 
@@ -894,7 +894,7 @@ The Docker setup runs both automatically — no action needed if using `docker c
 
 | Feature                       | Status                                                                                                                                                                                   |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Conductor missions            | Workspace UI is shipped; uses dashboard mission API when available and Workspace-native Swarm fallback otherwise (see [#262](https://github.com/jingr1/agorax/issues/262)) |
+| Mission goal launch (orchestrator) | Shipped: Create Mission → Goal → assignee `orchestrator` + `/api/swarm-dispatch` (Conductor UI removed; `/conductor` redirects to `/missions`) |
 | Native Desktop App (Electron) | Spec'd; PWA install path works today                                                                                                                                                     |
 
 ### Coming 🔜
@@ -929,6 +929,21 @@ PRs are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 - Bug fixes → open a PR directly
 - New features → open an issue first to discuss
 - Security issues → see [SECURITY.md](SECURITY.md) for responsible disclosure
+
+---
+
+## 🙏 Acknowledgments
+
+Agorax stands on the shoulders of these projects:
+
+| Project | Repository |
+| ------- | ---------- |
+| [Tutti](https://github.com/tutti-os/tutti) | https://github.com/tutti-os/tutti |
+| [Hermes WebUI](https://github.com/nesquena/hermes-webui) | https://github.com/nesquena/hermes-webui |
+| [Multica](https://github.com/multica-ai/multica) | https://github.com/multica-ai/multica |
+| [Hermes Workspace](https://github.com/outsourc-e/hermes-workspace) | https://github.com/outsourc-e/hermes-workspace |
+
+Thank you to their authors and communities.
 
 ---
 

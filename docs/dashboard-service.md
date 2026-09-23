@@ -30,7 +30,7 @@ scripts/install-dashboard-service.sh
 Defaults:
 
 - `HOST=127.0.0.1`
-- `PORT=3000`
+- `PORT=6734`
 - `NODE_ENV=production`
 - command: `pnpm start`
 

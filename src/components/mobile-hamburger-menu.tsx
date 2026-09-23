@@ -67,13 +67,6 @@ export const MOBILE_HAMBURGER_NAV_ITEMS = [
       p.startsWith('/missions') || p.startsWith('/mission-control'),
   },
   {
-    id: 'conductor',
-    label: 'Conductor',
-    icon: Rocket01Icon,
-    to: '/conductor',
-    match: (p: string) => p.startsWith('/conductor'),
-  },
-  {
     id: 'agents',
     label: 'Agents',
     icon: UserMultipleIcon,

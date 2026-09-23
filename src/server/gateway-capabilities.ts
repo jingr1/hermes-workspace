@@ -233,9 +233,8 @@ export type EnhancedCapabilities = {
    */
   mcpFallback: boolean
   /**
-   * True when the dashboard exposes `/api/conductor/missions`. The Conductor
-   * UI requires this; if false, the screen renders an 'upstream not ready'
-   * placeholder instead of failing mid-action. See #262.
+   * @deprecated Always false. Conductor UI was removed; goal launch is
+   * Missions → orchestrator. Kept for connection-status payload stability.
    */
   conductor: boolean
   /**
@@ -886,35 +885,6 @@ async function probeDashboard(): Promise<{ available: boolean; url: string }> {
 }
 
 /**
- * Lightweight probe for the Conductor mission endpoint. Some dashboard builds
- * ship without it; those deployments should show a graceful placeholder
- * instead of letting the Conductor UI 500. See #262.
- */
-async function probeConductor(dashboardAvailable: boolean): Promise<boolean> {
-  if (!dashboardAvailable) return false
-  try {
-    const res = await dashboardFetch('/api/conductor/missions', {
-      method: 'GET',
-      signal: AbortSignal.timeout(probeTimeoutMs()),
-    })
-    if (res.status === 404 || res.status === 405) return false
-    // 401 means the path exists but the auth token isn't accepted yet —
-    // treat as available so token-gated setups don't hide the feature.
-    if (res.status === 401) return true
-
-    const contentType = res.headers.get('content-type') ?? ''
-    // Vite/TanStack's SPA fallback returns HTTP 200 + text/html for missing
-    // API routes. Do not mark Conductor available unless the dashboard gives
-    // us a JSON API response; otherwise /api/conductor-spawn tries to POST to
-    // the dashboard and the user sees "Method Not Allowed".
-    if (!contentType.toLowerCase().includes('application/json')) return false
-    return res.ok
-  } catch {
-    return false
-  }
-}
-
-/**
  * Lightweight probe for the upstream Hermes kanban plugin. When the dashboard
  * exposes `/api/plugins/kanban/board` we assume the kanban plugin is loaded
  * and the workspace can sync its /swarm kanban surface with the dashboard's
@@ -1112,18 +1082,16 @@ async function fillEnhancedCapabilities(input: {
 }): Promise<void> {
   const localControlPlane = hasLocalControlPlane()
   // Zero-fork: control plane is local; do not block startup on :9119 token
-  // scraping or dashboard-only endpoints (Conductor/Kanban/MCP via dashboard).
+  // scraping or dashboard-only endpoints (Kanban/MCP via dashboard).
   const probeDashboardBacked = !localControlPlane && input.dashboardAvailable
 
-  const [mcp, conductor, kanban] = await Promise.all([
+  const [mcp, kanban] = await Promise.all([
     probeMcp(probeDashboardBacked),
-    probeDashboardBacked
-      ? probeConductor(input.dashboardAvailable)
-      : Promise.resolve(false),
     probeDashboardBacked
       ? probeKanban(input.dashboardAvailable)
       : Promise.resolve(false),
   ])
+  const conductor = false
 
   // Local Agorax control plane: profile config.yaml is always writable for
   // mcp_servers — do not require dashboard /api/config or native gateway MCP.

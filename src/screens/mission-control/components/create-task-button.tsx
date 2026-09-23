@@ -13,7 +13,7 @@ import { SpecField } from './spec-field'
 const PIPELINES_QUERY_KEY = ['mission-control', 'pipelines'] as const
 const ROOMS_QUERY_KEY = ['mission-control', 'rooms'] as const
 
-type ExecutionMode = 'pipeline' | 'assignee'
+type ExecutionMode = 'goal' | 'pipeline' | 'assignee'
 type AssigneeKind = 'agent' | 'chat_group'
 
 async function fetchPipelines(): Promise<
@@ -58,6 +58,12 @@ async function createMission(payload: Record<string, unknown>): Promise<{
   return data
 }
 
+function titleFromGoal(goal: string): string {
+  const line = goal.trim().split(/\r?\n/).find((l) => l.trim()) ?? ''
+  const clipped = line.trim().slice(0, 120)
+  return clipped || 'Untitled mission'
+}
+
 type CreateMissionButtonProps = {
   variant?: 'header' | 'inline'
 }
@@ -69,7 +75,7 @@ export function CreateMissionButton({
   const [title, setTitle] = useState('')
   const [spec, setSpec] = useState('')
   const [criteria, setCriteria] = useState('')
-  const [mode, setMode] = useState<ExecutionMode>('pipeline')
+  const [mode, setMode] = useState<ExecutionMode>('goal')
   const [selectedPipelineId, setSelectedPipelineId] = useState('')
   const [assigneeKind, setAssigneeKind] = useState<AssigneeKind>('agent')
   const [assigneeId, setAssigneeId] = useState('')
@@ -81,7 +87,7 @@ export function CreateMissionButton({
   const pipelinesQuery = useQuery({
     queryKey: PIPELINES_QUERY_KEY,
     queryFn: fetchPipelines,
-    enabled: open,
+    enabled: open && mode === 'pipeline',
   })
   const projectsQuery = useQuery({
     queryKey: ['mission-control', 'projects'],
@@ -111,6 +117,19 @@ export function CreateMissionButton({
         .map((l) => l.trim())
         .filter(Boolean)
       const project = projectId.trim() || undefined
+      if (mode === 'goal') {
+        const goal = spec.trim()
+        if (!goal) throw new Error('Enter a goal')
+        return createMission({
+          title: titleFromGoal(goal),
+          spec: goal,
+          executionMode: 'assignee',
+          assignee: { type: 'agent', id: 'orchestrator' },
+          acceptanceCriteria,
+          autoDispatch: true,
+          projectId: project,
+        })
+      }
       if (mode === 'pipeline') {
         if (!selectedPipelineId) throw new Error('Select a pipeline')
         return createMission({
@@ -141,7 +160,12 @@ export function CreateMissionButton({
       void queryClient.invalidateQueries({
         queryKey: ['mission-control', 'missions'],
       })
-      toast('Mission created', { type: 'success' })
+      toast(
+        mode === 'goal'
+          ? 'Mission launched via orchestrator'
+          : 'Mission created',
+        { type: 'success' },
+      )
       setOpen(false)
       setTitle('')
       setSpec('')
@@ -159,6 +183,10 @@ export function CreateMissionButton({
       toast(error.message || 'Failed to create mission', { type: 'error' })
     },
   })
+
+  const submitDisabled =
+    mutation.isPending ||
+    (mode === 'goal' ? !spec.trim() : !title.trim())
 
   return (
     <>
@@ -179,57 +207,82 @@ export function CreateMissionButton({
           <div className="w-full max-w-lg rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 shadow-xl">
             <h2 className="text-sm font-semibold">Create Mission</h2>
             <p className="mt-1 text-[11px] text-[var(--theme-muted)]">
-              Pipeline auto-runs tasks. Group chat is optional later.
+              Goal launches orchestrator routing. Pipeline runs a fixed stage
+              graph. Assignee targets one agent or chat group.
             </p>
 
             <div className="mt-3 flex gap-1 rounded-lg border border-[var(--theme-border)] p-0.5">
-              {(['pipeline', 'assignee'] as const).map((m) => (
+              {(
+                [
+                  ['goal', 'Goal'],
+                  ['pipeline', 'Pipeline'],
+                  ['assignee', 'Assignee'],
+                ] as const
+              ).map(([m, label]) => (
                 <button
                   key={m}
                   type="button"
                   onClick={() => setMode(m)}
                   className={cn(
-                    'flex-1 rounded-md px-2 py-1.5 text-xs font-medium capitalize',
+                    'flex-1 rounded-md px-2 py-1.5 text-xs font-medium',
                     mode === m
                       ? 'bg-[var(--theme-accent)] text-white'
                       : 'text-[var(--theme-muted)] hover:bg-[var(--theme-hover)]',
                   )}
                 >
-                  {m}
+                  {label}
                 </button>
               ))}
             </div>
 
             <div className="mt-3 space-y-3">
-              <label className="block text-xs">
-                <span className="text-[var(--theme-muted)]">Title</span>
-                <input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1.5 text-sm"
-                />
-              </label>
-              <label className="block text-xs">
-                <span className="text-[var(--theme-muted)]">Spec</span>
-                <SpecField
-                  value={spec}
-                  onChange={setSpec}
-                  rows={4}
-                  className="mt-1"
-                  placeholder="Describe the mission. Attach workspace paths as needed."
-                />
-              </label>
-              <label className="block text-xs">
-                <span className="text-[var(--theme-muted)]">
-                  Acceptance criteria (one per line)
-                </span>
-                <textarea
-                  value={criteria}
-                  onChange={(e) => setCriteria(e.target.value)}
-                  rows={2}
-                  className="mt-1 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1.5 text-sm"
-                />
-              </label>
+              {mode === 'goal' ? (
+                <label className="block text-xs">
+                  <span className="text-[var(--theme-muted)]">Goal</span>
+                  <SpecField
+                    value={spec}
+                    onChange={setSpec}
+                    rows={5}
+                    className="mt-1"
+                    placeholder="Describe the outcome. Orchestrator decomposes and dispatches specialists."
+                  />
+                </label>
+              ) : (
+                <>
+                  <label className="block text-xs">
+                    <span className="text-[var(--theme-muted)]">Title</span>
+                    <input
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1.5 text-sm"
+                    />
+                  </label>
+                  <label className="block text-xs">
+                    <span className="text-[var(--theme-muted)]">Spec</span>
+                    <SpecField
+                      value={spec}
+                      onChange={setSpec}
+                      rows={4}
+                      className="mt-1"
+                      placeholder="Describe the mission. Attach workspace paths as needed."
+                    />
+                  </label>
+                </>
+              )}
+
+              {mode !== 'goal' ? (
+                <label className="block text-xs">
+                  <span className="text-[var(--theme-muted)]">
+                    Acceptance criteria (one per line)
+                  </span>
+                  <textarea
+                    value={criteria}
+                    onChange={(e) => setCriteria(e.target.value)}
+                    rows={2}
+                    className="mt-1 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1.5 text-sm"
+                  />
+                </label>
+              ) : null}
 
               {mode === 'pipeline' ? (
                 <label className="block text-xs">
@@ -247,7 +300,9 @@ export function CreateMissionButton({
                     ))}
                   </select>
                 </label>
-              ) : (
+              ) : null}
+
+              {mode === 'assignee' ? (
                 <div className="space-y-2">
                   <div className="flex gap-1 rounded-lg border border-[var(--theme-border)] p-0.5">
                     {(['agent', 'chat_group'] as const).map((k) => (
@@ -291,7 +346,7 @@ export function CreateMissionButton({
                     </select>
                   </label>
                 </div>
-              )}
+              ) : null}
 
               {(mode === 'pipeline' ||
                 (mode === 'assignee' && assigneeKind === 'agent')) && (
@@ -304,6 +359,14 @@ export function CreateMissionButton({
                   Auto-start tasks
                 </label>
               )}
+
+              {mode === 'goal' ? (
+                <p className="text-[11px] text-[var(--theme-muted)]">
+                  Assigns <code className="text-[10px]">orchestrator</code> and
+                  auto-starts. Specialists are dispatched onto this mission via{' '}
+                  <code className="text-[10px]">/api/swarm-dispatch</code>.
+                </p>
+              ) : null}
 
               <label className="block text-xs">
                 <span className="text-[var(--theme-muted)]">
@@ -334,11 +397,17 @@ export function CreateMissionButton({
               </button>
               <button
                 type="button"
-                disabled={!title.trim() || mutation.isPending}
+                disabled={submitDisabled}
                 onClick={() => mutation.mutate()}
                 className="rounded-md bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
               >
-                {mutation.isPending ? 'Creating…' : 'Create'}
+                {mutation.isPending
+                  ? mode === 'goal'
+                    ? 'Launching…'
+                    : 'Creating…'
+                  : mode === 'goal'
+                    ? 'Launch'
+                    : 'Create'}
               </button>
             </div>
           </div>

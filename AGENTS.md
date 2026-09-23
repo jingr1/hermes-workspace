@@ -21,7 +21,7 @@
 
 **Agent 列表读路径：** UI 统一用 `GET /api/agents`（`agents.yaml` + status）。单 agent 能力用 `GET /api/agents/:id/capabilities`（**Hermes + managed**）：Hermes 读 profile FS；managed 读平台绑定 + runtime settings（如 Claude/Codex model）。`GET /api/profiles/capabilities` 仍仅 Hermes profile。声明增删改用 `/api/agent-registry`。
 
-当前版本：`2.4.0`。本地开发：`pnpm dev` 默认 `PORT=3001`（部分文档/Windows 示例仍写 `3000`，以实际 `PORT` 为准）。
+当前版本：`2.4.0`。本地开发：`pnpm dev` 默认 `PORT=6734`。
 
 ---
 
@@ -123,7 +123,7 @@ API 要点：
 - **知识分层：** `~/wiki` = 长期领域知识；`memory/swarm/missions/<missionId>/` = 归档任务产物；`memory/swarm/<worker>/` = 进行中草稿；`memory/handoffs/swarm/` = 最新 checkpoint；任务结束后由 `learning` 把可复用结论 ingest 进 wiki（见 `docs/swarm/LEARNING-WIKI-INGEST.md`）。
 - **职责边界：** Researcher 只立事实；Architect 可质疑并握方向/规格/选道/评审/harden；Developer / Writer 只执行本道规格，缺口升给 architect（writer 事实缺口经 architect 回 researcher）；Learning 文档化与 wiki ingest；Orchestrator 路由与放行。质疑往返最多 3 轮，再按 `docs/swarm/ESCALATION-GUIDE.md` 升级。
 - 除非任务明确需要，不要全局启用可选 Hermes plugin；先在 `agents.yaml` 记录 plugin/toolset 对齐。
-- 本地 Workspace 配对/调试时，**一个 gateway 为规范实例**：`hermes gateway run` 监听 `:8642`。Dashboard（`:9119`）可选，仅分析。再起 gateway 前先 `curl http://127.0.0.1:<workspace-port>/api/sessions`（本机 `pnpm dev` 多为 `3001`）。Sessions 已有数据则刷新/重探测 UI，不要再起第二个 gateway。
+- 本地 Workspace 配对/调试时，**一个 gateway 为规范实例**：`hermes gateway run` 监听 `:8642`。Dashboard（`:9119`）可选，仅分析。再起 gateway 前先 `curl http://127.0.0.1:<workspace-port>/api/sessions`（本机 `pnpm dev` 多为 `6734`）。Sessions 已有数据则刷新/重探测 UI，不要再起第二个 gateway。
 - 若默认模型走 `openai-codex` / Codex 族，聊天依赖本机 Codex CLI 已登录（`codex login`）。
 
 ---
@@ -181,7 +181,7 @@ set -g exit-unattached off
 
 ## 七、Windows 备注
 
-- **两个必需服务**：Gateway（:8642）+ Workspace（常见 :3000；本仓库 Linux `pnpm dev` 默认 :3001）。Dashboard（:9119）可选。
+- **两个必需服务**：Gateway（:8642）+ Workspace（`pnpm dev` 默认 :6734）。Dashboard（:9119）可选。
   - Gateway：`hermes gateway run`
   - Workspace：`pnpm dev`
   - 可选：`hermes dashboard --port 9119 --host 127.0.0.1 --no-open`
@@ -191,7 +191,7 @@ set -g exit-unattached off
 - Gateway API 需 `API_SERVER_ENABLED=true` + `API_SERVER_KEY`，否则无已连接平台。
 - Workspace 运行时优先读 `HERMES_API_URL` / `HERMES_API_TOKEN` / `HERMES_DASHBOARD_URL`；`CLAUDE_*` 同名变量仅作兼容回退。
 - Windows 无自带 `sqlite3` CLI：`winget install SQLite.SQLite`，并把 `sqlite3.exe` 放进 PATH。
-- Claude Tasks / Conductor 需要 `claude` CLI：`npm install -g @anthropic-ai/claude-code`。
+- Claude Code managed agents 需要 `claude` CLI：`npm install -g @anthropic-ai/claude-code`。
 - 端口冲突：PowerShell `netstat -ano | findstr :<port>` + `Stop-Process -Id <PID> -Force`。
 - 需要 Node.js 22+。Windows npm script 不要依赖 `NODE_ENV=...` / `NODE_OPTIONS=...` 前缀写法。
 

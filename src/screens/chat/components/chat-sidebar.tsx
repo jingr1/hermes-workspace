@@ -13,9 +13,7 @@ import {
   MessageMultiple01Icon,
   MessageMultiple02Icon,
   Moon02Icon,
-  PencilEdit02Icon,
   PuzzleIcon,
-  Rocket01Icon,
   Search01Icon,
   Settings01Icon,
   Sun02Icon,
@@ -554,8 +552,6 @@ function ChatSidebarComponent({
   // Route active states
   const isChatActive =
     pathname === '/' || pathname === '/new' || pathname.startsWith('/chat')
-  const isNewSessionActive =
-    pathname === '/new' || pathname.startsWith('/chat/new')
   const _isSettingsActive = pathname === '/settings'
   const isSkillsActive = pathname === '/skills'
   const isMcpActive = pathname === '/mcp'
@@ -566,7 +562,6 @@ function ChatSidebarComponent({
   const isMissionControlActive =
     pathname.startsWith('/missions') || pathname.startsWith('/mission-control')
   const isGroupChatActive = pathname.startsWith('/group-chat')
-  const isConductorActive = pathname === '/conductor'
   const isAgentsActive =
     pathname.startsWith('/agents') ||
     pathname.startsWith('/operations') ||
@@ -709,7 +704,7 @@ function ChatSidebarComponent({
   const searchItem: NavItemDef = {
     kind: 'button',
     icon: Search01Icon,
-    label: 'Search',
+    label: t('common.search'),
     active: isSearchModalOpen,
     onClick: openSearchModal,
   }
@@ -757,35 +752,28 @@ function ChatSidebarComponent({
       kind: 'link',
       to: '/missions',
       icon: Target02Icon,
-      label: 'Missions',
+      label: t('nav.missions'),
       active: isMissionControlActive,
     },
     {
       kind: 'link',
       to: '/group-chat',
       icon: MessageMultiple02Icon,
-      label: 'Groups',
+      label: t('nav.groups'),
       active: isGroupChatActive,
-    },
-    {
-      kind: 'link',
-      to: '/conductor',
-      icon: Rocket01Icon,
-      label: 'Conductor',
-      active: isConductorActive,
     },
     {
       kind: 'link',
       to: '/agents',
       icon: UserMultipleIcon,
-      label: 'Agents',
+      label: t('nav.agents'),
       active: isAgentsActive,
     },
     {
       kind: 'link',
       to: '/swarm',
       icon: UserGroupIcon,
-      label: 'Swarm',
+      label: t('nav.swarm'),
       active: isSwarmActive,
     },
     ...(echoStudioEnabled
@@ -794,7 +782,7 @@ function ChatSidebarComponent({
             kind: 'link' as const,
             to: '/echo-studio',
             icon: DashboardSquare01Icon,
-            label: 'Echo Studio',
+            label: t('nav.echoStudio'),
             active: pathname.startsWith('/echo-studio'),
           },
         ]
@@ -821,7 +809,7 @@ function ChatSidebarComponent({
       kind: 'link',
       to: '/mcp',
       icon: McpServerIcon,
-      label: 'MCP',
+      label: t('nav.mcp'),
       active: isMcpActive,
     },
   ]
@@ -949,34 +937,6 @@ function ChatSidebarComponent({
           />
         </motion.div>
       </div>
-
-      {/* ── New Session button ──────────────────────────────────────── */}
-      {!isVisuallyCollapsed && (
-        <div className="px-2 pb-1">
-          <Link
-            to="/chat/$sessionKey"
-            params={{ sessionKey: 'new' }}
-            onClick={() => {
-              onSelectSession?.()
-            }}
-            className={cn(
-              buttonVariants({ variant: 'ghost', size: 'sm' }),
-              'w-full justify-start gap-2.5 px-3 py-2 text-primary-900 hover:bg-primary-200 dark:hover:bg-primary-800',
-              isNewSessionActive &&
-                'bg-accent-500/10 text-accent-500 hover:bg-accent-50 dark:hover:bg-accent-900/300/15',
-            )}
-            data-tour="new-session"
-          >
-            <HugeiconsIcon
-              icon={PencilEdit02Icon}
-              size={20}
-              strokeWidth={1.5}
-              className="size-5 shrink-0"
-            />
-            <span>New Session</span>
-          </Link>
-        </div>
-      )}
 
       {/* ── Scrollable body: nav + sessions ─────────────────────────── */}
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin flex flex-col">

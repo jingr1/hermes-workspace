@@ -111,7 +111,7 @@ async def test_phase2_blocked_once_end_to_end() -> None:
             initial: OrchestratorState = {
                 "mission_id": mission_id,
                 "mission_goal": "Design and implement a small verifiable feature",
-                "swarm_api_url": "http://localhost:3000/api",
+                "swarm_api_url": "http://localhost:6734/api",
                 "checkpoints": [],
                 "classifications": [],
                 "langgraph_assignments": [],
@@ -155,7 +155,7 @@ async def test_phase2_resume_abort() -> None:
             initial: OrchestratorState = {
                 "mission_id": mission_id,
                 "mission_goal": "sample mission",
-                "swarm_api_url": "http://localhost:3000/api",
+                "swarm_api_url": "http://localhost:6734/api",
                 "checkpoints": [],
                 "classifications": [],
                 "langgraph_assignments": [],
@@ -192,7 +192,7 @@ async def test_read_mission_state() -> None:
             initial: OrchestratorState = {
                 "mission_id": mission_id,
                 "mission_goal": "sample mission",
-                "swarm_api_url": "http://localhost:3000/api",
+                "swarm_api_url": "http://localhost:6734/api",
                 "checkpoints": [],
                 "classifications": [],
                 "langgraph_assignments": [],
@@ -336,7 +336,7 @@ async def test_check_swarm_workspace_retries_after_timeout(monkeypatch):
     monkeypatch.setattr(nodes, "_workspace_http_client", lambda *args, **kwargs: FakeClient())
     monkeypatch.setattr(nodes.asyncio, "sleep", fast_sleep)
 
-    err = await nodes.check_swarm_workspace("http://127.0.0.1:3000/api")
+    err = await nodes.check_swarm_workspace("http://127.0.0.1:6734/api")
     assert err is None
     assert calls["n"] == 3
 
@@ -369,7 +369,7 @@ def test_init_mission_honors_workflow_path_channel() -> None:
         state: OrchestratorState = {
             "mission_id": "wf-channel-test",
             "mission_goal": "research only",
-            "swarm_api_url": "http://localhost:3000/api",
+            "swarm_api_url": "http://localhost:6734/api",
             "workflow_path": "hermes_langgraph_orchestrator/workflows/research_only.yaml",
             "langgraph_assignments": [],
         }
@@ -542,7 +542,7 @@ async def test_mock_research_only_workflow_e2e() -> None:
                 "mission_id": mission_id,
                 "mission_goal": "research mock e2e",
                 "workflow_path": wf_path,
-                "swarm_api_url": "http://localhost:3000/api",
+                "swarm_api_url": "http://localhost:6734/api",
                 "checkpoints": [],
                 "classifications": [],
                 "langgraph_assignments": [],
@@ -574,7 +574,7 @@ async def test_mock_human_gate_research_workflow() -> None:
                 "mission_id": mission_id,
                 "mission_goal": "research mock human gate",
                 "workflow_path": wf_path,
-                "swarm_api_url": "http://localhost:3000/api",
+                "swarm_api_url": "http://localhost:6734/api",
                 "checkpoints": [],
                 "classifications": [],
                 "langgraph_assignments": [],
@@ -639,9 +639,9 @@ def test_build_human_gate_assignments_architect_to_developer():
 def test_is_local_workspace_url():
     from hermes_langgraph_orchestrator.nodes import _is_local_workspace_url
 
-    assert _is_local_workspace_url("http://127.0.0.1:3000/api")
-    assert _is_local_workspace_url("http://localhost:3000/api")
-    assert not _is_local_workspace_url("http://10.0.0.5:3000/api")
+    assert _is_local_workspace_url("http://127.0.0.1:6734/api")
+    assert _is_local_workspace_url("http://localhost:6734/api")
+    assert not _is_local_workspace_url("http://10.0.0.5:6734/api")
 
 
 def test_latest_assignment_checkpoints_prefers_newest_assignment():

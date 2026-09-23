@@ -1,20 +1,9 @@
 /**
  * Lightweight i18n — UI string translations for Agorax.
- * Add new languages by adding a locale map below.
+ * Supported locales: English and Simplified Chinese.
  */
 
-export type LocaleId =
-  | 'en'
-  | 'es'
-  | 'fr'
-  | 'de'
-  | 'zh'
-  | 'zh-TW'
-  | 'ja'
-  | 'ko'
-  | 'pt'
-  | 'ru'
-  | 'ar'
+export type LocaleId = 'en' | 'zh'
 
 const EN = {
   // Nav
@@ -24,6 +13,12 @@ const EN = {
   'nav.terminal': 'Terminal',
   'nav.jobs': 'Jobs',
   'nav.tasks': 'Tasks',
+  'nav.missions': 'Missions',
+  'nav.groups': 'Groups',
+  'nav.agents': 'Agents',
+  'nav.swarm': 'Swarm',
+  'nav.mcp': 'MCP',
+  'nav.echoStudio': 'Echo Studio',
   'nav.memory': 'Memory',
   'nav.skills': 'Skills',
   'nav.profiles': 'Profiles',
@@ -64,84 +59,6 @@ const EN = {
 export type TranslationKey = keyof typeof EN
 type LocaleTranslations = Record<TranslationKey, string>
 
-const ES: LocaleTranslations = {
-  'nav.dashboard': 'Panel',
-  'nav.chat': 'Chat',
-  'nav.files': 'Archivos',
-  'nav.terminal': 'Terminal',
-  'nav.jobs': 'Trabajos',
-  'nav.tasks': 'Tareas',
-  'nav.memory': 'Memoria',
-  'nav.skills': 'Habilidades',
-  'nav.profiles': 'Perfiles',
-  'nav.settings': 'Configuración',
-  'skills.installed': 'Instaladas',
-  'skills.marketplace': 'Mercado',
-  'skills.search': 'Buscar por nombre, etiquetas o descripción',
-  'skills.noResults': 'No se encontraron habilidades',
-  'profiles.profiles': 'Perfiles',
-  'profiles.monitoring': 'Monitoreo',
-  'tasks.title': 'Tareas',
-  'tasks.newTask': 'Nueva Tarea',
-  'tasks.backlog': 'Pendientes',
-  'tasks.todo': 'Por Hacer',
-  'tasks.inProgress': 'En Progreso',
-  'tasks.review': 'Revisión',
-  'tasks.done': 'Hecho',
-  'jobs.title': 'Trabajos',
-  'jobs.newJob': 'Nuevo Trabajo',
-  'settings.title': 'Configuración',
-  'settings.language': 'Idioma',
-  'settings.languageDesc':
-    'Elige el idioma de la interfaz del espacio de trabajo.',
-  'common.save': 'Guardar',
-  'common.cancel': 'Cancelar',
-  'common.delete': 'Eliminar',
-  'common.search': 'Buscar',
-  'common.loading': 'Cargando...',
-  'common.error': 'Error',
-  'common.noData': 'Sin datos',
-}
-
-const FR: LocaleTranslations = {
-  'nav.dashboard': 'Tableau de bord',
-  'nav.chat': 'Chat',
-  'nav.files': 'Fichiers',
-  'nav.terminal': 'Terminal',
-  'nav.jobs': 'Tâches planifiées',
-  'nav.tasks': 'Tâches',
-  'nav.memory': 'Mémoire',
-  'nav.skills': 'Compétences',
-  'nav.profiles': 'Profils',
-  'nav.settings': 'Paramètres',
-  'skills.installed': 'Installées',
-  'skills.marketplace': 'Marché',
-  'skills.search': 'Rechercher par nom, tags ou description',
-  'skills.noResults': 'Aucune compétence trouvée',
-  'profiles.profiles': 'Profils',
-  'profiles.monitoring': 'Surveillance',
-  'tasks.title': 'Tâches',
-  'tasks.newTask': 'Nouvelle Tâche',
-  'tasks.backlog': 'En attente',
-  'tasks.todo': 'À faire',
-  'tasks.inProgress': 'En cours',
-  'tasks.review': 'Révision',
-  'tasks.done': 'Terminé',
-  'jobs.title': 'Tâches planifiées',
-  'jobs.newJob': 'Nouvelle tâche',
-  'settings.title': 'Paramètres',
-  'settings.language': 'Langue',
-  'settings.languageDesc':
-    "Choisissez la langue d'affichage de l'espace de travail.",
-  'common.save': 'Enregistrer',
-  'common.cancel': 'Annuler',
-  'common.delete': 'Supprimer',
-  'common.search': 'Rechercher',
-  'common.loading': 'Chargement...',
-  'common.error': 'Erreur',
-  'common.noData': 'Aucune donnée',
-}
-
 const ZH: LocaleTranslations = {
   'nav.dashboard': '仪表板',
   'nav.chat': '聊天',
@@ -149,6 +66,12 @@ const ZH: LocaleTranslations = {
   'nav.terminal': '终端',
   'nav.jobs': '作业',
   'nav.tasks': '任务',
+  'nav.missions': '任务',
+  'nav.groups': '群聊',
+  'nav.agents': '智能体',
+  'nav.swarm': '集群',
+  'nav.mcp': 'MCP',
+  'nav.echoStudio': 'Echo Studio',
   'nav.memory': '记忆',
   'nav.skills': '技能',
   'nav.profiles': '配置文件',
@@ -180,146 +103,14 @@ const ZH: LocaleTranslations = {
   'common.noData': '暂无数据',
 }
 
-const RU: LocaleTranslations = {
-  'nav.dashboard': 'Панель',
-  'nav.chat': 'Чат',
-  'nav.files': 'Файлы',
-  'nav.terminal': 'Терминал',
-  'nav.jobs': 'Задания',
-  'nav.tasks': 'Задачи',
-  'nav.memory': 'Память',
-  'nav.skills': 'Навыки',
-  'nav.profiles': 'Профили',
-  'nav.settings': 'Настройки',
-  'skills.installed': 'Установленные',
-  'skills.marketplace': 'Маркетплейс',
-  'skills.search': 'Поиск по названию, тегам или описанию',
-  'skills.noResults': 'Навыки не найдены',
-  'profiles.profiles': 'Профили',
-  'profiles.monitoring': 'Мониторинг',
-  'tasks.title': 'Задачи',
-  'tasks.newTask': 'Новая задача',
-  'tasks.backlog': 'Бэклог',
-  'tasks.todo': 'К выполнению',
-  'tasks.inProgress': 'В работе',
-  'tasks.review': 'Проверка',
-  'tasks.done': 'Готово',
-  'jobs.title': 'Задания',
-  'jobs.newJob': 'Новое задание',
-  'settings.title': 'Настройки',
-  'settings.language': 'Язык',
-  'settings.languageDesc': 'Выберите язык интерфейса рабочего пространства.',
-  'common.save': 'Сохранить',
-  'common.cancel': 'Отмена',
-  'common.delete': 'Удалить',
-  'common.search': 'Поиск',
-  'common.loading': 'Загрузка...',
-  'common.error': 'Ошибка',
-  'common.noData': 'Нет данных',
-}
-
-const ZH_TW: LocaleTranslations = {
-  'nav.dashboard': '儀表板',
-  'nav.chat': '聊天',
-  'nav.files': '檔案',
-  'nav.terminal': '終端機',
-  'nav.jobs': '工作',
-  'nav.tasks': '任務',
-  'nav.memory': '記憶體',
-  'nav.skills': '技能',
-  'nav.profiles': '個人資料',
-  'nav.settings': '設定',
-  'skills.installed': '已安裝',
-  'skills.marketplace': '市集',
-  'skills.search': '依名稱、標籤或描述搜尋',
-  'skills.noResults': '找不到技能',
-  'profiles.profiles': '個人資料',
-  'profiles.monitoring': '監控',
-  'tasks.title': '任務',
-  'tasks.newTask': '新增任務',
-  'tasks.backlog': '待辦清單',
-  'tasks.todo': '待處理',
-  'tasks.inProgress': '進行中',
-  'tasks.review': '審查',
-  'tasks.done': '完成',
-  'jobs.title': '工作',
-  'jobs.newJob': '新增工作',
-  'settings.title': '設定',
-  'settings.language': '語言',
-  'settings.languageDesc': '選擇工作區介面的顯示語言。',
-  'common.save': '儲存',
-  'common.cancel': '取消',
-  'common.delete': '刪除',
-  'common.search': '搜尋',
-  'common.loading': '載入中...',
-  'common.error': '錯誤',
-  'common.noData': '無資料',
-}
-
-const JA: LocaleTranslations = {
-  'nav.dashboard': 'ダッシュボード',
-  'nav.chat': 'チャット',
-  'nav.files': 'ファイル',
-  'nav.terminal': 'ターミナル',
-  'nav.jobs': 'ジョブ',
-  'nav.tasks': 'タスク',
-  'nav.memory': 'メモリ',
-  'nav.skills': 'スキル',
-  'nav.profiles': 'プロフィール',
-  'nav.settings': '設定',
-  'skills.installed': 'インストール済み',
-  'skills.marketplace': 'マーケットプレイス',
-  'skills.search': '名前・タグ・説明で検索',
-  'skills.noResults': 'スキルが見つかりません',
-  'profiles.profiles': 'プロフィール',
-  'profiles.monitoring': 'モニタリング',
-  'tasks.title': 'タスク',
-  'tasks.newTask': '新しいタスク',
-  'tasks.backlog': 'バックログ',
-  'tasks.todo': '未着手',
-  'tasks.inProgress': '進行中',
-  'tasks.review': 'レビュー',
-  'tasks.done': '完了',
-  'jobs.title': 'ジョブ',
-  'jobs.newJob': '新しいジョブ',
-  'settings.title': '設定',
-  'settings.language': '言語',
-  'settings.languageDesc': 'ワークスペースUIの表示言語を選択します。',
-  'common.save': '保存',
-  'common.cancel': 'キャンセル',
-  'common.delete': '削除',
-  'common.search': '検索',
-  'common.loading': '読み込み中...',
-  'common.error': 'エラー',
-  'common.noData': 'データなし',
-}
-
 const LOCALES: Record<LocaleId, LocaleTranslations> = {
   en: EN,
-  es: ES,
-  fr: FR,
-  de: EN,
   zh: ZH,
-  'zh-TW': ZH_TW,
-  ja: JA,
-  ko: EN,
-  pt: EN,
-  ru: RU,
-  ar: EN,
 }
 
 export const LOCALE_LABELS: Record<LocaleId, string> = {
   en: 'English',
-  es: 'Español',
-  fr: 'Français',
-  de: 'Deutsch',
   zh: '中文（简体）',
-  'zh-TW': '繁體中文',
-  ja: '日本語',
-  ko: '한국어',
-  pt: 'Português',
-  ru: 'Русский',
-  ar: 'العربية',
 }
 
 const STORAGE_KEY = 'agorax-locale'

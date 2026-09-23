@@ -66,12 +66,12 @@ Hermes Kanban 链（规划用，和上面不是同一条路）
 
 ## 4. 按「你在哪跑 orchestrator」选方法
 
-### A. Workspace 已启动（`pnpm dev`，:3000）
+### A. Workspace 已启动（`pnpm dev`，:6734）
 
 **首选 ① Swarm API**
 
 ```bash
-curl -s -X POST http://127.0.0.1:3000/api/swarm-dispatch \
+curl -s -X POST http://127.0.0.1:6734/api/swarm-dispatch \
   -H 'Content-Type: application/json' \
   -d '{
     "assignments": [{
@@ -114,7 +114,7 @@ CLI 里的 orchestrator：用 **`terminal` 工具执行上述 curl**。
 ```text
 需要派 swarm.yaml 里的 specialist（researcher/architect/developer）？
 │
-├─ 是 → Workspace (:3000) 在跑？
+├─ 是 → Workspace (:6734) 在跑？
 │      ├─ 是 → ① POST /api/swarm-dispatch（要 checkpoint 就 waitForCheckpoint）
 │      └─ 否 → ② terminal + wrapper（oneshot，无统一 checkpoint）
 │
@@ -164,4 +164,4 @@ CLI 里的 orchestrator：用 **`terminal` 工具执行上述 curl**。
 | `clarify`             | 向人确认（greenlight、wizard） |
 | （无 sessions_spawn） | ⑤ 不在 CLI orchestrator        |
 
-**Skill `workspace-dispatch` 不在 orchestrator profile 上**（避免 CLI 误用 `sessions_spawn`）。Conductor 从文件读取该 skill；Swarm 派发见 ①。
+**Skill `workspace-dispatch` 不在 orchestrator profile 上**（避免 CLI 误用 `sessions_spawn`）。Mission Goal 启动时，assignee=`orchestrator` 的 Task prompt 会要求用 terminal `curl` 调 ①；Swarm 派发见 ①。

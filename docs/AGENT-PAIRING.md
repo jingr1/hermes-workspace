@@ -12,7 +12,7 @@
 │  Claude Gateway  │◄──────────────────────►│ Agorax │
 │  (Python, FastAPI)│  /health, /v1/chat,   │  (Node, Vite)     │
 │  hermes gateway   │  /api/sessions, etc.  │  pnpm dev         │
-│  run              │                       │  port 3000        │
+│  run              │                       │  port 6734        │
 └─────────────────┘                        └──────────────────┘
 ```
 
@@ -231,7 +231,7 @@ available.
 
 ```bash
 curl -sf http://127.0.0.1:8642/health
-curl -sf http://127.0.0.1:3000/api/sessions | jq '.sessions | length' 2>/dev/null || curl -sf http://127.0.0.1:3000/api/sessions
+curl -sf http://127.0.0.1:6734/api/sessions | jq '.sessions | length' 2>/dev/null || curl -sf http://127.0.0.1:6734/api/sessions
 ```
 
 If `/api/sessions` returns sessions (or an empty array) the pairing is alive.
@@ -244,7 +244,7 @@ refresh or reprobe the workspace UI first.
 
 ## Step 7 — Verify in browser
 
-Open `http://localhost:3000` (or whatever port Vite reports).
+Open `http://localhost:6734` (or whatever port Vite reports).
 
 - **Full UI with chat** = success.
 - **"Connect Backend" / "Skip setup" onboarding screen** = gateway not reachable

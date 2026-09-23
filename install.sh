@@ -246,7 +246,7 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
   mkdir -p "$HOME/Library/LaunchAgents"
 
   NODE_BIN="$(command -v node)"
-  HERMES_PORT="${PORT:-3000}"
+  HERMES_PORT="${PORT:-6734}"
   HERMES_API_GATEWAY="http://127.0.0.1:${GATEWAY_PORT}"
   TOKEN=""
 
@@ -291,7 +291,7 @@ Next steps (two terminals):
   2) Start the workspace UI:
        cd $INSTALL_DIR && pnpm dev
 
-  3) Open http://localhost:3000
+  3) Open http://localhost:6734
 
 If the gateway was already running before this install,
 restart it so API_SERVER_ENABLED=true takes effect.

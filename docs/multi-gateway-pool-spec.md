@@ -258,7 +258,7 @@ A persistent pill/button in the top-left (next to sidebar toggle):
 - Composer sends to active profile's gateway
 - "New Session" creates session scoped to active profile
 
-### 7.3 Operations / Conductor
+### 7.3 Operations / Missions
 
 - Task cards show which profile they're running on
 - "Run on" dropdown when creating tasks
@@ -383,7 +383,7 @@ CLAUDE_GATEWAY_HEALTH_INTERVAL=30  # Health check seconds
 
 1. **Phase 1 (This PR)**: Pool manager + routing layer + profile selector in chat
 2. **Phase 2 (Follow-up)**: Session aggregation with profile grouping
-3. **Phase 3 (Follow-up)**: Operations/Conductor multi-profile support
+3. **Phase 3 (Follow-up)**: Operations/Missions multi-profile support
 4. **Phase 4 (Follow-up)**: Memory browser cross-profile search
 
 ---
@@ -400,7 +400,7 @@ CLAUDE_GATEWAY_HEALTH_INTERVAL=30  # Health check seconds
 
 1. Should the workspace auto-spawn all profile gateways on startup, or only on first use?
 2. Should there be a "workspace default" profile that's always active, or should each panel remember its last profile?
-3. How should the Conductor page handle tasks that span multiple profiles (e.g., Jules delegates to Architect)?
+3. How should the Missions page handle tasks that span multiple profiles (e.g., Jules delegates to Architect)?
 4. Should profiles share a unified notification stream, or should each profile have its own notification badge?
 
 ---

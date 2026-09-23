@@ -116,8 +116,6 @@ import { Route as ApiContextUsageRouteImport } from './routes/api/context-usage'
 import { Route as ApiConnectionStatusRouteImport } from './routes/api/connection-status'
 import { Route as ApiConnectionSettingsRouteImport } from './routes/api/connection-settings'
 import { Route as ApiConfigPatchRouteImport } from './routes/api/config-patch'
-import { Route as ApiConductorStopRouteImport } from './routes/api/conductor-stop'
-import { Route as ApiConductorSpawnRouteImport } from './routes/api/conductor-spawn'
 import { Route as ApiCommandsRouteImport } from './routes/api/commands'
 import { Route as ApiCollabEventsRouteImport } from './routes/api/collab-events'
 import { Route as ApiClaudeJobsRouteImport } from './routes/api/claude-jobs'
@@ -805,16 +803,6 @@ const ApiConnectionSettingsRoute = ApiConnectionSettingsRouteImport.update({
 const ApiConfigPatchRoute = ApiConfigPatchRouteImport.update({
   id: '/api/config-patch',
   path: '/api/config-patch',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiConductorStopRoute = ApiConductorStopRouteImport.update({
-  id: '/api/conductor-stop',
-  path: '/api/conductor-stop',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiConductorSpawnRoute = ApiConductorSpawnRouteImport.update({
-  id: '/api/conductor-spawn',
-  path: '/api/conductor-spawn',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiCommandsRoute = ApiCommandsRouteImport.update({
@@ -1653,8 +1641,6 @@ export interface FileRoutesByFullPath {
   '/api/claude-jobs': typeof ApiClaudeJobsRouteWithChildren
   '/api/collab-events': typeof ApiCollabEventsRoute
   '/api/commands': typeof ApiCommandsRoute
-  '/api/conductor-spawn': typeof ApiConductorSpawnRoute
-  '/api/conductor-stop': typeof ApiConductorStopRoute
   '/api/config-patch': typeof ApiConfigPatchRoute
   '/api/connection-settings': typeof ApiConnectionSettingsRoute
   '/api/connection-status': typeof ApiConnectionStatusRoute
@@ -1911,8 +1897,6 @@ export interface FileRoutesByTo {
   '/api/claude-jobs': typeof ApiClaudeJobsRouteWithChildren
   '/api/collab-events': typeof ApiCollabEventsRoute
   '/api/commands': typeof ApiCommandsRoute
-  '/api/conductor-spawn': typeof ApiConductorSpawnRoute
-  '/api/conductor-stop': typeof ApiConductorStopRoute
   '/api/config-patch': typeof ApiConfigPatchRoute
   '/api/connection-settings': typeof ApiConnectionSettingsRoute
   '/api/connection-status': typeof ApiConnectionStatusRoute
@@ -2173,8 +2157,6 @@ export interface FileRoutesById {
   '/api/claude-jobs': typeof ApiClaudeJobsRouteWithChildren
   '/api/collab-events': typeof ApiCollabEventsRoute
   '/api/commands': typeof ApiCommandsRoute
-  '/api/conductor-spawn': typeof ApiConductorSpawnRoute
-  '/api/conductor-stop': typeof ApiConductorStopRoute
   '/api/config-patch': typeof ApiConfigPatchRoute
   '/api/connection-settings': typeof ApiConnectionSettingsRoute
   '/api/connection-status': typeof ApiConnectionStatusRoute
@@ -2436,8 +2418,6 @@ export interface FileRouteTypes {
     | '/api/claude-jobs'
     | '/api/collab-events'
     | '/api/commands'
-    | '/api/conductor-spawn'
-    | '/api/conductor-stop'
     | '/api/config-patch'
     | '/api/connection-settings'
     | '/api/connection-status'
@@ -2694,8 +2674,6 @@ export interface FileRouteTypes {
     | '/api/claude-jobs'
     | '/api/collab-events'
     | '/api/commands'
-    | '/api/conductor-spawn'
-    | '/api/conductor-stop'
     | '/api/config-patch'
     | '/api/connection-settings'
     | '/api/connection-status'
@@ -2955,8 +2933,6 @@ export interface FileRouteTypes {
     | '/api/claude-jobs'
     | '/api/collab-events'
     | '/api/commands'
-    | '/api/conductor-spawn'
-    | '/api/conductor-stop'
     | '/api/config-patch'
     | '/api/connection-settings'
     | '/api/connection-status'
@@ -3217,8 +3193,6 @@ export interface RootRouteChildren {
   ApiClaudeJobsRoute: typeof ApiClaudeJobsRouteWithChildren
   ApiCollabEventsRoute: typeof ApiCollabEventsRoute
   ApiCommandsRoute: typeof ApiCommandsRoute
-  ApiConductorSpawnRoute: typeof ApiConductorSpawnRoute
-  ApiConductorStopRoute: typeof ApiConductorStopRoute
   ApiConfigPatchRoute: typeof ApiConfigPatchRoute
   ApiConnectionSettingsRoute: typeof ApiConnectionSettingsRoute
   ApiConnectionStatusRoute: typeof ApiConnectionStatusRoute
@@ -4124,20 +4098,6 @@ declare module '@tanstack/react-router' {
       path: '/api/config-patch'
       fullPath: '/api/config-patch'
       preLoaderRoute: typeof ApiConfigPatchRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/conductor-stop': {
-      id: '/api/conductor-stop'
-      path: '/api/conductor-stop'
-      fullPath: '/api/conductor-stop'
-      preLoaderRoute: typeof ApiConductorStopRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/conductor-spawn': {
-      id: '/api/conductor-spawn'
-      path: '/api/conductor-spawn'
-      fullPath: '/api/conductor-spawn'
-      preLoaderRoute: typeof ApiConductorSpawnRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/commands': {
@@ -5678,8 +5638,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiClaudeJobsRoute: ApiClaudeJobsRouteWithChildren,
   ApiCollabEventsRoute: ApiCollabEventsRoute,
   ApiCommandsRoute: ApiCommandsRoute,
-  ApiConductorSpawnRoute: ApiConductorSpawnRoute,
-  ApiConductorStopRoute: ApiConductorStopRoute,
   ApiConfigPatchRoute: ApiConfigPatchRoute,
   ApiConnectionSettingsRoute: ApiConnectionSettingsRoute,
   ApiConnectionStatusRoute: ApiConnectionStatusRoute,

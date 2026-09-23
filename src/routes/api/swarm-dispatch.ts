@@ -811,7 +811,7 @@ function markCheckpointResult(
 ): void {
   // When the checkpoint reaches any terminal status (anything other than
   // 'in_progress' — i.e. done/blocked/needs_input/handoff) the worker is no
-  // longer running this task, so clear currentTask the same way conductor-stop
+  // longer running this task, so clear currentTask the same way mission cancel
   // resets it. While still in_progress we omit the key entirely so
   // writeRuntimePatch keeps the existing currentTask untouched.
   const clearCurrentTask = checkpoint.checkpointStatus !== 'in_progress'

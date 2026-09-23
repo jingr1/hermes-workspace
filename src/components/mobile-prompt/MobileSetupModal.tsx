@@ -38,7 +38,7 @@ export function MobileSetupModal({ isOpen, onClose }: MobileSetupModalProps) {
 
   useEffect(() => {
     if (!isOpen) return
-    fetch(`/api/network-url?port=${window.location.port || 3000}`)
+    fetch(`/api/network-url?port=${window.location.port || 6734}`)
       .then(
         (r) =>
           r.json() as Promise<{

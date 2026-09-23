@@ -4,6 +4,9 @@
  * Create rules (Mission domain plan):
  *   - pipeline: instantiate stages → Tasks, auto-dispatch; do NOT create room
  *   - assignee+agent: single Task + auto-dispatch
+ *   - assignee+orchestrator: goal container; orchestrator decomposes and
+ *     re-dispatches specialists via POST /api/swarm-dispatch with the same
+ *     missionId (replaces the removed Conductor launch path)
  *   - assignee+chat_group: bind roomId; no auto-decompose
  *   - room: only via manual ensureRoomForMission later
  */
@@ -73,6 +76,88 @@ export type CreatedMission = {
 
 /** @deprecated alias */
 export type CreatedTask = CreatedMission
+
+/** Loopback Workspace base URL for orchestrator curl dispatch. */
+export function workspaceDispatchBaseUrl(): string {
+  const port = process.env.PORT ?? process.env.VITE_PORT ?? '6734'
+  return `http://127.0.0.1:${port}`
+}
+
+function newMissionId(): string {
+  return `mission-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+/**
+ * Build the single assignee Task prompt. When assignee is `orchestrator`,
+ * include an explicit swarm-dispatch contract so goal → specialist Tasks
+ * land on the same missionId (Conductor replacement path).
+ */
+export function buildAssigneeTaskInstruction(input: {
+  missionId: string
+  title: string
+  spec: string
+  acceptanceCriteria?: Array<string>
+  assigneeId: string
+}): string {
+  const criteria =
+    input.acceptanceCriteria && input.acceptanceCriteria.length > 0
+      ? input.acceptanceCriteria.map((c) => `- ${c}`)
+      : ['- (none declared)']
+  const base = [
+    `# Mission: ${input.title}`,
+    '',
+    `mission_id: ${input.missionId}`,
+    '',
+    '## Spec',
+    input.spec.trim() || '(no spec text)',
+    '',
+    '## Acceptance criteria',
+    ...criteria,
+  ]
+  if (input.assigneeId !== 'orchestrator') {
+    return base.join('\n')
+  }
+  const dispatchUrl = `${workspaceDispatchBaseUrl()}/api/swarm-dispatch`
+  return [
+    ...base,
+    '',
+    '## Orchestrator dispatch contract (required)',
+    '',
+    'You own routing for this mission goal. Do **not** implement research, design, code, or writing yourself.',
+    '',
+    '1. Decompose the Spec into bounded specialist Tasks for the semantic roster:',
+    '   `researcher` → `architect` → (`developer` **or** `writer`, never both in parallel) → `learning` when appropriate.',
+    '2. Dispatch via HTTP (terminal `curl` is fine):',
+    '',
+    '```bash',
+    `curl -sS -X POST '${dispatchUrl}' \\`,
+    "  -H 'Content-Type: application/json' \\",
+    '  -d \'{',
+    `    "missionId": "${input.missionId}",`,
+    '    "waitForCheckpoint": false,',
+    '    "assignments": [',
+    '      {',
+    '        "workerId": "<researcher|architect|developer|writer|learning>",',
+    '        "task": "<self-contained brief + exit criteria + STATE: DONE checkpoint>",',
+    '        "rationale": "<why this worker>"',
+    '      }',
+    '    ]',
+    "  }'",
+    '```',
+    '',
+    '3. Always pass the **same** `missionId` so child Tasks appear on this Mission board.',
+    '4. Prefer sequential handoffs over max-parallel heuristic swarms; architect picks `executor: developer | writer`.',
+    '5. After a successful dispatch response, emit a checkpoint and finish your own Task:',
+    '',
+    '```text',
+    'STATE: DONE',
+    'RESULT: Dispatched <workers> for mission ' + input.missionId,
+    'NEXT_ACTION: await specialist checkpoints',
+    '```',
+    '',
+    'Do **not** use `sessions_spawn`, Kanban Dispatcher spawn, or same-profile `delegate_task` as the Swarm specialist path.',
+  ].join('\n')
+}
 
 function normalizeCreateInput(input: CreateTaskInput): CreateMissionInput {
   if (input.executionMode === 'assignee') {
@@ -276,18 +361,16 @@ export async function createMission(
       })
       mission = getSwarmMission(mission.id) ?? mission
     } else {
-      const instruction = [
-        `# Mission: ${input.title}`,
-        '',
-        '## Spec',
-        input.spec.trim() || '(no spec text)',
-        '',
-        '## Acceptance criteria',
-        ...(input.acceptanceCriteria && input.acceptanceCriteria.length > 0
-          ? input.acceptanceCriteria.map((c) => `- ${c}`)
-          : ['- (none declared)']),
-      ].join('\n')
+      const missionId = newMissionId()
+      const instruction = buildAssigneeTaskInstruction({
+        missionId,
+        title: input.title,
+        spec: input.spec,
+        acceptanceCriteria: input.acceptanceCriteria,
+        assigneeId: assignee.id,
+      })
       mission = createOrUpdateMission({
+        missionId,
         title: input.title,
         spec: input.spec,
         acceptanceCriteria: input.acceptanceCriteria ?? [],
@@ -303,11 +386,15 @@ export async function createMission(
           {
             workerId: assignee.id,
             task: instruction,
-            rationale: 'assignee mode single task',
+            rationale:
+              assignee.id === 'orchestrator'
+                ? 'assignee mode: orchestrator goal routing'
+                : 'assignee mode single task',
             reviewRequired: false,
             createdByWorkerId: 'system:assignee',
             dispatchable: true,
-            stageKey: 'execute',
+            stageKey:
+              assignee.id === 'orchestrator' ? 'orchestrate' : 'execute',
           },
         ],
       })

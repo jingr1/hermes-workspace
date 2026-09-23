@@ -80,7 +80,7 @@ def _default_swarm_api_url() -> str:
     return (
         os.environ.get("AGORAX_URL")
         or os.environ.get("SWARM_API_URL")
-        or "http://127.0.0.1:3000/api"
+        or "http://127.0.0.1:6734/api"
     ).rstrip("/")
 
 

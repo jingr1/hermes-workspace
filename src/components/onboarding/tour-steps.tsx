@@ -36,15 +36,7 @@ export const tourSteps: Array<Step> = [
     content:
       'Navigate between all your tools here. Collapse/expand sections to customize your workspace.',
   },
-  // Step 3: New Session
-  {
-    target: '[data-tour="new-session"]',
-    placement: 'right',
-    title: 'Start a New Chat',
-    content:
-      'Click here to start a new AI chat session. Each conversation is saved automatically.',
-  },
-  // Step 4: Dashboard
+  // Step 3: Dashboard
   {
     target: '[data-tour="dashboard"]',
     placement: 'right',
@@ -52,7 +44,7 @@ export const tourSteps: Array<Step> = [
     content:
       'Your overview of sessions, usage, and activity. See everything at a glance.',
   },
-  // Step 5: Agent Hub
+  // Step 4: Agent Hub
   {
     target: '[data-tour="agent-hub"]',
     placement: 'right',
@@ -60,7 +52,7 @@ export const tourSteps: Array<Step> = [
     content:
       'Manage your AI agents and configurations. Create custom agents with specialized behaviors.',
   },
-  // Step 7: Skills
+  // Step 5: Skills
   {
     target: '[data-tour="skills"]',
     placement: 'right',
@@ -68,7 +60,7 @@ export const tourSteps: Array<Step> = [
     content:
       'Browse and install agent skills to extend capabilities. Add new tools and abilities to your agents.',
   },
-  // Step 8: Terminal
+  // Step 6: Terminal
   {
     target: '[data-tour="terminal"]',
     placement: 'right',
@@ -76,7 +68,7 @@ export const tourSteps: Array<Step> = [
     content:
       'Built-in terminal for quick commands. Execute shell commands without leaving Agorax.',
   },
-  // Step 9: Usage Meter (in header)
+  // Step 7: Usage Meter (in header)
   {
     target: '[data-tour="usage-meter"]',
     placement: 'bottom',
@@ -84,7 +76,7 @@ export const tourSteps: Array<Step> = [
     content:
       'Monitor your AI provider usage in real-time. Track costs and API consumption.',
   },
-  // Step 10: Settings
+  // Step 8: Settings
   {
     target: '[data-tour="settings"]',
     placement: 'right',
@@ -92,7 +84,7 @@ export const tourSteps: Array<Step> = [
     content:
       'Configure providers, themes, accent colors, and more. Make Agorax yours.',
   },
-  // Step 11: Finish
+  // Step 9: Finish
   {
     target: 'body',
     placement: 'center',

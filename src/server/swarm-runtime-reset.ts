@@ -97,7 +97,7 @@ export function resetSwarmWorkerRuntime(
       lastCheckIn: now,
       lastSummary: `Reset by ${input.actor}: ${input.reason}`,
       lastControlMessage: `Reset by ${input.actor}: ${input.reason}`,
-      nextAction: 'Idle. Ready for the next Swarm or Conductor dispatch.',
+      nextAction: 'Idle. Ready for the next Swarm or Mission dispatch.',
       cancelledAt: now,
       cancellationReason: input.reason,
       cancelledBy: input.actor,

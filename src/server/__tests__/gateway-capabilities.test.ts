@@ -234,11 +234,11 @@ describe('gateway-capabilities', () => {
     })
   })
 
-  it('does not mark Conductor available when dashboard returns SPA HTML fallback', async () => {
+  it('keeps Conductor capability false after Conductor UI removal', async () => {
     process.env.HERMES_API_URL = 'http://gateway.test'
     process.env.CLAUDE_DASHBOARD_URL = 'http://dashboard.test'
     const fetchMock = vi.fn(
-      async (input: RequestInfo | URL, init?: RequestInit) => {
+      async (input: RequestInfo | URL, _init?: RequestInit) => {
         const url = String(input)
         if (url === 'http://dashboard.test/api/status') {
           return new Response(JSON.stringify({ version: '0.12.0' }), {
@@ -252,12 +252,6 @@ describe('gateway-capabilities', () => {
               headers: { 'content-type': 'text/html' },
             },
           )
-        }
-        if (url === 'http://dashboard.test/api/conductor/missions') {
-          return new Response('<!doctype html><div id="root"></div>', {
-            status: 200,
-            headers: { 'content-type': 'text/html; charset=utf-8' },
-          })
         }
         if (url === 'http://dashboard.test/api/plugins/kanban/board') {
           return new Response(JSON.stringify({ ok: true }), {
@@ -294,13 +288,13 @@ describe('gateway-capabilities', () => {
 
     expect(caps.dashboard.available).toBe(true)
     expect(caps.conductor).toBe(false)
-    expect(fetchMock).toHaveBeenCalledWith(
+    expect(fetchMock).not.toHaveBeenCalledWith(
       'http://dashboard.test/api/conductor/missions',
-      expect.objectContaining({ method: 'GET' }),
+      expect.anything(),
     )
   })
 
-  it('marks Conductor available when dashboard returns JSON from missions API', async () => {
+  it('does not revive Conductor capability from dashboard missions API', async () => {
     process.env.HERMES_API_URL = 'http://gateway.test'
     process.env.CLAUDE_DASHBOARD_URL = 'http://dashboard.test'
     vi.stubGlobal(
@@ -345,7 +339,7 @@ describe('gateway-capabilities', () => {
     const mod = await loadMod()
     const caps = await mod.probeGateway({ force: true, waitForEnhanced: true })
 
-    expect(caps.conductor).toBe(true)
+    expect(caps.conductor).toBe(false)
   })
 
   describe('isLocalhostDeployment', () => {
@@ -391,9 +385,9 @@ describe('gateway-capabilities', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input)
-        if (url === 'http://dashboard.test/api/conductor/missions') {
+        if (url === 'http://dashboard.test/api/plugins/kanban/board') {
           await new Promise((resolve) => setTimeout(resolve, 250))
-          return new Response(JSON.stringify({ missions: [] }), {
+          return new Response(JSON.stringify({ ok: true }), {
             headers: { 'content-type': 'application/json' },
           })
         }

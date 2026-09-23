@@ -13,7 +13,7 @@
 #     host = "0.0.0.0";
 #     passwordFile = config.sops.secrets."hermes-workspace-password".path;
 #   };
-#   networking.firewall.allowedTCPPorts = [ 3000 ];
+#   networking.firewall.allowedTCPPorts = [ 6734 ];
 {
   config,
   lib,
@@ -39,7 +39,7 @@ in
 
     port = mkOption {
       type = types.port;
-      default = 3000;
+      default = 6734;
       description = "TCP port the workspace server listens on.";
     };
 

@@ -1,4 +1,4 @@
-import { BotIcon, Rocket01Icon } from '@hugeicons/core-free-icons'
+import { BotIcon, Target02Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useNavigate } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
@@ -41,7 +41,7 @@ export function AgentsScreen() {
                   title: 'Typical flow',
                   bullets: [
                     'Repair or configure agents here first.',
-                    'Then use Conductor for mission-style dispatch and Swarm for coordinated multi-worker runs.',
+                    'Then use Missions (Goal → orchestrator) for goal launch and Swarm for coordinated multi-worker runs.',
                   ],
                 },
                 {
@@ -55,10 +55,10 @@ export function AgentsScreen() {
             />
             <Button
               className="bg-accent-500 text-primary-950 hover:bg-accent-400"
-              onClick={() => void navigate({ to: '/conductor' })}
+              onClick={() => void navigate({ to: '/missions' })}
             >
-              <HugeiconsIcon icon={Rocket01Icon} size={16} strokeWidth={1.8} />
-              Open Conductor
+              <HugeiconsIcon icon={Target02Icon} size={16} strokeWidth={1.8} />
+              Open Missions
             </Button>
           </div>
         </header>
@@ -69,20 +69,20 @@ export function AgentsScreen() {
           </h2>
           <p className="mt-2 max-w-2xl text-sm text-primary-600">
             The deleted workspace daemon and project stack backed the previous
-            agent directory. Use Conductor for mission launch and the Gateway
-            Conductor for live session visibility.
+            agent directory. Use Missions for goal launch (orchestrator routing)
+            and Swarm for live multi-worker coordination.
           </p>
           <div className="mt-5 flex flex-wrap gap-3">
             <Button
               variant="secondary"
               className="border border-primary-200 bg-[var(--theme-card)] text-primary-700 hover:bg-primary-50"
-              onClick={() => void navigate({ to: '/conductor' })}
+              onClick={() => void navigate({ to: '/missions' })}
             >
-              Open Conductor
+              Open Missions
             </Button>
             <Button
               className="bg-accent-500 text-primary-950 hover:bg-accent-400"
-              onClick={() => void navigate({ to: '/conductor' })}
+              onClick={() => void navigate({ to: '/missions' })}
             >
               Start Mission
             </Button>

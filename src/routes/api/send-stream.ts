@@ -707,11 +707,12 @@ export const Route = createFileRoute('/api/send-stream')({
                   const locale =
                     typeof body.locale === 'string' ? body.locale.trim() : ''
                   const localeSystemMsg: Array<OpenAICompatMessage> =
-                    locale && locale !== 'en'
+                    locale === 'zh'
                       ? [
                           {
                             role: 'system',
-                            content: `Respond in ${locale === 'es' ? 'Spanish' : locale === 'fr' ? 'French' : locale === 'zh' ? 'Chinese' : locale === 'de' ? 'German' : locale === 'ja' ? 'Japanese' : locale === 'ko' ? 'Korean' : locale === 'pt' ? 'Portuguese' : locale === 'ru' ? 'Russian' : locale === 'ar' ? 'Arabic' : 'English'}. The user's interface is set to this language.`,
+                            content:
+                              "Respond in Chinese. The user's interface is set to this language.",
                           },
                         ]
                       : []

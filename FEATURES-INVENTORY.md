@@ -386,7 +386,7 @@
 | `GOOGLE_API_KEY`       | Google Gemini API key passthrough (optional)       |
 | `HERMES_API_TOKEN`     | Auth token for gateway API_SERVER_KEY              |
 | `BEARER_TOKEN`         | Bearer token for backend auth                      |
-| `PORT`                 | Server port (default: 3002 dev, 3000 prod)         |
+| `PORT`                 | Server port (default: 6734)         |
 
 ### 4.6 Claude Config Management
 
@@ -672,7 +672,7 @@ pnpm dev  # Vite dev server with HMR on port 3002
 ### 10.2 Production Build
 
 ```bash
-pnpm build && pnpm start  # Node.js server on port 3000
+pnpm build && pnpm start  # Node.js server on port 6734
 ```
 
 ### 10.3 Stable Mode
@@ -685,7 +685,7 @@ pnpm stop:stable   # Stop via scripts/stop-stable.sh
 ### 10.4 Docker Compose
 
 - **hermes-agent** container — Python FastAPI gateway on port 8642
-- **hermes-workspace** container — Node.js web UI on port 3000
+- **hermes-workspace** container — Node.js web UI on port 6734
 - Health checks with retries
 - Environment file passthrough
 

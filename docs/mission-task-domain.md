@@ -33,6 +33,7 @@
 
 - Goal container with `executionMode: pipeline | assignee`
 - Persists user **spec** + **acceptanceCriteria** (editable after create)
+- **Goal launch (UI):** Create Mission → Goal → assignee `orchestrator` + auto-dispatch; orchestrator must `POST /api/swarm-dispatch` with the same `missionId` to spawn specialist Tasks (replaces Conductor)
 - **pipeline**: instantiate stages → Tasks; **auto-dispatch**; do **not** auto-create a room
 - **assignee + agent**: single Task, auto-dispatch
 - **assignee + chat_group**: bind existing room; no auto-decompose

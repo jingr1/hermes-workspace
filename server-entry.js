@@ -75,7 +75,7 @@ const ALWAYS_HEADERS = {
   'Referrer-Policy': 'strict-origin-when-cross-origin',
 }
 
-const port = parseInt(process.env.PORT || '3000', 10)
+const port = parseInt(process.env.PORT || '6734', 10)
 // Default HOST to localhost-only. Operators who want the workspace reachable
 // on a LAN / Tailscale / public surface must opt in explicitly with
 // HOST=0.0.0.0 *and* set CLAUDE_PASSWORD (enforced below). See #122.

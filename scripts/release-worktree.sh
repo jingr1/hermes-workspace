@@ -18,8 +18,8 @@ case "$CMD" in
     (cd "$RELEASE" && pnpm build)
     ;;
   start)
-    echo "[release] starting production server on PORT=${PORT:-3000}"
-    (cd "$RELEASE" && PORT="${PORT:-3000}" pnpm start)
+    echo "[release] starting production server on PORT=${PORT:-6734}"
+    (cd "$RELEASE" && PORT="${PORT:-6734}" pnpm start)
     ;;
   rebuild)
     "$0" sync
@@ -31,11 +31,11 @@ Usage: $0 <sync|build|start|rebuild>
 
   sync     Reset release worktree to dev repo's committed HEAD (no uncommitted files)
   build    pnpm build in release worktree
-  start    pnpm start in release worktree (default PORT=3000)
+  start    pnpm start in release worktree (default PORT=6734)
   rebuild  sync + build
 
 Dev repo:     $ROOT  →  pnpm dev  (PORT=3001)
-Release tree: $RELEASE  →  pnpm start (PORT=3000)
+Release tree: $RELEASE  →  pnpm start (PORT=6734)
 
 Override release path: HERMES_RELEASE_DIR=/path/to/release $0 build
 EOF

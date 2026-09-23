@@ -7,7 +7,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SERVICE_NAME="hermes-workspace"
-PORT="${PORT:-3000}"
+PORT="${PORT:-6734}"
 HOST="${HOST:-127.0.0.1}"
 NODE_ENV="${NODE_ENV:-production}"
 PNPM_BIN="${PNPM_BIN:-$(command -v pnpm || true)}"

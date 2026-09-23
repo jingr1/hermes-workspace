@@ -175,8 +175,8 @@ export function AgentHubLayout({ agents }: AgentHubLayoutProps) {
           <OfficeView
             agentRows={agentRows}
             missionRunning={hasActive}
-            onViewOutput={() => void navigate({ to: '/conductor' })}
-            onNewMission={() => void navigate({ to: '/conductor' })}
+            onViewOutput={() => void navigate({ to: '/missions' })}
+            onNewMission={() => void navigate({ to: '/missions' })}
             processType="parallel"
             companyName="Agent Office"
             containerHeight={520}

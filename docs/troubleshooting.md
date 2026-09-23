@@ -54,7 +54,7 @@ If the gateway is running and healthy but Workspace still disconnects, check for
 Before starting a second gateway, verify the workspace probe directly:
 
 ```bash
-curl http://127.0.0.1:3000/api/sessions
+curl http://127.0.0.1:6734/api/sessions
 ```
 
 If that returns sessions (or an empty list), the backend pairing is already alive and the UI needs a refresh/reprobe — **do not start another gateway**.
@@ -149,7 +149,7 @@ cd ~/hermes-workspace && pnpm dev
 - **Merge conflict markers in source files:** `grep -r "<<<<<<" src/` — if you find any, resolve them or `git checkout -- <file>`.
 - **Missing node_modules:** `pnpm install`
 - **Node version too old:** `node --version` — requires Node 22+.
-- **Port already in use:** `lsof -i :3000` (macOS) or `ss -tlnp | grep 3000` (Linux) — kill the stale process.
+- **Port already in use:** `lsof -i :6734` (macOS) or `ss -tlnp | grep 6734` (Linux) — kill the stale process.
 
 ---
 

@@ -5,7 +5,7 @@
 # Build locally:
 #   docker build -t agorax .
 # Run:
-#   docker run -p 3000:3000 -e HERMES_API_URL=http://host.docker.internal:8642 agorax
+#   docker run -p 6734:6734 -e HERMES_API_URL=http://host.docker.internal:8642 agorax
 # Or pull pre-built:
 #   docker pull ghcr.io/outsourc-e/agorax:latest
 #
@@ -52,13 +52,13 @@ COPY --from=build --chown=workspace:workspace /app/skills ./skills
 COPY --chown=workspace:workspace docker/entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 ENV NODE_ENV=production \
-    PORT=3000 \
+    PORT=6734 \
     HOST=0.0.0.0 \
     HERMES_API_URL=http://hermes-agent:8642
 
-EXPOSE 3000
+EXPOSE 6734
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD curl -fsS http://127.0.0.1:3000/ >/dev/null || exit 1
+  CMD curl -fsS http://127.0.0.1:6734/ >/dev/null || exit 1
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/docker-entrypoint.sh"]
 CMD ["node", "--max-old-space-size=2048", "server-entry.js"]

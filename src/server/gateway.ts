@@ -421,7 +421,7 @@ class GatewayClient {
         }
 
         const { url, token, password } = getGatewayConfig()
-        // B4: derive origin from gateway URL instead of hardcoded localhost:3000
+        // B4: derive origin from gateway URL instead of hardcoded localhost:6734
         const gatewayOrigin = (() => {
           try {
             const parsed = new URL(url.replace(/^ws/, 'http'))

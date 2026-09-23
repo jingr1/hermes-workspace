@@ -4,7 +4,7 @@ import { LOCALE_LABELS, t, type LocaleId } from './i18n'
 function withLocale<T>(locale: LocaleId, fn: () => T): T {
   const originalWindow = globalThis.window
   const originalNavigator = globalThis.navigator
-  const store = new Map<string, string>([['hermes-workspace-locale', locale]])
+  const store = new Map<string, string>([['agorax-locale', locale]])
   Object.defineProperty(globalThis, 'window', {
     configurable: true,
     value: {},
@@ -35,29 +35,26 @@ function withLocale<T>(locale: LocaleId, fn: () => T): T {
 }
 
 describe('i18n translations', () => {
+  it('uses English labels by default', () => {
+    withLocale('en', () => {
+      expect(t('nav.dashboard')).toBe('Dashboard')
+      expect(t('nav.missions')).toBe('Missions')
+      expect(t('nav.agents')).toBe('Agents')
+    })
+  })
+
   it('uses Simplified Chinese labels for wired navigation keys', () => {
     withLocale('zh', () => {
       expect(t('nav.dashboard')).toBe('仪表板')
+      expect(t('nav.missions')).toBe('任务')
+      expect(t('nav.agents')).toBe('智能体')
       expect(t('nav.profiles')).toBe('配置文件')
     })
   })
 
-  it('uses Russian labels instead of falling back to English', () => {
-    withLocale('ru', () => {
-      expect(t('nav.dashboard')).toBe('Панель')
-      expect(t('settings.language')).toBe('Язык')
-    })
-  })
-
-  it('uses Japanese labels instead of falling back to English', () => {
-    withLocale('ja', () => {
-      expect(t('nav.dashboard')).toBe('ダッシュボード')
-      expect(t('settings.language')).toBe('言語')
-    })
-  })
-
-  it('exposes readable locale labels for contributor-targeted languages', () => {
+  it('exposes only English and Simplified Chinese locale labels', () => {
+    expect(Object.keys(LOCALE_LABELS).sort()).toEqual(['en', 'zh'])
+    expect(LOCALE_LABELS.en).toBe('English')
     expect(LOCALE_LABELS.zh).toBe('中文（简体）')
-    expect(LOCALE_LABELS.ru).toBe('Русский')
   })
 })

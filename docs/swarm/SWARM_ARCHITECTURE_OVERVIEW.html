@@ -317,7 +317,7 @@
 │  │  (对话)   │  │  (控制平面) │  │  (任务)   │  │  (总览)       │  │
 │  └──────────┘  └─────┬─────┘  └──────────┘  └───────────────┘  │
 ├──────────────────────┼──────────────────────────────────────────┤
-│                  API 路由层 (:3000)                               │
+│                  API 路由层 (:6734)                               │
 │  ┌──────────────────┼──────────────────────────────────────┐    │
 │  │ /api/swarm-dispatch    → 派发任务到 Worker               │    │
 │  │ /api/swarm-roster      → Worker 花名册                   │    │
@@ -325,7 +325,7 @@
 │  │ /api/swarm-missions    → Mission 历史                    │    │
 │  │ /api/swarm-kanban      → 看板 CRUD                       │    │
 │  │ /api/swarm-direct-chat → 直接向 Worker 发送消息          │    │
-│  │ /api/conductor-spawn   → Conductor 任务启动              │    │
+│  │ /api/swarm-dispatch    → Mission / Swarm 任务启动              │    │
 │  │ /api/swarm-orchestrator-loop → 自动编排循环              │    │
 │  └──────────────────────────────────────────────────────────┘    │
 ├──────────────────────────────────────────────────────────────────┤
@@ -638,7 +638,7 @@ NEXT_ACTION: exact recommended next action</code></pre>
     <h3>4.2 Orchestrator 的三种调用路径</h3>
 
     <h4>路径 A: Conductor 原生派发</h4>
-    <pre><code>用户 → Conductor UI → conductor-spawn.ts
+    <pre><code>用户 → Missions Create (Goal) → POST /api/missions (assignee=orchestrator)
   │
   ├─ mode: "dashboard" → 使用 Hermes Dashboard mission API
   │
@@ -1017,7 +1017,7 @@ NEXT_ACTION: Submit for code review by reviewer</code></pre>
         <td>Worker 花名册 API</td>
       </tr>
       <tr>
-        <td><code>src/routes/api/conductor-spawn.ts</code></td>
+        <td><code>src/routes/api/missions/index.ts</code></td>
         <td>477</td>
         <td>Conductor 任务启动</td>
       </tr>

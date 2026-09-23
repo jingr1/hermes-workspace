@@ -13,7 +13,7 @@
 
 | 侧栏文案 | 最终路由 | 一句话 | 管什么 |
 | -------- | -------- | ------ | ------ |
-| **Missions** | `/missions` | 「在做什么」 | MissionSurface（board/list/swimlane）+ 详情 Tasks；Create Mission；可选群聊 |
+| **Missions** | `/missions` | 「在做什么」 | MissionSurface（board/list/swimlane）+ 详情 Tasks；Create Mission（Goal / pipeline / assignee）；可选群聊 |
 | **Agents** | `/agents` | 「是谁、能干什么、健康吗」 | profile 配置、轻量健康/用量、cron、outputs |
 | **Swarm** | `/swarm2` | 「编排现场」 | dispatch / tmux / Human Gate / checkpoint |
 

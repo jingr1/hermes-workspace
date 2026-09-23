@@ -10,7 +10,7 @@ Three services, three config files:
 | -------------------- | ---- | ------------------------------------------ |
 | Hermes Agent Gateway | 8642 | `C:\Users\<you>\AppData\Local\hermes\.env` |
 | Hermes CLI tools     | —    | `C:\Users\<you>\.hermes\.env`              |
-| Workspace Dashboard  | 3000 | `C:\Users\<you>\hermes-workspace\.env`     |
+| Workspace Dashboard  | 6734 | `C:\Users\<you>\hermes-workspace\.env`     |
 
 ## Required .env contents
 
@@ -36,7 +36,7 @@ OPENROUTER_API_KEY=<your-key>
 HERMES_API_URL=http://127.0.0.1:8642
 # Optional: HERMES_DASHBOARD_URL=http://127.0.0.1:9119  # analytics only
 HERMES_API_TOKEN=<must-match-API_SERVER_KEY-above>
-PORT=3000
+PORT=6734
 HOST=127.0.0.1
 ```
 
@@ -51,7 +51,7 @@ winget install SQLite.SQLite --accept-package-agreements --accept-source-agreeme
 # Source: C:\Users\<you>\AppData\Local\Microsoft\WinGet\Packages\SQLite.SQLite_...\sqlite3.exe
 # Dest:   C:\Users\<you>\bin\sqlite3.exe
 
-# 2. Claude CLI (for Claude Tasks / Conductor)
+# 2. Claude CLI (for Claude Code managed agents)
 npm install -g @anthropic-ai/claude-code
 
 # 3. pnpm (if not installed)
@@ -70,7 +70,7 @@ hermes gateway run
 cd C:\Users\<you>\hermes-workspace
 pnpm dev
 
-# Open http://127.0.0.1:3000
+# Open http://127.0.0.1:6734
 ```
 
 ## Port conflict resolution
@@ -78,7 +78,7 @@ pnpm dev
 ```powershell
 # Find what's holding a port
 netstat -ano | findstr :8642
-netstat -ano | findstr :3000
+netstat -ano | findstr :6734
 
 # Kill it
 Stop-Process -Id <PID> -Force
@@ -86,7 +86,7 @@ Stop-Process -Id <PID> -Force
 
 ## PWA Install
 
-1. Open `http://127.0.0.1:3000` in Chrome or Edge
+1. Open `http://127.0.0.1:6734` in Chrome or Edge
 2. Click install icon (⊕) in address bar
 3. Gets own window + taskbar icon
 
@@ -99,7 +99,7 @@ Stop-Process -Id <PID> -Force
 | `API_SERVER_KEY is required`                    | Add `API_SERVER_KEY=<value>` to `AppData\Local\hermes\.env` |
 | `spawnSync sqlite3 ENOENT`                      | Install sqlite3 via winget, copy exe to PATH                |
 | `which: no claude in`                           | `npm install -g @anthropic-ai/claude-code`                  |
-| `Port 3000 already in use`                      | Kill stale process via `netstat -ano` + `Stop-Process`      |
+| `Port 6734 already in use`                      | Kill stale process via `netstat -ano` + `Stop-Process`      |
 | `Slack invalid_auth`                            | Expected if Slack not configured — ignore                   |
 | Dashboard shows "not available on this backend" | Gateway API server not running or HERMES_API_TOKEN mismatch |
 

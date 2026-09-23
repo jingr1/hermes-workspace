@@ -67,7 +67,7 @@ Agorax Swarm 是一个**持久化多 Agent 协同系统**，构建在 [Hermes Ag
 │  │  (对话)   │  │  (控制平面) │  │  (任务)   │  │  (总览)       │  │
 │  └──────────┘  └─────┬─────┘  └──────────┘  └───────────────┘  │
 ├──────────────────────┼──────────────────────────────────────────┤
-│                  API 路由层 (:3000)                               │
+│                  API 路由层 (:6734)                               │
 │  ┌──────────────────┼──────────────────────────────────────┐    │
 │  │ /api/swarm-dispatch    → 派发任务到 Worker               │    │
 │  │ /api/swarm-roster      → Worker 花名册                   │    │
@@ -75,7 +75,7 @@ Agorax Swarm 是一个**持久化多 Agent 协同系统**，构建在 [Hermes Ag
 │  │ /api/swarm-missions    → Mission 历史                    │    │
 │  │ /api/swarm-kanban      → 看板 CRUD                       │    │
 │  │ /api/swarm-direct-chat → 直接向 Worker 发送消息          │    │
-│  │ /api/conductor-spawn   → Conductor 任务启动              │    │
+│  │ /api/swarm-dispatch    → Mission / Swarm 任务启动         │    │
 │  │ /api/swarm-orchestrator-loop → 自动编排循环              │    │
 │  └──────────────────────────────────────────────────────────┘    │
 ├──────────────────────────────────────────────────────────────────┤
@@ -311,18 +311,14 @@ dispatchSwarmAssignments()                    [swarm-dispatch.ts:1018]
 
 ### 4.2 Orchestrator 的三种调用路径
 
-#### 路径 A: Conductor 原生派发
+#### 路径 A: Mission Goal → Orchestrator 派发
 
 ```
-用户 → Conductor UI → conductor-spawn.ts
+用户 → Missions Create (Goal) → POST /api/missions (assignee=orchestrator)
   │
-  ├─ mode: "dashboard" → 使用 Hermes Dashboard mission API
-  │
-  └─ mode: "native-swarm" → 直接调用 dispatchSwarmAssignments()
+  └─ orchestrator Task prompt 要求 curl POST /api/swarm-dispatch
        │
-       └─ 并行派发 builder + reviewer + qa ...
-            │
-            └─ 完成后 → checkpoint 通知 → Orchestrator tmux
+       └─ 同一 missionId 下追加 specialist assignments → tmux workers
 ```
 
 #### 路径 B: 自动编排循环
@@ -587,7 +583,7 @@ type SwarmKanbanCard = {
 | `src/routes/api/swarm-dispatch.ts`           | 1138 | 核心派发逻辑：`dispatchSwarmAssignments()`, `runWorker()`, `sendPromptToLiveSession()`, `waitForFreshCheckpoint()` |
 | `src/routes/api/swarm-orchestrator-loop.ts`  | ~600 | 自动编排循环：轮询 Worker 状态并自动续派                                                                           |
 | `src/routes/api/swarm-roster.ts`             | ~50  | Worker 花名册 API                                                                                                  |
-| `src/routes/api/conductor-spawn.ts`          | 477  | Conductor 任务启动入口（dashboard / native-swarm 双模式）                                                          |
+| `src/routes/api/missions/index.ts`           | —    | Mission create（Goal → orchestrator / pipeline / assignee）                                              |
 | `src/routes/api/swarm-direct-chat.ts`        | 293  | 直接向 Worker tmux 会话发送消息                                                                                    |
 | `src/routes/api/swarm-kanban.ts`             | 93   | 看板 CRUD API                                                                                                      |
 | `src/server/swarm-foundation.ts`             | ~600 | 基础设施：路径、profile 管理                                                                                       |

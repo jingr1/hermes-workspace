@@ -48,7 +48,7 @@ export const Route = createFileRoute('/api/session-send')({
           // handling differs across Node fetch implementations), which causes
           // the downstream /api/send-stream call to 401 silently and the user
           // never sees their assistant reply. See #XXX.
-          const internalPort = process.env.PORT || '3000'
+          const internalPort = process.env.PORT || '6734'
           const url = new URL(
             '/api/send-stream',
             `http://127.0.0.1:${internalPort}`,

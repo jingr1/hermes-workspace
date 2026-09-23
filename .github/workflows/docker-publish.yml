@@ -72,7 +72,7 @@ jobs:
           set -euo pipefail
 
           cid=$(docker run -d \
-            -p 127.0.0.1:3000:3000 \
+            -p 127.0.0.1:6734:6734 \
             -e HERMES_API_URL=http://127.0.0.1:8642 \
             -e CLAUDE_PASSWORD=ci-smoke-test-password \
             agorax:smoke)
@@ -87,7 +87,7 @@ jobs:
                 ;;
             esac
 
-            if curl -fsS http://127.0.0.1:3000/ >/dev/null; then
+            if curl -fsS http://127.0.0.1:6734/ >/dev/null; then
               echo "Container stayed alive and served HTTP successfully"
               exit 0
             fi

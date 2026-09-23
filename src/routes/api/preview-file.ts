@@ -1,7 +1,7 @@
 /**
  * Preview-file endpoint.
  *
- * Serves a file from disk so the Conductor complete-phase panel can embed
+ * Serves a file from disk so mission / preview panels can embed
  * the mission output (typically /tmp/dispatch-<slug>/index.html) in an
  * iframe. Locks serving to a small list of trusted prefixes so the route
  * can never be used to exfiltrate arbitrary user files.

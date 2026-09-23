@@ -36,7 +36,7 @@ pnpm dev
 Open the local URL printed by Vite/TanStack Start. In most local setups that is:
 
 ```text
-http://localhost:3000
+http://localhost:6734
 ```
 
 Some release lanes run on `:3002`; trust the terminal output if it differs.
@@ -91,7 +91,7 @@ POST /api/swarm-dispatch
 Minimal single-worker example:
 
 ```bash
-curl -X POST http://localhost:3000/api/swarm-dispatch   -H 'Content-Type: application/json'   -d '{
+curl -X POST http://localhost:6734/api/swarm-dispatch   -H 'Content-Type: application/json'   -d '{
     "workerIds": ["swarm7"],
     "prompt": "Write a short checkpoint explaining what you can see in your current workspace. Do not modify files.",
     "timeoutSeconds": 240,
@@ -102,7 +102,7 @@ curl -X POST http://localhost:3000/api/swarm-dispatch   -H 'Content-Type: applic
 Assignment-form example:
 
 ```bash
-curl -X POST http://localhost:3000/api/swarm-dispatch   -H 'Content-Type: application/json'   -d '{
+curl -X POST http://localhost:6734/api/swarm-dispatch   -H 'Content-Type: application/json'   -d '{
     "missionTitle": "Docs smoke test",
     "assignments": [
       {

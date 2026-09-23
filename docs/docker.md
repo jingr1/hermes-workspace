@@ -10,13 +10,13 @@ cd agorax
 cp .env.example .env
 # add at least one provider key (e.g. OPENROUTER_API_KEY=...)
 docker compose up -d
-open http://localhost:3000
+open http://localhost:6734
 ```
 
 That's it. The repo's `docker-compose.yml` runs:
 
 - `hermes-agent` (port `8642`, internal only)
-- `hermes-workspace` (port `3000`, bound to `127.0.0.1`)
+- `hermes-workspace` (port `6734`, bound to `127.0.0.1`)
 
 The workspace waits for the agent's `/health` to return `200` before starting (via `depends_on: condition: service_healthy`). On a fresh laptop this takes about 15 seconds.
 
@@ -51,7 +51,7 @@ Inside docker compose on the same host, `<agent-host-or-service>` is the service
 
 ### 3. Workspace gets a password
 
-The workspace bind is non-loopback in Docker (`0.0.0.0:3000`). It refuses to start in production mode without a password to prevent accidental open exposure:
+The workspace bind is non-loopback in Docker (`0.0.0.0:6734`). It refuses to start in production mode without a password to prevent accidental open exposure:
 
 ```bash
 HERMES_PASSWORD=<a long random string different from API_SERVER_KEY>
@@ -91,7 +91,7 @@ You should see:
 The workspace caches the gateway capability map for 2 minutes (15 seconds when in disconnected state, since v2.2.1). If the agent came up after the workspace started probing, that cache is stale.
 
 ```bash
-curl -X POST http://localhost:3000/api/gateway-reprobe
+curl -X POST http://localhost:6734/api/gateway-reprobe
 ```
 
 This re-runs the probe and returns the fresh capability map. If it now reads `mode=zero-fork` you're connected.
@@ -107,7 +107,7 @@ docker compose logs agorax 2>&1 | grep '\[gateway\]' | tail -3
 A healthy log looks like:
 
 ```
-[gateway] gateway=http://hermes-agent:8642 dashboard=http://hermes-agent:9119 mode=zero-fork core=[health,chatCompletions,models,streaming] enhanced=[sessions,skills,memory,config,jobs,enhancedChat,conductor,kanban] missing=[mcp]
+[gateway] gateway=http://hermes-agent:8642 dashboard=http://hermes-agent:9119 mode=zero-fork core=[health,chatCompletions,models,streaming] enhanced=[sessions,skills,memory,config,jobs,enhancedChat,kanban] missing=[mcp]
 ```
 
 A failing log usually shows `core=[]` and `missing=[health,...]` — that means every probe got a non-2xx response. Check the agent's logs (`docker compose logs hermes-agent`) for matching 401/404/timeout entries.
@@ -126,7 +126,7 @@ A failing log usually shows `core=[]` and `missing=[health,...]` — that means 
 
 If your workspace and agent are on **different stacks** on the same NAS (or different hosts entirely), they don't share a docker network. You need:
 
-1. Both to publish their ports (the agent on `8642`, the workspace on `3000`).
+1. Both to publish their ports (the agent on `8642`, the workspace on `6734`).
 2. The workspace to point at the agent's **host IP**, not service name. Example for Synology with NAS at `192.168.1.78`:
 
 ```bash
@@ -142,7 +142,7 @@ API_SERVER_HOST=0.0.0.0
 API_SERVER_KEY=<long random>
 ```
 
-4. The dashboard plugin (multi-board kanban, conductor missions) needs the dashboard service running on the agent host too — see the agent's docker-compose for that service.
+4. The dashboard plugin (multi-board kanban) needs the dashboard service running on the agent host too — see the agent's docker-compose for that service.
 
 If you bind the agent to `0.0.0.0` on a NAS without `API_SERVER_KEY`, the agent will refuse to start. This is intentional — open-internet exposure of the agent's chat endpoint without auth would be a footgun.
 
@@ -162,6 +162,6 @@ If your setup matches the playbook above and still breaks, file an issue at <htt
 
 1. Your `docker-compose.yml` (redact secrets)
 2. The output of `docker compose logs agorax 2>&1 | grep '\[gateway\]' | tail -5`
-3. The output of `curl -fsS http://<workspace-host>:3000/api/gateway-reprobe -X POST` (also redact)
+3. The output of `curl -fsS http://<workspace-host>:6734/api/gateway-reprobe -X POST` (also redact)
 
 That gets us to the actual cause within a couple of comments instead of a long back-and-forth.

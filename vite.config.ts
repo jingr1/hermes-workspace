@@ -404,8 +404,8 @@ const config = defineConfig(({ mode, command }) => {
       // Port precedence:
       //   1. --port CLI flag (wins, but we no longer hardcode it in package.json)
       //   2. $PORT env var (for containers, reverse proxies, WhatsApp bridge collisions, etc. — see #96)
-      //   3. default 3000 (matches README/docs/docker-compose expectations)
-      port: process.env.PORT ? Number(process.env.PORT) : 3000,
+      //   3. default 6734 (matches README/docs/docker-compose expectations)
+      port: process.env.PORT ? Number(process.env.PORT) : 6734,
       // Managed Workspace launchers expect a stable port. Fail loudly instead
       // of silently hopping to 3001+ so launchctl/service health matches the
       // actual listening socket.
@@ -729,7 +729,6 @@ const config = defineConfig(({ mode, command }) => {
               path === '/api/swarm-direct-chat' ||
               path === '/api/swarm-dispatch' ||
               path === '/api/swarm-decompose' ||
-              path === '/api/conductor-spawn' ||
               /^\/api\/agents\/[^/]+\/chat$/.test(path)
             const timeout = isLongRunning ? 0 : 15_000
             socket.setTimeout(timeout)
