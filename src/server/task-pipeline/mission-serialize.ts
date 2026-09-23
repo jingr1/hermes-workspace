@@ -4,54 +4,12 @@
 import type {
   SwarmMission,
   SwarmMissionAssignment,
-  SwarmMissionAssignmentState,
 } from '../swarm-missions'
-import { laneFromMission } from '../task-pipeline/lane-sync'
-import type { KanbanLane } from '../task-pipeline/lane-sync'
-
-const FALLBACK_PROGRESS_BY_LANE: Record<string, number> = {
-  done: 100,
-  complete: 100,
-  review: 75,
-  running: 50,
-  blocked: 50,
-  ready: 25,
-  todo: 10,
-  backlog: 0,
-}
-
-function assignmentProgressWeight(state: SwarmMissionAssignmentState): number {
-  switch (state) {
-    case 'done':
-    case 'checkpointed':
-      return 1
-    case 'reviewing':
-      return 0.8
-    case 'blocked':
-    case 'needs_input':
-      return 0.5
-    case 'dispatched':
-      return 0.5
-    case 'queued':
-    case 'cancelled':
-    default:
-      return 0
-  }
-}
-
-export function computeMissionProgress(
-  mission: SwarmMission | null,
-  lane: string,
-): number {
-  if (mission && mission.assignments.length > 0) {
-    const weighted = mission.assignments.reduce(
-      (sum, assignment) => sum + assignmentProgressWeight(assignment.state),
-      0,
-    )
-    return Math.round((weighted / mission.assignments.length) * 100)
-  }
-  return FALLBACK_PROGRESS_BY_LANE[lane] ?? FALLBACK_PROGRESS_BY_LANE.backlog
-}
+import {
+  deriveMissionStatus,
+  effectiveMissionStatus,
+  type MissionStatus,
+} from '../task-pipeline/mission-status'
 
 export function serializeMissionTask(assignment: SwarmMissionAssignment) {
   return {
@@ -73,14 +31,20 @@ export function serializeMissionTask(assignment: SwarmMissionAssignment) {
 
 export type MissionSummary = {
   title: string
-  lane: KanbanLane | string
+  /** Effective status (board pin ?? derived) — Multica-style single field. */
+  status: MissionStatus
+  /** @deprecated Prefer `status` */
+  lane: MissionStatus
   missionId: string | null
-  missionState: string | null
-  derivedLane: KanbanLane | null
+  /** @deprecated Prefer `status` */
+  missionState: MissionStatus | null
+  /** Derived from tasks only (ignores board pin). */
+  derivedStatus: MissionStatus | null
+  /** @deprecated Prefer `derivedStatus` */
+  derivedLane: MissionStatus | null
   currentAssignee: string | null
-  /** Active pipeline stage key (or worker id fallback) for the in-flight task. */
+  /** Active pipeline stage key for the in-flight task; null when unset (e.g. Swarm2). */
   currentStage: string | null
-  progress: number
   executionMode: string | null
   assignee: SwarmMission['assignee']
   roomId: string | null
@@ -89,8 +53,8 @@ export type MissionSummary = {
   priority: number | null
   labels: Array<string>
   taskCount: number
-  /** Human board override when set. */
-  boardLane: KanbanLane | null
+  /** Human board pin when set. */
+  boardLane: MissionStatus | null
 }
 
 function pickActiveAssignment(mission: SwarmMission | null) {
@@ -115,15 +79,17 @@ export function buildMissionSummary(input: {
 }): MissionSummary {
   const { mission } = input
   if (!mission) {
+    const fallback = (input.cardStatus as MissionStatus | undefined) ?? 'todo'
     return {
       title: input.cardTitle ?? 'Untitled',
-      lane: input.cardStatus ?? 'todo',
+      status: fallback,
+      lane: fallback,
       missionId: null,
       missionState: null,
+      derivedStatus: null,
       derivedLane: null,
       currentAssignee: null,
       currentStage: null,
-      progress: 0,
       executionMode: null,
       assignee: null,
       roomId: null,
@@ -135,21 +101,27 @@ export function buildMissionSummary(input: {
       boardLane: null,
     }
   }
-  const derived = laneFromMission(mission)
+  const derived = deriveMissionStatus(mission.assignments)
+  const status = effectiveMissionStatus({
+    state: mission.state,
+    boardLane: mission.boardLane,
+    assignments: mission.assignments,
+  })
   const active = pickActiveAssignment(mission)
   return {
     title: mission.title?.trim()
       ? mission.title.trim()
       : (input.cardTitle ?? 'Untitled'),
-    lane: mission.boardLane ?? derived,
+    status,
+    lane: status,
     missionId: mission.id,
     missionState: mission.state,
+    derivedStatus: derived,
     derivedLane: derived,
     currentAssignee:
       active?.workerId ??
       (mission.assignee?.type === 'agent' ? mission.assignee.id : null),
-    currentStage: active?.stageKey ?? active?.workerId ?? null,
-    progress: computeMissionProgress(mission, derived),
+    currentStage: active?.stageKey ?? null,
     executionMode: mission.executionMode ?? null,
     assignee: mission.assignee ?? null,
     roomId: mission.roomId ?? null,

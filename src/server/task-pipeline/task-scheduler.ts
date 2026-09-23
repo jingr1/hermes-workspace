@@ -236,7 +236,7 @@ export async function processDueRetries(nowMs = now()): Promise<number> {
       (a) => a.id === entry.assignmentId,
     )
     if (!assignment || assignment.dispatchable === false) continue
-    if (mission?.state === 'cancelled' || mission?.state === 'complete')
+    if (mission?.state === 'cancelled' || mission?.state === 'done')
       continue
     await scheduleDispatchMission(entry.missionId)
     count++
@@ -259,6 +259,6 @@ export function isAssignmentDispatchable(
 
 export function listRunnableMissions(limit = 100) {
   return listSwarmMissions(limit).filter(
-    (m) => m.state === 'planning' || m.state === 'dispatching' || m.state === 'executing',
+    (m) => m.state === 'todo' || m.state === 'ready' || m.state === 'running',
   )
 }

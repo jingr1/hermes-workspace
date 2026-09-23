@@ -2,63 +2,55 @@
 
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import type { KanbanLane, TaskSummary } from '@/lib/mission-control-api'
+import type { MissionStatus, TaskSummary } from '@/lib/mission-control-api'
 import { cn } from '@/lib/utils'
 import { fetchTasks } from '@/lib/mission-control-api'
 import { CreateTaskButton } from './components/create-task-button'
 
-const LANES: Array<{ id: KanbanLane; label: string }> = [
-  { id: 'backlog', label: 'Backlog' },
-  { id: 'todo', label: 'Ready' },
+const STATUSES: Array<{ id: MissionStatus; label: string }> = [
+  { id: 'todo', label: 'Todo' },
+  { id: 'ready', label: 'Ready' },
   { id: 'running', label: 'Running' },
   { id: 'review', label: 'Review' },
   { id: 'blocked', label: 'Blocked' },
   { id: 'done', label: 'Done' },
+  { id: 'cancelled', label: 'Cancelled' },
 ]
 
-const LANE_COLORS: Record<KanbanLane, string> = {
-  backlog: '#6b7280',
+const STATUS_COLORS: Record<MissionStatus, string> = {
   todo: '#3b82f6',
-  ready: '#3b82f6',
+  ready: '#0ea5e9',
   running: '#f97316',
   review: '#a855f7',
   blocked: '#ef4444',
   done: '#22c55e',
+  cancelled: '#6b7280',
 }
 
 const TASKS_QUERY_KEY = ['mission-control', 'tasks'] as const
 
 type TaskKpiFilter = 'all' | 'in_progress' | 'blocked' | 'pending_human' | 'done'
 
-function resolveLane(task: TaskSummary): KanbanLane {
-  const lane =
-    (task.derivedLane ?? task.lane) === 'ready'
-      ? 'todo'
-      : (task.derivedLane ?? task.lane)
-  return lane
+function resolveStatus(task: TaskSummary): MissionStatus {
+  return (task.status ?? task.derivedStatus ?? task.lane ?? 'todo') as MissionStatus
 }
 
 function isInProgress(task: TaskSummary): boolean {
-  const lane = resolveLane(task)
-  return lane === 'running' || lane === 'review' || lane === 'todo'
+  const status = resolveStatus(task)
+  return status === 'running' || status === 'review' || status === 'ready'
 }
 
 function isBlocked(task: TaskSummary): boolean {
-  return resolveLane(task) === 'blocked'
+  return resolveStatus(task) === 'blocked'
 }
 
 function isPendingHuman(task: TaskSummary): boolean {
-  if (isBlocked(task)) return true
-  const state = (task.missionState ?? '').toLowerCase()
-  return (
-    state.includes('needs_human') ||
-    state.includes('needs_input') ||
-    state.includes('pending')
-  )
+  const status = resolveStatus(task)
+  return status === 'blocked' || status === 'review'
 }
 
 function isDone(task: TaskSummary): boolean {
-  return resolveLane(task) === 'done'
+  return resolveStatus(task) === 'done'
 }
 
 function KpiChip({
@@ -141,11 +133,11 @@ export function BoardView({
   }, [tasks, kpiFilter])
 
   const byLane = useMemo(() => {
-    const map = new Map<KanbanLane, Array<TaskSummary>>()
-    for (const lane of LANES) map.set(lane.id, [])
+    const map = new Map<MissionStatus, Array<TaskSummary>>()
+    for (const lane of STATUSES) map.set(lane.id, [])
     for (const task of filteredTasks) {
-      const lane = resolveLane(task)
-      const bucket = map.get(lane) ?? map.get('backlog')!
+      const lane = resolveStatus(task)
+      const bucket = map.get(lane) ?? map.get('todo')!
       bucket.push(task)
     }
     return map
@@ -207,7 +199,7 @@ export function BoardView({
 
       <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden p-4">
         <div className="flex h-full min-w-[900px] gap-3">
-          {LANES.map((lane) => {
+          {STATUSES.map((lane) => {
             const laneTasks = byLane.get(lane.id) ?? []
             return (
               <div
@@ -218,7 +210,7 @@ export function BoardView({
                   className="flex items-center justify-between rounded-t-xl border-b border-[var(--theme-border)] px-3 py-2"
                   style={{
                     borderTopWidth: 2,
-                    borderTopColor: LANE_COLORS[lane.id],
+                    borderTopColor: STATUS_COLORS[lane.id],
                   }}
                 >
                   <span className="text-xs font-semibold">{lane.label}</span>
@@ -241,7 +233,8 @@ export function BoardView({
                         {task.currentAssignee ? (
                           <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-medium text-amber-800">
                             {task.currentAssignee}
-                            {task.currentStage
+                            {task.currentStage &&
+                            task.currentStage !== task.currentAssignee
                               ? ` · ${task.currentStage}`
                               : ''}
                           </span>
@@ -254,9 +247,6 @@ export function BoardView({
                             No active worker
                           </span>
                         )}
-                        <span className="text-[var(--theme-muted)]">
-                          {task.progress}%
-                        </span>
                       </div>
                     </button>
                   ))}

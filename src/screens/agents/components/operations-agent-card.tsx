@@ -18,7 +18,7 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { AnimatePresence, motion } from 'motion/react'
 import { Button } from '@/components/ui/button'
 import { AgentProgress } from '@/components/agent-view/agent-progress'
-import { PixelAvatar } from '@/components/agent-swarm/pixel-avatar'
+import { AgentIdentityAvatar } from '@/components/avatars'
 import { Markdown } from '@/components/prompt-kit/markdown'
 import { toast } from '@/components/ui/toast'
 import { runCronJob, toggleCronJob } from '@/lib/cron-api'
@@ -236,9 +236,12 @@ export function OperationsInlineChat({
 export function OperationsAgentCard({
   agent,
   onOpenSettings,
+  providerSiblingCount = 1,
 }: {
   agent: OperationsAgent
   onOpenSettings: (agentId: string) => void
+  /** Hermes roster size — >1 shows two-letter initials on the circular icon. */
+  providerSiblingCount?: number
 }) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -466,17 +469,11 @@ export function OperationsAgentCard({
             className={status.ring}
           />
           <div className="absolute inset-0 flex items-center justify-center">
-            <PixelAvatar
+            <AgentIdentityAvatar
+              name={displayName}
+              runtime="hermes"
+              providerSiblingCount={providerSiblingCount}
               size={40}
-              color={agent.meta.color}
-              accentColor="#ffffff"
-              status={
-                agent.status === 'error' || agent.status === 'blocked'
-                  ? 'failed'
-                  : agent.status === 'active'
-                    ? 'running'
-                    : 'idle'
-              }
             />
           </div>
         </div>

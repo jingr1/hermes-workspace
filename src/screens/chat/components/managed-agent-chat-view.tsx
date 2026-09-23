@@ -219,7 +219,14 @@ export function ManagedAgentChatView({
   return (
     <AssistantAvatarProvider
       value={{
-        src: agent.runtime === 'codex' ? '/codex-mark.svg' : '/claude-code-mark.svg',
+        src:
+          agent.runtime === 'codex'
+            ? '/agent-avatars/codex-rounded.png'
+            : agent.runtime === 'cursor'
+              ? '/agent-avatars/cursor-rounded.png'
+              : agent.runtime === 'opencode'
+                ? '/agent-avatars/opencode-rounded.png'
+                : '/agent-avatars/claude-rounded.png',
         alt: brand.label,
       }}
     >

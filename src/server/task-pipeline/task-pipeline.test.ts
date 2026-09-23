@@ -530,7 +530,7 @@ describe('lane-sync', () => {
     const base = {
       id: 'm',
       title: 't',
-      state: 'executing' as const,
+      state: 'running' as const,
       createdAt: 0,
       updatedAt: 0,
       events: [],
@@ -552,7 +552,7 @@ describe('lane-sync', () => {
     expect(
       laneSync.laneFromMission({
         ...base,
-        state: 'complete',
+        state: 'done',
         assignments: [],
       } as never),
     ).toBe('done')

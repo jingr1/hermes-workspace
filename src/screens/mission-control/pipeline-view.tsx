@@ -248,24 +248,19 @@ export function PipelineView({
   const missions = missionsQuery.data?.missions ?? []
 
   const [activeMissionKey, setActiveMissionKey] = useState<string | null>(activeId)
-  const [selectionCleared, setSelectionCleared] = useState(false)
   useEffect(() => {
-    if (activeId) {
-      setActiveMissionKey(activeId)
-      setSelectionCleared(false)
-    }
+    if (activeId) setActiveMissionKey(activeId)
   }, [activeId])
 
   const activeMission: MissionSummary | null = useMemo(() => {
     if (missions.length === 0) return null
-    if (selectionCleared) return null
     if (activeMissionKey) {
       return (
         missions.find((t) => t.missionId === activeMissionKey) ?? null
       )
     }
     return missions[0] ?? null
-  }, [missions, activeMissionKey, selectionCleared])
+  }, [missions, activeMissionKey])
 
   const detailKey = activeMission?.missionId ?? null
   const detailQuery = useQuery({
@@ -336,14 +331,30 @@ export function PipelineView({
     mutationFn: () => deleteMission(detailKey!),
     onSuccess: async () => {
       const deletedId = detailKey
-      select(null)
-      setActiveMissionKey(null)
-      setSelectionCleared(true)
-      await queryClient.invalidateQueries({ queryKey: MISSIONS_QUERY_KEY })
+      const idx = missions.findIndex((m) => m.missionId === deletedId)
+      const remaining = missions.filter(
+        (m) => m.missionId && m.missionId !== deletedId,
+      )
+      // Prefer the next row; if we deleted the last, stay on the previous.
+      const nextId =
+        remaining.length === 0
+          ? null
+          : (remaining[Math.min(Math.max(idx, 0), remaining.length - 1)]
+              ?.missionId ?? null)
+
       if (deletedId) {
         queryClient.removeQueries({
           queryKey: ['mission-control', 'mission', deletedId],
         })
+      }
+      await queryClient.invalidateQueries({ queryKey: MISSIONS_QUERY_KEY })
+
+      if (nextId) {
+        setActiveMissionKey(nextId)
+        select(nextId)
+      } else {
+        setActiveMissionKey(null)
+        select(null)
       }
       toast('Mission deleted', { type: 'success' })
     },
@@ -366,7 +377,10 @@ export function PipelineView({
   const nowWorker =
     missionView?.currentAssignee ??
     (currentStage ? currentStage.agent : null)
-  const nowStage = currentStage?.stageKey ?? currentStage?.agent ?? null
+  // Prefer assignment stageKey; do not fall back to agent — that produced
+  // "developer · developer" for Swarm2 / pre-pipeline missions with null stageKey.
+  const nowStage =
+    currentStage?.stageKey ?? missionView?.currentStage ?? null
   const agentOptions = agentsQuery.data?.agents.map((a) => a.agentId) ?? []
 
   return (
@@ -382,7 +396,6 @@ export function PipelineView({
             onClick={() => {
               const id = m.missionId
               if (!id) return
-              setSelectionCleared(false)
               setActiveMissionKey(id)
               select(id)
             }}
@@ -405,7 +418,7 @@ export function PipelineView({
               {m.currentAssignee
                 ? `${m.currentAssignee} · `
                 : ''}
-              {m.taskCount} tasks · {m.progress}%
+              {m.taskCount} tasks
             </div>
           </button>
         ))}
@@ -430,8 +443,8 @@ export function PipelineView({
               ) : null}
               {nowWorker ? (
                 <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
-                  Now: {nowWorker}
-                  {nowStage ? ` · ${nowStage}` : ''}
+                  {nowWorker}
+                  {nowStage && nowStage !== nowWorker ? ` · ${nowStage}` : ''}
                 </span>
               ) : (
                 <span className="rounded bg-slate-500/10 px-1.5 py-0.5 text-[10px] text-slate-600">
@@ -526,14 +539,9 @@ export function PipelineView({
               Properties
             </h3>
             <dl className="space-y-3">
-              <PropRow label="Lane">
+              <PropRow label="Status">
                 <span className="block pt-1.5 font-medium">
-                  {missionView?.derivedLane ?? missionView?.lane ?? '—'}
-                </span>
-              </PropRow>
-              <PropRow label="State">
-                <span className="block pt-1.5 font-medium">
-                  {missionView?.missionState ?? '—'}
+                  {missionView?.status ?? '—'}
                 </span>
               </PropRow>
               <PropRow label="Now">

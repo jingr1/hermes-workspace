@@ -32,7 +32,7 @@ export function MissionsLayout({
             <p className="text-xs text-[var(--theme-muted)]">
               {showDetail
                 ? 'Mission detail — tasks decomposed for agents.'
-                : 'Mission board · list · table · swimlane (no Gantt).'}
+                : 'Mission board · list · swimlane (no Gantt).'}
             </p>
           </div>
           <div className="flex items-center gap-3">

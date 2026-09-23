@@ -228,6 +228,15 @@ export function MentionPicker({
                   name={option.participant.displayName}
                   kind={option.participant.kind}
                   size={24}
+                  runtime={option.participant.runtime}
+                  providerSiblingCount={
+                    participants.filter(
+                      (other) =>
+                        other.kind === 'agent' &&
+                        (other.runtime || 'hermes') ===
+                          (option.participant?.runtime || 'hermes'),
+                    ).length
+                  }
                 />
               ) : (
                 <span className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold bg-slate-600 text-white">

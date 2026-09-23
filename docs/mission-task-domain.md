@@ -7,8 +7,12 @@
 > Project 合同见 [`mission-project-domain.md`](mission-project-domain.md)。
 >
 > **Kanban cards are not part of this domain.** List / detail / delete are
-> mission-keyed (`missionId`). Board lanes derive from assignment state
-> (`derivedLane`) with optional human `boardLane` override.
+> mission-keyed (`missionId`).
+>
+> **Status = board column**（对齐 Multica）：单一枚举
+> `todo | ready | running | review | blocked | done | cancelled`。
+> `mission.state` 由 assignments 推导；人工拖拽写 `boardLane`（同枚举 pin），
+> 列表/看板有效列 = `boardLane ?? state`。
 
 ## Entities
 
@@ -49,10 +53,11 @@ Runtime stub: `GET /api/missions/:missionId/tasks/:taskId/runtime`
 
 ## UI rules
 
-- MissionSurface modes: board / list / table / swimlane (**no Gantt**)
-- List rows are Missions only; Tasks appear in Mission detail table
+- MissionSurface modes: board / list / swimlane (**no Gantt**；table 并入 list）
+- List rows are Missions only（按 lane 分组；含 assignee / pipeline / tasks）；Tasks appear in Mission detail table
 - `/tasks` redirects to `/missions`
-- Board drag writes `mission.boardLane` via `PATCH /api/missions/:id`（不再写 kanban card）
+- Board drag writes `mission.boardLane`（= status pin）via `PATCH /api/missions/:id`（也可传 `status`）
+- Properties 只展示一项 **Status**（effective：`boardLane ?? state`）
 
 ## Pipeline contract vs Symphony WORKFLOW.md
 
@@ -79,5 +84,5 @@ Skills keep `SKILL.md` YAML front matter; optional `metadata.hermes.pipeline_sta
 - Header shows active worker via `currentAssignee` and current stage
 - Task Summary is a short line with expand-to-full brief
 - Properties: editable priority / labels / project / assignee (assignee mode);
-  lane / state / pipeline / room remain informational
+  status / pipeline / room remain informational（status 为单一生命周期字段）
 - Create Mission can optionally set `projectId`

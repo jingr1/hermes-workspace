@@ -49,14 +49,17 @@ export type AgentsStatusResponse = {
   checkedAt: number
 }
 
-export type KanbanLane =
-  | 'backlog'
+export type MissionStatus =
   | 'todo'
   | 'ready'
   | 'running'
   | 'review'
   | 'blocked'
   | 'done'
+  | 'cancelled'
+
+/** @deprecated Use MissionStatus — column = status (Multica). */
+export type KanbanLane = MissionStatus
 
 export type MissionAssignee = {
   type: 'agent' | 'chat_group'
@@ -65,13 +68,18 @@ export type MissionAssignee = {
 
 export type MissionSummary = {
   title: string
-  lane: KanbanLane
+  /** Effective status (board pin ?? derived). */
+  status: MissionStatus
+  /** @deprecated Prefer `status` */
+  lane: MissionStatus
   missionId: string | null
+  /** @deprecated Prefer `status` */
   missionState: string | null
-  derivedLane: KanbanLane | null
+  derivedStatus: MissionStatus | null
+  /** @deprecated Prefer `derivedStatus` */
+  derivedLane: MissionStatus | null
   currentAssignee: string | null
   currentStage: string | null
-  progress: number
   executionMode: string | null
   assignee: MissionAssignee | null
   roomId: string | null
@@ -80,7 +88,7 @@ export type MissionSummary = {
   priority: number | null
   labels: Array<string>
   taskCount: number
-  boardLane: KanbanLane | null
+  boardLane: MissionStatus | null
 }
 
 /** @deprecated Prefer MissionSummary */
@@ -212,13 +220,14 @@ export async function fetchMissionDetail(
     return {
       mission: data.mission ?? {
         title: data.task.title,
-        lane: data.task.status,
+        status: data.task.status as MissionStatus,
+        lane: data.task.status as MissionStatus,
         missionId: data.task.missionId,
         missionState: null,
+        derivedStatus: null,
         derivedLane: null,
         currentAssignee: null,
         currentStage: null,
-        progress: 0,
         executionMode: null,
         assignee: null,
         roomId: null,
@@ -324,7 +333,9 @@ export type PatchMissionInput = {
   projectId?: string | null
   priority?: number | null
   labels?: Array<string>
-  boardLane?: KanbanLane | null
+  /** Status pin (Multica column). Alias of `status`. */
+  boardLane?: MissionStatus | null
+  status?: MissionStatus | null
 }
 
 export async function patchMission(

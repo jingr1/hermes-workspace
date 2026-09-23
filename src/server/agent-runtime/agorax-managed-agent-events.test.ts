@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { agoraxEventsFromManagedActivity } from './agorax-managed-agent-events'
+import {
+  agoraxEventsFromManagedActivity,
+  assistantTextFromMessageUpdate,
+} from './agorax-managed-agent-events'
 
 describe('agoraxEventsFromManagedActivity', () => {
   it('projects assistant message deltas as text events', () => {
@@ -127,7 +130,56 @@ describe('agoraxEventsFromManagedActivity', () => {
     ])
     expect(failed).toEqual([
       expect.objectContaining({ type: 'activity', runId: 'run-1' }),
+      {
+        type: 'error',
+        runId: 'run-1',
+        message: 'provider rejected request',
+      },
       { type: 'run_exited', runId: 'run-1', exitCode: 1 },
     ])
+  })
+
+  it('extracts assistant text from durable message_update snapshots', () => {
+    expect(
+      assistantTextFromMessageUpdate({
+        workspaceId: 'workspace-1',
+        agentSessionId: 'session-1',
+        eventType: 'message_update',
+        data: {
+          workspaceId: 'workspace-1',
+          agentSessionId: 'session-1',
+          eventType: 'message_update',
+          latestVersion: 2,
+          acceptedCount: 1,
+          messages: [
+            {
+              agentSessionId: 'session-1',
+              kind: 'text',
+              messageId: 'user-1',
+              payload: { text: 'hi' },
+              role: 'user',
+              version: 1,
+              turnId: 'turn-1',
+              sequence: 1,
+              occurredAtUnixMs: 1,
+            },
+            {
+              agentSessionId: 'session-1',
+              kind: 'text',
+              messageId: 'asst-1',
+              payload: {
+                text: 'API Error: Request rejected (429) · Token-X quota exhausted',
+              },
+              role: 'assistant',
+              status: 'failed',
+              version: 2,
+              turnId: 'turn-1',
+              sequence: 2,
+              occurredAtUnixMs: 2,
+            },
+          ],
+        },
+      }),
+    ).toBe('API Error: Request rejected (429) · Token-X quota exhausted')
   })
 })

@@ -527,7 +527,8 @@ async function runGroupChatRounds(
       }
 
       // Timeout: advance watermark (don't re-prompt same delta) + strand so
-      // the finished reply can be harvested late. Failed: advance + emit.
+      // the finished reply can be harvested late. Failed: advance + post the
+      // reason into the room so quota/API errors are not silent.
       if (turnResult.kind === 'timeout') {
         setWatermark(room.id, member.participantId, roomLog.length)
         setStranded(room.id, member, {
@@ -541,6 +542,15 @@ async function runGroupChatRounds(
         })
       } else if (turnResult.kind === 'failed') {
         setWatermark(room.id, member.participantId, roomLog.length)
+        const failText = `⚠️ ${member.displayName} failed: ${turnResult.reason}`
+        insertMessage({
+          roomId: room.id,
+          senderKind: 'agent',
+          senderParticipantId: member.participantId,
+          senderName: member.displayName,
+          content: failText,
+          mentions: [],
+        })
         publishChatEvent('group_chat_failed', {
           roomId: room.id,
           member: member.displayName,
@@ -628,6 +638,14 @@ async function runGroupChatRounds(
           ) {
             setWatermark(room.id, member.participantId, roomLog2.length)
             if (turnResult.kind === 'failed') {
+              insertMessage({
+                roomId: room.id,
+                senderKind: 'agent',
+                senderParticipantId: member.participantId,
+                senderName: member.displayName,
+                content: `⚠️ ${member.displayName} failed: ${turnResult.reason}`,
+                mentions: [],
+              })
               publishChatEvent('group_chat_failed', {
                 roomId: room.id,
                 member: member.displayName,

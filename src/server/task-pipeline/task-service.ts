@@ -172,6 +172,7 @@ export function instantiatePipeline(input: {
       workerId: stage.agent,
       task: brief.instruction,
       rationale: `pipeline ${input.template.id} stage ${stage.key}`,
+      stageKey: stage.key,
     })
     const created = updated!.assignments[updated!.assignments.length - 1]
     stageIdByKey.set(stage.key, created.id)
@@ -391,4 +392,4 @@ export async function createTask(
 }
 
 export { syncLaneFromMission } from './lane-sync'
-export type { KanbanLane }
+export type { KanbanLane, MissionStatus } from './lane-sync'

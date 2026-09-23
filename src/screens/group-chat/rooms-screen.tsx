@@ -516,6 +516,14 @@ function MessageBubble({
         kind={message.senderKind}
         status="idle"
         size={36}
+        runtime={sender?.runtime}
+        providerSiblingCount={
+          participants.filter(
+            (p) =>
+              p.kind === 'agent' &&
+              (p.runtime || 'hermes') === (sender?.runtime || 'hermes'),
+          ).length
+        }
       />
       <div
         className={cn(

@@ -22,7 +22,7 @@ export function startBackgroundHarvest(): void {
   const tick = async () => {
     try {
       const active = listSwarmMissions(50).filter(
-        (m) => m.state === 'executing' || m.state === 'reviewing',
+        (m) => m.state === 'running' || m.state === 'review',
       )
       for (const mission of active) {
         await syncSwarmMissionCheckpoints(mission.id).catch(() => {})

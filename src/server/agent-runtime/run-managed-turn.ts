@@ -15,7 +15,13 @@ import {
   GROUP_TURN_POLL_MS,
   GROUP_TURN_TIMEOUT_MS,
 } from '../group-chat/constants'
+import { assistantTextFromMessageUpdate } from './agorax-managed-agent-events'
 import { getMcpEndpoint } from './dispatch'
+import {
+  reconcileManagedRunActivity,
+  type ReconcileManagedRunActivity,
+  type ReconciledManagedRun,
+} from './reconcile-managed-run-activity'
 import { getAgentRuntimeRouter } from './router'
 import type { AgentRuntimeAdapter, AgentRunInput, AgentStreamEvent } from './types'
 
@@ -50,6 +56,11 @@ export type RunManagedTurnInput = {
   nativeSessionId?: string
   /** When true, spawn with `--resume` instead of `--session-id`. */
   nativeResume?: boolean
+  /**
+   * Test seam: override activity GET reconcile (WS-miss fallback).
+   * Production uses {@link reconcileManagedRunActivity}.
+   */
+  reconcileActivity?: ReconcileManagedRunActivity
 }
 
 export type RunManagedTurnResult =
@@ -159,8 +170,31 @@ export async function runManagedTurn(
     onEvent: input.onEvent,
     signal: input.signal,
     whileInteractionPending: input.whileInteractionPending,
+    reconcileActivity: input.reconcileActivity ?? reconcileManagedRunActivity,
     events,
   })
+}
+
+function applyReconciledFacts(
+  reconciled: ReconciledManagedRun,
+  state: {
+    text: string
+    snapshotText: string
+    lastError: string | null
+    exitCode: number | null
+  },
+): {
+  text: string
+  snapshotText: string
+  lastError: string | null
+  exitCode: number | null
+} {
+  return {
+    text: state.text,
+    snapshotText: reconciled.text.trim() || state.snapshotText,
+    lastError: reconciled.error ?? state.lastError,
+    exitCode: reconciled.exitCode ?? state.exitCode,
+  }
 }
 
 async function drainManagedRun(
@@ -173,20 +207,57 @@ async function drainManagedRun(
     onEvent?: (event: AgentStreamEvent) => void
     signal?: AbortSignal
     whileInteractionPending?: () => boolean
+    reconcileActivity?: ReconcileManagedRunActivity
     events: Array<AgentStreamEvent>
   },
 ): Promise<RunManagedTurnResult> {
   let text = ''
+  /** Durable message_update assistant snapshots replace (not append) text. */
+  let snapshotText = ''
   let exitCode: number | null = null
   let sawExit = false
   let lastError: string | null = null
   const startedAt = Date.now()
   let deadline = startedAt + opts.softMs
+  const reconcile = opts.reconcileActivity
 
   const onAbort = () => {
     void adapter.interrupt(runId, 'aborted')
   }
   opts.signal?.addEventListener('abort', onAbort, { once: true })
+
+  const finishEmptyFailure = async (
+    fallbackReason: string,
+    timedOut: boolean,
+  ): Promise<RunManagedTurnResult> => {
+    if (reconcile) {
+      const recovered = await reconcile(runId).catch(() => null)
+      if (recovered?.settled) {
+        ;({ text, snapshotText, lastError, exitCode } = applyReconciledFacts(
+          recovered,
+          { text, snapshotText, lastError, exitCode },
+        ))
+      }
+    }
+    const trimmed = (text.trim() || snapshotText.trim())
+    if (trimmed) {
+      return timedOut
+        ? { kind: 'timed_out', runId, text: trimmed, events: opts.events }
+        : {
+            kind: 'completed',
+            runId,
+            text: trimmed,
+            exitCode,
+            events: opts.events,
+          }
+    }
+    return {
+      kind: 'failed',
+      runId,
+      reason: lastError ?? fallbackReason,
+      events: opts.events,
+    }
+  }
 
   try {
     const iterator = adapter.streamEvents(runId)[Symbol.asyncIterator]()
@@ -215,15 +286,14 @@ async function drainManagedRun(
           continue
         }
         await adapter.interrupt(runId, 'group turn hard timeout').catch(() => undefined)
-        const trimmed = text.trim()
-        return trimmed
-          ? { kind: 'timed_out', runId, text: trimmed, events: opts.events }
-          : {
-              kind: 'failed',
-              runId,
-              reason: lastError ?? 'managed turn timed out with empty reply',
-              events: opts.events,
-            }
+        const trimmed = (text.trim() || snapshotText.trim())
+        if (trimmed) {
+          return { kind: 'timed_out', runId, text: trimmed, events: opts.events }
+        }
+        return finishEmptyFailure(
+          'managed turn timed out with empty reply',
+          true,
+        )
       }
 
       const raced = await Promise.race([
@@ -233,7 +303,25 @@ async function drainManagedRun(
         })),
       ])
 
-      if (raced.tag === 'tick') continue
+      if (raced.tag === 'tick') {
+        // WS can miss terminal turn_update (publish rejected). Poll activity
+        // so quota/provider failures surface without waiting for soft timeout.
+        if (reconcile) {
+          const recovered = await reconcile(runId).catch(() => null)
+          if (recovered?.settled) {
+            ;({ text, snapshotText, lastError, exitCode } = applyReconciledFacts(
+              recovered,
+              { text, snapshotText, lastError, exitCode },
+            ))
+            sawExit = true
+            await adapter
+              .interrupt(runId, 'reconciled settled turn')
+              .catch(() => undefined)
+            break
+          }
+        }
+        continue
+      }
 
       const { result } = raced
       pending = iterator.next()
@@ -251,6 +339,9 @@ async function drainManagedRun(
       } else if (event.type === 'run_exited') {
         exitCode = event.exitCode
         sawExit = true
+      } else if (event.type === 'activity') {
+        const snap = assistantTextFromMessageUpdate(event.activity)
+        if (snap) snapshotText = snap
       }
     }
   } catch (error) {
@@ -264,20 +355,20 @@ async function drainManagedRun(
     opts.signal?.removeEventListener('abort', onAbort)
   }
 
-  const trimmed = text.trim()
+  const trimmed = (text.trim() || snapshotText.trim())
   if (trimmed) {
+    // Quota / provider failures often land as assistant text with exitCode≠0.
+    // Surface them as completed text so group-chat can post the reason instead
+    // of silently advancing the watermark on an empty failure.
     return { kind: 'completed', runId, text: trimmed, exitCode, events: opts.events }
   }
-  return {
-    kind: 'failed',
-    runId,
-    reason:
-      lastError ??
+  return finishEmptyFailure(
+    lastError ??
       (exitCode != null && exitCode !== 0
         ? `run exited with code ${exitCode} and empty reply`
         : 'empty reply'),
-    events: opts.events,
-  }
+    false,
+  )
 }
 
 /**

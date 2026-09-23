@@ -1,56 +1,50 @@
 /**
- * lane-sync — Mission/Assignment state → board lane.
- *
- * Mapping:
- *   mission complete              → done
- *   any blocked / needs_input     → blocked
- *   any dispatched                → running
- *   any reviewing / checkpointed  → review
- *   any queued                    → ready
- *   else                          → todo
- *
- * Kanban cards are no longer part of the Mission domain; callers use
- * `laneFromMission` (and optional `mission.boardLane`) only.
+ * lane-sync — thin board helpers over MissionStatus (Multica: column = status).
  */
 import type { SwarmMission } from '../swarm-missions'
+import {
+  deriveMissionStatus,
+  effectiveMissionStatus,
+  normalizeMissionStatus,
+  type KanbanLane,
+  type MissionStatus,
+} from './mission-status'
 
-export type KanbanLane =
-  | 'backlog'
-  | 'todo'
-  | 'ready'
-  | 'running'
-  | 'review'
-  | 'blocked'
-  | 'done'
+export type { KanbanLane, MissionStatus }
+export {
+  deriveMissionStatus,
+  effectiveMissionStatus,
+  normalizeMissionStatus,
+  MISSION_STATUSES,
+  isMissionStatus,
+} from './mission-status'
 
-export function laneFromMission(mission: SwarmMission): KanbanLane {
-  if (mission.state === 'complete') return 'done'
-  const assignments = mission.assignments
-  if (
-    assignments.some((a) => a.state === 'blocked' || a.state === 'needs_input')
-  )
-    return 'blocked'
-  if (assignments.some((a) => a.state === 'dispatched')) return 'running'
-  if (assignments.some((a) => a.state === 'reviewing')) return 'review'
-  if (assignments.some((a) => a.state === 'queued')) return 'ready'
-  if (assignments.some((a) => a.state === 'checkpointed')) return 'review'
-  return 'todo'
+/** Derived status from assignments (ignores human board pin). */
+export function laneFromMission(mission: SwarmMission): MissionStatus {
+  return deriveMissionStatus(mission.assignments ?? [])
 }
 
-/** Effective board lane: human override when set, else derived. */
-export function effectiveBoardLane(mission: SwarmMission): KanbanLane {
-  if (mission.boardLane) return mission.boardLane
-  return laneFromMission(mission)
+/** Effective board/list column: human pin when set, else derived. */
+export function effectiveBoardLane(mission: SwarmMission): MissionStatus {
+  return effectiveMissionStatus({
+    state: mission.state,
+    boardLane: mission.boardLane,
+    assignments: mission.assignments,
+  })
 }
 
 /**
- * @deprecated Cards removed from Mission domain. Returns derived lane only.
+ * @deprecated Cards removed from Mission domain. Returns derived status only.
  */
 export async function syncLaneFromMission(input: {
   missionId: string
-}): Promise<KanbanLane | null> {
+}): Promise<MissionStatus | null> {
   const { getSwarmMission } = await import('../swarm-missions')
   const mission = getSwarmMission(input.missionId)
   if (!mission) return null
   return laneFromMission(mission)
+}
+
+export function normalizeBoardLane(value: unknown): MissionStatus {
+  return normalizeMissionStatus(value)
 }

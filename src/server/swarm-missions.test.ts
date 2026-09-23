@@ -74,7 +74,7 @@ describe('swarm-missions', () => {
     })
 
     expect(updated).not.toBeNull()
-    expect(updated?.state).toBe('complete')
+    expect(updated?.state).toBe('done')
     expect(updated?.assignments[0]?.state).toBe('checkpointed')
     expect(updated?._completed).toBe(true)
 
@@ -186,7 +186,7 @@ describe('swarm-missions', () => {
       source: 'swarm-dispatch',
     })
 
-    expect(updated?.state).toBe('complete')
+    expect(updated?.state).toBe('done')
   })
 
   it('records dispatch failures as blocked mission assignments', async () => {
@@ -270,7 +270,7 @@ describe('swarm-missions', () => {
       source: 'swarm-checkpoint-api',
     })
 
-    expect(checkpointed?.state).toBe('reviewing')
+    expect(checkpointed?.state).toBe('review')
     expect(checkpointed?.assignments[0]?.state).toBe('checkpointed')
     expect(checkpointed?.assignments[1]?.state).toBe('queued')
 
@@ -373,7 +373,8 @@ describe('swarm-missions', () => {
     })
 
     expect(cancelled?.assignment.state).toBe('cancelled')
-    expect(cancelled?.mission.state).toBe('planning')
+    // Remaining queued assignment → Multica `ready` (dispatchable work).
+    expect(cancelled?.mission.state).toBe('ready')
     expect(
       cancelled?.mission.assignments.map((assignment) => assignment.state),
     ).toEqual(['cancelled', 'queued'])
@@ -388,7 +389,7 @@ describe('swarm-missions', () => {
         {
           id: 'mission-stale-terminal',
           title: 'Stale executing mission',
-          state: 'executing',
+          state: 'running',
           createdAt: 1,
           updatedAt: 1,
           assignments: [
@@ -438,7 +439,7 @@ describe('swarm-missions', () => {
     })
 
     const persisted = JSON.parse(readFileSync(mod.SWARM_MISSIONS_PATH, 'utf8'))
-    expect(persisted.missions[0]?.state).toBe('complete')
+    expect(persisted.missions[0]?.state).toBe('done')
     expect(persisted.missions[0]?.events.at(-1)?.message).toContain(
       'Archived as stale',
     )
@@ -453,7 +454,7 @@ describe('swarm-missions', () => {
         {
           id: 'mission-recent-terminal',
           title: 'Recent executing mission',
-          state: 'executing',
+          state: 'running',
           createdAt: recentUpdatedAt,
           updatedAt: recentUpdatedAt,
           assignments: [
@@ -489,7 +490,7 @@ describe('swarm-missions', () => {
     })
 
     const persisted = JSON.parse(readFileSync(mod.SWARM_MISSIONS_PATH, 'utf8'))
-    expect(persisted.missions[0]?.state).toBe('executing')
+    expect(persisted.missions[0]?.state).toBe('running')
     expect(persisted.missions[0]?.events).toHaveLength(0)
   })
 

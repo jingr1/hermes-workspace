@@ -83,7 +83,7 @@ describe('resolveRoomCwd / deriveMissionWorkspacePath', () => {
     vi.mocked(getSwarmMission).mockReturnValue({
       id: 'm1',
       title: 'M',
-      state: 'executing',
+      state: 'running',
       createdAt: 0,
       updatedAt: 0,
       assignments: [],
@@ -122,7 +122,7 @@ describe('resolveRoomCwd / deriveMissionWorkspacePath', () => {
     vi.mocked(getSwarmMission).mockReturnValue({
       id: 'm2',
       title: 'M',
-      state: 'executing',
+      state: 'running',
       createdAt: 0,
       updatedAt: 0,
       assignments: [],

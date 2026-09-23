@@ -7,7 +7,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { AgentProgress } from '@/components/agent-view/agent-progress'
-import { PixelAvatar } from '@/components/agent-swarm/pixel-avatar'
+import { AgentIdentityAvatar } from '@/components/avatars'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -51,11 +51,11 @@ export function OrchestratorCard({ totalAgents }: { totalAgents: number }) {
             className="text-emerald-500"
           />
           <div className="absolute inset-0 flex items-center justify-center">
-            <PixelAvatar
+            <AgentIdentityAvatar
+              name={orchestratorName}
+              runtime="hermes"
+              providerSiblingCount={Math.max(2, totalAgents)}
               size={40}
-              color="#f59e0b"
-              accentColor="#fbbf24"
-              status="running"
             />
           </div>
         </div>

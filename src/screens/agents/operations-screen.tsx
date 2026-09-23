@@ -239,6 +239,7 @@ export function OperationsScreen() {
                 >
                   <OperationsAgentCard
                     agent={agent}
+                    providerSiblingCount={agents.length}
                     onOpenSettings={(agentId) => setSettingsAgentId(agentId)}
                   />
                 </motion.div>

@@ -39,6 +39,14 @@ export function PendingTurnCard({
           kind={requester?.kind ?? 'agent'}
           status="thinking"
           size={36}
+          runtime={requester?.runtime}
+          providerSiblingCount={
+            participants.filter(
+              (p) =>
+                p.kind === 'agent' &&
+                (p.runtime || 'hermes') === (requester?.runtime || 'hermes'),
+            ).length
+          }
         />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">

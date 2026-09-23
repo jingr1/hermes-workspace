@@ -8,7 +8,7 @@ export type AssistantAvatarConfig = {
 }
 
 const DEFAULT_ASSISTANT_AVATAR: AssistantAvatarConfig = {
-  src: '/hermes-agent-avatar.webp',
+  src: '/agent-avatars/agorax-rounded.png',
   alt: 'Hermes Agent',
 }
 

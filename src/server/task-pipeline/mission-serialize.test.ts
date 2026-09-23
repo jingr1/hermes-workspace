@@ -43,7 +43,7 @@ function makeMission(
   return {
     id: 'mission-1',
     title: 'Demo',
-    state: 'executing',
+    state: 'running',
     createdAt: 1,
     updatedAt: 2,
     pipelineId: 'rad',
@@ -105,5 +105,31 @@ describe('mission-serialize runtime stub', () => {
     expect(summary.currentAssignee).toBe('researcher')
     expect(summary.currentStage).toBe('research')
     expect(summary.missionId).toBe('mission-1')
+    expect(summary.status).toBe('running')
+    expect(summary.derivedStatus).toBe('running')
+  })
+
+  it('buildMissionSummary leaves currentStage null when stageKey unset', () => {
+    const assignment = makeAssignment({
+      state: 'dispatched',
+      workerId: 'developer',
+      stageKey: null,
+    })
+    const summary = buildMissionSummary({
+      mission: makeMission(assignment),
+    })
+    expect(summary.currentAssignee).toBe('developer')
+    expect(summary.currentStage).toBeNull()
+  })
+
+  it('buildMissionSummary prefers boardLane pin as status', () => {
+    const assignment = makeAssignment({ state: 'queued' })
+    const mission = makeMission(assignment)
+    mission.state = 'ready'
+    mission.boardLane = 'review'
+    const summary = buildMissionSummary({ mission })
+    expect(summary.status).toBe('review')
+    expect(summary.derivedStatus).toBe('ready')
+    expect(summary.boardLane).toBe('review')
   })
 })

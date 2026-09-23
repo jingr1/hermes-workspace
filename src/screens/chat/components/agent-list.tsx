@@ -7,10 +7,11 @@ import { AgentStatusDot } from './agent-status-dot'
 import type { AgentWithStatus } from '@/lib/agent-types'
 import type { UnifiedAgentStatus } from '@/lib/agent-status'
 import { SettingsDialog } from '@/components/settings-dialog'
+import { AgentIdentityAvatar } from '@/components/avatars'
 import {
-  AGENT_ACCENT_COLORS,
-  AgentAvatar,
-} from '@/screens/gateway/components/agent-avatar'
+  countAgentsByProvider,
+  normalizeAgentAvatarProvider,
+} from '@/lib/agent-avatar'
 import { cn } from '@/lib/utils'
 import { useAgentStore } from '@/stores/agent-store'
 import { agentRuntimeLabel } from '@/lib/managed-agent-runtime/agent-targets'
@@ -95,7 +96,7 @@ function toUnifiedStatus(
 
 function AgentListItem({
   agent,
-  index,
+  providerSiblingCount,
   isActive,
   onSelect,
   onOpenSettings,
@@ -103,7 +104,7 @@ function AgentListItem({
   providerStatusEntry,
 }: {
   agent: AgentWithStatus
-  index: number
+  providerSiblingCount: number
   isActive: boolean
   onSelect: (agentId: string) => void
   onOpenSettings: (agentId: string) => void
@@ -116,7 +117,6 @@ function AgentListItem({
     const targetProfileName = agent.runtimeConfig.profile ?? agent.agentId
     return profiles.find((p) => p.name === targetProfileName)
   }, [agent, profiles])
-  const accent = AGENT_ACCENT_COLORS[index % AGENT_ACCENT_COLORS.length]
   const providerDot = providerStatusToDot(providerStatusEntry)
   const upgradeProvider =
     providerStatusBadge(providerStatusEntry) === 'update-available'
@@ -146,17 +146,15 @@ function AgentListItem({
           event.stopPropagation()
           onOpenSettings(agent.agentId)
         }}
-        className="shrink-0 rounded-md transition-colors hover:bg-primary-300/60"
+        className="shrink-0 rounded-full transition-colors hover:bg-primary-300/60"
         title="Agent settings"
       >
-        <div
-          className={cn(
-            'flex size-8 items-center justify-center overflow-hidden rounded-md',
-            accent.avatar,
-          )}
-        >
-          <AgentAvatar index={index} color={accent.hex} size={28} />
-        </div>
+        <AgentIdentityAvatar
+          name={agent.name}
+          runtime={agent.runtime}
+          providerSiblingCount={providerSiblingCount}
+          size={36}
+        />
       </button>
       <button
         type="button"
@@ -267,6 +265,11 @@ export function AgentList({
     return next
   }, [agents])
 
+  const providerSiblingCounts = useMemo(
+    () => countAgentsByProvider(sortedAgents),
+    [sortedAgents],
+  )
+
   const listContent = (
     <>
       {sortedAgents.length === 0 ? (
@@ -275,7 +278,7 @@ export function AgentList({
         </p>
       ) : (
         <div className="space-y-0.5">
-          {sortedAgents.map((agent, index) => {
+          {sortedAgents.map((agent) => {
             const providerId =
               providerIdForAgentRuntime(agent.runtime) ??
               (agent.runtime === 'hermes'
@@ -287,7 +290,11 @@ export function AgentList({
               <AgentListItem
                 key={agent.agentId}
                 agent={agent}
-                index={index}
+                providerSiblingCount={
+                  providerSiblingCounts.get(
+                    normalizeAgentAvatarProvider(agent.runtime),
+                  ) ?? 1
+                }
                 isActive={agent.agentId === activeAgentId}
                 onSelect={handleSelect}
                 onOpenSettings={setSettingsAgentId}

@@ -722,7 +722,7 @@ function markDispatchStarted(
   }
   const controlMessage = `Dispatched task: ${task.slice(0, 180)}`
   writeRuntimePatch(workerId, {
-    state: 'executing',
+    state: 'running',
     phase: 'dispatched',
     currentTask: task,
     currentMissionId: missionId ?? null,

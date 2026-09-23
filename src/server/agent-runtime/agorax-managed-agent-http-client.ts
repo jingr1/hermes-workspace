@@ -580,14 +580,23 @@ export class AgoraxManagedAgentHttpClient {
     init: RequestInit,
     signal?: AbortSignal,
   ): Promise<T> {
-    const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
-      ...init,
-      ...(signal ? { signal } : {}),
-      headers: {
-        ...this.headers,
-        ...(init.headers ?? {}),
-      },
-    })
+    let response: Response
+    try {
+      response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+        ...init,
+        ...(signal ? { signal } : {}),
+        headers: {
+          ...this.headers,
+          ...(init.headers ?? {}),
+        },
+      })
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      // Node undici collapses connection-refused into bare "fetch failed".
+      throw new Error(
+        `managed agent daemon unreachable at ${this.baseUrl}${path} (${detail}); start with pnpm dev:managed-agent`,
+      )
+    }
     if (!response.ok) {
       throw new AgoraxManagedAgentHttpError(
         response.status,

@@ -41,6 +41,14 @@ export function MemberRoster({ participants, onRemove }: MemberRosterProps) {
                     kind={p.kind}
                     status={p.online ? 'idle' : 'failed'}
                     size={38}
+                    runtime={p.runtime}
+                    providerSiblingCount={
+                      participants.filter(
+                        (other) =>
+                          other.kind === 'agent' &&
+                          (other.runtime || 'hermes') === (p.runtime || 'hermes'),
+                      ).length
+                    }
                     showTooltip={false}
                   />
                 </DialogTrigger>

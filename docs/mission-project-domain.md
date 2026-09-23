@@ -1,13 +1,11 @@
 # Mission ↔ Project domain contract
 
 > Agorax **Project** = 控制面在 `projects.yaml` 中声明的 **目标 Git 仓库**（agent 可改代码/产物的 cwd 真相源）。  
-> **Mission** = 用户可见的目标容器（见 [`mission-task-domain.md`](mission-task-domain.md)）。二者 **可选绑定**；`workspaceMode` 由 pipeline 模板决定，不由 Project 单独决定。
+> **Mission** = 用户可见的目标容器（见 `[mission-task-domain.md](mission-task-domain.md)`）。二者 **可选绑定**；`workspaceMode` 由 pipeline 模板决定，不由 Project 单独决定。
 
 ---
 
-## 1. Project 是什么 / 不是什么
-
-### 是（IS）
+## 1. Project 是什么 
 
 - **声明式 registry entry**：`GET /api/projects` 与 `loadProjectsFile()` 均来自仓库根 `projects.yaml`（`version` + `projects[]`）。
 - **字段契约**（每条 `ProjectDeclaration`）：
@@ -17,21 +15,18 @@
 - **运行时校验**：无 `projects.yaml` 或校验失败 → 无法解析 project；**禁止**用 `process.cwd()` 隐式当 target repo。
 - **自宿主 opt-in**：若 `repo` 指向控制面仓库（hermes-workspace 自身），必须 `selfHosted: true`，否则加载失败。
 
-### 不是（IS NOT）
-
-- **不是** Multica 的 Project（issue 容器 / workspace 协作空间）—— 同名不同概念，见 §6。
-- **不是** Mission、Task、Kanban card、group chat room；Project 不拥有 mission 生命周期。
-- **不是** 用户任意粘贴的 cwd：群聊 ad-hoc 用 `room.workspacePath`；任务型 room 的 cwd **派生**自 mission，不可手改（绑 `missionId` 时 PATCH path → 409）。
-- **不是** pipeline 或 LangGraph workflow id。
-
 ---
+
+
 
 ## 2. Mission → Project（可选绑定）
 
-| 字段 | 位置 | 含义 |
-|------|------|------|
-| `projectId` | Mission | 可选；指向 `projects.yaml` 中某 `id` |
-| `workspaceMode` | Mission | `canonical` \| `worktree`；**pipeline 创建时**从 `pipelines.yaml` 模板拷贝；assignee 模式创建固定 `canonical` |
+
+| 字段              | 位置      | 含义                                                                                           |
+| --------------- | ------- | -------------------------------------------------------------------------------------------- |
+| `projectId`     | Mission | 可选；指向 `projects.yaml` 中某 `id`                                                                |
+| `workspaceMode` | Mission | `canonical` | `worktree`；**pipeline 创建时**从 `pipelines.yaml` 模板拷贝；assignee 模式创建固定 `canonical` |
+
 
 **规则**
 
@@ -42,14 +37,18 @@
 
 ---
 
+
+
 ## 3. `workspaceMode` 与 Project 的交互
 
 Pipeline 模板级二选一（`pipeline-templates.ts` 加载期校验）：
 
-| `workspaceMode` | 有效 cwd（有 `projectId`） | worktree 创建时机 |
-|-----------------|----------------------------|-------------------|
-| `canonical` | `project.repo`（共享 canonical checkout） | 无 per-mission worktree |
-| `worktree` | `<worktreeRoot>/<missionId>/…`（`localGitContext`） | `createMission`：template=worktree **且** 有 project → `ensureMissionWorktree`；`ensureRoomForMission` 也会 ensure |
+
+| `workspaceMode` | 有效 cwd（有 `projectId`）                             | worktree 创建时机                                                                                                |
+| --------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `canonical`     | `project.repo`（共享 canonical checkout）             | 无 per-mission worktree                                                                                       |
+| `worktree`      | `<worktreeRoot>/<missionId>/…`（`localGitContext`） | `createMission`：template=worktree **且** 有 project → `ensureMissionWorktree`；`ensureRoomForMission` 也会 ensure |
+
 
 **worktree 模式约束**
 
@@ -61,7 +60,11 @@ Pipeline 模板级二选一（`pipeline-templates.ts` 加载期校验）：
 
 ---
 
+
+
 ## 4. 生命周期
+
+
 
 ### Create (`createMission`)
 
@@ -70,11 +73,15 @@ Pipeline 模板级二选一（`pipeline-templates.ts` 加载期校验）：
 3. **assignee**（agent 或 chat_group）：`workspaceMode` 恒 `canonical`；chat_group 只绑 room，不自动 worktree。
 4. 返回 payload 含 `projectId`, `workspaceMode`, `worktreePath`（若有）。
 
+
+
 ### Run
 
 - Task dispatch / advance：worktree mission 在 mission worktree cwd 上跑；canonical 在 `project.repo`（若已绑 project）。
 - 群聊 **任务型** room：`resolveRoomCwd(room)` = 显式 `workspacePath` **else** `deriveMissionWorkspacePath(missionId)`（worktree → worktree path，否则 → `project.repo`）。每 turn drive **算一次**，不改 Hermes profile 全局 workspace。
 - 服务器 **禁止**从某 project 的 `worktreeRoot` 内启动（防 `deleteMission` release 删掉运行中树）。
+
+
 
 ### Delete (`deleteMission`)
 
@@ -84,6 +91,8 @@ Pipeline 模板级二选一（`pipeline-templates.ts` 加载期校验）：
 Patch：`projectId` 可改（校验 known id）；**不**自动迁移已有 worktree（改绑属运维/产品边界，文档层记：worktree 与 create 时 project 强耦合）。
 
 ---
+
+
 
 ## 5. UX 含义
 
@@ -95,27 +104,36 @@ Patch：`projectId` 可改（校验 known id）；**不**自动迁移已有 work
 
 ---
 
+
+
 ## 6. Agorax Project vs Multica Project
 
-| 维度 | Agorax `Project` | Multica `Project` |
-|------|------------------|-------------------|
-| 存储 | 控制面 `projects.yaml` | 服务端 DB，workspace 作用域 |
-| 身份 | `id` + 本机/远端 **文件系统路径** | UUID + slug，权限与成员 |
-| 绑定对象 | Mission（可选 `projectId`） | Issue、视图、Gantt、inbox 等 |
-| 工作区 | `repo` / per-mission **git worktree** | 无内置 git worktree 模型 |
-| API | `GET /api/projects` | Multica REST `/projects` … |
-| 列表 UX | Mission swimlane 维度 | IssueSurface project scope |
+
+| 维度    | Agorax `Project`                      | Multica `Project`          |
+| ----- | ------------------------------------- | -------------------------- |
+| 存储    | 控制面 `projects.yaml`                   | 服务端 DB，workspace 作用域       |
+| 身份    | `id` + 本机/远端 **文件系统路径**               | UUID + slug，权限与成员          |
+| 绑定对象  | Mission（可选 `projectId`）               | Issue、视图、Gantt、inbox 等     |
+| 工作区   | `repo` / per-mission **git worktree** | 无内置 git worktree 模型        |
+| API   | `GET /api/projects`                   | Multica REST `/projects` … |
+| 列表 UX | Mission swimlane 维度                   | IssueSurface project scope |
+
 
 **集成原则**：跨产品链接时用 **显式字段**（如 Mission `externalRef` / tracker id），不要把 Multica project slug 写进 Agorax `projectId`，除非运维刻意对齐命名。
 
 ---
 
+
+
 ## 相关实现索引
 
-| Concern | Path |
-|---------|------|
-| projects.yaml 加载/校验 | `src/server/task-pipeline/projects.ts` |
-| create/delete + worktree | `src/server/task-pipeline/task-service.ts`, `src/server/git-ops.ts` |
-| pipeline workspaceMode | `pipelines.yaml`, `src/server/task-pipeline/pipeline-templates.ts` |
-| 群聊 cwd | `src/server/group-chat/resolve-room-cwd.ts`, `ensure-room-for-mission.ts` |
-| Mission/Task 总览 | [`mission-task-domain.md`](mission-task-domain.md) |
+
+| Concern                  | Path                                                                      |
+| ------------------------ | ------------------------------------------------------------------------- |
+| projects.yaml 加载/校验      | `src/server/task-pipeline/projects.ts`                                    |
+| create/delete + worktree | `src/server/task-pipeline/task-service.ts`, `src/server/git-ops.ts`       |
+| pipeline workspaceMode   | `pipelines.yaml`, `src/server/task-pipeline/pipeline-templates.ts`        |
+| 群聊 cwd                   | `src/server/group-chat/resolve-room-cwd.ts`, `ensure-room-for-mission.ts` |
+| Mission/Task 总览          | `[mission-task-domain.md](mission-task-domain.md)`                        |
+
+

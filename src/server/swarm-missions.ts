@@ -9,6 +9,11 @@ import { dirname, join } from 'node:path'
 import { SWARM_CANONICAL_REPO } from './swarm-environment'
 import { applyArtifactPathPolicy } from './swarm-mission-artifacts'
 import type { ParsedSwarmCheckpoint } from './swarm-checkpoints'
+import {
+  deriveMissionStatus,
+  normalizeMissionStatus,
+  type MissionStatus,
+} from './task-pipeline/mission-status'
 
 export type SwarmMissionAssignmentState =
   | 'queued'
@@ -19,14 +24,9 @@ export type SwarmMissionAssignmentState =
   | 'reviewing'
   | 'done'
   | 'cancelled'
-export type SwarmMissionState =
-  | 'planning'
-  | 'dispatching'
-  | 'executing'
-  | 'reviewing'
-  | 'blocked'
-  | 'complete'
-  | 'cancelled'
+
+/** Multica-style: mission.state === board column. */
+export type SwarmMissionState = MissionStatus
 
 export type MissionExecutionMode = 'pipeline' | 'assignee'
 
@@ -106,18 +106,10 @@ export type SwarmMission = {
   priority?: number | null
   labels?: Array<string>
   /**
-   * Optional human board placement (MissionSurface drag).
-   * When null, UI uses laneFromMission(derived).
+   * Optional human board pin (MissionSurface drag).
+   * When set, UI column uses this; otherwise `state` (derived from tasks).
    */
-  boardLane?:
-    | 'backlog'
-    | 'todo'
-    | 'ready'
-    | 'running'
-    | 'review'
-    | 'blocked'
-    | 'done'
-    | null
+  boardLane?: SwarmMissionState | null
 }
 
 export type SwarmMissionEvent = {
@@ -179,9 +171,17 @@ function readStore(): SwarmMissionStore {
     const parsed = JSON.parse(
       readFileSync(SWARM_MISSIONS_PATH, 'utf8'),
     ) as SwarmMissionStore
+    const missions = Array.isArray(parsed.missions) ? parsed.missions : []
     return {
       version: 1,
-      missions: Array.isArray(parsed.missions) ? parsed.missions : [],
+      missions: missions.map((mission) => ({
+        ...mission,
+        state: normalizeMissionStatus(mission.state),
+        boardLane:
+          mission.boardLane == null
+            ? mission.boardLane
+            : normalizeMissionStatus(mission.boardLane),
+      })),
     }
   } catch {
     return { version: 1, missions: [] }
@@ -230,42 +230,7 @@ function reportFromCheckpoint(input: {
 function deriveMissionState(
   assignments: Array<SwarmMissionAssignment>,
 ): SwarmMissionState {
-  if (
-    assignments.length > 0 &&
-    assignments.every((item) => item.state === 'cancelled')
-  )
-    return 'cancelled'
-  if (
-    assignments.some(
-      (item) => item.state === 'blocked' || item.state === 'needs_input',
-    )
-  )
-    return 'blocked'
-  if (
-    assignments.length > 0 &&
-    assignments.every(
-      (item) =>
-        item.state === 'done' ||
-        item.state === 'cancelled' ||
-        (item.state === 'checkpointed' && !item.reviewRequired),
-    )
-  )
-    return 'complete'
-  if (
-    assignments.some(
-      (item) =>
-        item.state === 'reviewing' ||
-        (item.state === 'checkpointed' && item.reviewRequired),
-    )
-  )
-    return 'reviewing'
-  if (
-    assignments.some(
-      (item) => item.state === 'dispatched' || item.state === 'checkpointed',
-    )
-  )
-    return 'executing'
-  return 'planning'
+  return deriveMissionStatus(assignments)
 }
 
 function inferReviewRequired(task: string, rationale?: string | null): boolean {
@@ -311,7 +276,12 @@ export function archiveStaleMissions(staleMs: number = 6 * 60 * 60 * 1000): {
   const now = Date.now()
   const archivedIds: Array<string> = []
   for (const mission of store.missions) {
-    if (mission.state !== 'executing' && mission.state !== 'planning') continue
+    if (
+      mission.state !== 'running' &&
+      mission.state !== 'todo' &&
+      mission.state !== 'ready'
+    )
+      continue
     if (now - mission.updatedAt < staleMs) continue
     if (
       !mission.assignments.every((a) =>
@@ -319,7 +289,7 @@ export function archiveStaleMissions(staleMs: number = 6 * 60 * 60 * 1000): {
       )
     )
       continue
-    mission.state = 'complete'
+    mission.state = 'done'
     mission.events.push(
       event(
         'continuation',
@@ -417,7 +387,7 @@ export function createOrUpdateMission(input: {
     mission = {
       id: missionId,
       title: input.title || 'Untitled swarm mission',
-      state: 'planning',
+      state: 'todo',
       createdAt,
       updatedAt: createdAt,
       assignments: [],
@@ -503,7 +473,7 @@ export function markMissionAssignmentDispatched(input: {
   const store = readStore()
   const mission = store.missions.find((item) => item.id === input.missionId)
   if (!mission) return null
-  if (mission.state === 'cancelled' || mission.state === 'complete')
+  if (mission.state === 'cancelled' || mission.state === 'done')
     return mission
   const assignment = input.assignmentId
     ? mission.assignments.find((item) => item.id === input.assignmentId)
@@ -610,7 +580,7 @@ export function recordMissionCheckpoint(input: {
   if (assignment.state === 'done')
     return Object.assign(mission, { _ignoredReason: 'assignment done' })
   if (assignment.checkpoint?.raw === input.checkpoint.raw) {
-    return Object.assign(mission, { _completed: mission.state === 'complete' })
+    return Object.assign(mission, { _completed: mission.state === 'done' })
   }
   const checkpoint = applyArtifactPathPolicy(
     input.checkpoint,
@@ -650,7 +620,7 @@ export function recordMissionCheckpoint(input: {
   mission.updatedAt = now()
   const previousState = mission.state
   mission.state = deriveMissionState(mission.assignments)
-  const completed = mission.state === 'complete' && previousState !== 'complete'
+  const completed = mission.state === 'done' && previousState !== 'done'
   writeStore(store)
 
   // Swarm-path orchestration hooks. MCP callers (source === 'mcp') handle
@@ -707,7 +677,7 @@ export function recordMissionAssignmentBlocked(input: {
   const store = readStore()
   const mission = store.missions.find((item) => item.id === input.missionId)
   if (!mission) return null
-  if (mission.state === 'cancelled' || mission.state === 'complete') return null
+  if (mission.state === 'cancelled' || mission.state === 'done') return null
   const assignment =
     (input.assignmentId
       ? mission.assignments.find((item) => item.id === input.assignmentId)
@@ -775,6 +745,7 @@ export function appendMissionContinuation(input: {
   task: string
   rationale: string
   dependsOn?: Array<string>
+  stageKey?: string | null
 }): SwarmMission | null {
   if (!input.missionId) return null
   const store = readStore()
@@ -799,6 +770,7 @@ export function appendMissionContinuation(input: {
     dispatchable: true,
     externalRef: null,
     workspacePath: null,
+    stageKey: input.stageKey ?? null,
   })
   assertAcyclicDependencies(mission.assignments)
   mission.events.push(
@@ -996,7 +968,12 @@ export function patchMissionFields(input: {
   if (input.projectId !== undefined) mission.projectId = input.projectId
   if (input.priority !== undefined) mission.priority = input.priority
   if (input.labels !== undefined) mission.labels = input.labels
-  if (input.boardLane !== undefined) mission.boardLane = input.boardLane
+  if (input.boardLane !== undefined) {
+    mission.boardLane =
+      input.boardLane === null
+        ? null
+        : normalizeMissionStatus(input.boardLane)
+  }
   mission.updatedAt = now()
   writeStore(store)
   return mission

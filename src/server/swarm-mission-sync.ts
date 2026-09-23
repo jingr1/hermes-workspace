@@ -143,7 +143,7 @@ export function missionAssignmentsSettled(
   mission: SwarmMission | null,
 ): boolean {
   if (!mission) return true
-  if (mission.state === 'complete' || mission.state === 'cancelled') return true
+  if (mission.state === 'done' || mission.state === 'cancelled') return true
   return mission.assignments.every(
     (assignment) => !assignmentNeedsSync(assignment),
   )

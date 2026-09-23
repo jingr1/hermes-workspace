@@ -13,7 +13,7 @@
 
 | 侧栏文案 | 最终路由 | 一句话 | 管什么 |
 | -------- | -------- | ------ | ------ |
-| **Missions** | `/missions` | 「在做什么」 | MissionSurface（board/list/table/swimlane）+ 详情 Tasks；Create Mission；可选群聊 |
+| **Missions** | `/missions` | 「在做什么」 | MissionSurface（board/list/swimlane）+ 详情 Tasks；Create Mission；可选群聊 |
 | **Agents** | `/agents` | 「是谁、能干什么、健康吗」 | profile 配置、轻量健康/用量、cron、outputs |
 | **Swarm** | `/swarm2` | 「编排现场」 | dispatch / tmux / Human Gate / checkpoint |
 
@@ -45,7 +45,7 @@ Overview tab **删除**。`?tab=overview` → redirect 到 Board（见 §5）。
 
 | 子态 | 如何进入 | 说明 |
 | ---- | -------- | ---- |
-| **MissionSurface** | `/missions` | board / list / table / swimlane；Create Mission（pipeline \| assignee 互斥） |
+| **MissionSurface** | `/missions` | board / list / swimlane；Create Mission（pipeline \| assignee 互斥） |
 | **Detail** | `/missions?missionId=<id>`（兼容 `taskId`） | Tasks 分解表 + StageBar + Timeline；群聊按需 Create room |
 
 列表实体始终是 **Mission**；Task 不进列表行。详见 [`mission-task-domain.md`](./mission-task-domain.md)。

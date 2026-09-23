@@ -1,11 +1,11 @@
-import { PixelAvatar } from '@/components/agent-swarm/pixel-avatar'
+import { AgentIdentityAvatar } from '@/components/avatars'
 import {
   TooltipContent,
   TooltipProvider,
   TooltipRoot,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { getInitials, getMemberColor } from '../lib/avatar-utils'
+import { getInitials } from '../lib/avatar-utils'
 
 type MemberAvatarProps = {
   id: string
@@ -14,22 +14,28 @@ type MemberAvatarProps = {
   status?: 'idle' | 'thinking' | 'running' | 'complete' | 'failed'
   size?: number
   className?: string
+  /** Agent runtime / provider — selects circular base art. */
+  runtime?: string
+  /** Hermes (and other) roster size; >1 shows two-letter initials. */
+  providerSiblingCount?: number
   /** When false, skip the built-in tooltip (parent already provides one). */
   showTooltip?: boolean
 }
 
 function AvatarFace({
-  id,
   name,
   kind,
-  status,
   size,
+  runtime,
+  providerSiblingCount,
 }: {
   id: string
   name: string
   kind: 'human' | 'agent' | 'system'
   status: 'idle' | 'thinking' | 'running' | 'complete' | 'failed'
   size: number
+  runtime?: string
+  providerSiblingCount?: number
 }) {
   if (kind === 'human') {
     return (
@@ -48,31 +54,13 @@ function AvatarFace({
     )
   }
 
-  const color = getMemberColor(id, name)
-
   return (
-    <div className="relative">
-      <PixelAvatar
-        color={color}
-        accentColor={color}
-        size={size}
-        status={status}
-        expression={status === 'thinking' ? 'focused' : 'neutral'}
-      />
-      <span
-        className="absolute -bottom-0.5 -right-0.5 block rounded-full border-2 border-[var(--theme-bg)]"
-        style={{
-          width: Math.max(8, size * 0.25),
-          height: Math.max(8, size * 0.25),
-          background:
-            status === 'thinking'
-              ? '#f59e0b'
-              : status === 'failed'
-                ? '#ef4444'
-                : '#22c55e',
-        }}
-      />
-    </div>
+    <AgentIdentityAvatar
+      name={name}
+      runtime={runtime ?? 'hermes'}
+      providerSiblingCount={providerSiblingCount ?? 1}
+      size={size}
+    />
   )
 }
 
@@ -83,10 +71,20 @@ export function MemberAvatar({
   status = 'idle',
   size = 32,
   className,
+  runtime,
+  providerSiblingCount,
   showTooltip = true,
 }: MemberAvatarProps) {
   const face = (
-    <AvatarFace id={id} name={name} kind={kind} status={status} size={size} />
+    <AvatarFace
+      id={id}
+      name={name}
+      kind={kind}
+      status={status}
+      size={size}
+      runtime={runtime}
+      providerSiblingCount={providerSiblingCount}
+    />
   )
 
   if (!showTooltip) {

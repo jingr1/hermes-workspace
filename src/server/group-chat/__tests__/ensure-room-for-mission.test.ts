@@ -72,7 +72,7 @@ describe('ensureRoomForMission', () => {
     vi.mocked(getSwarmMission).mockReturnValue({
       id: 'mission-1',
       title: 'Ship feature',
-      state: 'executing',
+      state: 'running',
       createdAt: Date.now(),
       updatedAt: Date.now(),
       assignments: [

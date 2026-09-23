@@ -107,7 +107,7 @@ describe('agent-status-watcher', () => {
 
   it('publishes agent_status with scope=global on file change', async () => {
     writeRuntime('dev', {
-      state: 'executing',
+      state: 'running',
       currentTask: 'build feature',
       missionId: 'm-1',
       checkpointStatus: 'in_progress',
@@ -138,7 +138,7 @@ describe('agent-status-watcher', () => {
     expect(statusEvent).toBeDefined()
     expect(statusEvent?.data.agentId).toBe('dev')
     expect(statusEvent?.data.scope).toBe('global')
-    expect(statusEvent?.data.state).toBe('executing')
+    expect(statusEvent?.data.state).toBe('running')
     expect(statusEvent?.data.currentTask).toBe('build feature')
   })
 

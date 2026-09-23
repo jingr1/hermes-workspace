@@ -19,7 +19,8 @@ import {
 } from '../../../../server/task-pipeline/mission-serialize'
 import type { DispatchReadyResult } from '../../../../server/task-pipeline/dispatch-ready'
 import { getProject } from '../../../../server/task-pipeline/projects'
-import type { KanbanLane } from '../../../../server/task-pipeline/lane-sync'
+import type { MissionStatus } from '../../../../server/task-pipeline/lane-sync'
+import { normalizeMissionStatus } from '../../../../server/task-pipeline/lane-sync'
 
 function resolveMission(id: string): SwarmMission | null {
   return getSwarmMission(id)
@@ -150,7 +151,8 @@ export const Route = createFileRoute('/api/missions/$missionId/')({
           projectId?: string | null
           priority?: number | null
           labels?: Array<string>
-          boardLane?: KanbanLane | null
+          boardLane?: MissionStatus | null
+          status?: MissionStatus | null
         }
         try {
           body = await request.json()
@@ -190,6 +192,19 @@ export const Route = createFileRoute('/api/missions/$missionId/')({
           )
         }
 
+        const statusPin =
+          body.status !== undefined
+            ? body.status
+            : body.boardLane !== undefined
+              ? body.boardLane
+              : undefined
+        const normalizedPin =
+          statusPin === undefined
+            ? undefined
+            : statusPin === null
+              ? null
+              : normalizeMissionStatus(statusPin)
+
         const patched = patchMissionFields({
           missionId: mission.id,
           title: body.title,
@@ -198,7 +213,7 @@ export const Route = createFileRoute('/api/missions/$missionId/')({
           projectId: body.projectId,
           priority: body.priority,
           labels: body.labels,
-          boardLane: body.boardLane,
+          boardLane: normalizedPin,
         })
         if (!patched) {
           return json({ error: 'Failed to patch mission' }, { status: 500 })
