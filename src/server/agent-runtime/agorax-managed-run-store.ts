@@ -27,8 +27,8 @@ function displaySessionPath(root: string, displaySessionId: string): string {
 }
 
 /**
- * Persists only the correlation between an Agorax display run and Tutti's
- * canonical identities. Session/Turn lifecycle remains owned by Tutti Host.
+ * Persists only the correlation between an Agorax display run and Agorax's
+ * canonical identities. Session/Turn lifecycle remains owned by managed-agent Host.
  */
 export class AgoraxManagedRunStore {
   constructor(private readonly root = DEFAULT_ROOT) {}

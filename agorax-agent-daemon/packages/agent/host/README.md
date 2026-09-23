@@ -5,14 +5,14 @@ canonical agent session and turn lifecycle orchestration. The package now owns
 the create, resume, send, durable submit-claim, canonical title, session read,
 settings, pin, delete, cancel, session fork,
 interactive response, plan decision, durable runtime-operation, and complete
-goal-control/reconcile application core. `tuttid` routes those commands through
+goal-control/reconcile application core. `agorax-agentd` routes those commands through
 `Host`; transport adapters translate their own HTTP or RPC shapes into these
 provider-neutral contracts.
 
-Tutti Mode turn snapshots use `PreferenceVersion` to separate the current
+Agent Mode turn snapshots use `PreferenceVersion` to separate the current
 `Effect`/`Speed` pair from the deprecated single-axis
 `OrchestrationIntensity`. Current writers set
-`TuttiModePreferenceVersionEffectSpeed` and populate the legacy alias with the
+`ModePreferenceVersionEffectSpeed` and populate the legacy alias with the
 effect value. Runtime readers treat version zero as a legacy snapshot, mapping
 its intensity to effect and using balanced speed (`50`). This is an upgrade
 read path, not support for connecting a new client to an older daemon.
@@ -271,7 +271,7 @@ Goal ownership from `Session.ActiveTurnID`, Turn recency, or origin alone.
 > **Currently disabled.** Durable edit-and-retry is neutralized in production via
 > `Config.EditRetryDisabled`: its saga can strand a session in a rolled-back-but-
 > not-resent state whose runtime operation becomes a cold-recovery poison pill
-> that crashes `tuttid` on launch. While disabled, `GetEditRetryAvailability`
+> that crashes `agorax-agentd` on launch. While disabled, `GetEditRetryAvailability`
 > reports unsupported, `EditRetry`/`RecoverEditRetry` refuse, and recovery
 > quarantines any leftover operation (failing it and clearing the session's
 > history fence back to `ready`). Re-enable only once the resend/recovery gap is
@@ -285,7 +285,7 @@ complete lifecycle: it snapshots the lossless submitted content, serializes the
 Session mutation, checkpoints before provider rollback, retracts exactly one
 effective Turn only after authoritative confirmation, then submits a stable
 replacement Turn. The replacement keeps attachments, mentions, capability
-references, and the Tutti mode snapshot while replacing only the first text
+references, and the Agorax mode snapshot while replacing only the first text
 block. Retraction changes model-visible history and canonical projections; it
 does not compensate filesystem changes produced by the original Turn.
 Conversation timelines hide retracted Turns, while audit reads and generated
@@ -394,7 +394,7 @@ path is synchronous with the Host command while subsequent provider output
 remains asynchronous. A local persistence failure after provider acceptance is
 reported as delivery-unknown and retains the submit claim; it must never cause
 an automatic redispatch. Providers receive only the opaque `ClientSubmitID` as
-a correlation identity. Canonical Turn ids remain Tutti-owned and are not
+a correlation identity. Canonical Turn ids remain Agorax-owned and are not
 projected into provider client-identity fields.
 
 `CaptureHistoricalSessionGraph` and `RestoreHistoricalSessionGraph` are the
@@ -522,7 +522,7 @@ No provider Turn is ever selected by index. The SQLite repair is an idempotent
 empty-binding compare-and-swap and rejects provider Turn identities already
 owned by another canonical Turn. Recovery and provider-owned Fork results pass
 through the owning Agent's binding writer. Claude stores its checkpoint inside
-its private JSON payload; Codex and Tutti Agent `thread/fork(lastTurnId)` use
+its private JSON payload; Codex and Agorax Agent `thread/fork(lastTurnId)` use
 the shared app-server payload schema and provider Turn id while retaining
 separate runtime version attestations and isolated provider homes.
 Target titles use one lineage-family sequence (`Title (2)`, `Title (3)`, ...)
@@ -560,7 +560,7 @@ Fork uses the durable
 `prepared -> dispatching -> provider_accepted -> committed` saga. Provider
 dispatch happens only after `dispatching` commits. The selected provider Turn
 must exist in the provider source; earlier provider history is trusted and is
-not compared with Tutti's canonical prefix. Provider acceptance, including the
+not compared with Agorax's canonical prefix. Provider acceptance, including the
 child provider Session id, is persisted before any host-copy binding or
 canonical materialization. A `provider_accepted` retry therefore performs only
 idempotent local binding and commit and never invokes the provider again.
@@ -611,7 +611,7 @@ selection, desktop APIs, attachment ingress, and cloud inbox/outbox behavior.
 Adapter-only create fields such as transcript source paths and materialized
 skill bundles intentionally remain outside the Host contract.
 
-`tuttid` production wiring resolves canonical/runtime ports and grouped adapter
+`agorax-agentd` production wiring resolves canonical/runtime ports and grouped adapter
 dependencies before constructing the agent service. It creates shared narrow
 components, uses their `HostSupportPorts` with canonical/runtime ports to
 compose one long-lived `Host`, then passes that completed Host and the same
@@ -666,7 +666,7 @@ before commit.
 The conformance harness depends only on the public Host contract. An
 implementation supplies a `conformance.Driver`, seeds its own canonical and
 runtime fakes in `Reset`, and runs every value returned by
-`conformance.Scenarios`. This lets `tuttid`, the extracted Host, and downstream
+`conformance.Scenarios`. This lets `agorax-agentd`, the extracted Host, and downstream
 adapters share one behavior baseline without importing one another.
 Coordinator, goal, and commit-observer scenario groups extend the same driver
 with recovery ordering, recovery failure propagation, post-commit failure
@@ -682,7 +682,7 @@ reuse the same package-level scenario value; catalog ownership must not be
 inferred by matching its display name.
 
 The Host release module depends on `store-sqlite` and
-`store-sqlite/canonical`, but not on `daemon`, sidecars, or `tuttid`. Canonical
+`store-sqlite/canonical`, but not on `daemon`, sidecars, or `agorax-agentd`. Canonical
 activity snapshots, report observer types, provider identities, capability
 vocabulary, and plan-decision strategy live in `store-sqlite/canonical`.
 Daemon packages retain source-compatible aliases for existing consumers;

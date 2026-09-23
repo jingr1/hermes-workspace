@@ -39,7 +39,7 @@ test("session mapping falls back to the host-supplied user identity", () => {
   assert.equal(session.userId, "host-user-1");
 });
 
-test("session mapping fills tuttid-only projections with daemon defaults", () => {
+test("session mapping fills daemon-only projections with daemon defaults", () => {
   const session = agentActivitySessionFromDaemonSession(
     "workspace-1",
     createDaemonSession(),
@@ -196,6 +196,21 @@ test("turn mapping keeps empty daemon error and command fields null", () => {
   assert.equal("sourceGoalOperationId" in turn, false);
 });
 
+test("turn mapping coerces blank Origin to legacy_unknown", () => {
+  const turn = agentActivityTurnFromDaemonTurn(
+    createDaemonTurn({
+      Phase: "settled",
+      Outcome: "failed",
+      ErrorMessage: "You’ve hit your usage limit.",
+      Origin: ""
+    })
+  );
+  assert.equal(turn.origin, "legacy_unknown");
+  assert.equal(turn.phase, "settled");
+  assert.equal(turn.outcome, "failed");
+  assert.deepEqual(turn.error, { message: "You’ve hit your usage limit." });
+});
+
 test("turn mapping rejects invalid daemon phase or capability refs", () => {
   assert.throws(
     () =>
@@ -208,7 +223,7 @@ test("turn mapping rejects invalid daemon phase or capability refs", () => {
     () =>
       agentActivityTurnFromDaemonTurn(
         createDaemonTurn({
-          CapabilityRefs: [{ capability: "tutti", source: "slash_command" }]
+          CapabilityRefs: [{ capability: "agorax", source: "slash_command" }]
         })
       ),
     /unsupported workspace agent capability reference/

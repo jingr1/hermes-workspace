@@ -130,9 +130,17 @@ export function RoomsScreen() {
     let nextStatus: string | null | undefined
 
     for (const ev of pending) {
+      // Reply/message are the primary insert signals. Also refetch on failed
+      // (runner inserts a failure note but only publishes group_chat_failed)
+      // and on turn/drive terminals so a dropped mid-turn reply SSE still
+      // surfaces after Codex finishes — matches "refresh then it appears".
       if (
         ev.event === 'group_chat_reply' ||
-        ev.event === 'group_chat_message'
+        ev.event === 'group_chat_message' ||
+        ev.event === 'group_chat_failed' ||
+        ev.event === 'group_chat_turn_ended' ||
+        ev.event === 'group_chat_settled' ||
+        ev.event === 'group_chat_capped'
       ) {
         refreshMessages = true
       }

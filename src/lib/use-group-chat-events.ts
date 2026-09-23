@@ -12,6 +12,9 @@ const MAX_EVENTS = 50
 const GROUP_CHAT_SSE_EVENTS = [
   'group_chat_reply',
   'group_chat_message',
+  // Failure notes are also room_messages rows; without this the UI stays stale
+  // until a full page reload even though sqlite already has the bubble.
+  'group_chat_failed',
   'group_chat_human_attention',
   'group_chat_human_answered',
   'group_chat_human_dismissed',

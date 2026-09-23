@@ -2,7 +2,7 @@
 
 Catalog-agnostic **server-side** core for the business event stream
 (daemon ↔ renderer over WebSocket). The Go counterpart to
-`@tutti-os/event-stream-core`.
+`@agorax/event-stream-core`.
 
 It owns the in-memory pub/sub registry, scope routing and session fan-out:
 
@@ -21,7 +21,7 @@ It is generic over the scope type `S` and depends only on an injected `Catalog`
 `ScopeNormalizer[S]`. It contains **no concrete topics**. Each product binds its
 own scope and catalog:
 
-- tutti workspace → `Service[EventScope]` where `EventScope = { WorkspaceID }`
+- Agorax workspace → `Service[EventScope]` where `EventScope = { WorkspaceID }`
 - group chat → `Service[RoomScope]` where `RoomScope = { RoomID }`
 
 The WS frame encode/decode (which is woven through the generated protocol types)

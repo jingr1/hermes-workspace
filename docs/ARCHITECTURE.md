@@ -157,15 +157,15 @@ Python 包 `hermes_langgraph_orchestrator/`，把 mission 执行建模为**声�
 
 ### 5.4 Agent Runtime（managed 运行时）
 
-统一接入外部 CLI agent（claude-code / codex / cursor / kimi / opencode；`src/server/agent-runtime/`）。2026-09 起为 **daemon bridge + canonical engine 两层架构**：agorax 复用 tutti 的 agent 前后端映射逻辑（`packages/agent-activity-core` + `packages/agent-activity-daemon-adapter`，均提取自 tutti 对应包），迁移记录见 `docs/managed-agent-tutti-mapping.md`。
+统一接入外部 CLI agent（claude-code / codex / cursor / kimi / opencode；`src/server/agent-runtime/`）。2026-09 起为 **daemon bridge + canonical engine 两层架构**：Agorax 自有 `agorax-agent-daemon` + `packages/agent-activity-core` / `packages/agent-activity-daemon-adapter`；迁移记录见 `docs/managed-agent-daemon-mapping.md`。
 
 ```text
-┌─ daemon host（agorax-agent-daemon，tutti daemon 复制体）─────────────┐
+┌─ daemon host（agorax-agent-daemon）──────────────────────────────────┐
 │  生命周期 owner：Session/Turn/Interaction 真相源在其 SQLite            │
 │  REST  /v1/workspaces/{ws}/agent-sessions（list/create/input/cancel/ │
 │        interactions/activity[afterVersion,limit]/title/pin/settings/│
 │        delete/composer-options/plan-decisions/goal）                 │
-│  WS    /v1/events/ws  tutti envelope（id/topic/version/emittedAt/    │
+│  WS    /v1/events/ws  activity envelope（id/topic/version/emittedAt/ │
 │        scope/payload；payload.eventType ∈ message_delta|message_update│
 │        |turn_update|interaction_update|session_reconcile_required）  │
 └──────────────┬───────────────────────────────────────────────────────┘
@@ -195,7 +195,7 @@ Python 包 `hermes_langgraph_orchestrator/`，把 mission 执行建模为**声�
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
-- **事件 = 提示，canonical 读兜底**（tutti 铁律）：WS/SSE 事件带完整 payload，前端 envelope 校验 + 版本连续性判断后 inline 应用；帧解析失败、版本缺口、断线重连 → 原地 dispatch reconcile，经 detail / `afterVersion` 增量读修复。daemon WS 对滞后订阅者丢帧时发 `session_reconcile_required`。
+- **事件 = 提示，canonical 读兜底**：WS/SSE 事件带完整 payload，前端 envelope 校验 + 版本连续性判断后 inline 应用；帧解析失败、版本缺口、断线重连 → 原地 dispatch reconcile，经 detail / `afterVersion` 增量读修复。daemon WS 对滞后订阅者丢帧时发 `session_reconcile_required`。
 - **状态所有权**：daemon host = Session/Turn/Interaction 生命周期 owner（SQLite 真相源）；activity-core engine = 前端 canonical state owner（不可变 snapshot + selectors）；群聊 / mission / Swarm / sidebar 只投影，不双写生命周期事实。
 - **Legacy 兼容路径**：`router.ts` + `agorax-managed-agent-bridge.ts` + `transport.ts`（daemon WS → `agorax-managed-agent-events.ts` 的 canonical→`AgentStreamEvent` 转换）仍为群聊 managed turn 与旧 `POST /api/agents/:id/chat` 路由服务；transport 未配置（无 `AGORAX_MANAGED_AGENT_URL`）时回退 spawn adapter（`claude-code-adapter.ts` spawn `claude -p --output-format stream-json`、`codex-adapter.ts`）。Hermes = `HermesAdapterStub`（只 probe gateway，执行仍走 swarm-dispatch / send-stream）。**Native bridge skeleton**（`hermes-native-bridge.ts`，见 [`docs/hermes-native-bridge.md`](./hermes-native-bridge.md)）定义 `agorax_run_mapping` 与 Create/Send stubs，不替换 stub/tmux。
 - **Host REST 出口（daemon）**：session title/delete/pin/settings、composer-options（诚实空目录）、plan-decision、goal 只读已挂到 `agorax-agentd`；Workspace engine 路由与 activity adapter 已接线 rename/delete/pin。
@@ -345,6 +345,6 @@ legacy `POST /api/agents/:id/chat`（SSE spawn 路径）仍保留供兼容，前
 | Swarm2 子系统 spec | `swarm2-agent-ide-spec.md`、`swarm2-autopilot-orchestration-spec.md`、`swarm2-memory-framework-spec.md`、`swarm2-frankengpu-control-plane.md`、`swarm2-worker-lifecycle-compaction-spec.md` |
 | 版本演进 | `release-2.1.0.md`、`release-2.5.0.md` |
 | Managed runtime 接入 | `../skills/hermes-workspace-agents-integration/SKILL.md` |
-| Tutti 映射逻辑复用（managed agent 迁移记录） | `managed-agent-tutti-mapping.md` |
+| Managed agent 迁移与 daemon 映射 | `managed-agent-daemon-mapping.md` |
 | 运维 | `docker.md`、`dashboard-service.md`、`troubleshooting.md`、`windows-setup-guide.md`、`AGENT-PAIRING.md`、`api-key-registry.md` |
 | 周边 | `../hermes_langgraph_orchestrator/README.md` |

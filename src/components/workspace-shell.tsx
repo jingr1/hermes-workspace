@@ -52,8 +52,10 @@ import { useSettings } from '@/hooks/use-settings'
 import { TerminalWorkspaceLazy } from '@/lib/terminal-workspace-lazy'
 // ActivityTicker moved to dashboard-only (too noisy for global header)
 
+export const DESKTOP_SIDEBAR_EXPANDED_WIDTH_PX = 200
+export const DESKTOP_SIDEBAR_COLLAPSED_WIDTH_PX = 48
 export const DESKTOP_SIDEBAR_BACKDROP_CLASS =
-  'fixed left-0 bottom-0 top-[var(--titlebar-h,0px)] w-[300px] z-10 bg-black/10 backdrop-blur-[1px]'
+  'fixed left-0 bottom-0 top-[var(--titlebar-h,0px)] w-[200px] z-10 bg-black/10 backdrop-blur-[1px]'
 
 type WorkspaceShellProps = {
   children?: React.ReactNode
@@ -522,7 +524,13 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
       !isMobile &&
       !isOnChatRoute &&
       settings.showSystemMetricsFooter ? (
-        <SystemMetricsFooter leftOffsetPx={sidebarCollapsed ? 48 : 300} />
+        <SystemMetricsFooter
+          leftOffsetPx={
+            sidebarCollapsed
+              ? DESKTOP_SIDEBAR_COLLAPSED_WIDTH_PX
+              : DESKTOP_SIDEBAR_EXPANDED_WIDTH_PX
+          }
+        />
       ) : null}
       {!isChromeFreeSurface ? (
         <CommandPalette pathname={pathname} sessions={sessions} />

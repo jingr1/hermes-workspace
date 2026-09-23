@@ -9,7 +9,7 @@ receipts only; Connector-owned commands never determine installation truth.
 
 The package contains no HTTP client, SQLite driver, product account state,
 Electron API, absolute state root, or operating-system process policy.
-Lifecycle behavior belongs here when Tutti and another daemon host must observe
+Lifecycle behavior belongs here when Agorax and another daemon host must observe
 the same result.
 
 `OperationScope` freezes the account authority used by a durable command.

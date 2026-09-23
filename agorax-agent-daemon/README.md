@@ -1,7 +1,7 @@
 # Agorax Agent Daemon Core
 
 This directory is the in-repository migration boundary for the Agent Host and
-managed runtime code previously maintained in the Tutti repository.
+managed runtime code for Agorax's local agent Host (Session / Turn / activity).
 
 ## Migrated core
 

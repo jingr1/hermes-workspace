@@ -7,7 +7,7 @@ same descriptors back without losing per-model reasoning, speed, or input
 capabilities.
 
 Provider runtimes are responsible for publishing complete model descriptors.
-Hosts such as `tuttid` and TSH's `desktopd` consume
+Hosts such as `agorax-agentd` and TSH's `desktopd` consume
 `ParseRuntimeConfigOptionModels`; they must not copy provider-specific parsing
 or infer missing capabilities. Process launch, transport, live-session lookup,
 and caching remain responsibilities of each host adapter.

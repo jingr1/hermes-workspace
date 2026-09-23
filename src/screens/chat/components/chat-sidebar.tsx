@@ -829,7 +829,7 @@ function ChatSidebarComponent({
             : 48
           : isMobile
             ? '85vw'
-            : 300,
+            : 200,
       }}
       transition={{ type: 'spring', stiffness: 400, damping: 30 }}
       className={cn(

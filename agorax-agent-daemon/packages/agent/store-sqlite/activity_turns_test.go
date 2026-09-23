@@ -620,6 +620,65 @@ func TestReportActivityStateIdempotentDuplicateSettledReport(t *testing.T) {
 	}
 }
 
+func TestReportActivityStateSettledFailedThenCompletedIsIdempotent(t *testing.T) {
+	t.Parallel()
+	store := openTestStore(t, testOptions(&staticProjectPaths{}))
+	ctx := context.Background()
+	seedTurnTestSession(t, store, "ws-1", "session-1")
+	if _, err := store.ReportActivityState(ctx, ActivityStateReport{
+		Session: SessionStateReport{
+			WorkspaceID: "ws-1", AgentSessionID: "session-1", Kind: SessionKindRoot,
+			Origin: "runtime", Provider: "codex", OccurredAtUnixMS: 10,
+		},
+		Turn: &TurnTransition{
+			WorkspaceID: "ws-1", AgentSessionID: "session-1", TurnID: "turn-1",
+			Phase: TurnPhaseRunning, OccurredAtUnixMS: 10,
+		},
+	}); err != nil {
+		t.Fatalf("running report: %v", err)
+	}
+	if result, err := store.ReportActivityState(ctx, ActivityStateReport{
+		Session: SessionStateReport{
+			WorkspaceID: "ws-1", AgentSessionID: "session-1", Kind: SessionKindRoot,
+			Origin: "runtime", Provider: "codex", OccurredAtUnixMS: 20,
+		},
+		Turn: &TurnTransition{
+			WorkspaceID: "ws-1", AgentSessionID: "session-1", TurnID: "turn-1",
+			Phase: TurnPhaseSettled, Outcome: TurnOutcomeFailed,
+			ErrorMessage: "You've hit your usage limit.", OccurredAtUnixMS: 20,
+		},
+	}); err != nil || !result.TurnAccepted {
+		t.Fatalf("failed settle result=%#v error=%v", result, err)
+	}
+
+	// Late lifecycle/provider stamp as completed must not fail the barrier —
+	// first settle (failed) wins; WS can still publish the rest of the batch.
+	result, err := store.ReportActivityState(ctx, ActivityStateReport{
+		Session: SessionStateReport{
+			WorkspaceID: "ws-1", AgentSessionID: "session-1", Kind: SessionKindRoot,
+			Origin: "runtime", Provider: "codex", CurrentPhase: "idle",
+			OccurredAtUnixMS: 21,
+		},
+		Turn: &TurnTransition{
+			WorkspaceID: "ws-1", AgentSessionID: "session-1", TurnID: "turn-1",
+			Phase: TurnPhaseSettled, Outcome: TurnOutcomeCompleted, OccurredAtUnixMS: 21,
+		},
+	})
+	if err != nil {
+		t.Fatalf("late completed after failed error=%v", err)
+	}
+	if result.TurnAccepted {
+		t.Fatalf("late completed accepted=%v, want idempotent reject", result.TurnAccepted)
+	}
+	turn, ok, getErr := store.GetTurn(ctx, "ws-1", "session-1", "turn-1")
+	if getErr != nil || !ok || turn.Phase != TurnPhaseSettled || turn.Outcome != TurnOutcomeFailed {
+		t.Fatalf("turn after late completed = %#v ok=%v error=%v, want settled/failed", turn, ok, getErr)
+	}
+	if turn.ErrorMessage != "You've hit your usage limit." {
+		t.Fatalf("error message = %q, want usage limit preserved", turn.ErrorMessage)
+	}
+}
+
 func TestRecordTurnTransitionAllowsWaitingToResumeRunning(t *testing.T) {
 	t.Parallel()
 	store := openTestStore(t, testOptions(&staticProjectPaths{}))

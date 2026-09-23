@@ -4,7 +4,7 @@
  * `submitInteractive({ action: "submit", payload })`), so its shape is a
  * cross-language contract, not an internal detail.
  *
- * Ported from tutti `packages/agent/gui/shared/agentConversation/interactiveAnswerPayload.ts`
+ * Ported from upstream `packages/agent/gui/shared/agentConversation/interactiveAnswerPayload.ts`
  * (canonical ACP/codex adapter contract — daemon Go adapters consume
  * `answersByQuestionId` verbatim).
  *

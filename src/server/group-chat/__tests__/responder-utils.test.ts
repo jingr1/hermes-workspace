@@ -4,6 +4,7 @@ import {
   isGroupInfraFailureText,
   isGroupPassText,
   isGroupTranscriptBusy,
+  hasActionableUnreadForMember,
   pickGroupTurnReply,
   resolveGroupResponders,
   rotateGroupSpeakers,
@@ -212,16 +213,83 @@ describe('responder-utils', () => {
       expect(responders.map((r) => r.participantId)).toEqual(['a', 'b'])
     })
 
-    it('falls back to all members when no mentions', () => {
+    it('falls back to all members when human has no mentions', () => {
       const messages = [makeMsg('human', 'human', 'any thoughts?')]
       const responders = resolveGroupResponders(messages, members)
       expect(responders.map((r) => r.participantId)).toEqual(['a', 'b', 'h'])
+    })
+
+    it('does not broadcast when only agent chatter has empty mentions', () => {
+      const messages = [
+        makeMsg('human', 'human', '@a help', [
+          { type: 'agent', participantId: 'a' },
+        ]),
+        makeMsg('agent', 'a', 'working on it'),
+        makeMsg('agent', 'b', 'also typing with no @'),
+      ]
+      const responders = resolveGroupResponders(messages, members)
+      expect(responders.map((r) => r.participantId)).toEqual(['a'])
+    })
+
+    it('agent @ expands responders after a named human mention', () => {
+      const messages = [
+        makeMsg('human', 'human', '@a help', [
+          { type: 'agent', participantId: 'a' },
+        ]),
+        makeMsg('agent', 'a', '@b take a look', [
+          { type: 'agent', participantId: 'b' },
+        ]),
+      ]
+      const responders = resolveGroupResponders(messages, members)
+      expect(responders.map((r) => r.participantId).sort()).toEqual(['a', 'b'])
+    })
+
+    it('returns empty when no human and no explicit agent @', () => {
+      const messages = [makeMsg('agent', 'a', 'just chatting')]
+      expect(resolveGroupResponders(messages, members)).toEqual([])
     })
 
     it('expands @all', () => {
       const messages = [makeMsg('human', 'human', '@all', [{ type: 'all' }])]
       const responders = resolveGroupResponders(messages, members)
       expect(responders.map((r) => r.participantId)).toEqual(['a', 'b', 'h'])
+    })
+  })
+
+  describe('hasActionableUnreadForMember', () => {
+    it('wakes on human unread', () => {
+      const unread = [makeMsg('human', 'human', '@all go', [{ type: 'all' }])]
+      expect(
+        hasActionableUnreadForMember(unread, members[0]!, members),
+      ).toBe(true)
+    })
+
+    it('ignores sibling agent posts without @', () => {
+      const unread = [
+        makeMsg('agent', 'b', '⚠️ Beta failed: boom'),
+        makeMsg('agent', 'b', 'done'),
+      ]
+      expect(
+        hasActionableUnreadForMember(unread, members[0]!, members),
+      ).toBe(false)
+    })
+
+    it('wakes when sibling explicitly @ this member', () => {
+      const unread = [
+        makeMsg('agent', 'b', '@a please review', [
+          { type: 'agent', participantId: 'a' },
+        ]),
+      ]
+      expect(
+        hasActionableUnreadForMember(unread, members[0]!, members),
+      ).toBe(true)
+    })
+
+    it('ignores own posts', () => {
+      const unread = [makeMsg('agent', 'a', 'my own reply')]
+      expect(
+        hasActionableUnreadForMember(unread, members[0]!, members),
+      ).toBe(false)
     })
   })
 
@@ -264,7 +332,7 @@ describe('responder-utils', () => {
   })
 
   describe('resolveGroupResponders autoHandoff', () => {
-    it('skips autoHandoff @ so mentioned set stays empty', () => {
+    it('skips autoHandoff @ so human empty @ still broadcasts', () => {
       const messages: Array<RoomMessage> = [
         makeMsg('human', 'human', 'hi'),
         {

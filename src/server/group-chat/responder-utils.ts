@@ -3,6 +3,7 @@
  *
  * Translated from upstream Bot Mode:
  *   - resolveGroupResponders
+ *   - hasActionableUnreadForMember
  *   - rotateGroupSpeakers
  *   - isGroupPassText
  *   - pickGroupTurnReply
@@ -13,41 +14,105 @@ import type { GroupMember, RoomMessage } from './types'
 
 /**
  * Decide which members should respond after the last user message.
- * If nobody is explicitly mentioned, all members get a turn.
+ *
+ * Wake contract:
+ * - `mentioned=0 → all` applies ONLY to the last **human** message (user
+ *   didn't @ anyone). Room chatter must never trigger that broadcast.
+ * - Agent posts after that human may expand the set via explicit @ / @all,
+ *   but never via empty mentions → everyone.
+ * - autoHandoff messages never contribute mentions.
  */
 export function resolveGroupResponders(
   messages: Array<RoomMessage>,
   members: Array<GroupMember>,
 ): Array<GroupMember> {
-  let sinceLastUser: Array<RoomMessage> = []
+  let lastHumanIndex = -1
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i]!.senderKind === 'human') {
-      sinceLastUser = messages.slice(i)
+      lastHumanIndex = i
       break
     }
   }
 
+  if (lastHumanIndex < 0) {
+    return respondersFromExplicitMentions(messages, members)
+  }
+
+  const lastHuman = messages[lastHumanIndex]!
   const mentioned = new Set<string>()
   let everyone = false
 
-  for (const entry of sinceLastUser) {
-    // Platform auto-handoff messages must not drive @ responders — spawn
-    // stays with the task pipeline (advance → dispatchNext).
+  if (!lastHuman.autoHandoff) {
+    const humanParsed = parseMentions(lastHuman.content, members)
+    if (humanParsed.everyone) everyone = true
+    for (const name of humanParsed.mentioned) mentioned.add(name)
+
+    // User didn't @ anyone → broadcast. This is the only empty→all path.
+    if (!humanParsed.everyone && humanParsed.mentioned.length === 0) {
+      return members
+    }
+  }
+
+  // Named human @ (or autoHandoff human): collect later agent @ expansions only.
+  for (let i = lastHumanIndex + 1; i < messages.length; i++) {
+    const entry = messages[i]!
+    // Platform auto-handoff must not drive @ responders — spawn stays with
+    // the task pipeline (advance → dispatchNext).
     if (entry.autoHandoff) continue
+    if (entry.senderKind === 'system') continue
     const parsed = parseMentions(entry.content, members)
-    if (parsed.everyone) {
-      everyone = true
-    }
-    for (const name of parsed.mentioned) {
-      mentioned.add(name)
-    }
+    if (parsed.everyone) everyone = true
+    for (const name of parsed.mentioned) mentioned.add(name)
   }
 
-  if (everyone || mentioned.size === 0) {
-    return members
-  }
-
+  if (everyone) return members
+  if (mentioned.size === 0) return []
   return members.filter((member) => mentioned.has(groupMemberKey(member)))
+}
+
+/** Explicit @ / @all only — never empty→all (used when no human message). */
+function respondersFromExplicitMentions(
+  messages: Array<RoomMessage>,
+  members: Array<GroupMember>,
+): Array<GroupMember> {
+  const mentioned = new Set<string>()
+  let everyone = false
+  for (const entry of messages) {
+    if (entry.autoHandoff) continue
+    if (entry.senderKind === 'system') continue
+    const parsed = parseMentions(entry.content, members)
+    if (parsed.everyone) everyone = true
+    for (const name of parsed.mentioned) mentioned.add(name)
+  }
+  if (everyone) return members
+  if (mentioned.size === 0) return []
+  return members.filter((member) => mentioned.has(groupMemberKey(member)))
+}
+
+/**
+ * Whether unread room lines should wake `member` for a turn.
+ *
+ * - Human messages are always actionable (caller already scoped responders).
+ * - Agent/system lines wake only on explicit @member / @all.
+ * - Sibling agent chatter without @ is noise — advance watermark, don't re-run.
+ */
+export function hasActionableUnreadForMember(
+  unread: Array<RoomMessage>,
+  member: GroupMember,
+  members: Array<GroupMember>,
+): boolean {
+  const key = groupMemberKey(member)
+  for (const entry of unread) {
+    if (entry.autoHandoff) continue
+    if (entry.senderKind === 'human') return true
+    if (entry.senderParticipantId === member.participantId) continue
+    if (entry.senderKind === 'agent' || entry.senderKind === 'system') {
+      const parsed = parseMentions(entry.content, members)
+      if (parsed.everyone) return true
+      if (parsed.mentioned.includes(key)) return true
+    }
+  }
+  return false
 }
 
 /**

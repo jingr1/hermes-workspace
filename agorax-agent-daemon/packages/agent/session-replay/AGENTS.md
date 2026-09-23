@@ -9,14 +9,14 @@ schema rules.
 ## Composer settings contract
 
 `settings.equal` checkpoint readiness and final-state
-`CompareTuttiReplayState` must share one composer-settings contract:
+`CompareReplayState` must share one composer-settings contract:
 
 - require every **recorded** key
 - treat empty defaults (`false`, `""`, `null`) as equivalent to absent
 - ignore live-only extras that current product materializes
 
 Do **not** add per-field `delete(settings, "…")` special cases in compare
-code when Tutti introduces a new default composer setting. Extend the shared
+code when Agorax introduces a new default composer setting. Extend the shared
 `composerSettingsEqual` helpers / empty-default rules, or update the portable
 projection if the field is not part of the semantic contract at all.
 

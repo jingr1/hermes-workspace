@@ -1,6 +1,6 @@
 /**
  * Personal / system skill roots for managed agent runtimes.
- * Mirrors Tutti `composerSkillDiscoveryPlan` personal+system roots
+ * Mirrors managed-agent `composerSkillDiscoveryPlan` personal+system roots
  * (project-cwd ancestors are added by callers when a repoRoot is known).
  */
 import * as fs from 'node:fs'

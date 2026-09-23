@@ -185,7 +185,7 @@ export function iterSkillMdFiles(skillsDir: string): Array<string> {
     for (const entry of entries) {
       if (entry.isDirectory()) {
         if (EXCLUDED_DIR_NAMES.has(entry.name)) continue
-        // Allow Tutti/Codex system skills (`.system`) and shared `.agents`.
+        // Allow Codex system skills (`.system`) and shared `.agents`.
         if (
           entry.name.startsWith('.') &&
           entry.name !== '.agents' &&

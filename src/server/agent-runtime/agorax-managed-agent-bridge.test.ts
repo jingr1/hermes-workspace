@@ -16,7 +16,7 @@ describe('AgoraxManagedAgentBridge', () => {
       'kimi',
     ])
     expect(isAgoraxManagedAgentBackend('cursor')).toBe(true)
-    expect(isAgoraxManagedAgentBackend('tutti-agent')).toBe(false)
+    expect(isAgoraxManagedAgentBackend('foreign-agent')).toBe(false)
     expect(isAgoraxManagedAgentBackend('hermes')).toBe(false)
   })
 

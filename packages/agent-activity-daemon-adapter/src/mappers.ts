@@ -373,18 +373,23 @@ function parseTurnPhase(value: string): AgentActivityTurn["phase"] {
 }
 
 function parseTurnOrigin(value: string): AgentActivityTurnOrigin {
+  // Go zero-value Origin arrives as "". Treat blank as legacy so a settled
+  // quota/rate-limit turn still maps — otherwise GET .../activity throws and
+  // group-chat reconcile returns null (silent hang until soft timeout).
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  if (!trimmed) return "legacy_unknown";
   if (
-    value !== "user_prompt" &&
-    value !== "goal_arm" &&
-    value !== "goal_continuation" &&
-    value !== "provider_initiated" &&
-    value !== "legacy_unknown"
+    trimmed !== "user_prompt" &&
+    trimmed !== "goal_arm" &&
+    trimmed !== "goal_continuation" &&
+    trimmed !== "provider_initiated" &&
+    trimmed !== "legacy_unknown"
   ) {
     throw new Error(
       `Daemon contract error: canonical turn origin ${JSON.stringify(value)} is invalid`
     );
   }
-  return value;
+  return trimmed as AgentActivityTurnOrigin;
 }
 
 function parseTurnOutcome(value: string): AgentActivityTurnOutcome {

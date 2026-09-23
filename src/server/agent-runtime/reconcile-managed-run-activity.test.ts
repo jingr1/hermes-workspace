@@ -136,4 +136,44 @@ describe('reconcileManagedRunActivity', () => {
       exitCode: null,
     })
   })
+
+  it('falls back to raw PascalCase activity when detail mapping throws', async () => {
+    const runStore = {
+      get: vi.fn().mockResolvedValue({
+        runId: 'run-4',
+        agentSessionId: 'session-4',
+        backend: 'codex',
+        updatedAt: 1,
+      }),
+    } as unknown as AgoraxManagedRunStore
+    const client = {
+      getSessionDetail: vi
+        .fn()
+        .mockRejectedValue(new Error('Daemon contract error: blank Origin')),
+      getActivitySnapshot: vi.fn().mockResolvedValue({
+        turns: [
+          {
+            TurnID: 'turn-4',
+            Phase: 'settled',
+            Outcome: 'failed',
+            ErrorMessage:
+              "You've hit your usage limit. Upgrade to Plus to continue using Codex.",
+            UpdatedAtUnixMS: 99,
+          },
+        ],
+        messages: [],
+      }),
+    } as unknown as AgoraxManagedAgentHttpClient
+
+    await expect(
+      reconcileManagedRunActivity('run-4', { runStore, client }),
+    ).resolves.toEqual({
+      settled: true,
+      text: '',
+      error:
+        "You've hit your usage limit. Upgrade to Plus to continue using Codex.",
+      outcome: 'failed',
+      exitCode: 1,
+    })
+  })
 })

@@ -2,7 +2,7 @@
 
 > 状态：Phase 0–1 skeleton（2026-09）  
 > 实现起步：[`src/server/agent-runtime/hermes-native-bridge.ts`](../src/server/agent-runtime/hermes-native-bridge.ts)  
-> 对照：[`docs/managed-agent-tutti-mapping.md`](./managed-agent-tutti-mapping.md)
+> 对照：[`docs/managed-agent-daemon-mapping.md`](./managed-agent-daemon-mapping.md)
 
 ## 1. Dual-bridge 模型
 
@@ -75,5 +75,5 @@ Hermes 在 Settings → Runtimes 的「就绪」= gateway probe（`probeHermesPr
 ## 7. 非目标（本阶段）
 
 - 把 Hermes tmux 长会话改成 managed `startRun` 进程模型
-- 整包替换为 Tutti AgentGUI
+- 整包替换为外部 Agent GUI
 - 在 native bridge 内重实现 Swarm 编排

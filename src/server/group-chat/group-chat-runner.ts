@@ -52,6 +52,7 @@ import {
 } from './mention-routing'
 import { openAttentionForRoom } from './pending-turn-service'
 import {
+  hasActionableUnreadForMember,
   isGroupPassText,
   isGroupTranscriptBusy,
   pickGroupTurnReply,
@@ -395,12 +396,15 @@ async function driveRoom(roomId: string): Promise<void> {
   const stillInFlight = getInFlightMembers(roomId)
   if (stillInFlight.length > 0) return
 
-  // Only run if there is new content since the last bot reply watermark.
-  const hasUnseenDelta = members.some((member) => {
+  // Only drive when a responder has actionable unread (human / @them / @all),
+  // not merely sibling agent chatter past their watermark.
+  const responders = resolveGroupResponders(allMessages, members)
+  const hasActionableDelta = responders.some((member) => {
     const watermark = getWatermark(roomId, member.participantId)
-    return allMessages.length > watermark
+    const unread = allMessages.slice(watermark)
+    return hasActionableUnreadForMember(unread, member, members)
   })
-  if (!hasUnseenDelta) {
+  if (!hasActionableDelta) {
     // Still may have stranded work; keep background harvest going.
     if (listStrandedMembers(roomId).length > 0) {
       void harvestStrandedUntilSettled(roomId, members)
@@ -476,7 +480,15 @@ async function runGroupChatRounds(
         continue
       }
 
-      const delta = roomLog.slice(watermark).slice(-GROUP_CHAT_HISTORY_LIMIT)
+      const unread = roomLog.slice(watermark)
+      // Sibling agent posts (incl. failure notes) without @this member are
+      // noise — advance watermark so we don't re-prompt on every room bubble.
+      if (!hasActionableUnreadForMember(unread, member, members)) {
+        setWatermark(room.id, member.participantId, roomLog.length)
+        continue
+      }
+
+      const delta = unread.slice(-GROUP_CHAT_HISTORY_LIMIT)
       if (delta.length === 0) continue
 
       const turnResult = await runMemberTurn(room, member, delta, members, cwd)
@@ -514,7 +526,11 @@ async function runGroupChatRounds(
           )
           posted += 1
           spokeThisRound += 1
-          setWatermark(room.id, member.participantId, roomLog.length + 1)
+          setWatermark(
+            room.id,
+            member.participantId,
+            getLatestMessages(room.id, { limit: 200 }).length,
+          )
           publishChatEvent('group_chat_reply', {
             roomId: room.id,
             messageId: newMessage.id,
@@ -548,7 +564,7 @@ async function runGroupChatRounds(
         })
       } else if (turnResult.kind === 'failed') {
         const failText = `⚠️ ${member.displayName} failed: ${turnResult.reason}`
-        insertMessage({
+        const failMessage = insertMessage({
           roomId: room.id,
           senderKind: 'agent',
           senderParticipantId: member.participantId,
@@ -564,6 +580,14 @@ async function runGroupChatRounds(
           member.participantId,
           getLatestMessages(room.id, { limit: 200 }).length,
         )
+        // Publish as a room message so the live UI refetches (group_chat_failed
+        // alone was ignored by the rooms screen until a full reload).
+        publishChatEvent('group_chat_message', {
+          roomId: room.id,
+          messageId: failMessage.id,
+          member: member.displayName,
+          text: failText,
+        })
         publishChatEvent('group_chat_failed', {
           roomId: room.id,
           member: member.displayName,
@@ -612,9 +636,13 @@ async function runGroupChatRounds(
         }
         const roomLog2 = getLatestMessages(room.id, { limit: 200 })
         const watermark = getWatermark(room.id, member.participantId)
-        const delta = roomLog2
-          .slice(watermark)
-          .slice(-GROUP_CHAT_HISTORY_LIMIT)
+        const unread = roomLog2.slice(watermark)
+        // Unaddressed @ may sit behind an already-advanced watermark (sibling
+        // noise catch-up). Prefer unread when present; else recent history.
+        const delta =
+          unread.length > 0
+            ? unread.slice(-GROUP_CHAT_HISTORY_LIMIT)
+            : roomLog2.slice(-GROUP_CHAT_HISTORY_LIMIT)
         if (delta.length === 0) continue
         const turnResult = await runMemberTurn(room, member, delta, members, cwd)
         if (turnResult.kind === 'reply') {
@@ -637,7 +665,11 @@ async function runGroupChatRounds(
             member.participantId,
           )
           posted += 1
-          setWatermark(room.id, member.participantId, roomLog2.length + 1)
+          setWatermark(
+            room.id,
+            member.participantId,
+            getLatestMessages(room.id, { limit: 200 }).length,
+          )
           publishChatEvent('group_chat_reply', {
             roomId: room.id,
             messageId: newMessage.id,
@@ -661,12 +693,13 @@ async function runGroupChatRounds(
         } else if (turnResult.kind === 'pass') {
           setWatermark(room.id, member.participantId, roomLog2.length)
         } else if (turnResult.kind === 'failed') {
-          insertMessage({
+          const failText = `⚠️ ${member.displayName} failed: ${turnResult.reason}`
+          const failMessage = insertMessage({
             roomId: room.id,
             senderKind: 'agent',
             senderParticipantId: member.participantId,
             senderName: member.displayName,
-            content: `⚠️ ${member.displayName} failed: ${turnResult.reason}`,
+            content: failText,
             mentions: [],
           })
           setWatermark(
@@ -674,6 +707,12 @@ async function runGroupChatRounds(
             member.participantId,
             getLatestMessages(room.id, { limit: 200 }).length,
           )
+          publishChatEvent('group_chat_message', {
+            roomId: room.id,
+            messageId: failMessage.id,
+            member: member.displayName,
+            text: failText,
+          })
           publishChatEvent('group_chat_failed', {
             roomId: room.id,
             member: member.displayName,

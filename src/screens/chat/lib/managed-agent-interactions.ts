@@ -19,7 +19,7 @@ import type {
  *   deny_and_stop.
  * - question: `input.questions` is the AskUserQuestion tool input shape
  *   (`{id?, header, question, multiSelect?, allowFreeText?, options:
- *   [{id?, label, description}]}`), matching tutti's normalizeAskUserQuestions
+ *   [{id?, label, description}]}`), matching normalizeAskUserQuestions
  *   contract.
  * - plan: info card with optional implement writeback when the daemon
  *   plan-decision endpoint is available (`supportsResponse = true`). Host
@@ -246,7 +246,7 @@ function projectQuestion(
  * view-model shape. Provider payloads (codex / ACP) may omit UI-facing
  * question or option ids, so deterministic contract identities are minted at
  * this boundary — renderers and automation never fall back to array position.
- * Ported from tutti `askUserQuestions.ts`.
+ * Shared ask-user question normalizer.
  */
 export function normalizeManagedAgentQuestions(
   rawQuestions: unknown,
@@ -296,7 +296,7 @@ export function normalizeManagedAgentQuestions(
   })
 }
 
-/** Deterministic id for provider payloads missing ids (tutti FNV-1a parity). */
+/** Deterministic id for provider payloads missing ids (FNV-1a). */
 function askUserContractId(
   scope: 'question' | 'option',
   value: unknown,

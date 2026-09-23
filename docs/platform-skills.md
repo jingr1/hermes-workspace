@@ -39,7 +39,7 @@ scans** on-disk skills trees the same way Hermes WebUI does
 - flat `skills/<name>/SKILL.md`
 - nested `skills/<cat>/…/<name>/SKILL.md` (any depth, e.g. `mlops/research/dspy`)
 - Hermes profile homes, repo `skills/`, `plugins/*/skills`, and `skills.external_dirs`
-- **Managed agent homes** (Tutti-aligned): `~/.claude/skills`, `~/.codex/skills`
+- **Managed agent homes** (managed-agent-aligned): `~/.claude/skills`, `~/.codex/skills`
   (+ `.system`), `~/.cursor/skills`, `~/.config/opencode/skills`, `~/.agents/skills`,
   plus project `.claude/.codex/.cursor/.opencode/.agents/skills` under the repo
 

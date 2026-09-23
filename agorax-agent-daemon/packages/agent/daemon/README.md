@@ -159,11 +159,11 @@ produces `required`. Remote evidence outranks stale local files until the host
 crosses an explicit account, credential, or runtime boundary. Transient probe
 failures preserve a settled observation.
 
-`tuttid` consumes this reducer in its provider-status service. It combines the
+`agorax-agentd` consumes this reducer in its provider-status service. It combines the
 local probe with real agent-run outcomes, owns freshness and credential-change
-reset, and projects the same public status to Tutti Desktop and AgentGUI.
+reset, and projects the same public status to Agorax and the managed-agent UI.
 External hosts consume the same reducer only when their runtime cannot use the
-`tuttid` status service. `DesktopIntegrationDescriptor` declares when such a
+`agorax-agentd` status service. `DesktopIntegrationDescriptor` declares when such a
 host must wait for credential projection before probing; the host maps that
 semantic barrier to its own synchronization mechanism.
 
@@ -175,7 +175,7 @@ token from their own credential authority and never send an API key or
 strategy, which invokes `account/rateLimits/read` through the provider runtime
 without publishing credential bytes. A successful request authenticates the
 session, an explicit authentication rejection requires login, and throttling,
-server, or transport failures preserve the local `configured` state. `tuttid`
+server, or transport failures preserve the local `configured` state. `agorax-agentd`
 expires this remote evidence after 15 minutes; Desktop asks again only while
 its window is visible and focused. OAuth refresh-token rotation remains
 credential-owner policy and is not performed by this status probe.
@@ -184,7 +184,7 @@ credential-owner policy and is not performed by this status probe.
 
 Agent sessions are durable controller records. For providers that support live
 session release, the runtime reaper may close an idle provider process without
-closing the Tutti agent session. The provider session id remains attached to the
+closing the Agorax agent session. The provider session id remains attached to the
 session, and the next `Exec` resumes the provider live session before starting a
 new turn.
 
@@ -233,7 +233,7 @@ External daemons (for example tsh desktopd) can project local agent activity to
 a remote controlplane without forking any `activity/` code.
 
 **Scope ID semantics (RFC hard constraint):** the scope identifier in these
-shared contracts is opaque — on the tutti side it is the **workspace ID**, for
+shared contracts is opaque — on the Agorax side it is the **workspace ID**, for
 external daemons such as tsh it is the **control-plane room ID**. workspace ≡
 room, one-to-one, with no implicit translation anywhere: `roomID` in the store
 interfaces is exactly the `WorkspaceID` on report inputs and is sent on the
@@ -306,5 +306,5 @@ defaults. `ProcessTransport` is also required when using the built-in provider
 adapters; hosts that pass custom `Adapters` own that transport setup themselves.
 
 State directory defaults still follow the historical `TUTTI_STATE_DIR` /
-`.tutti` behavior. State-dir injection is intentionally left for a later
+`.agorax` behavior. State-dir injection is intentionally left for a later
 host-boundary pass.

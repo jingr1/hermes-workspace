@@ -29,7 +29,7 @@ provider runtime adapters, process/VM isolation, and Electron windows. The
 portable Cassette must not contain an absolute path or depend on product
 metadata storage.
 
-`ScopeID` is the product-selected capture boundary. Tutti maps it to a
+`ScopeID` is the product-selected capture boundary. Agorax maps it to a
 Workspace; TSH may map it to a Room. The shared core does not assign product
 meaning to it. It belongs only to mutable Recording metadata and capture-time
 event filtering. Published Cassettes do not serialize it.
@@ -105,7 +105,7 @@ Cassette fact that introduced the entity:
 - `provider-observation` uses the exact Provider connection, chunk, input unit,
   and observation event position.
 
-The registered state codec assigns initial-state paths. Tutti's captured
+The registered state codec assigns initial-state paths. Agorax's captured
 Session graph has deterministic serialized Session, Turn, Message, and
 Interaction order, so a path remains stable for the lifetime of the Cassette.
 The path identifies the captured node, not a live canonical ordinal.
@@ -153,10 +153,10 @@ reporting strips the local Replay context; an in-process reporter that cannot
 preserve it fails closed instead of silently committing an uncorrelated
 observation.
 
-`initial-state.json` and `expected-state.json` share one Tutti-owned semantic
+`initial-state.json` and `expected-state.json` share one Agorax-owned semantic
 shape. `continue-session` requires the initial state; `create-session` forbids
 it; every Cassette requires the expected state. `cassette.json.stateFormat`
-identifies the product codec (`tutti.agent-session-replay-state.v1`); a
+identifies the product codec (`agorax.agent-session-replay-state.v1`); a
 consumer must reject a format it has not registered.
 
 New recordings use their UTC creation timestamp as the Cassette name. Renaming
@@ -165,20 +165,20 @@ updates the product metadata store without changing replay payload files.
 Deleting an inactive recording removes both its metadata and its candidate or
 published Cassette. Active recordings must be canceled before deletion.
 
-The daemon creates a fresh Tutti `WorkspaceID` for every Replay Workspace,
+The daemon creates a fresh Agorax `WorkspaceID` for every Replay Workspace,
 validates and merges all semantic initial states before mutation, restores
 canonical Agent history through Host before normal recovery, and verifies the
 semantic expected state. Runtime registrations carry the current `UserID`
 beside the Workspace target; Host binds it during restore, while the portable
 Agent graph remains user-independent. Every batch declares one semantic
-profile. Tutti uses the full Agent, Tutti Mode, Workflow, and Issue profile;
+profile. Agorax uses the full Agent, Agent Mode, Workflow, and Issue profile;
 consumers that implement only Agent semantics use the Agent profile. A
 Cassette that contains state from an unsupported domain fails before restore,
 and actual state is checked against the same profile during verification.
 Product composition supplies a non-empty target User through runtime registration; the
 JavaScript runner injects the replay-created Workspace identity only into
 product Activity Event envelopes.
-The runner also binds every scenario to one user-project root outside the Tutti
+The runner also binds every scenario to one user-project root outside the Agorax
 checkout. A caller may supply an absolute
 `TUTTI_AGENT_SESSION_REPLAY_PROJECT_ROOT`; otherwise the direct CLI creates a
 run-scoped Git project under the operating-system temporary directory and

@@ -53,7 +53,7 @@ const PROBE_CACHE_MS = 5_000
  * Agorax Host/runtime implementation.
  *
  * This class deliberately owns no process, session, or turn state. The
- * transport must delegate those operations to Tutti's canonical Host runtime.
+ * transport must delegate those operations to the Agorax managed-agent Host runtime.
  */
 export class AgoraxManagedAgentBridge {
   readonly kind: AgoraxManagedAgentBackend

@@ -8,7 +8,7 @@ import type { DaemonAgentSessionComposerSettings } from "./daemonDtos.ts";
  * request field.
  *
  * @deprecated TODO(daemon-endpoint): the Agorax agent daemon has no
- * composer-settings REST route yet. Kept from the tuttid adapter so the
+ * composer-settings REST route yet. Kept from the daemon adapter so the
  * reverse projection survives the port; the request contract lives in
  * daemonDtos.ts (DaemonAgentSessionComposerSettings).
  */

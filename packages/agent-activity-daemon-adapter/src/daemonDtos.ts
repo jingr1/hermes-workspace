@@ -106,7 +106,7 @@ export interface DaemonCanonicalSession {
 
 /**
  * storesqlites.Turn — emitted as items of the `turns` array of
- * GET .../activity. Unlike the tuttid generated DTO, the error is carried as
+ * GET .../activity. Unlike the daemon generated DTO, the error is carried as
  * flat `ErrorMessage`/`ErrorCode` strings and completed commands as
  * `CompletedCommandKind`/`CompletedCommandStatus`.
  */
@@ -359,7 +359,7 @@ export interface DaemonAgentTargetsResponse {
 
 /**
  * WebSocket frame from GET /v1/events/ws: `{"kind":"event","event":{...}}`
- * (agorax-agentd/events.go). `event` is the full tutti envelope:
+ * (agorax-agentd/events.go). `event` is the full activity envelope:
  * a random `id`, the shared monotonic `version` (per-daemon revision,
  * assigned under one lock so frames are emitted in version order),
  * `emittedAt` unix-ms, `scope.workspaceId`, and `payload` carrying
@@ -446,7 +446,7 @@ export interface DaemonSubmitInteractionResponseRequest {
 
 /**
  * Daemon composer-options REST response (session or provider scoped).
- * Shape mirrors the generated tuttid `AgentProviderComposerOptionsResponse`
+ * Shape mirrors the generated daemon `AgentProviderComposerOptionsResponse`
  * contract consumed by `agentActivityComposerOptionsFromDaemonResult`.
  */
 export interface DaemonProviderComposerOptionsResponse {
@@ -498,7 +498,7 @@ export interface DaemonProviderComposerOptionsResponse {
 /**
  * TODO(daemon-endpoint): no daemon composer-settings route exists. Kept so
  * hosts can keep calling the reverse projection; mirrors the generated
- * tuttid `AgentSessionComposerSettings` contract (camelCase keys).
+ * daemon `AgentSessionComposerSettings` contract (camelCase keys).
  */
 export interface DaemonAgentSessionComposerSettings {
   model?: string | null;

@@ -1,20 +1,18 @@
-# Managed Agent Tutti 映射逻辑复用记录
+# Managed Agent Daemon 映射记录
 
 状态：迁移完成（2026-09，Phase 0–5）
 
-本文记录 agorax 把 tutti（`/home/ramon.jing/tutti`，只读参考）的 agent 前后端映射逻辑
-复刻到本仓库的过程：复用来源对照、SSE/REST 合同摘要、与 tutti 合同的已知偏差、
+本文记录 agorax 把 Agorax managed-agent daemon（`agorax-agent-daemon/`）及 activity 映射包
+复刻到本仓库的过程：复用来源对照、SSE/REST 合同摘要、与 upstream 合同的已知偏差、
 状态所有权规则与验证命令清单。规划原文见
 `~/.kimi-code/.../plans/havok-miles-morales-storm.md`（本文不重复其问题分析）。
-
-tutti 侧的对应设计文档：`tutti/docs/architecture/agent-gui-hermes-workspace-mapping.md`。
 
 ## 结论
 
 agorax 自有 UI（`src/screens/chat/`、群聊）现在通过 **canonical 合同**消费
 `agorax-agent-daemon`：事件只是提示（events are hints），canonical 读兜底修复缺口；
 前端状态由 activity-core engine 持有；群聊 / mission / Swarm 只投影、不双写。
-复用的是 tutti 的**语义层与映射层**，不是 UI 组件——外壳、群聊、mission 所有权不变。
+复用的是 daemon 的**语义层与映射层**，不是 UI 组件——外壳、群聊、mission 所有权不变。
 
 **近期进展（2026-09 Waves）：**
 
@@ -24,14 +22,14 @@ agorax 自有 UI（`src/screens/chat/`、群聊）现在通过 **canonical 合�
 
 ## 复用来源对照表
 
-| tutti 包 | agorax 包 | 说明 |
+| 来源概念 | Agorax 包 | 说明 |
 | --- | --- | --- |
-| `tutti/packages/agent/activity-core` | `packages/agent-activity-core`（`@agorax/agent-activity-core`） | canonical 状态引擎整体提取：engine / reducers / selectors / `workspaceEventCoordinator` / `optimisticMessageOverlay` / `sessionReconcileExecutor` / envelope 一致性校验（`agentActivityEventEnvelopeIsConsistent`） |
-| `tutti/packages/agent/activity-tuttid-adapter` | `packages/agent-activity-daemon-adapter`（`@agorax/agent-activity-daemon-adapter`） | daemon DTO↔canonical 映射（~2400 行含测试）：`mappers.ts` / `sessionDetail.ts` / `requests.ts` / `composerOptions.ts` / `composerSettings.ts` / `capabilityReferences.ts`。daemon Go struct 的 PascalCase JSON 是真相源，不一致处以 daemon 实际输出为准修正 |
-| tutti daemon（host + WS hub） | `agorax-agent-daemon/` | 复制体升级：WS 事件补全 tutti envelope；REST 新增 session list 与 `afterVersion` 分页 |
-| tutti desktop 壳事件桥 | `src/lib/managed-agent-runtime/event-bridge.ts` | SSE 帧→envelope 校验→`queueMicrotask` 批处理→coordinator→engine；断线/坏帧触发 reconcile |
-| tutti desktop 壳 reconcile 装配 | `src/lib/managed-agent-runtime/reconcile-port.ts` | core `AgentActivitySessionReconcilePort` 实现：detail 读 + `afterVersion` 增量分页（协议仅支持前向分页，desc/beforeVersion 在端口内组装） |
-| tutti `interactiveAnswerPayload.ts` | `src/lib/managed-agent-runtime/interactive-answer-payload.ts` | question interaction 的 `answersByQuestionId` 权威 payload 纯函数 |
+| activity-core（canonical engine） | `packages/agent-activity-core`（`@agorax/agent-activity-core`） | canonical 状态引擎整体提取：engine / reducers / selectors / `workspaceEventCoordinator` / `optimisticMessageOverlay` / `sessionReconcileExecutor` / envelope 一致性校验（`agentActivityEventEnvelopeIsConsistent`） |
+| daemon DTO adapter | `packages/agent-activity-daemon-adapter`（`@agorax/agent-activity-daemon-adapter`） | daemon DTO↔canonical 映射（~2400 行含测试）：`mappers.ts` / `sessionDetail.ts` / `requests.ts` / `composerOptions.ts` / `composerSettings.ts` / `capabilityReferences.ts`。daemon Go struct 的 PascalCase JSON 是真相源，不一致处以 daemon 实际输出为准修正 |
+| managed-agent daemon | `agorax-agent-daemon/` | 复制体升级：WS 事件补全 upstream envelope；REST 新增 session list 与 `afterVersion` 分页 |
+| 前端事件桥 | `src/lib/managed-agent-runtime/event-bridge.ts` | SSE 帧→envelope 校验→`queueMicrotask` 批处理→coordinator→engine；断线/坏帧触发 reconcile |
+| 前端 reconcile 装配 | `src/lib/managed-agent-runtime/reconcile-port.ts` | core `AgentActivitySessionReconcilePort` 实现：detail 读 + `afterVersion` 增量分页（协议仅支持前向分页，desc/beforeVersion 在端口内组装） |
+| interactive answer payload | `src/lib/managed-agent-runtime/interactive-answer-payload.ts` | question interaction 的 `answersByQuestionId` 权威 payload 纯函数 |
 
 被替换掉的 agorax 自有实现：
 
@@ -139,12 +137,12 @@ submitInteractive / cancelTurn`），是该接口的 daemon 方言 typed client�
    `POST /api/agents/:id/chat` 路由仍消费它；daemon transport 未配置
    （无 `AGORAX_MANAGED_AGENT_URL`）时 router 回退 spawn adapter。
 
-## 与 tutti 合同的已知偏差
+## 与上游合同的已知偏差
 
 | 偏差 | 现状 | 后续 |
 | --- | --- | --- |
 | composer options | daemon 从本地 Claude settings / Codex config.toml 填充模型目录（`LoadLocalProviderModels`）；无配置时仍空（fail-closed）；未做 AppServer live `model/list` 探测 | 需要时再接 Codex AppServer / OpenCode CLI list |
-| client 生成 agentSessionId | 前端 `crypto.randomUUID()` 生成 canonical session id，activate 时提交给 daemon（tutti 由 host 侧生成） | 如需 tutti 对齐再调 |
+| client 生成 agentSessionId | 前端 `crypto.randomUUID()` 生成 canonical session id，activate 时提交给 daemon（部分上游实现由 host 侧生成） | 如需与 host 生成策略对齐再调 |
 | plan decision | daemon / engine / UI 已接 plan-decision（Codex `implement_prompt`）；非 Codex Host 可能拒绝 | 扩 provider 矩阵 |
 | goal control | GET goal 只读已接；goalControl 写路径仍 throw | 单独立项 |
 | session fork 未接 | engine 支持，agorax 未暴露 fork saga | 单独立项 |
@@ -156,10 +154,9 @@ submitInteractive / cancelTurn`），是该接口的 daemon 方言 typed client�
 
 ## 非目标（本次明确不做）
 
-- 不迁移 tutti UI 组件 / UI System / Workbench；agorax 保留全部自有外壳。
+- 不迁入外部桌面 UI / UI System / Workbench；Agorax 保留全部自有外壳。
 - 不用 Host Turn settle **替代** Mission MCP `task_complete`（Turn settle 可作执行层终态，但不单独驱动 mission DAG）。
-- goal control / session fork / edit retry / side conversation 等 tutti 高级合同产品化另立（Host REST 已部分出口）。
-- 不改 tutti 原仓库（只读参考）。
+- goal control / session fork / edit retry / side conversation 等 高级合同（goal / fork / edit retry 等）产品化另立（Host REST 已部分出口）。
 
 ## 验证命令清单
 
@@ -210,7 +207,7 @@ thinking 折叠块与工具卡片本就已消费这些 content part）：
 | `reasoning` | `content:[{type:'thinking', thinking: text}]`（payload 按 `text→content→message→body→displayPrompt→title` 回退取值） | 独立 entry → `TuiActivityCard` 思考折叠区（默认收起、streaming 时显示计时与状态） |
 | `activeToolCalls` | kind ∈ {`tool_call`,`tool`} 且 status 未终结（`completed/failed/canceled/error` 剔除） | `ThinkingBubble` "Using: X" 与流式活动区 |
 
-**payload key 合同**（与 tutti `workspaceAgentMessageProjection.ts` 对齐）：tool_call 用
+**payload key 合同**（与 daemon message projection 对齐）：tool_call 用
 `payload.{toolName|name, input|arguments, output, error|errorMessage}`；reasoning 用
 `payload.{text|content|message|body|displayPrompt|title}`。
 
@@ -221,7 +218,7 @@ thinking 折叠块与工具卡片本就已消费这些 content part）：
 **已知限制**：turn 以 tool-only 消息收尾且无后续 assistant 文本时，工具卡片不进时间线
 （`buildDisplayEntries` 尾挂规则 + `getTrailingToolOnlyTurnSummary` 未接线，属常规
 chat 路径的既有行为，非本次引入）。settled 工具卡片的输出经 `details` JSON 兜底展示，
-输入输出同卡，后续可参照 tutti `AgentExpandedToolContent` 的 rendererKind 分工具类型精修。
+输入输出同卡，后续可参照 daemon 工具内容展开约定 的 rendererKind 分工具类型精修。
 
 ## 前端未接入能力审计（2026-09-18，待评审）
 

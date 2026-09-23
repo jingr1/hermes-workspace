@@ -434,7 +434,7 @@ function normalizeSkillSourceKind(
     case "bundled":
     case "plugin":
     case "system":
-    // daemon field: "agorax-injected" replaces the tuttid "tutti-injected".
+    // daemon field: "agorax-injected" replaces the daemon "agorax-injected".
     case "agorax-injected":
     case "connector":
       return normalized;

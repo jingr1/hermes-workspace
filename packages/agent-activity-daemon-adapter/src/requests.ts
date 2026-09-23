@@ -22,7 +22,7 @@ type NewAgentSessionActivationInput = Extract<
  * initialContent, cwd, model, reasoningEffort, mcp*. Local prompt fields
  * such as `uri`, `hostPath`, `uploadStatus`, and `assetId` never cross.
  *
- * TODO(daemon-endpoint): remaining tuttid fields (capabilityRefs,
+ * TODO(daemon-endpoint): remaining daemon fields (capabilityRefs,
  * initialGoalControl, railPlacement, permissionModeId, planMode, speed,
  * title, visible, browserUse/codexSaverMode/rtkSaverMode, …) are dropped
  * until the daemon endpoint accepts them.
@@ -40,7 +40,7 @@ export function daemonCreateAgentSessionRequestFromActivity(
     agentTargetId: input.agentTargetId,
     clientSubmitId: input.clientSubmitId,
     // The daemon falls back to initialContent when content is empty; hosts
-    // follow the tuttid convention of sending initialContent at create time.
+    // follow the daemon convention of sending initialContent at create time.
     initialContent: daemonPromptContentBlocksFromActivity(
       input.initialContent ?? []
     ),

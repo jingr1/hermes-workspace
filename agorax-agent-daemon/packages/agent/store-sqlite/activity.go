@@ -279,11 +279,12 @@ func turnTransitionAlreadyApplied(stored Turn, incoming TurnTransition) bool {
 	if stored.TurnID == "" {
 		return false
 	}
-	// Durable settlement is agent-agnostic and absorbing. A second settled
-	// report (root-provider completion then canonical Turn settle, or two
-	// adapters racing the same terminal) must not fail the activity report.
+	// Durable settlement is absorbing: the first settled outcome wins. A later
+	// settled report with a different outcome (e.g. failed then completed from
+	// a racing root-provider / lifecycle stamp) must be an idempotent no-op so
+	// commit-before-publish still ships messages and WS terminal frames.
 	if stored.Phase == TurnPhaseSettled && incomingPhase == TurnPhaseSettled {
-		return settledTurnOutcomesCompatible(stored.Outcome, incoming.Outcome)
+		return true
 	}
 	if stored.Phase != incomingPhase {
 		return false

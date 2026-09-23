@@ -317,6 +317,17 @@ async function drainManagedRun(
             await adapter
               .interrupt(runId, 'reconciled settled turn')
               .catch(() => undefined)
+            const trimmedEarly = (text.trim() || snapshotText.trim())
+            const errEarly = lastError ?? recovered.error
+            // Error-only settle (quota / rate limit): don't wait for stream EOF.
+            if (!trimmedEarly && errEarly) {
+              return {
+                kind: 'failed',
+                runId,
+                reason: errEarly,
+                events: opts.events,
+              }
+            }
             break
           }
         }

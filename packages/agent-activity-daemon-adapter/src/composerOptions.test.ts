@@ -149,7 +149,7 @@ test("accepts agorax-injected and connector skill source kinds", () => {
     skills: [
       { name: "agorax", trigger: "/agorax", sourceKind: "agorax-injected" },
       { name: "github", trigger: "/github", sourceKind: "connector" },
-      { name: "legacy", trigger: "/legacy", sourceKind: "tutti-injected" }
+      { name: "legacy", trigger: "/legacy", sourceKind: "agorax-injected" }
     ]
   } as unknown as DaemonProviderComposerOptionsResponse;
 

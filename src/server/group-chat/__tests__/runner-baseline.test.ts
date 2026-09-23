@@ -393,5 +393,42 @@ describe('group-chat clean baseline', () => {
         expect(msg.content).toMatch(/failed: rate_limit/)
       }
     })
+
+    it('does not re-prompt on sibling error replies across MAX_ROUNDS', async () => {
+      insertMessage({
+        roomId: room.id,
+        senderKind: 'human',
+        senderParticipantId: 'user',
+        senderName: 'user',
+        content: '@all',
+        dbPath,
+      })
+
+      const callsByMember = new Map<string, number>()
+      executeMemberTurn.mockImplementation(async ({ member }) => {
+        callsByMember.set(
+          member.participantId,
+          (callsByMember.get(member.participantId) ?? 0) + 1,
+        )
+        // Quota/API errors often arrive as normal replies, which used to
+        // set spokeThisRound>0 and burn remaining MAX_ROUNDS on sibling posts.
+        return {
+          kind: 'reply',
+          text: `API Error: Request rejected (429) for ${member.displayName}`,
+        } satisfies GroupTurnResult
+      })
+
+      const { runRoom } = await importRunner()
+      await runRoom(room)
+
+      const botMessages = getLatestMessages(room.id, {
+        dbPath,
+        limit: 200,
+      }).filter((m) => m.senderKind === 'agent')
+
+      expect(botMessages).toHaveLength(3)
+      expect(callsByMember.size).toBe(3)
+      expect([...callsByMember.values()].every((n) => n === 1)).toBe(true)
+    })
   })
 })

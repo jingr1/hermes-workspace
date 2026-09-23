@@ -3,11 +3,11 @@
 Monorepo-private mapping between the **Agorax agent daemon** REST wire DTOs
 and the canonical `@agorax/agent-activity-core` entities.
 
-The daemon (`agorax-agent-daemon`, a renamed copy of the tutti daemon) emits
+The daemon (`agorax-agent-daemon`, Agorax managed-agent daemon) emits
 its canonical entities as Go `encoding/json` struct dumps, so response fields
 are the PascalCase Go field names (`ID`, `ActiveTurnID`, `CreatedAtUnixMS`,
 …). `src/daemonDtos.ts` is the hand-maintained DTO truth source and mirrors
-the daemon Go structs; it replaces the generated `@tutti-os/client-tuttid-ts`
+the daemon Go structs; it replaces the generated `generated daemon client`
 client the source package consumed. When the daemon structs change, update
 `daemonDtos.ts` and the key-set assertions in `daemonDtos.test.ts` together.
 
@@ -38,11 +38,11 @@ helper import.
   vocabulary: `agorax` + `slash_command`).
 - `composerOptions.ts` / `composerSettings.ts` —
   **deprecated, TODO(daemon-endpoint)**: the daemon has no composer routes
-  yet. Kept from the tuttid adapter so the canonical projections survive the
+  yet. Kept from the daemon adapter so the canonical projections survive the
   port; their response/request contracts live in `daemonDtos.ts` and mirror
-  the generated tuttid shapes until the daemon endpoint lands.
+  the generated daemon shapes until the daemon endpoint lands.
 
-Dropped from the source package: `goalControl.ts` and the Tutti-mode
+Dropped from the source package: `goalControl.ts` and mode-
 activation mapper — the daemon REST surface exposes no goal-control or mode
 routes, and this package adds no mappings for daemon-absent contracts.
 
