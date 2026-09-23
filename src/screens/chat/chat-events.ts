@@ -6,6 +6,9 @@ export const CHAT_SUBMIT_SELECTION_EVENT = 'claude:chat-submit-selection'
 
 export const CHAT_PENDING_COMMAND_STORAGE_KEY = 'claude.pending-chat-command'
 
+/** Prefill composer after navigating to an existing agent chat (e.g. Knowledge Ask). */
+export const CHAT_PENDING_MESSAGE_STORAGE_KEY = 'hermes.pending-chat-message'
+
 export type ChatRunCommandDetail = {
   command: string
 }

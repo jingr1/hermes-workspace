@@ -12,6 +12,10 @@ import { loadWorkspaceCatalog } from '../../../workspace'
 import type { ManagedAgentActivateResponseDto } from '@/lib/managed-agent-runtime/command-dtos'
 import type { AgoraxManagedPromptContentBlock } from '@/lib/managed-agent-runtime/prompt-content'
 import { managedPromptContentBlocksFromUnknown } from '@/lib/managed-agent-runtime/prompt-content'
+import {
+  buildManagedSkillPromptPrefix,
+  buildTurnSkillInjection,
+} from '../../../../../server/platform-skills'
 
 export const Route = createFileRoute('/api/agents/$agentId/engine/activate')({
   server: {
@@ -76,11 +80,35 @@ export const Route = createFileRoute('/api/agents/$agentId/engine/activate')({
         })
         const workspace = await loadWorkspaceCatalog().catch(() => null)
         const cwd = resolveManagedChatWorkspaceCwd(workspace)
+        const turnInject = buildTurnSkillInjection(agentId, message)
+        const sessionPrefix =
+          turnInject.injected.length > 0
+            ? ''
+            : buildManagedSkillPromptPrefix(agentId)
+        const effectiveTask = sessionPrefix
+          ? `${sessionPrefix}\n\n${message}`
+          : turnInject.text
+        // Rewrite text blocks in promptContent when present so attachments stay.
+        if (promptContent.length > 0 && effectiveTask !== message) {
+          const textIdx = promptContent.findIndex((b) => b.type === 'text')
+          if (textIdx >= 0) {
+            promptContent = promptContent.map((block, index) =>
+              index === textIdx && block.type === 'text'
+                ? { type: 'text', text: effectiveTask }
+                : block,
+            )
+          } else {
+            promptContent = [
+              { type: 'text', text: effectiveTask },
+              ...promptContent,
+            ]
+          }
+        }
         const started = await startManagedChatRun({
           agentId,
           runId: agentSessionId,
           sessionId: displaySessionId,
-          task: message,
+          task: effectiveTask,
           ...(promptContent.length ? { content: promptContent } : {}),
           ...(model ? { model } : {}),
           ...(reasoningEffort ? { effort: reasoningEffort } : {}),

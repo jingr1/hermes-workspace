@@ -152,6 +152,7 @@ submitInteractive / cancelTurn`），是该接口的 daemon 方言 typed client�
 | side conversation 未接 | 无对应产品流程 | 需要时映射为 thread/panel |
 | mission MCP 控制通道 | daemon createSession 接受 `mcpEndpoint`/`mcpRunToken`/`mcpToolAllowlist`；Claude CLI adapter 写入 per-run mcp-config；transport 转发 `McpHandshake`；生产 `installAdvanceBridge` 挂在 dispatch-ready | Codex/其他 provider 见能力矩阵；非 Claude 可能 partial |
 | capability 上报 | adapter 用 `agentActivitySessionCapabilitiesFromIds` 展开 `Capabilities.values`；未上报时仍为 null（unknown） | 随 composer-options 端点一起补模型目录 |
+| **platform skills（目录 + 绑定）** | collab.db `platform_skills` / `agent_skills`；Hermes 物化到 profile skills；managed activate/input 注入 | Skills UI 全 registry agent 分配；Composer `/` 仅列 enabled 绑定；本轮选中不改绑定 | 见 [`docs/platform-skills.md`](./platform-skills.md) |
 
 ## 非目标（本次明确不做）
 

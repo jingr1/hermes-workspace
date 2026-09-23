@@ -16,12 +16,15 @@ import {
   useDiscoverMcpTools,
   useUpsertMcpServer,
 } from '../hooks/use-mcp-mutations'
+import { useCreatePlatformMcp } from '../hooks/use-platform-mcp'
 import { useMcpCapabilityMode } from '../hooks/use-mcp-capability-mode'
 import type { McpClientInput, McpServer } from '@/types/mcp'
 
 interface Props {
   open: boolean
   initial?: McpServer | McpClientInput | null
+  /** Where to persist new servers. Library = platform catalog (default). */
+  target?: 'library' | 'profile'
   onClose: () => void
 }
 
@@ -63,10 +66,17 @@ function isMcpServer(value: unknown): value is McpServer {
   )
 }
 
-export function McpServerDialog({ open, initial, onClose }: Props) {
+export function McpServerDialog({
+  open,
+  initial,
+  target = 'library',
+  onClose,
+}: Props) {
   const upsert = useUpsertMcpServer()
+  const createLibrary = useCreatePlatformMcp()
   const discover = useDiscoverMcpTools()
   const { mode: capabilityMode } = useMcpCapabilityMode()
+  const saving = upsert.isPending || createLibrary.isPending
   const [draft, setDraft] = useState<McpClientInput>(EMPTY)
   // Ephemeral, never persisted to a named exported type — secrets stay
   // in component-local state and are merged into the POST payload only at
@@ -124,8 +134,12 @@ export function McpServerDialog({ open, initial, onClose }: Props) {
               {draft.name || (initial ? 'Edit MCP Server' : 'Add MCP Server')}
             </DialogTitle>
             <DialogDescription className="mt-1 text-pretty">
-              {initial ? 'Edit MCP Server' : 'Add MCP Server'} •{' '}
-              {draft.transportType.toUpperCase()} transport •{' '}
+              {initial
+                ? 'Edit MCP Server'
+                : target === 'library'
+                  ? 'Add to platform MCP library (assign to agents separately)'
+                  : 'Add MCP Server'}{' '}
+              • {draft.transportType.toUpperCase()} transport •{' '}
               {draft.authType || 'none'} auth
             </DialogDescription>
             <div className="mt-3 flex flex-wrap gap-1.5">
@@ -298,7 +312,7 @@ export function McpServerDialog({ open, initial, onClose }: Props) {
                 variant="ghost"
                 size="sm"
                 onClick={onClose}
-                disabled={upsert.isPending}
+                disabled={saving}
               >
                 Cancel
               </Button>
@@ -313,13 +327,17 @@ export function McpServerDialog({ open, initial, onClose }: Props) {
               </Button>
               <Button
                 size="sm"
-                disabled={upsert.isPending || !draft.name}
+                disabled={saving || !draft.name}
                 onClick={async () => {
                   const payload = bearerToken
                     ? { ...draft, bearerToken }
                     : draft
                   try {
-                    await upsert.mutateAsync(payload)
+                    if (target === 'library' && !initial) {
+                      await createLibrary.mutateAsync(payload)
+                    } else {
+                      await upsert.mutateAsync(payload)
+                    }
                     onClose()
                   } finally {
                     // Wipe ephemeral secret on success and on error so it
@@ -328,7 +346,7 @@ export function McpServerDialog({ open, initial, onClose }: Props) {
                   }
                 }}
               >
-                {upsert.isPending ? 'Saving…' : 'Save'}
+                {saving ? 'Saving…' : 'Save'}
               </Button>
             </div>
           </div>

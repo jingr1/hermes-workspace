@@ -5,6 +5,7 @@ import {
   CLAUDE_API,
   CLAUDE_DASHBOARD_URL,
   ensureGatewayCoreProbed,
+  ensureGatewayEnhancedProbed,
   getGatewayMode,
 } from '../../server/gateway-capabilities'
 
@@ -16,7 +17,10 @@ export const Route = createFileRoute('/api/gateway-status')({
           return json({ error: 'Unauthorized' }, { status: 401 })
         }
 
+        // Core probe sets mcpFallback for local control plane; kick enhanced
+        // probe in the background so native mcp can flip true without blocking.
         const capabilities = await ensureGatewayCoreProbed()
+        void ensureGatewayEnhancedProbed().catch(() => {})
         let pool: unknown = null
         try {
           const { getGatewayPoolStatus, isGatewayPoolEnabled } =

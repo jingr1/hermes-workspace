@@ -6,7 +6,10 @@ import { useAgentStore } from '../../../stores/agent-store'
 import { fetchAgents, fetchSessionsForAgent } from '../../../lib/agent-api'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { resolveSessionForProfile } from '../../../screens/chat/last-session'
-import { chatQueryKeys } from '../../../screens/chat/chat-queries'
+import {
+  chatQueryKeys,
+  fetchSessions,
+} from '../../../screens/chat/chat-queries'
 import type { SessionMeta } from '../../../screens/chat/types'
 import { useQueryClient } from '@tanstack/react-query'
 
@@ -67,7 +70,9 @@ function ChatAgentRoute() {
   useEffect(() => {
     let cancelled = false
 
-    const resolveSessionForAgent = (id: string): string | null => {
+    const resolveSessionForAgent = async (
+      id: string,
+    ): Promise<string | null> => {
       const fromUrl = search.session?.trim()
 
       const agent = useAgentStore
@@ -78,11 +83,27 @@ function ChatAgentRoute() {
       if (agent.runtime === 'hermes') {
         if (fromUrl && fromUrl !== 'new') return fromUrl
         const profile = agent.runtimeConfig.profile ?? agent.agentId
-        const cached = queryClient.getQueryData<Array<SessionMeta>>(
+        let sessions = queryClient.getQueryData<Array<SessionMeta>>(
           chatQueryKeys.sessionsForProfile(profile),
         )
-        const resolved = resolveSessionForProfile(cached, profile, {
-          sessionsLoaded: cached !== undefined,
+        let sessionsLoaded = sessions !== undefined
+        if (!sessionsLoaded) {
+          try {
+            sessions = await fetchSessions(profile)
+            if (cancelled) return null
+            queryClient.setQueryData(
+              chatQueryKeys.sessionsForProfile(profile),
+              sessions,
+            )
+            sessionsLoaded = true
+          } catch {
+            if (cancelled) return null
+            sessions = []
+            sessionsLoaded = false
+          }
+        }
+        const resolved = resolveSessionForProfile(sessions, profile, {
+          sessionsLoaded,
         })
         return resolved === 'new' ? null : resolved
       }
@@ -95,7 +116,9 @@ function ChatAgentRoute() {
         friendlyId: session.sessionId,
       }))
       const resolved = resolveSessionForProfile(local, id, {
-        sessionsLoaded: cached.length > 0 || useAgentStore.getState().sessionsByAgentId.has(id),
+        sessionsLoaded:
+          cached.length > 0 ||
+          useAgentStore.getState().sessionsByAgentId.has(id),
       })
       return resolved === 'new' ? null : resolved
     }
@@ -105,8 +128,11 @@ function ChatAgentRoute() {
       const agent = useAgentStore
         .getState()
         .agents.find((entry) => entry.agentId === agentId)
-      if (agent && agent.runtime !== 'hermes' &&
-          !useAgentStore.getState().sessionsByAgentId.has(agentId)) {
+      if (
+        agent &&
+        agent.runtime !== 'hermes' &&
+        !useAgentStore.getState().sessionsByAgentId.has(agentId)
+      ) {
         try {
           const data = await fetchSessionsForAgent(agentId)
           if (cancelled) return
@@ -116,7 +142,8 @@ function ChatAgentRoute() {
           useAgentStore.getState().setSessions(agentId, [])
         }
       }
-      const sessionId = resolveSessionForAgent(agentId)
+      const sessionId = await resolveSessionForAgent(agentId)
+      if (cancelled) return
       setActiveAgentId(agentId || null, { sessionId })
       setSeeded(true)
     }

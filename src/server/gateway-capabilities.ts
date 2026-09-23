@@ -225,11 +225,11 @@ export type EnhancedCapabilities = {
   mcp: boolean
   /**
    * Phase 1.5 — local-only fallback. True when the agent does NOT yet expose
-   * the `/api/mcp*` runtime endpoints but the dashboard `/api/config` route
-   * exposes a `mcp_servers` map AND the deployment is loopback-only. The
-   * workspace then performs CRUD against `config.mcp_servers` directly while
-   * disabling Test/Discover/Logs (which require runtime probing). Removed
-   * once hermes-agent ships native `/api/mcp*` endpoints.
+   * the `/api/mcp*` runtime endpoints but the workspace can CRUD `mcp_servers`
+   * via the local profile control plane (or, for non-local CP, dashboard
+   * `/api/config` on loopback). Workspace routes then read/write profile
+   * `config.yaml` (or dashboard config) while Test/Discover/Logs still need
+   * native runtime probing. Removed once hermes-agent ships native `/api/mcp*`.
    */
   mcpFallback: boolean
   /**
@@ -1125,15 +1125,15 @@ async function fillEnhancedCapabilities(input: {
       : Promise.resolve(false),
   ])
 
-  const dashboardConfigAvailable =
-    input.dashboardAvailable || input.legacyConfig || localControlPlane
-  const mcpFallback =
-    !mcp &&
-    !localControlPlane &&
-    input.dashboardAvailable &&
-    dashboardConfigAvailable &&
-    isLocalhostDeployment() &&
-    (await probeMcpConfigKey())
+  // Local Agorax control plane: profile config.yaml is always writable for
+  // mcp_servers — do not require dashboard /api/config or native gateway MCP.
+  const mcpFallback = mcp
+    ? false
+    : localControlPlane
+      ? true
+      : input.dashboardAvailable &&
+        isLocalhostDeployment() &&
+        (await probeMcpConfigKey())
 
   capabilities = {
     ...capabilities,
@@ -1229,7 +1229,9 @@ export async function probeGateway(options?: {
           config: localControlPlane || legacyConfig,
           jobs: localControlPlane || legacyJobs,
           mcp: false,
-          mcpFallback: false,
+          // Local CP can manage MCP via profile config.yaml immediately —
+          // do not wait for enhanced probe (avoids /mcp "Not available").
+          mcpFallback: localControlPlane,
           conductor: false,
           kanban: false,
           sessionTruncate: sessionMutation.sessionTruncate,

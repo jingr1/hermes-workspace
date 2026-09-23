@@ -285,6 +285,82 @@ CREATE INDEX IF NOT EXISTS idx_managed_chat_messages_session
   ON managed_chat_messages(session_id, created_at);
 `,
   },
+  {
+    version: 7,
+    sql: `
+-- Platform skill catalog + per-agent bindings (Multica-style reuse).
+CREATE TABLE IF NOT EXISTS platform_skills (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  description TEXT NOT NULL DEFAULT '',
+  content TEXT NOT NULL DEFAULT '',
+  origin_json TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_platform_skills_name
+  ON platform_skills(name);
+
+CREATE TABLE IF NOT EXISTS platform_skill_files (
+  skill_id TEXT NOT NULL,
+  path TEXT NOT NULL,
+  content TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (skill_id, path),
+  FOREIGN KEY (skill_id) REFERENCES platform_skills(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS agent_skills (
+  agent_id TEXT NOT NULL,
+  skill_id TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (agent_id, skill_id),
+  FOREIGN KEY (skill_id) REFERENCES platform_skills(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_agent_skills_agent
+  ON agent_skills(agent_id, enabled);
+CREATE INDEX IF NOT EXISTS idx_agent_skills_skill
+  ON agent_skills(skill_id);
+`,
+  },
+  {
+    version: 8,
+    sql: `
+-- Category for platform skill catalog (Hermes skills/<cat>/<name> layout).
+ALTER TABLE platform_skills ADD COLUMN category TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_platform_skills_category
+  ON platform_skills(category);
+`,
+  },
+  {
+    version: 9,
+    sql: `
+-- Platform MCP catalog + per-agent bindings (Multica/Skills-style reuse).
+CREATE TABLE IF NOT EXISTS platform_mcp_servers (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  transport TEXT NOT NULL DEFAULT 'stdio',
+  config_json TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_platform_mcp_servers_name
+  ON platform_mcp_servers(name);
+
+CREATE TABLE IF NOT EXISTS agent_mcp_servers (
+  agent_id TEXT NOT NULL,
+  server_id TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (agent_id, server_id),
+  FOREIGN KEY (server_id) REFERENCES platform_mcp_servers(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_agent_mcp_servers_agent
+  ON agent_mcp_servers(agent_id, enabled);
+CREATE INDEX IF NOT EXISTS idx_agent_mcp_servers_server
+  ON agent_mcp_servers(server_id);
+`,
+  },
 ]
 
 export function ensureCollabDb(dbPath: string = getCollabDbPath()): void {

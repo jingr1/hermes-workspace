@@ -94,6 +94,7 @@ import { useContextAlert } from './hooks/use-context-alert'
 import {
   CHAT_OPEN_SETTINGS_EVENT,
   CHAT_PENDING_COMMAND_STORAGE_KEY,
+  CHAT_PENDING_MESSAGE_STORAGE_KEY,
   CHAT_RUN_COMMAND_EVENT,
   CHAT_SUBMIT_SELECTION_EVENT,
 } from './chat-events'
@@ -192,6 +193,8 @@ type ChatScreenProps = {
    * Managed runtimes pass false.
    */
   hermesChrome?: boolean
+  /** Registry agent id for platform skill composer `/` listing. */
+  skillsAgentId?: string
 }
 
 type PortableHistoryMessage = {
@@ -534,6 +537,7 @@ export function ChatScreen({
   renderMain,
   sessionController,
   hermesChrome = true,
+  skillsAgentId,
 }: ChatScreenProps) {
   const navigate = useNavigate()
   const pathname = useRouterState({
@@ -3842,6 +3846,32 @@ export function ChatScreen({
     runPaletteSlashCommand(pendingCommand)
   }, [runPaletteSlashCommand])
 
+  useEffect(() => {
+    // Managed chat owns its own composer handle via renderMain.
+    if (renderMain) return
+
+    const pendingMessage = window.sessionStorage.getItem(
+      CHAT_PENDING_MESSAGE_STORAGE_KEY,
+    )
+    if (!pendingMessage) return
+
+    let attempts = 0
+    const tryPrefill = () => {
+      if (composerHandleRef.current) {
+        window.sessionStorage.removeItem(CHAT_PENDING_MESSAGE_STORAGE_KEY)
+        composerHandleRef.current.setValue(pendingMessage)
+        return
+      }
+      attempts += 1
+      if (attempts < 20) {
+        timer = window.setTimeout(tryPrefill, 50)
+      }
+    }
+
+    let timer = window.setTimeout(tryPrefill, 0)
+    return () => window.clearTimeout(timer)
+  }, [activeFriendlyId, renderMain])
+
   const toggleSidebar = useWorkspaceStore((s) => s.toggleSidebar)
 
   const handleToggleSidebarCollapse = useCallback(() => {
@@ -4155,6 +4185,7 @@ export function ChatScreen({
               onThinkingLevelChange: handleThinkingLevelChange,
               gatewayQueriesEnabled: !historyLoading,
               slashRuntime: hermesSlashRuntime,
+              skillsAgentId,
             }}
           >
             {hideUi ? null : (

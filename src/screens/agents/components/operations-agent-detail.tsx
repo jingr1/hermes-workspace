@@ -28,6 +28,10 @@ import type {
   AgentSkillItem,
   AgentMcpItem,
 } from '../hooks/use-operations'
+import {
+  useAssignAgentMcp,
+  usePlatformMcpLibrary,
+} from '@/screens/mcp/hooks/use-platform-mcp'
 
 // Fetch models from the local filesystem endpoint — no gateway dependency.
 // Falls back gracefully when /api/models (gateway-backed) is unreachable.
@@ -504,6 +508,7 @@ function CapabilitiesTab({
   onToggleSkill: (input: {
     profile: string
     name: string
+    skillId?: string
     enabled: boolean
   }) => Promise<unknown>
   isTogglingSkill: boolean
@@ -511,9 +516,14 @@ function CapabilitiesTab({
     profile: string
     server: string
     enabled: boolean
+    serverId?: string
   }) => Promise<unknown>
   isTogglingMcp: boolean
-  onRemoveMcp: (input: { profile: string; server: string }) => Promise<unknown>
+  onRemoveMcp: (input: {
+    profile: string
+    server: string
+    serverId?: string
+  }) => Promise<unknown>
   isRemovingMcp: boolean
 }) {
   const [skillSearch, setSkillSearch] = useState('')
@@ -527,6 +537,14 @@ function CapabilitiesTab({
   const [localMcp, setLocalMcp] = useState<AgentMcpItem[]>(
     agent.capabilities.mcpServers,
   )
+  const libraryQuery = usePlatformMcpLibrary()
+  const assignMcp = useAssignAgentMcp()
+  const unboundLibrary = useMemo(() => {
+    const configured = new Set(localMcp.map((m) => m.name.toLowerCase()))
+    return (libraryQuery.data ?? []).filter(
+      (s) => !configured.has(s.name.toLowerCase()),
+    )
+  }, [libraryQuery.data, localMcp])
 
   // Keep local state in sync when SWITCHING to a different agent.
   // Intentionally depend on agent.id (not agent.capabilities.skills) because
@@ -566,6 +584,7 @@ function CapabilitiesTab({
       await onToggleSkill({
         profile: agent.id,
         name: skill.name,
+        skillId: skill.skillId,
         enabled: !skill.enabled,
       })
     } catch (err) {
@@ -594,6 +613,7 @@ function CapabilitiesTab({
         profile: agent.id,
         server: mcp.name,
         enabled: !mcp.enabled,
+        serverId: mcp.serverId,
       })
     } catch (err) {
       // Rollback
@@ -610,11 +630,15 @@ function CapabilitiesTab({
 
   async function handleRemoveMcp(mcp: AgentMcpItem) {
     setInlineError(null)
-    if (!confirm(`Remove MCP server "${mcp.name}" from this profile?`)) return
+    if (!confirm(`Remove MCP server "${mcp.name}" from this agent?`)) return
     // Optimistic update
     setLocalMcp((prev) => prev.filter((m) => m.name !== mcp.name))
     try {
-      await onRemoveMcp({ profile: agent.id, server: mcp.name })
+      await onRemoveMcp({
+        profile: agent.id,
+        server: mcp.name,
+        serverId: mcp.serverId,
+      })
     } catch (err) {
       // Rollback
       setLocalMcp((prev) => [...prev, mcp])
@@ -681,8 +705,8 @@ function CapabilitiesTab({
 
         {localSkills.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-6 text-sm text-[var(--theme-muted)]">
-            No skills installed in this profile. Visit the Skills page to add
-            some.
+            No platform skills bound to this agent. Visit the Skills page to
+            assign reusable catalog skills.
           </div>
         ) : (
           <>
@@ -771,14 +795,17 @@ function CapabilitiesTab({
             to="/mcp"
             className="text-xs text-[var(--theme-accent)] hover:underline"
           >
-            Manage in MCP →
+            Assign from library →
           </Link>
         </div>
 
         {localMcp.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-6 text-sm text-[var(--theme-muted)]">
-            No MCP servers configured for this profile. Visit the MCP page to
-            add some.
+            No MCP servers on this profile yet. Assign from the{' '}
+            <Link to="/mcp" className="text-[var(--theme-accent)] hover:underline">
+              MCP library
+            </Link>{' '}
+            (Agents tab), or add a private server.
           </div>
         ) : (
           <div className="space-y-1.5">
@@ -837,6 +864,53 @@ function CapabilitiesTab({
             ))}
           </div>
         )}
+
+        {unboundLibrary.length > 0 ? (
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-[var(--theme-muted)]">
+              Assign from library
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {unboundLibrary.map((server) => (
+                <Button
+                  key={server.id}
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  disabled={assignMcp.isPending}
+                  onClick={() => {
+                    void assignMcp
+                      .mutateAsync({
+                        agentId: agent.id,
+                        serverIds: [server.id],
+                      })
+                      .then(() => {
+                        setLocalMcp((prev) => [
+                          ...prev,
+                          {
+                            name: server.name,
+                            enabled: true,
+                            status: 'ok',
+                            serverId: server.id,
+                            source: 'platform',
+                          },
+                        ])
+                      })
+                      .catch((err: unknown) => {
+                        setInlineError(
+                          err instanceof Error
+                            ? err.message
+                            : 'Failed to assign MCP',
+                        )
+                      })
+                  }}
+                >
+                  + {server.name}
+                </Button>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </section>
 
       {/* Toolsets section */}
@@ -1118,6 +1192,7 @@ export function OperationsAgentDetail({
   onToggleSkill: (input: {
     profile: string
     name: string
+    skillId?: string
     enabled: boolean
   }) => Promise<unknown>
   isTogglingSkill: boolean
@@ -1125,9 +1200,14 @@ export function OperationsAgentDetail({
     profile: string
     server: string
     enabled: boolean
+    serverId?: string
   }) => Promise<unknown>
   isTogglingMcp: boolean
-  onRemoveMcp: (input: { profile: string; server: string }) => Promise<unknown>
+  onRemoveMcp: (input: {
+    profile: string
+    server: string
+    serverId?: string
+  }) => Promise<unknown>
   isRemovingMcp: boolean
 }) {
   const [activeTab, setActiveTab] = useState<Tab>('identity')

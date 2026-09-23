@@ -2,9 +2,20 @@
 
 > 产品名：**Agorax**（AI Agent 的公共广场）。运行时由 **Hermes Agent** 提供（gateway / profiles / `~/.hermes`），运行时术语保持 Hermes 命名不变，见 [`docs/agorax-naming-contract.md`](docs/agorax-naming-contract.md)。
 
-本仓库使用语义化 Hermes agent/worker（不是纯编号 lane）。统一配置真相源是 [`agents.yaml`](agents.yaml)；每个 Hermes agent 在 `~/.hermes/profiles/<agent-id>/` 有对应 profile，角色 skill 见配置，wrapper 在 `~/.local/bin/`。
+本仓库使用语义化 Hermes agent/worker（不是纯编号 lane）。统一配置真相源是 [`agents.yaml`](agents.yaml)；每个 Hermes agent 在对应 profile 下有配置（**`default` → `~/.hermes`**，其余 → `~/.hermes/profiles/<agent-id>/`），角色 skill 见配置，wrapper 在 `~/.local/bin/`。
 
 **统一 agent 声明**见 [`agents.yaml`](agents.yaml)：同时描述角色、skills、能力和 agent **如何启动**（runtime / command / execution）。一个 agent 条目既是可调度 worker，也是 runtime registry entry。
+
+### Runtime 双轨合同（默认要求）
+
+后续涉及 **Agents / Skills / MCP**（及同类「按 agent 配置能力」）的功能时，**默认必须同时支持**：
+
+| 轨 | `agents.yaml` `runtime` | 例子 | 能力落点 |
+| --- | --- | --- | --- |
+| **Hermes** | `hermes` | `orchestrator`、`developer`、… | profile `~/.hermes` / `profiles/<id>/`（如 `config.yaml` `mcp_servers`、`skills/`） |
+| **Managed** | `claude-code` / `codex` / … | `cc-impl`、`codex-impl` | collab 绑定为真相源；启动时由 adapter 注入（如 Claude Code per-run `mcp-config.json`），**不要**假设存在 Hermes profile |
+
+禁止只为 Hermes profile 列表实现 UI/API 后把 managed 留空。平台库 + `agent_*` 绑定表的 `agent_id` 一律用 registry id（与 Skills 相同）。
 
 当前版本：`2.4.0`。本地开发：`pnpm dev` 默认 `PORT=3001`（部分文档/Windows 示例仍写 `3000`，以实际 `PORT` 为准）。
 
@@ -18,12 +29,14 @@ LangGraph workflow（默认 `radw.yaml`，以及 `rdi.yaml`、`research_only.yam
 
 | Worker         | Wrapper               | Modes                                     | Tools                                                                                   | Skills                                                                                                                                                                                                                                         | MCP | Plugins |
 | -------------- | --------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- | ------- |
-| `orchestrator` | `orchestrator:plan`   | plan, autoresearch, autoresearch-dispatch | todo, kanban, delegation, terminal, file, session_search, cronjob, skills, clarify, web | orchestrator-core, mission-memory-layout, gstack-for-hermes, llm-wiki, kanban-orchestrator, writing-plans, autoresearch, autoresearch-plan, autoresearch-orchestrate                                                                           | 无  | 无      |
-| `researcher`   | `researcher:quick`    | quick                                     | web, browser, terminal, file, vision, session_search, skills, todo                      | researcher-core, mission-memory-layout, llm-wiki, browser-harness, gstack-for-hermes, researcher-quick, arxiv, youtube-content, polymarket                                                                                                     | 无  | 无      |
-| `architect`    | `architect:design`    | design, autoresearch                      | terminal, file, web, session_search, skills, todo                                       | architect-core, harden-gate, mission-memory-layout, gstack-for-hermes, llm-wiki, writing-plans, requesting-code-review, codebase-inspection, architecture-diagram, brainstorming, autoresearch, autoresearch-execute                           | 无  | 无      |
-| `developer`    | `developer:implement` | implement, autoresearch                   | terminal, file, browser, web, session_search, skills, todo                              | gstack-for-hermes, mission-memory-layout, llm-wiki, test-driven-development, systematic-debugging, codebase-inspection, github-pr-workflow, requesting-code-review, receiving-code-review, executing-plans, autoresearch, autoresearch-execute | 无  | 无      |
-| `writer`       | `writer:author`       | author, autoresearch                      | terminal, file, web, browser, session_search, skills, todo, vision                      | gstack-for-hermes, mission-memory-layout, llm-wiki, powerpoint, docx, pdf, popular-web-designs, excalidraw, architecture-diagram, claude-design, songwriting-and-ai-music, media, writing-plans, autoresearch, autoresearch-execute            | 无  | 无      |
-| `learning`     | `learning`            | —                                         | file, session_search, skills, todo, web                                                 | gstack-for-hermes, llm-wiki, obsidian, writing-plans, mission-memory-layout, learning-wiki-ingest                                                                                                                                              | 无  | 无      |
+| `orchestrator` | `orchestrator:plan`   | plan, autoresearch, autoresearch-dispatch | todo, kanban, delegation, terminal, file, session_search, cronjob, skills, clarify, web | orchestrator-core, mission-memory-layout, gstack-for-hermes, llm-wiki, kanban-orchestrator, writing-plans, autoresearch, autoresearch-plan, autoresearch-orchestrate                                                                           | 库可选 | 无      |
+| `researcher`   | `researcher:quick`    | quick                                     | web, browser, terminal, file, vision, session_search, skills, todo                      | researcher-core, mission-memory-layout, llm-wiki, browser-harness, gstack-for-hermes, researcher-quick, arxiv, youtube-content, polymarket                                                                                                     | 库可选 | 无      |
+| `architect`    | `architect:design`    | design, autoresearch                      | terminal, file, web, session_search, skills, todo                                       | architect-core, harden-gate, mission-memory-layout, gstack-for-hermes, llm-wiki, writing-plans, requesting-code-review, codebase-inspection, architecture-diagram, brainstorming, autoresearch, autoresearch-execute                           | 库可选 | 无      |
+| `developer`    | `developer:implement` | implement, autoresearch                   | terminal, file, browser, web, session_search, skills, todo                              | gstack-for-hermes, mission-memory-layout, llm-wiki, test-driven-development, systematic-debugging, codebase-inspection, github-pr-workflow, requesting-code-review, receiving-code-review, executing-plans, autoresearch, autoresearch-execute | 库可选 | 无      |
+| `writer`       | `writer:author`       | author, autoresearch                      | terminal, file, web, browser, session_search, skills, todo, vision                      | gstack-for-hermes, mission-memory-layout, llm-wiki, powerpoint, docx, pdf, popular-web-designs, excalidraw, architecture-diagram, claude-design, songwriting-and-ai-music, media, writing-plans, autoresearch, autoresearch-execute            | 库可选 | 无      |
+| `learning`     | `learning`            | —                                         | file, session_search, skills, todo, web                                                 | gstack-for-hermes, llm-wiki, obsidian, writing-plans, mission-memory-layout, learning-wiki-ingest                                                                                                                                              | 库可选 | 无      |
+
+> **MCP：** 默认 roster 不预装外部 MCP。平台 MCP 库在 `/mcp`（`collab.db` → `platform_mcp_servers`），须显式绑定到 agent（`agent_mcp_servers`，**Hermes + managed 均可用**）。Hermes：物化进 profile `config.yaml` `mcp_servers`（`_agorax_platform`）；Managed：绑定存库，Claude Code 在 `startRun` 写入 per-run `mcp-config.json`。本地 Agorax 不依赖 gateway 原生 `/api/mcp`；`mcpFallback` 在 local control plane 下可用。`agents.yaml` 的 `mcpServers: []` 预留给后续 seed。
 
 > Swarm2「Add Worker」UI 的历史 role presets（Builder / Reviewer 等）见 [`docs/swarm/ROLES.md`](docs/swarm/ROLES.md)。**那些 preset 名不是** LangGraph workflow 里的 worker id。
 
@@ -58,6 +71,7 @@ orchestrator → researcher → architect → (developer | writer) → architect
 
 | id                          | runtime            | 说明                                                                              |
 | --------------------------- | ------------------ | --------------------------------------------------------------------------------- |
+| `default`                   | `hermes`           | 隐式根 profile：`~/.hermes`（不是 `profiles/default`）；`dispatchable: false`     |
 | `orchestrator` … `learning` | `hermes`           | 与 swarm roster 一一对应；`profile` 同 id                                         |
 | `gpuserver`                 | `hermes`           | `execution: ssh`；capabilities：gpu / cuda / benchmark / training；mention：`gpu` |
 | `cc-impl`                   | `claude-code`      | 展示名 Claude Code；`command: claude`，`args: ['-p']`；mention：`claude`          |

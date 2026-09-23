@@ -14,11 +14,13 @@ import {
 import {
   maskSecretsInPlace,
   normalizeMcpServer,
-  normalizeMcpServerFromConfig,
 } from '../../../server/mcp-normalize'
-import { getConfig, saveConfig } from '../../../server/hermes-dashboard-api'
 import type { McpConfigureInput } from '../../../types/mcp-input'
 import { createCapabilityUnavailablePayload } from '@/lib/feature-gates'
+import {
+  patchProfileMcpServer,
+  resolveMcpProfileName,
+} from '../../../server/mcp-profile-config'
 
 const REQUEST_TIMEOUT_MS = 30_000
 
@@ -103,56 +105,28 @@ export const Route = createFileRoute('/api/mcp/configure')({
             }
             return json({ ok: true, server: maskSecretsInPlace(server) })
           }
-          // Phase 1.5 fallback — patch the matching `config.mcp_servers[name]`
-          // entry in place. We only update the toggleable keys exposed by
-          // McpConfigureInput; transport/secrets stay untouched.
-          const cfg = await getConfig()
-          const root: Record<string, unknown> =
-            'config' in cfg && cfg.config && typeof cfg.config === 'object'
-              ? (cfg.config as Record<string, unknown>)
-              : cfg
-          const rawServers = root.mcp_servers
-          const servers =
-            rawServers &&
-            typeof rawServers === 'object' &&
-            !Array.isArray(rawServers)
-              ? { ...(rawServers as Record<string, unknown>) }
-              : {}
-          const existing = servers[input.name]
-          if (
-            !existing ||
-            typeof existing !== 'object' ||
-            Array.isArray(existing)
-          ) {
-            return json(
-              { ok: false, error: `MCP server not found: ${input.name}` },
-              { status: 404 },
-            )
-          }
-          const next: Record<string, unknown> = {
-            ...(existing as Record<string, unknown>),
-          }
-          if (typeof input.enabled === 'boolean') next.enabled = input.enabled
-          if (input.toolMode) next.tool_mode = input.toolMode
-          if (Array.isArray(input.includeTools))
-            next.include_tools = input.includeTools
-          if (Array.isArray(input.excludeTools))
-            next.exclude_tools = input.excludeTools
-          servers[input.name] = next
-          await saveConfig({ mcp_servers: servers })
-          const written = normalizeMcpServerFromConfig(input.name, next)
-          if (!written) {
-            return json(
-              { ok: false, error: 'MCP configure failed (config write)' },
-              { status: 500 },
-            )
-          }
-          return json({ ok: true, server: maskSecretsInPlace(written) })
-        } catch (err) {
-          return json(
-            { ok: false, error: safeErrorMessage(err) },
-            { status: 500 },
+          const url = new URL(request.url)
+          const profile = resolveMcpProfileName(
+            url.searchParams.get('profile') ||
+              (typeof (raw as Record<string, unknown>).profile === 'string'
+                ? ((raw as Record<string, unknown>).profile as string)
+                : null),
           )
+          const written = patchProfileMcpServer(profile, input.name, {
+            enabled: input.enabled,
+            toolMode: input.toolMode,
+            includeTools: input.includeTools,
+            excludeTools: input.excludeTools,
+          })
+          return json({
+            ok: true,
+            server: maskSecretsInPlace(written),
+            profile,
+          })
+        } catch (err) {
+          const message = safeErrorMessage(err)
+          const status = message.includes('not found') ? 404 : 500
+          return json({ ok: false, error: message }, { status })
         }
       },
     },

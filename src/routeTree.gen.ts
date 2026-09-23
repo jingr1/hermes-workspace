@@ -32,9 +32,11 @@ import { Route as ConductorRouteImport } from './routes/conductor'
 import { Route as AgentsRouteImport } from './routes/agents'
 import { Route as SplatRouteImport } from './routes/$'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SkillsIndexRouteImport } from './routes/skills/index'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
 import { Route as GroupChatIndexRouteImport } from './routes/group-chat/index'
 import { Route as ChatIndexRouteImport } from './routes/chat/index'
+import { Route as SkillsSkillIdRouteImport } from './routes/skills/$skillId'
 import { Route as SettingsProvidersRouteImport } from './routes/settings/providers'
 import { Route as GroupChatRoomIdRouteImport } from './routes/group-chat/$roomId'
 import { Route as ChatSessionKeyRouteImport } from './routes/chat/$sessionKey'
@@ -81,6 +83,8 @@ import { Route as ApiProviderUsageRouteImport } from './routes/api/provider-usag
 import { Route as ApiProjectsRouteImport } from './routes/api/projects'
 import { Route as ApiPreviewFileRouteImport } from './routes/api/preview-file'
 import { Route as ApiPluginsRouteImport } from './routes/api/plugins'
+import { Route as ApiPlatformSkillsRouteImport } from './routes/api/platform-skills'
+import { Route as ApiPlatformMcpRouteImport } from './routes/api/platform-mcp'
 import { Route as ApiPipelinesRouteImport } from './routes/api/pipelines'
 import { Route as ApiPingRouteImport } from './routes/api/ping'
 import { Route as ApiPendingTurnsRouteImport } from './routes/api/pending-turns'
@@ -175,6 +179,10 @@ import { Route as ApiProfilesDeleteRouteImport } from './routes/api/profiles/del
 import { Route as ApiProfilesCreateRouteImport } from './routes/api/profiles/create'
 import { Route as ApiProfilesCapabilitiesRouteImport } from './routes/api/profiles/capabilities'
 import { Route as ApiProfilesActivateRouteImport } from './routes/api/profiles/activate'
+import { Route as ApiPlatformSkillsSeedRouteImport } from './routes/api/platform-skills/seed'
+import { Route as ApiPlatformSkillsImportRouteImport } from './routes/api/platform-skills/import'
+import { Route as ApiPlatformSkillsSkillIdRouteImport } from './routes/api/platform-skills/$skillId'
+import { Route as ApiPlatformMcpServerIdRouteImport } from './routes/api/platform-mcp/$serverId'
 import { Route as ApiOauthPollTokenRouteImport } from './routes/api/oauth.poll-token'
 import { Route as ApiOauthDeviceCodeRouteImport } from './routes/api/oauth.device-code'
 import { Route as ApiModelInfoRouteImport } from './routes/api/model/info'
@@ -229,11 +237,17 @@ import { Route as ApiMcpNameLogsRouteImport } from './routes/api/mcp/$name.logs'
 import { Route as ApiAgentsCodexImplModelsRouteImport } from './routes/api/agents/codex-impl/models'
 import { Route as ApiAgentsCodexImplConfigRouteImport } from './routes/api/agents/codex-impl/config'
 import { Route as ApiAgentsClaudeCodeModelsRouteImport } from './routes/api/agents/claude-code/models'
+import { Route as ApiAgentsAgentIdSkillsRouteImport } from './routes/api/agents/$agentId/skills'
 import { Route as ApiAgentsAgentIdSessionsRouteImport } from './routes/api/agents/$agentId/sessions'
+import { Route as ApiAgentsAgentIdMcpRouteImport } from './routes/api/agents/$agentId/mcp'
+import { Route as ApiAgentsAgentIdLocalSkillsRouteImport } from './routes/api/agents/$agentId/local-skills'
 import { Route as ApiAgentsAgentIdChatRouteImport } from './routes/api/agents/$agentId/chat'
 import { Route as ApiRunsSessionKeyRunIdAbandonRouteImport } from './routes/api/runs/$sessionKey.$runId.abandon'
 import { Route as ApiRoomsRoomIdParticipantsParticipantIdRouteImport } from './routes/api/rooms/$roomId/participants/$participantId'
+import { Route as ApiAgentsAgentIdSkillsComposerRouteImport } from './routes/api/agents/$agentId/skills/composer'
+import { Route as ApiAgentsAgentIdSkillsSkillIdRouteImport } from './routes/api/agents/$agentId/skills/$skillId'
 import { Route as ApiAgentsAgentIdSessionsSessionIdRouteImport } from './routes/api/agents/$agentId/sessions/$sessionId'
+import { Route as ApiAgentsAgentIdMcpServerIdRouteImport } from './routes/api/agents/$agentId/mcp/$serverId'
 import { Route as ApiAgentsAgentIdInteractionsSessionIdRouteImport } from './routes/api/agents/$agentId/interactions/$sessionId'
 import { Route as ApiAgentsAgentIdEngineSessionsRouteImport } from './routes/api/agents/$agentId/engine/sessions'
 import { Route as ApiAgentsAgentIdEngineActivateRouteImport } from './routes/api/agents/$agentId/engine/activate'
@@ -370,6 +384,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SkillsIndexRoute = SkillsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SkillsRoute,
+} as any)
 const SettingsIndexRoute = SettingsIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -384,6 +403,11 @@ const ChatIndexRoute = ChatIndexRouteImport.update({
   id: '/chat/',
   path: '/chat/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const SkillsSkillIdRoute = SkillsSkillIdRouteImport.update({
+  id: '/$skillId',
+  path: '/$skillId',
+  getParentRoute: () => SkillsRoute,
 } as any)
 const SettingsProvidersRoute = SettingsProvidersRouteImport.update({
   id: '/providers',
@@ -615,6 +639,16 @@ const ApiPreviewFileRoute = ApiPreviewFileRouteImport.update({
 const ApiPluginsRoute = ApiPluginsRouteImport.update({
   id: '/api/plugins',
   path: '/api/plugins',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPlatformSkillsRoute = ApiPlatformSkillsRouteImport.update({
+  id: '/api/platform-skills',
+  path: '/api/platform-skills',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPlatformMcpRoute = ApiPlatformMcpRouteImport.update({
+  id: '/api/platform-mcp',
+  path: '/api/platform-mcp',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPipelinesRoute = ApiPipelinesRouteImport.update({
@@ -1091,6 +1125,27 @@ const ApiProfilesActivateRoute = ApiProfilesActivateRouteImport.update({
   path: '/api/profiles/activate',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPlatformSkillsSeedRoute = ApiPlatformSkillsSeedRouteImport.update({
+  id: '/seed',
+  path: '/seed',
+  getParentRoute: () => ApiPlatformSkillsRoute,
+} as any)
+const ApiPlatformSkillsImportRoute = ApiPlatformSkillsImportRouteImport.update({
+  id: '/import',
+  path: '/import',
+  getParentRoute: () => ApiPlatformSkillsRoute,
+} as any)
+const ApiPlatformSkillsSkillIdRoute =
+  ApiPlatformSkillsSkillIdRouteImport.update({
+    id: '/$skillId',
+    path: '/$skillId',
+    getParentRoute: () => ApiPlatformSkillsRoute,
+  } as any)
+const ApiPlatformMcpServerIdRoute = ApiPlatformMcpServerIdRouteImport.update({
+  id: '/$serverId',
+  path: '/$serverId',
+  getParentRoute: () => ApiPlatformMcpRoute,
+} as any)
 const ApiOauthPollTokenRoute = ApiOauthPollTokenRouteImport.update({
   id: '/api/oauth/poll-token',
   path: '/api/oauth/poll-token',
@@ -1375,10 +1430,26 @@ const ApiAgentsClaudeCodeModelsRoute =
     path: '/api/agents/claude-code/models',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiAgentsAgentIdSkillsRoute = ApiAgentsAgentIdSkillsRouteImport.update({
+  id: '/api/agents/$agentId/skills',
+  path: '/api/agents/$agentId/skills',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAgentsAgentIdSessionsRoute =
   ApiAgentsAgentIdSessionsRouteImport.update({
     id: '/api/agents/$agentId/sessions',
     path: '/api/agents/$agentId/sessions',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAgentsAgentIdMcpRoute = ApiAgentsAgentIdMcpRouteImport.update({
+  id: '/api/agents/$agentId/mcp',
+  path: '/api/agents/$agentId/mcp',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAgentsAgentIdLocalSkillsRoute =
+  ApiAgentsAgentIdLocalSkillsRouteImport.update({
+    id: '/api/agents/$agentId/local-skills',
+    path: '/api/agents/$agentId/local-skills',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiAgentsAgentIdChatRoute = ApiAgentsAgentIdChatRouteImport.update({
@@ -1398,11 +1469,29 @@ const ApiRoomsRoomIdParticipantsParticipantIdRoute =
     path: '/$participantId',
     getParentRoute: () => ApiRoomsRoomIdParticipantsRoute,
   } as any)
+const ApiAgentsAgentIdSkillsComposerRoute =
+  ApiAgentsAgentIdSkillsComposerRouteImport.update({
+    id: '/composer',
+    path: '/composer',
+    getParentRoute: () => ApiAgentsAgentIdSkillsRoute,
+  } as any)
+const ApiAgentsAgentIdSkillsSkillIdRoute =
+  ApiAgentsAgentIdSkillsSkillIdRouteImport.update({
+    id: '/$skillId',
+    path: '/$skillId',
+    getParentRoute: () => ApiAgentsAgentIdSkillsRoute,
+  } as any)
 const ApiAgentsAgentIdSessionsSessionIdRoute =
   ApiAgentsAgentIdSessionsSessionIdRouteImport.update({
     id: '/$sessionId',
     path: '/$sessionId',
     getParentRoute: () => ApiAgentsAgentIdSessionsRoute,
+  } as any)
+const ApiAgentsAgentIdMcpServerIdRoute =
+  ApiAgentsAgentIdMcpServerIdRouteImport.update({
+    id: '/$serverId',
+    path: '/$serverId',
+    getParentRoute: () => ApiAgentsAgentIdMcpRoute,
   } as any)
 const ApiAgentsAgentIdInteractionsSessionIdRoute =
   ApiAgentsAgentIdInteractionsSessionIdRouteImport.update({
@@ -1545,7 +1634,7 @@ export interface FileRoutesByFullPath {
   '/profiles': typeof ProfilesRoute
   '/reserve': typeof ReserveRoute
   '/settings': typeof SettingsRouteWithChildren
-  '/skills': typeof SkillsRoute
+  '/skills': typeof SkillsRouteWithChildren
   '/swarm': typeof SwarmRoute
   '/swarm2': typeof Swarm2Route
   '/tasks': typeof TasksRoute
@@ -1596,6 +1685,8 @@ export interface FileRoutesByFullPath {
   '/api/pending-turns': typeof ApiPendingTurnsRouteWithChildren
   '/api/ping': typeof ApiPingRoute
   '/api/pipelines': typeof ApiPipelinesRoute
+  '/api/platform-mcp': typeof ApiPlatformMcpRouteWithChildren
+  '/api/platform-skills': typeof ApiPlatformSkillsRouteWithChildren
   '/api/plugins': typeof ApiPluginsRoute
   '/api/preview-file': typeof ApiPreviewFileRoute
   '/api/projects': typeof ApiProjectsRoute
@@ -1642,9 +1733,11 @@ export interface FileRoutesByFullPath {
   '/chat/$sessionKey': typeof ChatSessionKeyRoute
   '/group-chat/$roomId': typeof GroupChatRoomIdRoute
   '/settings/providers': typeof SettingsProvidersRoute
+  '/skills/$skillId': typeof SkillsSkillIdRoute
   '/chat/': typeof ChatIndexRoute
   '/group-chat/': typeof GroupChatIndexRoute
   '/settings/': typeof SettingsIndexRoute
+  '/skills/': typeof SkillsIndexRoute
   '/api/agent-runtime/enable': typeof ApiAgentRuntimeEnableRoute
   '/api/agent-runtime/install': typeof ApiAgentRuntimeInstallRoute
   '/api/agent-runtime/status': typeof ApiAgentRuntimeStatusRoute
@@ -1683,6 +1776,10 @@ export interface FileRoutesByFullPath {
   '/api/model/info': typeof ApiModelInfoRoute
   '/api/oauth/device-code': typeof ApiOauthDeviceCodeRoute
   '/api/oauth/poll-token': typeof ApiOauthPollTokenRoute
+  '/api/platform-mcp/$serverId': typeof ApiPlatformMcpServerIdRoute
+  '/api/platform-skills/$skillId': typeof ApiPlatformSkillsSkillIdRoute
+  '/api/platform-skills/import': typeof ApiPlatformSkillsImportRoute
+  '/api/platform-skills/seed': typeof ApiPlatformSkillsSeedRoute
   '/api/profiles/activate': typeof ApiProfilesActivateRoute
   '/api/profiles/capabilities': typeof ApiProfilesCapabilitiesRoute
   '/api/profiles/create': typeof ApiProfilesCreateRoute
@@ -1733,7 +1830,10 @@ export interface FileRoutesByFullPath {
   '/api/missions/': typeof ApiMissionsIndexRoute
   '/api/tasks/': typeof ApiTasksIndexRoute
   '/api/agents/$agentId/chat': typeof ApiAgentsAgentIdChatRoute
+  '/api/agents/$agentId/local-skills': typeof ApiAgentsAgentIdLocalSkillsRoute
+  '/api/agents/$agentId/mcp': typeof ApiAgentsAgentIdMcpRouteWithChildren
   '/api/agents/$agentId/sessions': typeof ApiAgentsAgentIdSessionsRouteWithChildren
+  '/api/agents/$agentId/skills': typeof ApiAgentsAgentIdSkillsRouteWithChildren
   '/api/agents/claude-code/models': typeof ApiAgentsClaudeCodeModelsRoute
   '/api/agents/codex-impl/config': typeof ApiAgentsCodexImplConfigRoute
   '/api/agents/codex-impl/models': typeof ApiAgentsCodexImplModelsRoute
@@ -1754,7 +1854,10 @@ export interface FileRoutesByFullPath {
   '/api/agents/$agentId/engine/activate': typeof ApiAgentsAgentIdEngineActivateRoute
   '/api/agents/$agentId/engine/sessions': typeof ApiAgentsAgentIdEngineSessionsRoute
   '/api/agents/$agentId/interactions/$sessionId': typeof ApiAgentsAgentIdInteractionsSessionIdRouteWithChildren
+  '/api/agents/$agentId/mcp/$serverId': typeof ApiAgentsAgentIdMcpServerIdRoute
   '/api/agents/$agentId/sessions/$sessionId': typeof ApiAgentsAgentIdSessionsSessionIdRoute
+  '/api/agents/$agentId/skills/$skillId': typeof ApiAgentsAgentIdSkillsSkillIdRoute
+  '/api/agents/$agentId/skills/composer': typeof ApiAgentsAgentIdSkillsComposerRoute
   '/api/rooms/$roomId/participants/$participantId': typeof ApiRoomsRoomIdParticipantsParticipantIdRoute
   '/api/runs/$sessionKey/$runId/abandon': typeof ApiRunsSessionKeyRunIdAbandonRoute
   '/api/agents/$agentId/engine/session/$sessionId': typeof ApiAgentsAgentIdEngineSessionSessionIdRouteWithChildren
@@ -1790,7 +1893,6 @@ export interface FileRoutesByTo {
   '/operations': typeof OperationsRoute
   '/profiles': typeof ProfilesRoute
   '/reserve': typeof ReserveRoute
-  '/skills': typeof SkillsRoute
   '/swarm': typeof SwarmRoute
   '/swarm2': typeof Swarm2Route
   '/tasks': typeof TasksRoute
@@ -1841,6 +1943,8 @@ export interface FileRoutesByTo {
   '/api/pending-turns': typeof ApiPendingTurnsRouteWithChildren
   '/api/ping': typeof ApiPingRoute
   '/api/pipelines': typeof ApiPipelinesRoute
+  '/api/platform-mcp': typeof ApiPlatformMcpRouteWithChildren
+  '/api/platform-skills': typeof ApiPlatformSkillsRouteWithChildren
   '/api/plugins': typeof ApiPluginsRoute
   '/api/preview-file': typeof ApiPreviewFileRoute
   '/api/projects': typeof ApiProjectsRoute
@@ -1887,9 +1991,11 @@ export interface FileRoutesByTo {
   '/chat/$sessionKey': typeof ChatSessionKeyRoute
   '/group-chat/$roomId': typeof GroupChatRoomIdRoute
   '/settings/providers': typeof SettingsProvidersRoute
+  '/skills/$skillId': typeof SkillsSkillIdRoute
   '/chat': typeof ChatIndexRoute
   '/group-chat': typeof GroupChatIndexRoute
   '/settings': typeof SettingsIndexRoute
+  '/skills': typeof SkillsIndexRoute
   '/api/agent-runtime/enable': typeof ApiAgentRuntimeEnableRoute
   '/api/agent-runtime/install': typeof ApiAgentRuntimeInstallRoute
   '/api/agent-runtime/status': typeof ApiAgentRuntimeStatusRoute
@@ -1928,6 +2034,10 @@ export interface FileRoutesByTo {
   '/api/model/info': typeof ApiModelInfoRoute
   '/api/oauth/device-code': typeof ApiOauthDeviceCodeRoute
   '/api/oauth/poll-token': typeof ApiOauthPollTokenRoute
+  '/api/platform-mcp/$serverId': typeof ApiPlatformMcpServerIdRoute
+  '/api/platform-skills/$skillId': typeof ApiPlatformSkillsSkillIdRoute
+  '/api/platform-skills/import': typeof ApiPlatformSkillsImportRoute
+  '/api/platform-skills/seed': typeof ApiPlatformSkillsSeedRoute
   '/api/profiles/activate': typeof ApiProfilesActivateRoute
   '/api/profiles/capabilities': typeof ApiProfilesCapabilitiesRoute
   '/api/profiles/create': typeof ApiProfilesCreateRoute
@@ -1978,7 +2088,10 @@ export interface FileRoutesByTo {
   '/api/missions': typeof ApiMissionsIndexRoute
   '/api/tasks': typeof ApiTasksIndexRoute
   '/api/agents/$agentId/chat': typeof ApiAgentsAgentIdChatRoute
+  '/api/agents/$agentId/local-skills': typeof ApiAgentsAgentIdLocalSkillsRoute
+  '/api/agents/$agentId/mcp': typeof ApiAgentsAgentIdMcpRouteWithChildren
   '/api/agents/$agentId/sessions': typeof ApiAgentsAgentIdSessionsRouteWithChildren
+  '/api/agents/$agentId/skills': typeof ApiAgentsAgentIdSkillsRouteWithChildren
   '/api/agents/claude-code/models': typeof ApiAgentsClaudeCodeModelsRoute
   '/api/agents/codex-impl/config': typeof ApiAgentsCodexImplConfigRoute
   '/api/agents/codex-impl/models': typeof ApiAgentsCodexImplModelsRoute
@@ -1999,7 +2112,10 @@ export interface FileRoutesByTo {
   '/api/agents/$agentId/engine/activate': typeof ApiAgentsAgentIdEngineActivateRoute
   '/api/agents/$agentId/engine/sessions': typeof ApiAgentsAgentIdEngineSessionsRoute
   '/api/agents/$agentId/interactions/$sessionId': typeof ApiAgentsAgentIdInteractionsSessionIdRouteWithChildren
+  '/api/agents/$agentId/mcp/$serverId': typeof ApiAgentsAgentIdMcpServerIdRoute
   '/api/agents/$agentId/sessions/$sessionId': typeof ApiAgentsAgentIdSessionsSessionIdRoute
+  '/api/agents/$agentId/skills/$skillId': typeof ApiAgentsAgentIdSkillsSkillIdRoute
+  '/api/agents/$agentId/skills/composer': typeof ApiAgentsAgentIdSkillsComposerRoute
   '/api/rooms/$roomId/participants/$participantId': typeof ApiRoomsRoomIdParticipantsParticipantIdRoute
   '/api/runs/$sessionKey/$runId/abandon': typeof ApiRunsSessionKeyRunIdAbandonRoute
   '/api/agents/$agentId/engine/session/$sessionId': typeof ApiAgentsAgentIdEngineSessionSessionIdRouteWithChildren
@@ -2038,7 +2154,7 @@ export interface FileRoutesById {
   '/profiles': typeof ProfilesRoute
   '/reserve': typeof ReserveRoute
   '/settings': typeof SettingsRouteWithChildren
-  '/skills': typeof SkillsRoute
+  '/skills': typeof SkillsRouteWithChildren
   '/swarm': typeof SwarmRoute
   '/swarm2': typeof Swarm2Route
   '/tasks': typeof TasksRoute
@@ -2089,6 +2205,8 @@ export interface FileRoutesById {
   '/api/pending-turns': typeof ApiPendingTurnsRouteWithChildren
   '/api/ping': typeof ApiPingRoute
   '/api/pipelines': typeof ApiPipelinesRoute
+  '/api/platform-mcp': typeof ApiPlatformMcpRouteWithChildren
+  '/api/platform-skills': typeof ApiPlatformSkillsRouteWithChildren
   '/api/plugins': typeof ApiPluginsRoute
   '/api/preview-file': typeof ApiPreviewFileRoute
   '/api/projects': typeof ApiProjectsRoute
@@ -2135,9 +2253,11 @@ export interface FileRoutesById {
   '/chat/$sessionKey': typeof ChatSessionKeyRoute
   '/group-chat/$roomId': typeof GroupChatRoomIdRoute
   '/settings/providers': typeof SettingsProvidersRoute
+  '/skills/$skillId': typeof SkillsSkillIdRoute
   '/chat/': typeof ChatIndexRoute
   '/group-chat/': typeof GroupChatIndexRoute
   '/settings/': typeof SettingsIndexRoute
+  '/skills/': typeof SkillsIndexRoute
   '/api/agent-runtime/enable': typeof ApiAgentRuntimeEnableRoute
   '/api/agent-runtime/install': typeof ApiAgentRuntimeInstallRoute
   '/api/agent-runtime/status': typeof ApiAgentRuntimeStatusRoute
@@ -2176,6 +2296,10 @@ export interface FileRoutesById {
   '/api/model/info': typeof ApiModelInfoRoute
   '/api/oauth/device-code': typeof ApiOauthDeviceCodeRoute
   '/api/oauth/poll-token': typeof ApiOauthPollTokenRoute
+  '/api/platform-mcp/$serverId': typeof ApiPlatformMcpServerIdRoute
+  '/api/platform-skills/$skillId': typeof ApiPlatformSkillsSkillIdRoute
+  '/api/platform-skills/import': typeof ApiPlatformSkillsImportRoute
+  '/api/platform-skills/seed': typeof ApiPlatformSkillsSeedRoute
   '/api/profiles/activate': typeof ApiProfilesActivateRoute
   '/api/profiles/capabilities': typeof ApiProfilesCapabilitiesRoute
   '/api/profiles/create': typeof ApiProfilesCreateRoute
@@ -2226,7 +2350,10 @@ export interface FileRoutesById {
   '/api/missions/': typeof ApiMissionsIndexRoute
   '/api/tasks/': typeof ApiTasksIndexRoute
   '/api/agents/$agentId/chat': typeof ApiAgentsAgentIdChatRoute
+  '/api/agents/$agentId/local-skills': typeof ApiAgentsAgentIdLocalSkillsRoute
+  '/api/agents/$agentId/mcp': typeof ApiAgentsAgentIdMcpRouteWithChildren
   '/api/agents/$agentId/sessions': typeof ApiAgentsAgentIdSessionsRouteWithChildren
+  '/api/agents/$agentId/skills': typeof ApiAgentsAgentIdSkillsRouteWithChildren
   '/api/agents/claude-code/models': typeof ApiAgentsClaudeCodeModelsRoute
   '/api/agents/codex-impl/config': typeof ApiAgentsCodexImplConfigRoute
   '/api/agents/codex-impl/models': typeof ApiAgentsCodexImplModelsRoute
@@ -2247,7 +2374,10 @@ export interface FileRoutesById {
   '/api/agents/$agentId/engine/activate': typeof ApiAgentsAgentIdEngineActivateRoute
   '/api/agents/$agentId/engine/sessions': typeof ApiAgentsAgentIdEngineSessionsRoute
   '/api/agents/$agentId/interactions/$sessionId': typeof ApiAgentsAgentIdInteractionsSessionIdRouteWithChildren
+  '/api/agents/$agentId/mcp/$serverId': typeof ApiAgentsAgentIdMcpServerIdRoute
   '/api/agents/$agentId/sessions/$sessionId': typeof ApiAgentsAgentIdSessionsSessionIdRoute
+  '/api/agents/$agentId/skills/$skillId': typeof ApiAgentsAgentIdSkillsSkillIdRoute
+  '/api/agents/$agentId/skills/composer': typeof ApiAgentsAgentIdSkillsComposerRoute
   '/api/rooms/$roomId/participants/$participantId': typeof ApiRoomsRoomIdParticipantsParticipantIdRoute
   '/api/runs/$sessionKey/$runId/abandon': typeof ApiRunsSessionKeyRunIdAbandonRoute
   '/api/agents/$agentId/engine/session/$sessionId': typeof ApiAgentsAgentIdEngineSessionSessionIdRouteWithChildren
@@ -2338,6 +2468,8 @@ export interface FileRouteTypes {
     | '/api/pending-turns'
     | '/api/ping'
     | '/api/pipelines'
+    | '/api/platform-mcp'
+    | '/api/platform-skills'
     | '/api/plugins'
     | '/api/preview-file'
     | '/api/projects'
@@ -2384,9 +2516,11 @@ export interface FileRouteTypes {
     | '/chat/$sessionKey'
     | '/group-chat/$roomId'
     | '/settings/providers'
+    | '/skills/$skillId'
     | '/chat/'
     | '/group-chat/'
     | '/settings/'
+    | '/skills/'
     | '/api/agent-runtime/enable'
     | '/api/agent-runtime/install'
     | '/api/agent-runtime/status'
@@ -2425,6 +2559,10 @@ export interface FileRouteTypes {
     | '/api/model/info'
     | '/api/oauth/device-code'
     | '/api/oauth/poll-token'
+    | '/api/platform-mcp/$serverId'
+    | '/api/platform-skills/$skillId'
+    | '/api/platform-skills/import'
+    | '/api/platform-skills/seed'
     | '/api/profiles/activate'
     | '/api/profiles/capabilities'
     | '/api/profiles/create'
@@ -2475,7 +2613,10 @@ export interface FileRouteTypes {
     | '/api/missions/'
     | '/api/tasks/'
     | '/api/agents/$agentId/chat'
+    | '/api/agents/$agentId/local-skills'
+    | '/api/agents/$agentId/mcp'
     | '/api/agents/$agentId/sessions'
+    | '/api/agents/$agentId/skills'
     | '/api/agents/claude-code/models'
     | '/api/agents/codex-impl/config'
     | '/api/agents/codex-impl/models'
@@ -2496,7 +2637,10 @@ export interface FileRouteTypes {
     | '/api/agents/$agentId/engine/activate'
     | '/api/agents/$agentId/engine/sessions'
     | '/api/agents/$agentId/interactions/$sessionId'
+    | '/api/agents/$agentId/mcp/$serverId'
     | '/api/agents/$agentId/sessions/$sessionId'
+    | '/api/agents/$agentId/skills/$skillId'
+    | '/api/agents/$agentId/skills/composer'
     | '/api/rooms/$roomId/participants/$participantId'
     | '/api/runs/$sessionKey/$runId/abandon'
     | '/api/agents/$agentId/engine/session/$sessionId'
@@ -2532,7 +2676,6 @@ export interface FileRouteTypes {
     | '/operations'
     | '/profiles'
     | '/reserve'
-    | '/skills'
     | '/swarm'
     | '/swarm2'
     | '/tasks'
@@ -2583,6 +2726,8 @@ export interface FileRouteTypes {
     | '/api/pending-turns'
     | '/api/ping'
     | '/api/pipelines'
+    | '/api/platform-mcp'
+    | '/api/platform-skills'
     | '/api/plugins'
     | '/api/preview-file'
     | '/api/projects'
@@ -2629,9 +2774,11 @@ export interface FileRouteTypes {
     | '/chat/$sessionKey'
     | '/group-chat/$roomId'
     | '/settings/providers'
+    | '/skills/$skillId'
     | '/chat'
     | '/group-chat'
     | '/settings'
+    | '/skills'
     | '/api/agent-runtime/enable'
     | '/api/agent-runtime/install'
     | '/api/agent-runtime/status'
@@ -2670,6 +2817,10 @@ export interface FileRouteTypes {
     | '/api/model/info'
     | '/api/oauth/device-code'
     | '/api/oauth/poll-token'
+    | '/api/platform-mcp/$serverId'
+    | '/api/platform-skills/$skillId'
+    | '/api/platform-skills/import'
+    | '/api/platform-skills/seed'
     | '/api/profiles/activate'
     | '/api/profiles/capabilities'
     | '/api/profiles/create'
@@ -2720,7 +2871,10 @@ export interface FileRouteTypes {
     | '/api/missions'
     | '/api/tasks'
     | '/api/agents/$agentId/chat'
+    | '/api/agents/$agentId/local-skills'
+    | '/api/agents/$agentId/mcp'
     | '/api/agents/$agentId/sessions'
+    | '/api/agents/$agentId/skills'
     | '/api/agents/claude-code/models'
     | '/api/agents/codex-impl/config'
     | '/api/agents/codex-impl/models'
@@ -2741,7 +2895,10 @@ export interface FileRouteTypes {
     | '/api/agents/$agentId/engine/activate'
     | '/api/agents/$agentId/engine/sessions'
     | '/api/agents/$agentId/interactions/$sessionId'
+    | '/api/agents/$agentId/mcp/$serverId'
     | '/api/agents/$agentId/sessions/$sessionId'
+    | '/api/agents/$agentId/skills/$skillId'
+    | '/api/agents/$agentId/skills/composer'
     | '/api/rooms/$roomId/participants/$participantId'
     | '/api/runs/$sessionKey/$runId/abandon'
     | '/api/agents/$agentId/engine/session/$sessionId'
@@ -2830,6 +2987,8 @@ export interface FileRouteTypes {
     | '/api/pending-turns'
     | '/api/ping'
     | '/api/pipelines'
+    | '/api/platform-mcp'
+    | '/api/platform-skills'
     | '/api/plugins'
     | '/api/preview-file'
     | '/api/projects'
@@ -2876,9 +3035,11 @@ export interface FileRouteTypes {
     | '/chat/$sessionKey'
     | '/group-chat/$roomId'
     | '/settings/providers'
+    | '/skills/$skillId'
     | '/chat/'
     | '/group-chat/'
     | '/settings/'
+    | '/skills/'
     | '/api/agent-runtime/enable'
     | '/api/agent-runtime/install'
     | '/api/agent-runtime/status'
@@ -2917,6 +3078,10 @@ export interface FileRouteTypes {
     | '/api/model/info'
     | '/api/oauth/device-code'
     | '/api/oauth/poll-token'
+    | '/api/platform-mcp/$serverId'
+    | '/api/platform-skills/$skillId'
+    | '/api/platform-skills/import'
+    | '/api/platform-skills/seed'
     | '/api/profiles/activate'
     | '/api/profiles/capabilities'
     | '/api/profiles/create'
@@ -2967,7 +3132,10 @@ export interface FileRouteTypes {
     | '/api/missions/'
     | '/api/tasks/'
     | '/api/agents/$agentId/chat'
+    | '/api/agents/$agentId/local-skills'
+    | '/api/agents/$agentId/mcp'
     | '/api/agents/$agentId/sessions'
+    | '/api/agents/$agentId/skills'
     | '/api/agents/claude-code/models'
     | '/api/agents/codex-impl/config'
     | '/api/agents/codex-impl/models'
@@ -2988,7 +3156,10 @@ export interface FileRouteTypes {
     | '/api/agents/$agentId/engine/activate'
     | '/api/agents/$agentId/engine/sessions'
     | '/api/agents/$agentId/interactions/$sessionId'
+    | '/api/agents/$agentId/mcp/$serverId'
     | '/api/agents/$agentId/sessions/$sessionId'
+    | '/api/agents/$agentId/skills/$skillId'
+    | '/api/agents/$agentId/skills/composer'
     | '/api/rooms/$roomId/participants/$participantId'
     | '/api/runs/$sessionKey/$runId/abandon'
     | '/api/agents/$agentId/engine/session/$sessionId'
@@ -3027,7 +3198,7 @@ export interface RootRouteChildren {
   ProfilesRoute: typeof ProfilesRoute
   ReserveRoute: typeof ReserveRoute
   SettingsRoute: typeof SettingsRouteWithChildren
-  SkillsRoute: typeof SkillsRoute
+  SkillsRoute: typeof SkillsRouteWithChildren
   SwarmRoute: typeof SwarmRoute
   Swarm2Route: typeof Swarm2Route
   TasksRoute: typeof TasksRoute
@@ -3078,6 +3249,8 @@ export interface RootRouteChildren {
   ApiPendingTurnsRoute: typeof ApiPendingTurnsRouteWithChildren
   ApiPingRoute: typeof ApiPingRoute
   ApiPipelinesRoute: typeof ApiPipelinesRoute
+  ApiPlatformMcpRoute: typeof ApiPlatformMcpRouteWithChildren
+  ApiPlatformSkillsRoute: typeof ApiPlatformSkillsRouteWithChildren
   ApiPluginsRoute: typeof ApiPluginsRoute
   ApiPreviewFileRoute: typeof ApiPreviewFileRoute
   ApiProjectsRoute: typeof ApiProjectsRoute
@@ -3182,7 +3355,10 @@ export interface RootRouteChildren {
   ApiMissionsIndexRoute: typeof ApiMissionsIndexRoute
   ApiTasksIndexRoute: typeof ApiTasksIndexRoute
   ApiAgentsAgentIdChatRoute: typeof ApiAgentsAgentIdChatRoute
+  ApiAgentsAgentIdLocalSkillsRoute: typeof ApiAgentsAgentIdLocalSkillsRoute
+  ApiAgentsAgentIdMcpRoute: typeof ApiAgentsAgentIdMcpRouteWithChildren
   ApiAgentsAgentIdSessionsRoute: typeof ApiAgentsAgentIdSessionsRouteWithChildren
+  ApiAgentsAgentIdSkillsRoute: typeof ApiAgentsAgentIdSkillsRouteWithChildren
   ApiAgentsClaudeCodeModelsRoute: typeof ApiAgentsClaudeCodeModelsRoute
   ApiAgentsCodexImplConfigRoute: typeof ApiAgentsCodexImplConfigRoute
   ApiAgentsCodexImplModelsRoute: typeof ApiAgentsCodexImplModelsRoute
@@ -3361,6 +3537,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/skills/': {
+      id: '/skills/'
+      path: '/'
+      fullPath: '/skills/'
+      preLoaderRoute: typeof SkillsIndexRouteImport
+      parentRoute: typeof SkillsRoute
+    }
     '/settings/': {
       id: '/settings/'
       path: '/'
@@ -3381,6 +3564,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/chat/'
       preLoaderRoute: typeof ChatIndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/skills/$skillId': {
+      id: '/skills/$skillId'
+      path: '/$skillId'
+      fullPath: '/skills/$skillId'
+      preLoaderRoute: typeof SkillsSkillIdRouteImport
+      parentRoute: typeof SkillsRoute
     }
     '/settings/providers': {
       id: '/settings/providers'
@@ -3702,6 +3892,20 @@ declare module '@tanstack/react-router' {
       path: '/api/plugins'
       fullPath: '/api/plugins'
       preLoaderRoute: typeof ApiPluginsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/platform-skills': {
+      id: '/api/platform-skills'
+      path: '/api/platform-skills'
+      fullPath: '/api/platform-skills'
+      preLoaderRoute: typeof ApiPlatformSkillsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/platform-mcp': {
+      id: '/api/platform-mcp'
+      path: '/api/platform-mcp'
+      fullPath: '/api/platform-mcp'
+      preLoaderRoute: typeof ApiPlatformMcpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/pipelines': {
@@ -4362,6 +4566,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiProfilesActivateRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/platform-skills/seed': {
+      id: '/api/platform-skills/seed'
+      path: '/seed'
+      fullPath: '/api/platform-skills/seed'
+      preLoaderRoute: typeof ApiPlatformSkillsSeedRouteImport
+      parentRoute: typeof ApiPlatformSkillsRoute
+    }
+    '/api/platform-skills/import': {
+      id: '/api/platform-skills/import'
+      path: '/import'
+      fullPath: '/api/platform-skills/import'
+      preLoaderRoute: typeof ApiPlatformSkillsImportRouteImport
+      parentRoute: typeof ApiPlatformSkillsRoute
+    }
+    '/api/platform-skills/$skillId': {
+      id: '/api/platform-skills/$skillId'
+      path: '/$skillId'
+      fullPath: '/api/platform-skills/$skillId'
+      preLoaderRoute: typeof ApiPlatformSkillsSkillIdRouteImport
+      parentRoute: typeof ApiPlatformSkillsRoute
+    }
+    '/api/platform-mcp/$serverId': {
+      id: '/api/platform-mcp/$serverId'
+      path: '/$serverId'
+      fullPath: '/api/platform-mcp/$serverId'
+      preLoaderRoute: typeof ApiPlatformMcpServerIdRouteImport
+      parentRoute: typeof ApiPlatformMcpRoute
+    }
     '/api/oauth/poll-token': {
       id: '/api/oauth/poll-token'
       path: '/api/oauth/poll-token'
@@ -4740,11 +4972,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentsClaudeCodeModelsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/agents/$agentId/skills': {
+      id: '/api/agents/$agentId/skills'
+      path: '/api/agents/$agentId/skills'
+      fullPath: '/api/agents/$agentId/skills'
+      preLoaderRoute: typeof ApiAgentsAgentIdSkillsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/agents/$agentId/sessions': {
       id: '/api/agents/$agentId/sessions'
       path: '/api/agents/$agentId/sessions'
       fullPath: '/api/agents/$agentId/sessions'
       preLoaderRoute: typeof ApiAgentsAgentIdSessionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agents/$agentId/mcp': {
+      id: '/api/agents/$agentId/mcp'
+      path: '/api/agents/$agentId/mcp'
+      fullPath: '/api/agents/$agentId/mcp'
+      preLoaderRoute: typeof ApiAgentsAgentIdMcpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agents/$agentId/local-skills': {
+      id: '/api/agents/$agentId/local-skills'
+      path: '/api/agents/$agentId/local-skills'
+      fullPath: '/api/agents/$agentId/local-skills'
+      preLoaderRoute: typeof ApiAgentsAgentIdLocalSkillsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/agents/$agentId/chat': {
@@ -4768,12 +5021,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiRoomsRoomIdParticipantsParticipantIdRouteImport
       parentRoute: typeof ApiRoomsRoomIdParticipantsRoute
     }
+    '/api/agents/$agentId/skills/composer': {
+      id: '/api/agents/$agentId/skills/composer'
+      path: '/composer'
+      fullPath: '/api/agents/$agentId/skills/composer'
+      preLoaderRoute: typeof ApiAgentsAgentIdSkillsComposerRouteImport
+      parentRoute: typeof ApiAgentsAgentIdSkillsRoute
+    }
+    '/api/agents/$agentId/skills/$skillId': {
+      id: '/api/agents/$agentId/skills/$skillId'
+      path: '/$skillId'
+      fullPath: '/api/agents/$agentId/skills/$skillId'
+      preLoaderRoute: typeof ApiAgentsAgentIdSkillsSkillIdRouteImport
+      parentRoute: typeof ApiAgentsAgentIdSkillsRoute
+    }
     '/api/agents/$agentId/sessions/$sessionId': {
       id: '/api/agents/$agentId/sessions/$sessionId'
       path: '/$sessionId'
       fullPath: '/api/agents/$agentId/sessions/$sessionId'
       preLoaderRoute: typeof ApiAgentsAgentIdSessionsSessionIdRouteImport
       parentRoute: typeof ApiAgentsAgentIdSessionsRoute
+    }
+    '/api/agents/$agentId/mcp/$serverId': {
+      id: '/api/agents/$agentId/mcp/$serverId'
+      path: '/$serverId'
+      fullPath: '/api/agents/$agentId/mcp/$serverId'
+      preLoaderRoute: typeof ApiAgentsAgentIdMcpServerIdRouteImport
+      parentRoute: typeof ApiAgentsAgentIdMcpRoute
     }
     '/api/agents/$agentId/interactions/$sessionId': {
       id: '/api/agents/$agentId/interactions/$sessionId'
@@ -4948,6 +5222,19 @@ const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
   SettingsRouteChildren,
 )
 
+interface SkillsRouteChildren {
+  SkillsSkillIdRoute: typeof SkillsSkillIdRoute
+  SkillsIndexRoute: typeof SkillsIndexRoute
+}
+
+const SkillsRouteChildren: SkillsRouteChildren = {
+  SkillsSkillIdRoute: SkillsSkillIdRoute,
+  SkillsIndexRoute: SkillsIndexRoute,
+}
+
+const SkillsRouteWithChildren =
+  SkillsRoute._addFileChildren(SkillsRouteChildren)
+
 interface ApiArtifactsRouteChildren {
   ApiArtifactsArtifactIdRoute: typeof ApiArtifactsArtifactIdRoute
 }
@@ -5074,6 +5361,33 @@ const ApiPendingTurnsRouteChildren: ApiPendingTurnsRouteChildren = {
 const ApiPendingTurnsRouteWithChildren = ApiPendingTurnsRoute._addFileChildren(
   ApiPendingTurnsRouteChildren,
 )
+
+interface ApiPlatformMcpRouteChildren {
+  ApiPlatformMcpServerIdRoute: typeof ApiPlatformMcpServerIdRoute
+}
+
+const ApiPlatformMcpRouteChildren: ApiPlatformMcpRouteChildren = {
+  ApiPlatformMcpServerIdRoute: ApiPlatformMcpServerIdRoute,
+}
+
+const ApiPlatformMcpRouteWithChildren = ApiPlatformMcpRoute._addFileChildren(
+  ApiPlatformMcpRouteChildren,
+)
+
+interface ApiPlatformSkillsRouteChildren {
+  ApiPlatformSkillsSkillIdRoute: typeof ApiPlatformSkillsSkillIdRoute
+  ApiPlatformSkillsImportRoute: typeof ApiPlatformSkillsImportRoute
+  ApiPlatformSkillsSeedRoute: typeof ApiPlatformSkillsSeedRoute
+}
+
+const ApiPlatformSkillsRouteChildren: ApiPlatformSkillsRouteChildren = {
+  ApiPlatformSkillsSkillIdRoute: ApiPlatformSkillsSkillIdRoute,
+  ApiPlatformSkillsImportRoute: ApiPlatformSkillsImportRoute,
+  ApiPlatformSkillsSeedRoute: ApiPlatformSkillsSeedRoute,
+}
+
+const ApiPlatformSkillsRouteWithChildren =
+  ApiPlatformSkillsRoute._addFileChildren(ApiPlatformSkillsRouteChildren)
 
 interface ApiRoomsRoomIdMessagesRouteChildren {
   ApiRoomsRoomIdMessagesMessageIdInteractionResponseRoute: typeof ApiRoomsRoomIdMessagesMessageIdInteractionResponseRoute
@@ -5231,6 +5545,17 @@ const ApiWorkspaceRouteWithChildren = ApiWorkspaceRoute._addFileChildren(
   ApiWorkspaceRouteChildren,
 )
 
+interface ApiAgentsAgentIdMcpRouteChildren {
+  ApiAgentsAgentIdMcpServerIdRoute: typeof ApiAgentsAgentIdMcpServerIdRoute
+}
+
+const ApiAgentsAgentIdMcpRouteChildren: ApiAgentsAgentIdMcpRouteChildren = {
+  ApiAgentsAgentIdMcpServerIdRoute: ApiAgentsAgentIdMcpServerIdRoute,
+}
+
+const ApiAgentsAgentIdMcpRouteWithChildren =
+  ApiAgentsAgentIdMcpRoute._addFileChildren(ApiAgentsAgentIdMcpRouteChildren)
+
 interface ApiAgentsAgentIdSessionsRouteChildren {
   ApiAgentsAgentIdSessionsSessionIdRoute: typeof ApiAgentsAgentIdSessionsSessionIdRoute
 }
@@ -5244,6 +5569,22 @@ const ApiAgentsAgentIdSessionsRouteChildren: ApiAgentsAgentIdSessionsRouteChildr
 const ApiAgentsAgentIdSessionsRouteWithChildren =
   ApiAgentsAgentIdSessionsRoute._addFileChildren(
     ApiAgentsAgentIdSessionsRouteChildren,
+  )
+
+interface ApiAgentsAgentIdSkillsRouteChildren {
+  ApiAgentsAgentIdSkillsSkillIdRoute: typeof ApiAgentsAgentIdSkillsSkillIdRoute
+  ApiAgentsAgentIdSkillsComposerRoute: typeof ApiAgentsAgentIdSkillsComposerRoute
+}
+
+const ApiAgentsAgentIdSkillsRouteChildren: ApiAgentsAgentIdSkillsRouteChildren =
+  {
+    ApiAgentsAgentIdSkillsSkillIdRoute: ApiAgentsAgentIdSkillsSkillIdRoute,
+    ApiAgentsAgentIdSkillsComposerRoute: ApiAgentsAgentIdSkillsComposerRoute,
+  }
+
+const ApiAgentsAgentIdSkillsRouteWithChildren =
+  ApiAgentsAgentIdSkillsRoute._addFileChildren(
+    ApiAgentsAgentIdSkillsRouteChildren,
   )
 
 interface ApiAgentsAgentIdInteractionsSessionIdRouteChildren {
@@ -5318,7 +5659,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProfilesRoute: ProfilesRoute,
   ReserveRoute: ReserveRoute,
   SettingsRoute: SettingsRouteWithChildren,
-  SkillsRoute: SkillsRoute,
+  SkillsRoute: SkillsRouteWithChildren,
   SwarmRoute: SwarmRoute,
   Swarm2Route: Swarm2Route,
   TasksRoute: TasksRoute,
@@ -5369,6 +5710,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPendingTurnsRoute: ApiPendingTurnsRouteWithChildren,
   ApiPingRoute: ApiPingRoute,
   ApiPipelinesRoute: ApiPipelinesRoute,
+  ApiPlatformMcpRoute: ApiPlatformMcpRouteWithChildren,
+  ApiPlatformSkillsRoute: ApiPlatformSkillsRouteWithChildren,
   ApiPluginsRoute: ApiPluginsRoute,
   ApiPreviewFileRoute: ApiPreviewFileRoute,
   ApiProjectsRoute: ApiProjectsRoute,
@@ -5474,7 +5817,10 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMissionsIndexRoute: ApiMissionsIndexRoute,
   ApiTasksIndexRoute: ApiTasksIndexRoute,
   ApiAgentsAgentIdChatRoute: ApiAgentsAgentIdChatRoute,
+  ApiAgentsAgentIdLocalSkillsRoute: ApiAgentsAgentIdLocalSkillsRoute,
+  ApiAgentsAgentIdMcpRoute: ApiAgentsAgentIdMcpRouteWithChildren,
   ApiAgentsAgentIdSessionsRoute: ApiAgentsAgentIdSessionsRouteWithChildren,
+  ApiAgentsAgentIdSkillsRoute: ApiAgentsAgentIdSkillsRouteWithChildren,
   ApiAgentsClaudeCodeModelsRoute: ApiAgentsClaudeCodeModelsRoute,
   ApiAgentsCodexImplConfigRoute: ApiAgentsCodexImplConfigRoute,
   ApiAgentsCodexImplModelsRoute: ApiAgentsCodexImplModelsRoute,

@@ -100,6 +100,7 @@ function HermesChatShell({
       activeFriendlyId={activeFriendlyId}
       isNewChat={isNewChat}
       hermesChrome
+      skillsAgentId={agentId}
       onSessionResolved={(payload) => {
         void payload
       }}

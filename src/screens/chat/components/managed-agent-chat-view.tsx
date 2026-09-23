@@ -14,10 +14,11 @@ import { useManagedAgentChat } from '../hooks/use-managed-agent-chat'
 import { useChatMobile } from '../hooks/use-chat-mobile'
 import { AssistantAvatarProvider } from '@/components/avatars'
 import { useQueryClient } from '@tanstack/react-query'
-import { CHAT_OPEN_SETTINGS_EVENT } from '../chat-events'
+import { CHAT_OPEN_SETTINGS_EVENT, CHAT_PENDING_MESSAGE_STORAGE_KEY } from '../chat-events'
 import type { AgentWithStatus } from '@/lib/agent-types'
 import type {
   ChatComposerAttachment,
+  ChatComposerHandle,
   ChatComposerHelpers,
 } from './chat-composer'
 
@@ -79,6 +80,7 @@ export function ManagedAgentChatView({
   const queryClient = useQueryClient()
   const { isMobile } = useChatMobile(queryClient)
   const openModelPickerRef = useRef<(() => void) | null>(null)
+  const composerHandleRef = useRef<ChatComposerHandle | null>(null)
   const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>(() =>
     readStoredThinking(sessionId),
   )
@@ -86,6 +88,29 @@ export function ManagedAgentChatView({
   useEffect(() => {
     setThinkingLevel(readStoredThinking(sessionId))
   }, [sessionId])
+
+  useEffect(() => {
+    const pendingMessage = window.sessionStorage.getItem(
+      CHAT_PENDING_MESSAGE_STORAGE_KEY,
+    )
+    if (!pendingMessage) return
+
+    let attempts = 0
+    const tryPrefill = () => {
+      if (composerHandleRef.current) {
+        window.sessionStorage.removeItem(CHAT_PENDING_MESSAGE_STORAGE_KEY)
+        composerHandleRef.current.setValue(pendingMessage)
+        return
+      }
+      attempts += 1
+      if (attempts < 20) {
+        timer = window.setTimeout(tryPrefill, 50)
+      }
+    }
+
+    let timer = window.setTimeout(tryPrefill, 0)
+    return () => window.clearTimeout(timer)
+  }, [sessionId, agent.agentId])
 
   const handleThinkingLevelChange = useCallback(
     (level: ThinkingLevel) => {
@@ -245,6 +270,7 @@ export function ManagedAgentChatView({
             defaultFileExplorerCollapsed={false}
             fileExplorerStorageKey={`agent-file-explorer:${agent.agentId}`}
             composerChrome="padded"
+            composerHandleRef={composerHandleRef}
             composerProps={{
               onSubmit: handleSubmit,
               // Match Hermes: keep composer interactive while streaming so the
@@ -262,6 +288,7 @@ export function ManagedAgentChatView({
               modelKeyMode: 'bare',
               gatewayQueriesEnabled: false,
               slashRuntime,
+              skillsAgentId: agent.agentId,
               thinkingLevel,
               onThinkingLevelChange: handleThinkingLevelChange,
               runtimeLabel: composerBrand.label,

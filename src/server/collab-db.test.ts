@@ -22,14 +22,14 @@ describe('collab-db', () => {
   it('creates collab.db with schema_migrations and all tables', () => {
     const dbPath = join(tempRoot, 'collab.db')
     ensureCollabDb(dbPath)
-    expect(getCollabDbVersion(dbPath)).toBe(1)
+    expect(getCollabDbVersion(dbPath)).toBeGreaterThanOrEqual(9)
   })
 
   it('is idempotent — running twice does not error or duplicate version', () => {
     const dbPath = join(tempRoot, 'collab.db')
     ensureCollabDb(dbPath)
     ensureCollabDb(dbPath)
-    expect(getCollabDbVersion(dbPath)).toBe(1)
+    expect(getCollabDbVersion(dbPath)).toBeGreaterThanOrEqual(9)
   })
 
   it('creates unique ids with prefix', () => {

@@ -76,6 +76,7 @@ export type AgentChatFrameProps = {
     modelKeyMode?: 'provider-prefixed' | 'bare'
     gatewayQueriesEnabled?: boolean
     slashRuntime?: SlashCommandRuntime
+    skillsAgentId?: string
     thinkingLevel?: ThinkingLevel
     onThinkingLevelChange?: (level: ThinkingLevel) => void
     runtimeLabel?: string

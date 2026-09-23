@@ -1,5 +1,29 @@
 version: 2
 agents:
+  # Implicit Hermes root profile (`~/.hermes`), not `~/.hermes/profiles/default`.
+  - id: default
+    name: Default
+    displayName: Default
+    role: Workspace Default
+    specialty: general-purpose Hermes home profile
+    mission: Default Hermes workspace agent rooted at ~/.hermes (skills, config, sessions).
+    profile: default
+    modes: []
+    tools: []
+    skills: []
+    plugins: []
+    pluginToolsets: []
+    mcpServers: []
+    capabilities: []
+    preferredTaskTypes: []
+    greenlightRequiredFor: []
+    maxConcurrentTasks: 1
+    acceptsBroadcast: true
+    reviewRequired: false
+    runtime: hermes
+    execution: local
+    dispatchable: false
+    enabled: true
   - id: orchestrator
     name: Orchestrator
     role: Swarm Orchestrator / Greenlight Gate

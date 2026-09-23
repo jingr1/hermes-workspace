@@ -313,20 +313,25 @@ export class ClaudeCodeAdapter implements AgentRuntimeAdapter {
     // Per-run MCP config: endpoint + token-from-env. Never written to the
     // user's global claude config.
     const mcpConfigPath = path.join(runRoot, 'mcp-config.json')
+    const mcpServers: Record<string, unknown> = {
+      'hermes-workspace': {
+        url: input.mcp.endpoint,
+        headers: { Authorization: 'Bearer ${HERMES_MCP_TOKEN}' },
+      },
+    }
+    try {
+      const { resolveEnabledPlatformMcpEntries, toClaudeMcpServerEntry } =
+        await import('../platform-mcp')
+      for (const entry of resolveEnabledPlatformMcpEntries(input.agentId)) {
+        if (entry.name === 'hermes-workspace') continue
+        mcpServers[entry.name] = toClaudeMcpServerEntry(entry.config)
+      }
+    } catch {
+      // Platform MCP optional — workspace MCP handshake still works.
+    }
     fs.writeFileSync(
       mcpConfigPath,
-      JSON.stringify(
-        {
-          mcpServers: {
-            'hermes-workspace': {
-              url: input.mcp.endpoint,
-              headers: { Authorization: 'Bearer ${HERMES_MCP_TOKEN}' },
-            },
-          },
-        },
-        null,
-        2,
-      ),
+      JSON.stringify({ mcpServers }, null, 2),
     )
 
     const logPath = path.join(runRoot, 'run.log')

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useEffect, useMemo, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'motion/react'
 import { McpServerCard } from './components/mcp-server-card'
 import { McpServerDialog } from './components/mcp-server-dialog'
@@ -12,15 +12,25 @@ import type { HubMcpEntry } from './hooks/use-mcp-hub'
 import type { McpClientInput, McpServer } from '@/types/mcp'
 import { Tabs, TabsList, TabsPanel, TabsTab } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
+import {
+  useAgentMcpBindings,
+  useAssignAgentMcp,
+  useDeletePlatformMcp,
+  usePlatformMcpLibrary,
+  useRemoveAgentMcp,
+  useSetAgentMcpEnabled,
+  type PlatformMcpSummary,
+} from './hooks/use-platform-mcp'
 
-type Tab = 'installed' | 'marketplace'
+type Tab = 'library' | 'agents' | 'installed' | 'marketplace'
 
 const TOOLBAR_FIELD =
   'h-9 w-full min-w-0 rounded-lg border border-primary-200 bg-primary-100/60 px-3 text-sm text-ink outline-none transition-colors focus:border-primary sm:min-w-[220px]'
 
 export function McpScreen() {
   const queryClient = useQueryClient()
-  const [tab, setTab] = useState<Tab>('installed')
+  const [tab, setTab] = useState<Tab>('library')
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('All')
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -29,28 +39,92 @@ export function McpScreen() {
   )
   const [installEntry, setInstallEntry] = useState<HubMcpEntry | null>(null)
   const [sourcesOpen, setSourcesOpen] = useState(false)
+  const [selectedAgent, setSelectedAgent] = useState('')
 
   const { mode: capabilityMode } = useMcpCapabilityMode()
-  // Marketplace tab uses useMcpHub instead; coerce to 'installed' so the
-  // server-list query stays valid but its results aren't rendered there.
-  const serverListTab = tab === 'marketplace' ? 'installed' : tab
-  const query = useMcpServers({ tab: serverListTab, category, search })
+  const libraryQuery = usePlatformMcpLibrary()
+  const serverListTab = tab === 'marketplace' || tab === 'library' || tab === 'agents'
+    ? 'installed'
+    : tab
+  const query = useMcpServers({
+    tab: serverListTab as 'installed',
+    category,
+    search: tab === 'installed' ? search : '',
+  })
   const servers = query.data?.servers ?? []
   const categories = query.data?.categories ?? ['All']
-
   const hubQuery = useMcpHub(tab === 'marketplace' ? search : '')
 
+  const agentsQuery = useQuery({
+    queryKey: ['mcp-agents-list'],
+    queryFn: async (): Promise<
+      Array<{ agentId: string; name: string; runtime: string }>
+    > => {
+      const response = await fetch('/api/agents')
+      const payload = (await response.json()) as {
+        agents?: Array<{
+          agentId: string
+          name?: string
+          runtime?: string
+        }>
+        error?: string
+      }
+      if (!response.ok) {
+        throw new Error(payload.error || 'Failed to load agents')
+      }
+      return (payload.agents ?? [])
+        .filter((a) => a.agentId && a.agentId !== 'default')
+        .map((a) => ({
+          agentId: a.agentId,
+          name: a.name || a.agentId,
+          runtime: a.runtime || 'unknown',
+        }))
+    },
+    staleTime: 60_000,
+  })
+  const agents = agentsQuery.data ?? []
+
+  useEffect(() => {
+    if (!agents.length || selectedAgent) return
+    setSelectedAgent(agents[0]!.agentId)
+  }, [agents, selectedAgent])
+
+  const bindingsQuery = useAgentMcpBindings(selectedAgent)
+  const assignMcp = useAssignAgentMcp()
+  const setEnabled = useSetAgentMcpEnabled()
+  const removeBinding = useRemoveAgentMcp()
+  const deleteLibrary = useDeletePlatformMcp()
+  const selectedRuntime =
+    agents.find((a) => a.agentId === selectedAgent)?.runtime ?? ''
+  const selectedIsHermes = selectedRuntime === 'hermes' || !selectedRuntime
+
   function handleTabChange(next: string | number | null) {
-    if (next === 'installed' || next === 'marketplace') {
+    if (
+      next === 'library' ||
+      next === 'agents' ||
+      next === 'installed' ||
+      next === 'marketplace'
+    ) {
       setTab(next)
       setSearch('')
     }
   }
 
+  const libraryServers = useMemo(() => {
+    const all = libraryQuery.data ?? []
+    if (!search.trim()) return all
+    const q = search.toLowerCase()
+    return all.filter((s) => s.name.toLowerCase().includes(q))
+  }, [libraryQuery.data, search])
+
   const totalLabel =
     tab === 'marketplace'
       ? `${(hubQuery.data?.total ?? 0).toLocaleString()} results`
-      : `${servers.length.toLocaleString()} servers`
+      : tab === 'library'
+        ? `${libraryServers.length.toLocaleString()} in library`
+        : tab === 'agents'
+          ? `${(bindingsQuery.data ?? []).length.toLocaleString()} assigned`
+          : `${servers.length.toLocaleString()} on profile`
 
   return (
     <div className="min-h-full overflow-y-auto bg-surface text-ink">
@@ -65,8 +139,8 @@ export function McpScreen() {
                 MCP Servers
               </h1>
               <p className="text-sm text-primary-500 text-pretty sm:text-base">
-                Discover, install, and manage Model Context Protocol servers
-                exposed to Hermes Agent.
+                Platform library + per-agent assignment (like Skills). Library
+                entries are not granted until you assign them.
               </p>
             </div>
             <Button
@@ -77,7 +151,7 @@ export function McpScreen() {
                 setDialogOpen(true)
               }}
             >
-              Add Server
+              Add to Library
             </Button>
           </div>
           {capabilityMode === 'fallback' ? (
@@ -85,8 +159,8 @@ export function McpScreen() {
               role="status"
               className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
             >
-              ⚠ Local fallback mode — using config.yaml. Test, Discover, and
-              Logs require the new hermes-agent /api/mcp endpoints.
+              Local profile mode — MCP CRUD uses config.yaml. Test, Discover,
+              and Logs need native hermes-agent /api/mcp endpoints.
             </div>
           ) : null}
         </header>
@@ -98,10 +172,16 @@ export function McpScreen() {
                 className="rounded-xl border border-primary-200 bg-primary-100/60 p-1"
                 variant="default"
               >
-                <TabsTab value="installed" className="min-w-[110px]">
-                  Installed
+                <TabsTab value="library" className="min-w-[100px]">
+                  Library
                 </TabsTab>
-                <TabsTab value="marketplace" className="min-w-[120px]">
+                <TabsTab value="agents" className="min-w-[100px]">
+                  Agents
+                </TabsTab>
+                <TabsTab value="installed" className="min-w-[100px]">
+                  Profile
+                </TabsTab>
+                <TabsTab value="marketplace" className="min-w-[110px]">
                   Marketplace
                 </TabsTab>
               </TabsList>
@@ -112,7 +192,9 @@ export function McpScreen() {
                 placeholder={
                   tab === 'marketplace'
                     ? 'Search MCP catalog…'
-                    : 'Search servers by name'
+                    : tab === 'library'
+                      ? 'Search library by name'
+                      : 'Search…'
                 }
                 className={`${TOOLBAR_FIELD} flex-1`}
               />
@@ -130,9 +212,82 @@ export function McpScreen() {
                   ))}
                 </select>
               ) : null}
+
+              {tab === 'agents' ? (
+                <select
+                  value={selectedAgent}
+                  onChange={(event) => setSelectedAgent(event.target.value)}
+                  className="h-9 rounded-lg border border-primary-200 bg-primary-100/60 px-3 text-sm text-ink outline-none"
+                >
+                  {agents.map((a) => (
+                    <option key={a.agentId} value={a.agentId}>
+                      {a.name} ({a.runtime})
+                    </option>
+                  ))}
+                </select>
+              ) : null}
             </div>
 
+            <TabsPanel value="library" className="pt-3">
+              <LibraryList
+                servers={libraryServers}
+                loading={libraryQuery.isPending}
+                error={
+                  libraryQuery.error instanceof Error
+                    ? libraryQuery.error.message
+                    : null
+                }
+                onDelete={(id) => deleteLibrary.mutate(id)}
+                deleting={deleteLibrary.isPending}
+              />
+            </TabsPanel>
+
+            <TabsPanel value="agents" className="pt-3 space-y-4">
+              {!selectedIsHermes ? (
+                <p className="text-xs text-primary-500">
+                  Managed runtime ({selectedRuntime}): bindings are stored in
+                  the platform library and injected at run start (Claude Code
+                  per-run mcp-config). No Hermes profile config.yaml write.
+                </p>
+              ) : null}
+              <AgentAssignPanel
+                agentId={selectedAgent}
+                library={libraryQuery.data ?? []}
+                bindings={bindingsQuery.data ?? []}
+                loading={bindingsQuery.isPending}
+                onAssign={(serverId) =>
+                  assignMcp.mutate({
+                    agentId: selectedAgent,
+                    serverIds: [serverId],
+                  })
+                }
+                onToggle={(serverId, enabled) =>
+                  setEnabled.mutate({
+                    agentId: selectedAgent,
+                    serverId,
+                    enabled,
+                  })
+                }
+                onRemove={(serverId) =>
+                  removeBinding.mutate({
+                    agentId: selectedAgent,
+                    serverId,
+                  })
+                }
+                busy={
+                  assignMcp.isPending ||
+                  setEnabled.isPending ||
+                  removeBinding.isPending
+                }
+              />
+            </TabsPanel>
+
             <TabsPanel value="installed" className="pt-3">
+              <p className="mb-3 text-xs text-primary-500">
+                Active profile snapshot of mcp_servers (includes materialized
+                platform bindings and private entries). Prefer Library + Agents
+                for shared servers.
+              </p>
               <ServerList
                 query={query}
                 onEdit={(s) => {
@@ -141,6 +296,7 @@ export function McpScreen() {
                 }}
               />
             </TabsPanel>
+
             <TabsPanel value="marketplace" className="pt-3 space-y-3">
               <div className="flex items-center justify-between gap-2">
                 {hubQuery.data?.source ? (
@@ -163,7 +319,7 @@ export function McpScreen() {
               {hubQuery.data?.warnings && hubQuery.data.warnings.length > 0 ? (
                 hubQuery.data.results && hubQuery.data.results.length > 0 ? (
                   <p className="text-xs text-amber-700 dark:text-amber-300">
-                    ⚠ One or more sources unavailable; showing local results.
+                    One or more sources unavailable; showing local results.
                     <span className="ml-1 text-[11px] text-primary-500">
                       ({hubQuery.data.warnings[0]})
                     </span>
@@ -212,7 +368,8 @@ export function McpScreen() {
         <footer className="flex items-center justify-between rounded-xl border border-primary-200 bg-primary-50/80 px-3 py-2.5 text-sm text-primary-500 tabular-nums">
           <span>{totalLabel}</span>
           <span className="text-xs">
-            mode: {capabilityMode === 'fallback' ? 'config fallback' : 'native'}
+            mode:{' '}
+            {capabilityMode === 'fallback' ? 'profile fallback' : 'native'}
           </span>
         </footer>
       </div>
@@ -220,6 +377,7 @@ export function McpScreen() {
       <McpServerDialog
         open={dialogOpen}
         initial={editing}
+        target={editing ? 'profile' : 'library'}
         onClose={() => setDialogOpen(false)}
       />
 
@@ -227,6 +385,7 @@ export function McpScreen() {
         entry={installEntry}
         onClose={() => setInstallEntry(null)}
         onInstalled={() => {
+          queryClient.invalidateQueries({ queryKey: ['platform-mcp'] })
           queryClient.invalidateQueries({ queryKey: ['mcp', 'servers'] })
           queryClient.invalidateQueries({ queryKey: ['mcp', 'hub-search'] })
         }}
@@ -236,6 +395,186 @@ export function McpScreen() {
         open={sourcesOpen}
         onClose={() => setSourcesOpen(false)}
       />
+    </div>
+  )
+}
+
+function LibraryList({
+  servers,
+  loading,
+  error,
+  onDelete,
+  deleting,
+}: {
+  servers: Array<PlatformMcpSummary>
+  loading: boolean
+  error: string | null
+  onDelete: (id: string) => void
+  deleting: boolean
+}) {
+  if (loading) {
+    return (
+      <EmptyCard
+        title="Loading library…"
+        description="Fetching platform MCP servers."
+      />
+    )
+  }
+  if (error) {
+    return <EmptyCard title="Failed to load library" description={error} tone="danger" />
+  }
+  if (servers.length === 0) {
+    return (
+      <EmptyCard
+        title="MCP library is empty"
+        description="Add a server or install from Marketplace. Library entries are not granted to any agent until you assign them on the Agents tab."
+      />
+    )
+  }
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      {servers.map((server) => (
+        <div
+          key={server.id}
+          className="rounded-xl border border-primary-200 bg-primary-50/90 p-4 space-y-2"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <p className="font-medium text-ink">{server.name}</p>
+              <p className="text-xs text-primary-500">
+                {server.transport} · {server.boundAgentCount} agent
+                {server.boundAgentCount === 1 ? '' : 's'}
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs text-red-600"
+              disabled={deleting}
+              onClick={() => onDelete(server.id)}
+            >
+              Delete
+            </Button>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function AgentAssignPanel({
+  agentId,
+  library,
+  bindings,
+  loading,
+  onAssign,
+  onToggle,
+  onRemove,
+  busy,
+}: {
+  agentId: string
+  library: Array<PlatformMcpSummary>
+  bindings: Array<{
+    serverId: string
+    name: string
+    enabled: boolean
+    transport: string
+  }>
+  loading: boolean
+  onAssign: (serverId: string) => void
+  onToggle: (serverId: string, enabled: boolean) => void
+  onRemove: (serverId: string) => void
+  busy: boolean
+}) {
+  const boundIds = useMemo(
+    () => new Set(bindings.map((b) => b.serverId)),
+    [bindings],
+  )
+  const available = library.filter((s) => !boundIds.has(s.id))
+
+  if (!agentId) {
+    return (
+      <EmptyCard
+        title="Select an agent"
+        description="Choose a profile/agent to manage MCP assignments."
+      />
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="mb-2 text-sm font-medium text-ink">
+          Assigned to {agentId}
+        </h3>
+        {loading ? (
+          <p className="text-sm text-primary-500">Loading…</p>
+        ) : bindings.length === 0 ? (
+          <EmptyCard
+            title="No MCP servers assigned"
+            description="Pick a library entry below to grant it to this agent."
+          />
+        ) : (
+          <div className="space-y-1.5">
+            {bindings.map((b) => (
+              <div
+                key={b.serverId}
+                className="flex items-center gap-3 rounded-xl border border-primary-200 bg-primary-50/90 px-3 py-2.5"
+              >
+                <Switch
+                  checked={b.enabled}
+                  disabled={busy}
+                  onCheckedChange={(checked) =>
+                    onToggle(b.serverId, Boolean(checked))
+                  }
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-ink">
+                    {b.name}
+                  </p>
+                  <p className="text-xs text-primary-500">{b.transport}</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  disabled={busy}
+                  onClick={() => onRemove(b.serverId)}
+                >
+                  Remove
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-sm font-medium text-ink">
+          Add from library
+        </h3>
+        {available.length === 0 ? (
+          <p className="text-sm text-primary-500">
+            {library.length === 0
+              ? 'Library is empty — add a server first.'
+              : 'All library servers are already assigned to this agent.'}
+          </p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {available.map((s) => (
+              <Button
+                key={s.id}
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={() => onAssign(s.id)}
+              >
+                + {s.name}
+              </Button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -251,7 +590,7 @@ function ServerList({ query, onEdit }: ServerListProps) {
     return (
       <EmptyCard
         title="Loading servers…"
-        description="Fetching MCP servers from Hermes Agent."
+        description="Fetching MCP servers from the active profile."
       />
     )
   }
@@ -267,8 +606,8 @@ function ServerList({ query, onEdit }: ServerListProps) {
   if (servers.length === 0) {
     return (
       <EmptyCard
-        title="No MCP servers configured"
-        description="Add a server from the My Presets tab or click Add Server above."
+        title="No MCP servers on this profile"
+        description="Assign from the Library on the Agents tab, or add a private server."
       />
     )
   }
@@ -304,10 +643,6 @@ function EmptyCard({ title, description, tone = 'neutral' }: EmptyCardProps) {
   )
 }
 
-// ---------------------------------------------------------------------------
-// MarketplaceGrid — Phase 3.0 Marketplace tab
-// ---------------------------------------------------------------------------
-
 const TRUST_PILL: Record<string, { label: string; className: string }> = {
   official: {
     label: 'Official',
@@ -317,129 +652,86 @@ const TRUST_PILL: Record<string, { label: string; className: string }> = {
   community: {
     label: 'Community',
     className:
-      'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300',
+      'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300',
   },
   unverified: {
     label: 'Unverified',
     className:
-      'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300',
+      'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200',
   },
-}
-
-const SOURCE_LABEL: Record<string, string> = {
-  'mcp-get': 'mcp.run',
-  local: 'Local',
-}
-
-interface MarketplaceGridProps {
-  entries: Array<HubMcpEntry>
-  loading: boolean
-  onInstall: (entry: HubMcpEntry) => void
 }
 
 function MarketplaceGrid({
   entries,
   loading,
   onInstall,
-}: MarketplaceGridProps) {
-  if (loading) {
-    return (
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div
-            key={i}
-            className="animate-pulse rounded-2xl border border-primary-200 bg-primary-50/70 p-4 min-h-[160px]"
-          >
-            <div className="mb-3 h-4 w-2/5 rounded-md bg-primary-100" />
-            <div className="mb-2 h-3 w-3/4 rounded-md bg-primary-100" />
-            <div className="h-3 w-1/2 rounded-md bg-primary-100" />
-            <div className="mt-4 h-8 w-1/3 rounded-md bg-primary-100" />
-          </div>
-        ))}
-      </div>
-    )
-  }
-
-  if (entries.length === 0) {
+}: {
+  entries: Array<HubMcpEntry>
+  loading: boolean
+  onInstall: (entry: HubMcpEntry) => void
+}) {
+  if (loading && entries.length === 0) {
     return (
       <EmptyCard
-        title="No results"
-        description="Try a different search term. The registry may be unavailable — local presets are used as fallback."
+        title="Searching marketplace…"
+        description="Querying configured MCP hub sources."
       />
     )
   }
-
+  if (entries.length === 0) {
+    return (
+      <EmptyCard
+        title="No marketplace results"
+        description="Try a different search, or manage Sources."
+      />
+    )
+  }
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
       <AnimatePresence initial={false}>
         {entries.map((entry) => {
           const trust = TRUST_PILL[entry.trust] ?? TRUST_PILL.unverified
-          const sourceLabel = SOURCE_LABEL[entry.source] ?? entry.source
-
           return (
-            <motion.article
+            <motion.div
               key={entry.id}
-              initial={{ opacity: 0, y: 8 }}
+              layout
+              initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.18 }}
-              className="flex flex-col gap-2 rounded-xl border border-primary-200 bg-primary-50/85 p-4"
+              exit={{ opacity: 0 }}
+              className="flex flex-col gap-3 rounded-xl border border-primary-200 bg-primary-50/90 p-4"
             >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 space-y-1">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <h3 className="text-base font-medium text-ink text-balance line-clamp-1">
-                      {entry.name}
-                    </h3>
-                    {entry.installed ? (
-                      <span
-                        className="shrink-0 rounded-md border border-primary/40 bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary"
-                        aria-label="Installed"
-                      >
-                        Installed
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="line-clamp-2 text-xs text-primary-500 text-pretty">
-                    {entry.description || 'No description.'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span
-                  className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${trust.className}`}
-                >
-                  {trust.label}
-                </span>
-                <span className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-0.5 text-[11px] font-medium text-primary-500">
-                  {sourceLabel}
-                </span>
-                {entry.tags.slice(0, 2).map((tag) => (
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-medium text-ink">{entry.name}</p>
                   <span
-                    key={tag}
-                    className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5 text-[11px] text-primary-500"
+                    className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${trust.className}`}
                   >
-                    {tag}
+                    {trust.label}
                   </span>
-                ))}
+                </div>
+                <p className="text-xs text-primary-500 line-clamp-3">
+                  {entry.description || 'No description'}
+                </p>
               </div>
-
-              <div className="mt-auto flex items-center justify-end gap-2 pt-2">
+              <div className="mt-auto flex items-center justify-between gap-2">
+                <span className="text-[11px] text-primary-400">
+                  {entry.template?.transportType ?? 'stdio'}
+                </span>
                 {entry.installed ? (
                   <span className="text-xs text-primary-500">
                     Already installed
                   </span>
                 ) : (
                   <Button
-                    variant="outline"
                     size="sm"
+                    variant="outline"
                     onClick={() => onInstall(entry)}
                   >
-                    Install
+                    Add to library
                   </Button>
                 )}
               </div>
-            </motion.article>
+            </motion.div>
           )
         })}
       </AnimatePresence>

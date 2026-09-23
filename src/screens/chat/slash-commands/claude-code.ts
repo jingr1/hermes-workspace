@@ -22,7 +22,7 @@ export function createClaudeCodeSlashRuntime(
 ): SlashCommandRuntime {
   return {
     catalog: CLAUDE_CODE_SLASH_COMMANDS,
-    sources: { gatewayCommands: false, skills: false },
+    sources: { gatewayCommands: false, skills: true },
     execute: (command: string) => {
       const trimmed = command.trim()
       const name = trimmed.split(/\s+/)[0]?.toLowerCase() ?? ''

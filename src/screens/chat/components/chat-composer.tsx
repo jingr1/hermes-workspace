@@ -193,6 +193,10 @@ type ChatComposerProps = {
    * are used and execute is left to the parent onSubmit path.
    */
   slashRuntime?: SlashCommandRuntime
+  /**
+   * Registry agent id whose enabled platform skill bindings appear in `/`.
+   */
+  skillsAgentId?: string
 }
 
 type ChatComposerHelpers = {
@@ -302,32 +306,42 @@ type InstalledSkillSummary = {
   description: string
   installed: boolean
   enabled: boolean
+  content?: string
 }
 
-async function fetchInstalledSkills(): Promise<Array<InstalledSkillSummary>> {
-  const response = await fetch('/api/skills?tab=installed&limit=120')
+async function fetchAgentComposerSkills(
+  agentId: string,
+): Promise<Array<InstalledSkillSummary>> {
+  const trimmed = agentId.trim()
+  if (!trimmed) return []
+  const response = await fetch(
+    `/api/agents/${encodeURIComponent(trimmed)}/skills/composer?includeContent=1`,
+  )
   if (!response.ok) {
     throw new Error(`Skills request failed (${response.status})`)
   }
-
   const payload = (await response.json()) as {
     skills?: Array<Record<string, unknown>>
-    ok?: boolean
   }
   const skills = Array.isArray(payload.skills) ? payload.skills : []
-
   return skills
-    .map((entry) => {
+    .map((entry): InstalledSkillSummary | null => {
       const id =
         readModelText(entry.id) ||
-        readModelText(entry.slug) ||
         readModelText(entry.name)
       if (!id) return null
       const name = readModelText(entry.name) || id
       const description = readModelText(entry.description)
-      const installed = entry.installed !== false
-      const enabled = entry.enabled !== false
-      return { id, name, description, installed, enabled }
+      const content =
+        typeof entry.content === 'string' ? entry.content : undefined
+      return {
+        id,
+        name,
+        description,
+        installed: true,
+        enabled: true,
+        content,
+      }
     })
     .filter((entry): entry is InstalledSkillSummary => entry !== null)
 }
@@ -976,6 +990,7 @@ function ChatComposerComponent({
   queuedCount = 0,
   onClearQueue,
   slashRuntime,
+  skillsAgentId,
   runtimeLabel = 'Claude Code',
   runtimeConfigHint,
 }: ChatComposerProps) {
@@ -1199,11 +1214,14 @@ function ChatComposerComponent({
     }
   }, [disabled])
   const installedSkillsQuery = useQuery({
-    queryKey: ['chat', 'composer', 'installed-skills'],
-    queryFn: fetchInstalledSkills,
+    queryKey: ['chat', 'composer', 'agent-skills', skillsAgentId ?? ''],
+    queryFn: () => fetchAgentComposerSkills(skillsAgentId ?? ''),
     retry: false,
     staleTime: 60_000,
-    enabled: !disabled && (slashCommandQuery !== null || skillsIdlePrefetch),
+    enabled:
+      Boolean(skillsAgentId?.trim()) &&
+      !disabled &&
+      (slashCommandQuery !== null || skillsIdlePrefetch),
   })
   const workspaceContextQuery = useQuery({
     queryKey: ['workspace', 'composer-context', workspaceProfileName],

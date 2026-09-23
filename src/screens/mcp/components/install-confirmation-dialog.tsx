@@ -149,17 +149,24 @@ export function InstallConfirmationDialog({
     setInstalling(true)
     setError(null)
     try {
-      const res = await fetch('/api/mcp', {
+      const res = await fetch('/api/platform-mcp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(resolvedTemplate),
         signal: ac.signal,
       })
-      const body = (await res.json()) as { ok?: boolean; error?: string }
-      if (!res.ok || body.ok === false) {
+      const body = (await res.json()) as {
+        ok?: boolean
+        error?: string
+        server?: { name?: string }
+      }
+      if (!res.ok || body.error) {
         throw new Error(body.error || `Install failed (${res.status})`)
       }
-      toast(`Installed ${entry.name}`, { type: 'success', icon: '✓' })
+      toast(`Added ${entry.name} to MCP library`, {
+        type: 'success',
+        icon: '✓',
+      })
       onInstalled?.()
       onClose()
     } catch (err) {

@@ -100,7 +100,7 @@ Agents（原 Operations）重新定位为：
 #### Tab 3: Capabilities（核心扩展）
 
 - **Skills**：已安装 skills 列表，按 agent 开关 / 排序 / 搜索；提供 "Add skill" 跳转
-- **MCP Servers**：已配置 MCP servers，按 agent 开关 / 编辑
+- **MCP Servers**：平台 MCP 库 + 按 agent 显式分配（与 Skills / Multica 同模型）；Operations 可 toggle profile 级条目，并从库一键 assign；入库 ≠ 授权
 - **Tools**：基于 Hermes config 的 enabled_toolsets / toolsets 显示（如果有），简单展示哪些 toolset 可用
 - **Workspace**：绑定工作区目录
 - **Memory**：绑定 wiki / memory 路径（如果支持）
@@ -166,7 +166,9 @@ export type OperationsAgent = GatewayConfigAgent & {
 | `/api/profiles/skills?name=<profile>` | GET      | 读取某 profile 的 skills（已有）                         |
 | `/api/profiles/update`                | POST     | 更新 profile config（已有）                              |
 | `/api/profiles/toggle-skill`          | POST     | 切换某 profile 的 skill 开关（已有）                     |
-| `/api/profiles/mcp`                   | GET/POST | 读取/更新某 profile 的 MCP server 配置（需新增）         |
+| `/api/profiles/mcp`                   | GET/POST | 读取/更新某 profile 的 MCP（toggle/remove/upsert） |
+| `/api/platform-mcp`                   | GET/POST | 平台 MCP 库 CRUD（写侧含完整 config；读侧脱敏） |
+| `/api/agents/:id/mcp`                 | GET/POST | 按 agent 分配平台 MCP；写后物化到 profile |
 | `/api/profiles/env`                   | GET      | 检测某 profile 是否有 .env（已有能力，封装 API）         |
 | `/api/profiles/capabilities`          | GET      | 聚合返回 skills + MCP + toolsets（可选，减少前端请求数） |
 
@@ -203,7 +205,10 @@ export type OperationsAgent = GatewayConfigAgent & {
 
 - `GET /api/profiles/capabilities?name=<profile>` — 聚合返回 skills + MCP + toolsets + workspace + envExists
 - `GET /api/profiles/mcp?name=<profile>` — 读取 profile 的 MCP servers 列表
-- `POST /api/profiles/mcp` — toggle/remove MCP server（body: `{name, action, server, enabled?}`）
+- `POST /api/profiles/mcp` — toggle/remove/upsert MCP server（body: `{name, action, server, enabled?}`）
+- `GET/POST /api/platform-mcp` — 平台 MCP 库（入库 ≠ 分配）
+- `GET/POST /api/agents/:agentId/mcp` — 绑定平台 MCP 到 agent 并 materialize
+- `PATCH/DELETE /api/agents/:agentId/mcp/:serverId` — enable/disable / 解绑
 
 ### 5.4 阶段二 Bug 修复计划（待实施）
 

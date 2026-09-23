@@ -10,11 +10,14 @@ export const Route = createFileRoute('/api/memory/search')({
         if (!isAuthenticated(request)) {
           return json({ error: 'Unauthorized' }, { status: 401 })
         }
-        // Memory is local-fs only. No remote gateway check needed.
         const url = new URL(request.url)
         const query = url.searchParams.get('q') || ''
+        const agentId = url.searchParams.get('agent')
         try {
-          return json({ results: searchMemoryFiles(query) })
+          return json({
+            agentId,
+            results: searchMemoryFiles(query, agentId),
+          })
         } catch (error) {
           return json(
             {

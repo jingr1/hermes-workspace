@@ -18,16 +18,56 @@ type MemoryFileMeta = {
   modified: string
 }
 
+type MemoryAgentScope = {
+  id: string
+  label: string
+  root: string | null
+  fileCount: number
+  memoryKind: 'hermes' | 'claude-code' | 'codex' | 'filesystem' | 'unsupported'
+  runtime: string
+  rootHint?: string
+  writable?: boolean
+}
+
 type MemorySearchMatch = {
   path: string
   line: number
   text: string
 }
 
-type ListResponse = { files?: Array<MemoryFileMeta> }
+type ListResponse = {
+  agentId?: string
+  memoryKind?: MemoryAgentScope['memoryKind']
+  runtime?: string
+  rootHint?: string
+  writable?: boolean
+  agents?: Array<MemoryAgentScope>
+  files?: Array<MemoryFileMeta>
+}
 type ReadResponse = { path?: string; content?: string }
 type SearchResponse = { results?: Array<MemorySearchMatch> }
 type WriteResponse = { success?: boolean; path?: string; error?: string }
+
+const MEMORY_AGENT_STORAGE_KEY = 'hermes-memory-browser-agent'
+
+function readStoredMemoryAgent(): string | null {
+  try {
+    if (typeof window === 'undefined') return null
+    const value = window.localStorage.getItem(MEMORY_AGENT_STORAGE_KEY)?.trim()
+    return value || null
+  } catch {
+    return null
+  }
+}
+
+function writeStoredMemoryAgent(agentId: string): void {
+  try {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(MEMORY_AGENT_STORAGE_KEY, agentId)
+  } catch {
+    // ignore quota / private-mode failures
+  }
+}
 
 async function readJson<T>(url: string): Promise<T> {
   const response = await fetch(url)
@@ -54,17 +94,24 @@ function formatModified(value: string): string {
   }).format(parsed)
 }
 
+function isRootMemoryPath(pathValue: string): boolean {
+  return (
+    pathValue === 'MEMORY.md' ||
+    pathValue === 'CLAUDE.md' ||
+    pathValue === 'AGENTS.md' ||
+    pathValue === 'USER.md' ||
+    pathValue === 'SOUL.md'
+  )
+}
+
 function isDailyMemoryPath(pathValue: string): boolean {
   return /^memories?\/\d{4}-\d{2}-\d{2}\.md$/.test(pathValue)
 }
 
 function splitFiles(files: Array<MemoryFileMeta>) {
-  const rootMemory = files.find((file) => file.path === 'MEMORY.md') || null
+  const rootMemory = files.find((file) => isRootMemoryPath(file.path)) || null
   const memoryFiles = files
-    .filter(
-      (file) =>
-        file.path.startsWith('memory/') || file.path.startsWith('memories/'),
-    )
+    .filter((file) => !isRootMemoryPath(file.path))
     .sort((a, b) => {
       if (isDailyMemoryPath(a.path) && isDailyMemoryPath(b.path)) {
         return b.path.localeCompare(a.path)
@@ -104,6 +151,9 @@ function highlightMatch(
 }
 
 export function MemoryBrowserScreen() {
+  const [selectedAgentId, setSelectedAgentId] = useState<string>(
+    () => readStoredMemoryAgent() || 'default',
+  )
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const [searchInput, setSearchInput] = useState('')
   const deferredSearch = useDeferredValue(searchInput)
@@ -118,12 +168,38 @@ export function MemoryBrowserScreen() {
   const searchTerm = deferredSearch.trim()
 
   const filesQuery = useQuery({
-    queryKey: ['memory', 'list'],
-    queryFn: () => readJson<ListResponse>('/api/memory/list'),
+    queryKey: ['memory', 'list', selectedAgentId],
+    queryFn: () =>
+      readJson<ListResponse>(
+        `/api/memory/list?agent=${encodeURIComponent(selectedAgentId)}`,
+      ),
   })
 
+  const agents = filesQuery.data?.agents ?? []
   const files = filesQuery.data?.files ?? []
+  const selectedAgent =
+    agents.find((agent) => agent.id === selectedAgentId) ?? null
+  const memoryUnsupported = selectedAgent?.memoryKind === 'unsupported'
+  const memoryWritable = selectedAgent?.writable !== false
+  const rootHint = selectedAgent?.rootHint || filesQuery.data?.rootHint
   const { rootMemory, memoryFiles } = useMemo(() => splitFiles(files), [files])
+
+  useEffect(() => {
+    if (agents.length === 0) return
+    if (agents.some((agent) => agent.id === selectedAgentId)) return
+    const fallback = agents[0]?.id || 'default'
+    setSelectedAgentId(fallback)
+    writeStoredMemoryAgent(fallback)
+  }, [agents, selectedAgentId])
+
+  useEffect(() => {
+    setSelectedPath(null)
+    setFocusLine(null)
+    setIsEditing(false)
+    setHasUnsavedChanges(false)
+    setDraftContent('')
+    setSearchInput('')
+  }, [selectedAgentId])
 
   useEffect(() => {
     if (selectedPath) return
@@ -135,20 +211,20 @@ export function MemoryBrowserScreen() {
   }, [selectedPath, rootMemory, memoryFiles])
 
   const contentQuery = useQuery({
-    queryKey: ['memory', 'read', selectedPath],
+    queryKey: ['memory', 'read', selectedAgentId, selectedPath],
     queryFn: () =>
       readJson<ReadResponse>(
-        `/api/memory/read?path=${encodeURIComponent(selectedPath || '')}`,
+        `/api/memory/read?agent=${encodeURIComponent(selectedAgentId)}&path=${encodeURIComponent(selectedPath || '')}`,
       ),
-    enabled: Boolean(selectedPath),
+    enabled: Boolean(selectedPath) && !memoryUnsupported,
   })
 
-  const searchEnabled = searchTerm.length > 0
+  const searchEnabled = searchTerm.length > 0 && !memoryUnsupported
   const searchQuery = useQuery({
-    queryKey: ['memory', 'search', searchTerm],
+    queryKey: ['memory', 'search', selectedAgentId, searchTerm],
     queryFn: () =>
       readJson<SearchResponse>(
-        `/api/memory/search?q=${encodeURIComponent(searchTerm)}`,
+        `/api/memory/search?agent=${encodeURIComponent(selectedAgentId)}&q=${encodeURIComponent(searchTerm)}`,
       ),
     enabled: searchEnabled,
   })
@@ -223,7 +299,11 @@ export function MemoryBrowserScreen() {
       const response = await fetch('/api/memory/write', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: selectedPath, content: draftContent }),
+        body: JSON.stringify({
+          agent: selectedAgentId,
+          path: selectedPath,
+          content: draftContent,
+        }),
       })
       const payload = (await response.json().catch(() => ({}))) as WriteResponse
       if (!response.ok || !payload.success) {
@@ -255,16 +335,61 @@ export function MemoryBrowserScreen() {
           backgroundColor: 'var(--theme-bg)',
         }}
       >
-        <div className="flex items-center gap-3">
-          <div
-            className="inline-flex size-9 items-center justify-center rounded-xl"
-            style={{
-              border: '1px solid var(--theme-border)',
-              backgroundColor: 'var(--theme-card)',
-              color: 'var(--theme-text)',
-            }}
-          >
-            <HugeiconsIcon icon={BrainIcon} size={18} strokeWidth={1.6} />
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <div
+              className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl"
+              style={{
+                border: '1px solid var(--theme-border)',
+                backgroundColor: 'var(--theme-card)',
+                color: 'var(--theme-text)',
+              }}
+            >
+              <HugeiconsIcon icon={BrainIcon} size={18} strokeWidth={1.6} />
+            </div>
+            <label className="min-w-0 flex-1 md:max-w-xs">
+              <span className="sr-only">Agent</span>
+              <select
+                value={selectedAgentId}
+                onChange={(event) => {
+                  const nextAgentId = event.target.value
+                  if (isEditing && hasUnsavedChanges) {
+                    const confirmed =
+                      typeof window === 'undefined'
+                        ? true
+                        : window.confirm(
+                            'You have unsaved changes. Discard them and switch agents?',
+                          )
+                    if (!confirmed) return
+                  }
+                  setSelectedAgentId(nextAgentId)
+                  writeStoredMemoryAgent(nextAgentId)
+                }}
+                className="w-full rounded-xl px-3 py-2 text-sm outline-none transition-colors focus:border-accent-500"
+                style={{
+                  border: '1px solid var(--theme-border)',
+                  backgroundColor: 'var(--theme-card)',
+                  color: 'var(--theme-text)',
+                }}
+              >
+                {agents.length === 0 ? (
+                  <option value={selectedAgentId}>{selectedAgentId}</option>
+                ) : (
+                  agents.map((agent) => (
+                    <option key={agent.id} value={agent.id}>
+                      {agent.label}
+                      {agent.memoryKind === 'unsupported'
+                        ? ` · ${agent.runtime}`
+                        : agent.fileCount > 0
+                          ? ` (${agent.fileCount})`
+                          : agent.rootHint
+                            ? ` · ${agent.rootHint}`
+                            : ''}
+                    </option>
+                  ))
+                )}
+              </select>
+            </label>
           </div>
           <div className="min-w-0 flex-1">
             <div className="relative">
@@ -278,7 +403,7 @@ export function MemoryBrowserScreen() {
               <input
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
-                placeholder="Search memory files"
+                placeholder={`Search ${selectedAgentId} memory`}
                 className="w-full rounded-xl py-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-accent-500"
                 style={{
                   border: '1px solid var(--theme-border)',
@@ -300,6 +425,11 @@ export function MemoryBrowserScreen() {
           >
             <span className="text-xs font-semibold uppercase tracking-wide text-primary-500 dark:text-neutral-400">
               Memory Files ({fileItems.length})
+              {rootHint ? (
+                <span className="ml-2 font-normal normal-case tracking-normal text-primary-400 dark:text-neutral-500">
+                  {rootHint}
+                </span>
+              ) : null}
             </span>
             <span className="md:hidden text-primary-500 dark:text-neutral-400">
               <HugeiconsIcon
@@ -379,11 +509,23 @@ export function MemoryBrowserScreen() {
                 ) : null}
 
                 <div className="px-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-primary-400 dark:text-neutral-500">
-                  memory/ or memories/
+                  {selectedAgent?.memoryKind === 'claude-code'
+                    ? 'projects/*/memory'
+                    : selectedAgent?.memoryKind === 'codex'
+                      ? 'memories (sqlite)'
+                      : 'memory/ · memories/ · projects/'}
                 </div>
-                {memoryFiles.length === 0 ? (
+                {memoryUnsupported ? (
                   <div className="rounded-lg border border-primary-200 bg-primary-50/80 px-3 py-2 text-xs text-primary-400 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-500">
-                    No files in memory/ or memories/
+                    No memory home found for runtime {selectedAgent?.runtime}
+                  </div>
+                ) : memoryFiles.length === 0 && !rootMemory ? (
+                  <div className="rounded-lg border border-primary-200 bg-primary-50/80 px-3 py-2 text-xs text-primary-400 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-500">
+                    No memory files under {rootHint || 'this agent home'}
+                  </div>
+                ) : memoryFiles.length === 0 ? (
+                  <div className="rounded-lg border border-primary-200 bg-primary-50/80 px-3 py-2 text-xs text-primary-400 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-500">
+                    No additional topic files
                   </div>
                 ) : (
                   memoryFiles.map((file) => (
@@ -416,7 +558,7 @@ export function MemoryBrowserScreen() {
                 </div>
               ) : null}
             </div>
-            {selectedPath ? (
+            {selectedPath && memoryWritable ? (
               <div className="ml-3 flex items-center gap-2">
                 {isEditing ? (
                   <>
@@ -474,8 +616,18 @@ export function MemoryBrowserScreen() {
               <StateBox label="Loading memory files..." />
             ) : filesQuery.error instanceof Error ? (
               <StateBox label={filesQuery.error.message} error />
+            ) : memoryUnsupported ? (
+              <StateBox
+                label={`No memory home found for runtime "${selectedAgent?.runtime}". Install/configure that agent first.`}
+              />
             ) : !selectedPath ? (
-              <StateBox label="No memory files found" />
+              <StateBox
+                label={
+                  rootHint
+                    ? `No memory files under ${rootHint}`
+                    : 'No memory files found'
+                }
+              />
             ) : contentQuery.isLoading ? (
               <StateBox label="Loading file..." />
             ) : contentQuery.error instanceof Error ? (

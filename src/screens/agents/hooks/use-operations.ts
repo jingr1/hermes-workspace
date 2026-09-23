@@ -84,6 +84,8 @@ export type OperationsOutputItem = {
 
 export type AgentSkillItem = {
   name: string
+  /** Platform catalog id when bound via agent_skills. */
+  skillId?: string
   description?: string
   category?: string | null
   enabled: boolean
@@ -95,6 +97,9 @@ export type AgentMcpItem = {
   enabled: boolean
   status?: 'ok' | 'error' | 'disabled'
   error?: string
+  /** Platform library binding id when sourced from agent_mcp_servers. */
+  serverId?: string
+  source?: 'platform' | 'profile'
 }
 
 export type OperationsAgentHealth = {
@@ -118,7 +123,7 @@ export type OperationsAgentCapabilities = {
   toolsets: string[]
 }
 
-/** Shape returned by /api/profiles/capabilities */
+/** Aggregated capabilities for Operations (platform + optional profile). */
 type CapabilitiesResponse = {
   profile: string
   skills: AgentSkillItem[]
@@ -130,6 +135,8 @@ type CapabilitiesResponse = {
     url?: string
     command?: string
     error?: string
+    serverId?: string
+    source?: 'platform' | 'profile'
   }>
   toolsets: string[]
   workspace?: string
@@ -712,25 +719,84 @@ export function useOperations() {
     refetchInterval: 30_000,
   })
 
-  // Fetch real capabilities (skills, MCP, toolsets) for each agent.
-  // Single aggregated query that the useMemo below splits per-agent.
+  // Fetch platform skill bindings for every registry agent (Hermes + managed).
   const capabilitiesQuery = useQuery({
     queryKey: ['operations', 'capabilities'],
     queryFn: async () => {
-      const { profiles } = await fetchClaudeProfiles()
       const results: Record<string, CapabilitiesResponse> = {}
+      const agentsRes = await fetch('/api/agents')
+      if (!agentsRes.ok) return results
+      const agentsPayload = (await agentsRes.json()) as {
+        agents?: Array<{ agentId: string }>
+      }
       await Promise.all(
-        profiles.map(async (profile) => {
-          if (profile.name === 'default') return // skip default
+        (agentsPayload.agents ?? []).map(async (agent) => {
+          const agentId = agent.agentId
+          if (!agentId || agentId === 'default') return
           try {
-            const res = await fetch(
-              `/api/profiles/capabilities?name=${encodeURIComponent(profile.name)}`,
+            const [skillsRes, mcpRes, profileCapsRes] = await Promise.all([
+              fetch(`/api/agents/${encodeURIComponent(agentId)}/skills`),
+              fetch(`/api/agents/${encodeURIComponent(agentId)}/mcp`),
+              fetch(
+                `/api/profiles/capabilities?name=${encodeURIComponent(agentId)}`,
+              ),
+            ])
+            const skillsPayload = skillsRes.ok
+              ? ((await skillsRes.json()) as {
+                  skills?: Array<{
+                    skillId: string
+                    name: string
+                    description: string
+                    enabled: boolean
+                  }>
+                })
+              : { skills: [] }
+            const mcpPayload = mcpRes.ok
+              ? ((await mcpRes.json()) as {
+                  servers?: Array<{
+                    serverId: string
+                    name: string
+                    enabled: boolean
+                    transport?: string
+                  }>
+                })
+              : { servers: [] }
+            const profileCaps = profileCapsRes.ok
+              ? ((await profileCapsRes.json()) as CapabilitiesResponse)
+              : null
+            const platformMcp = (mcpPayload.servers ?? []).map((s) => ({
+              name: s.name,
+              enabled: s.enabled,
+              status: (s.enabled ? 'connected' : 'disabled') as
+                | 'connected'
+                | 'failed'
+                | 'disabled',
+              serverId: s.serverId,
+              source: 'platform' as const,
+            }))
+            const platformNames = new Set(
+              platformMcp.map((m) => m.name.toLowerCase()),
             )
-            if (!res.ok) return
-            const data = (await res.json()) as CapabilitiesResponse
-            results[profile.name] = data
+            const profileOnly = (profileCaps?.mcpServers ?? [])
+              .filter((m) => !platformNames.has(m.name.toLowerCase()))
+              .map((m) => ({
+                ...m,
+                source: 'profile' as const,
+              }))
+            results[agentId] = {
+              profile: agentId,
+              skills: (skillsPayload.skills ?? []).map((s) => ({
+                name: s.name,
+                skillId: s.skillId,
+                description: s.description,
+                enabled: s.enabled,
+              })),
+              mcpServers: [...platformMcp, ...profileOnly],
+              toolsets: profileCaps?.toolsets ?? [],
+              envExists: profileCaps?.envExists ?? false,
+            }
           } catch {
-            // ignore — capabilities stay as fallback stubs
+            /* ignore */
           }
         }),
       )
@@ -873,6 +939,8 @@ export function useOperations() {
                   : m.enabled
                     ? 'ok'
                     : 'disabled') as 'ok' | 'error' | 'disabled',
+              serverId: m.serverId,
+              source: m.source,
             }))
           : agent.mcpCount
             ? Array.from({ length: agent.mcpCount }, (_, i) => ({
@@ -1147,18 +1215,22 @@ export function useOperations() {
     mutationFn: async (input: {
       profile: string
       name: string
+      skillId?: string
       enabled: boolean
     }) => {
-      const response = await fetch('/api/profiles/toggle-skill', {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(input),
-      })
+      const skillKey = input.skillId || input.name
+      const response = await fetch(
+        `/api/agents/${encodeURIComponent(input.profile)}/skills/${encodeURIComponent(skillKey)}`,
+        {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ enabled: input.enabled }),
+        },
+      )
       const payload = (await response.json().catch(() => ({}))) as {
-        ok?: boolean
         error?: string
       }
-      if (!response.ok || payload.ok === false) {
+      if (!response.ok) {
         throw new Error(
           payload.error || `Failed to toggle skill (${response.status})`,
         )
@@ -1181,7 +1253,27 @@ export function useOperations() {
       profile: string
       server: string
       enabled: boolean
+      serverId?: string
     }) => {
+      if (input.serverId) {
+        const response = await fetch(
+          `/api/agents/${encodeURIComponent(input.profile)}/mcp/${encodeURIComponent(input.serverId)}`,
+          {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ enabled: input.enabled }),
+          },
+        )
+        const payload = (await response.json().catch(() => ({}))) as {
+          error?: string
+        }
+        if (!response.ok) {
+          throw new Error(
+            payload.error || `Failed to toggle MCP (${response.status})`,
+          )
+        }
+        return
+      }
       const response = await fetch('/api/profiles/mcp', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -1215,7 +1307,26 @@ export function useOperations() {
   })
 
   const removeMcpMutation = useMutation({
-    mutationFn: async (input: { profile: string; server: string }) => {
+    mutationFn: async (input: {
+      profile: string
+      server: string
+      serverId?: string
+    }) => {
+      if (input.serverId) {
+        const response = await fetch(
+          `/api/agents/${encodeURIComponent(input.profile)}/mcp/${encodeURIComponent(input.serverId)}`,
+          { method: 'DELETE' },
+        )
+        const payload = (await response.json().catch(() => ({}))) as {
+          error?: string
+        }
+        if (!response.ok) {
+          throw new Error(
+            payload.error || `Failed to remove MCP (${response.status})`,
+          )
+        }
+        return
+      }
       const response = await fetch('/api/profiles/mcp', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },

@@ -1,8 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
-import { isAuthenticated } from '../../../server/auth-middleware'
-import { getPendingTurn } from '../../../server/group-chat/room-store'
-import { dismissPendingTurnForRoom } from '../../../server/group-chat/pending-turn-service'
+import { isAuthenticated } from '../../../../server/auth-middleware'
+import { getPendingTurn } from '../../../../server/group-chat/room-store'
+import { dismissPendingTurnForRoom } from '../../../../server/group-chat/pending-turn-service'
 
 export const Route = createFileRoute('/api/pending-turns/$turnId/dismiss')({
   server: {

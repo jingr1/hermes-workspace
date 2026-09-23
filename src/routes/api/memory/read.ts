@@ -10,18 +10,20 @@ export const Route = createFileRoute('/api/memory/read')({
         if (!isAuthenticated(request)) {
           return json({ error: 'Unauthorized' }, { status: 401 })
         }
-        // Memory is local-fs only. No remote gateway check needed.
         const url = new URL(request.url)
         const pathParam = url.searchParams.get('path') || ''
+        const agentId = url.searchParams.get('agent')
         try {
-          const content = readMemoryFile(pathParam)
-          return json({ path: pathParam, content })
+          const content = readMemoryFile(pathParam, agentId)
+          return json({ path: pathParam, agentId, content })
         } catch (error) {
           const message =
             error instanceof Error
               ? error.message
               : 'Failed to read memory file'
-          const status = /not allowed|outside workspace|required/i.test(message)
+          const status = /not allowed|outside workspace|required|Invalid agent/i.test(
+            message,
+          )
             ? 400
             : /ENOENT/.test(message)
               ? 404

@@ -12,6 +12,7 @@ import {
   Settings01Icon,
 } from '@hugeicons/core-free-icons'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { Markdown } from '@/components/prompt-kit/markdown'
 import {
@@ -22,6 +23,10 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
+import { CHAT_PENDING_MESSAGE_STORAGE_KEY } from '@/screens/chat/chat-events'
+import { readLastAgent } from '@/screens/chat/last-session'
+import { fetchAgents } from '@/lib/agent-api'
+import { useAgentStore } from '@/stores/agent-store'
 
 type WikiPageMeta = {
   path: string
@@ -273,6 +278,9 @@ function GraphCanvas({
 }
 
 export function KnowledgeBrowserScreen() {
+  const navigate = useNavigate()
+  const activeAgentId = useAgentStore((state) => state.activeAgentId)
+  const agents = useAgentStore((state) => state.agents)
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const [searchInput, setSearchInput] = useState('')
   const [selectedTag, setSelectedTag] = useState<string | null>(null)
@@ -382,9 +390,52 @@ export function KnowledgeBrowserScreen() {
     () => preprocessWikiMarkdown(content),
     [content],
   )
-  const askUrl = `/chat?message=${encodeURIComponent(
-    `Tell me about: ${page?.title || selectedPath || 'this page'}\n\nContext:\n${content.slice(0, 500)}`,
-  )}`
+  const askPrompt = useMemo(() => {
+    const title = page?.title || selectedPath || 'this page'
+    const context = content.slice(0, 500)
+    return `Tell me about: ${title}\n\nContext:\n${context}`
+  }, [content, page?.title, selectedPath])
+
+  function resolveAskAgentId(): string {
+    if (activeAgentId) return activeAgentId
+    const lastAgent = readLastAgent()
+    if (lastAgent) return lastAgent
+    const firstOnline = agents.find((agent) => agent.status === 'online')
+    if (firstOnline) return firstOnline.agentId
+    if (agents[0]?.agentId) return agents[0].agentId
+    return 'default'
+  }
+
+  async function handleAskAgent() {
+    let agentId = resolveAskAgentId()
+    if (agents.length === 0) {
+      try {
+        const data = await fetchAgents()
+        useAgentStore.getState().setAgents(data.agents)
+        const firstOnline = data.agents.find((agent) => agent.status === 'online')
+        agentId =
+          activeAgentId ||
+          readLastAgent() ||
+          firstOnline?.agentId ||
+          data.agents[0]?.agentId ||
+          'default'
+      } catch {
+        // keep fallback agentId
+      }
+    }
+    try {
+      window.sessionStorage.setItem(CHAT_PENDING_MESSAGE_STORAGE_KEY, askPrompt)
+    } catch {
+      // ignore quota / private-mode failures
+    }
+    void navigate({
+      to: '/chat/agent/$agentId',
+      params: { agentId },
+      // Omit session so ChatAgentRoute restores the agent's last existing session.
+      search: {},
+    })
+  }
+
   const searchResults = searchQuery.data?.results ?? []
 
   function resolveWikiPath(rawValue: string): string | null {
@@ -916,8 +967,9 @@ export function KnowledgeBrowserScreen() {
                 ) : null}
               </div>
               {page ? (
-                <a
-                  href={askUrl}
+                <button
+                  type="button"
+                  onClick={handleAskAgent}
                   className="inline-flex items-center gap-1.5 rounded-md border border-primary-200 px-3 py-1.5 text-xs font-semibold transition-colors hover:border-primary-300 hover:bg-primary-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:border-neutral-600 dark:hover:bg-neutral-800"
                 >
                   <HugeiconsIcon
@@ -926,7 +978,7 @@ export function KnowledgeBrowserScreen() {
                     strokeWidth={1.7}
                   />
                   Ask agent about this
-                </a>
+                </button>
               ) : null}
             </div>
 

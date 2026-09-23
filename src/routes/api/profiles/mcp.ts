@@ -2,26 +2,24 @@
  * Per-profile MCP server management.
  *
  *   GET /api/profiles/mcp?name=<profile>
- *     → reads config.yaml mcp_servers map, returns normalized list
- *
  *   POST /api/profiles/mcp
- *     body: { name: string, action: 'toggle'|'remove', server: string, enabled?: boolean }
- *     → toggles or removes an MCP server in the target profile's config.yaml
- *
- * Works against the local filesystem via profiles-browser (same as
- * /api/profiles/update). No dashboard proxy needed — the workspace
- * can read/write any profile on the same machine.
+ *     body: { name, action: 'toggle'|'remove'|'upsert', ... }
  */
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../server/auth-middleware'
+import { readProfile } from '../../../server/profiles-browser'
 import {
-  readProfile,
-  updateProfileConfig,
-} from '../../../server/profiles-browser'
-import { normalizeMcpListFromConfig } from '../../../server/mcp-normalize'
+  maskSecretsInPlace,
+  normalizeMcpListFromConfig,
+} from '../../../server/mcp-normalize'
 import { requireJsonContentType } from '../../../server/rate-limit'
-import { maskSecretsInPlace } from '../../../server/mcp-normalize'
+import { parseMcpServerInput } from '../../../server/mcp-input-validate'
+import {
+  deleteProfileMcpServer,
+  patchProfileMcpServer,
+  upsertProfileMcpServer,
+} from '../../../server/mcp-profile-config'
 
 const PROFILE_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
 
@@ -43,7 +41,6 @@ export const Route = createFileRoute('/api/profiles/mcp')({
           }
           const profile = readProfile(name)
           const servers = normalizeMcpListFromConfig(profile.config)
-          // Mask secrets before sending to client
           for (const s of servers) maskSecretsInPlace(s)
           return json({ profile: name, servers })
         } catch (error) {
@@ -66,37 +63,96 @@ export const Route = createFileRoute('/api/profiles/mcp')({
         if (csrfCheck) return csrfCheck
 
         try {
-          const body = (await request.json()) as {
-            name?: string
-            action?: 'toggle' | 'remove'
-            server?: string
-            enabled?: boolean
-          }
-          const profileName = (body.name || '').trim()
-          const action = body.action
-          const serverName = (body.server || '').trim()
+          const body = (await request.json()) as Record<string, unknown>
+          const profileName =
+            typeof body.name === 'string' ? body.name.trim() : ''
+          const action =
+            typeof body.action === 'string' ? body.action.trim() : ''
           if (!profileName || !PROFILE_NAME_RE.test(profileName)) {
             return json(
               { ok: false, error: 'A valid profile name is required' },
               { status: 400 },
             )
           }
+          if (
+            action !== 'toggle' &&
+            action !== 'remove' &&
+            action !== 'upsert'
+          ) {
+            return json(
+              {
+                ok: false,
+                error: 'action must be "toggle", "remove", or "upsert"',
+              },
+              { status: 400 },
+            )
+          }
+
+          if (action === 'upsert') {
+            // Prefer nested `server` object (full McpServerInput); else top-level fields.
+            const payload =
+              body.server && typeof body.server === 'object'
+                ? body.server
+                : {
+                    name:
+                      typeof body.serverName === 'string'
+                        ? body.serverName
+                        : body.server,
+                    transportType: body.transportType ?? body.transport,
+                    url: body.url,
+                    command: body.command,
+                    args: body.args,
+                    env: body.env,
+                    headers: body.headers,
+                    enabled: body.enabled,
+                    authType: body.authType,
+                    bearerToken: body.bearerToken,
+                    oauth: body.oauth,
+                    toolMode: body.toolMode,
+                    includeTools: body.includeTools,
+                    excludeTools: body.excludeTools,
+                  }
+            const parsed = parseMcpServerInput(payload)
+            if (!parsed.ok) {
+              return json(
+                {
+                  ok: false,
+                  error: 'Invalid MCP server payload',
+                  errors: parsed.errors,
+                },
+                { status: 400 },
+              )
+            }
+            const written = upsertProfileMcpServer(profileName, parsed.value)
+            return json({
+              ok: true,
+              profile: profileName,
+              server: maskSecretsInPlace(written),
+            })
+          }
+
+          const serverName =
+            typeof body.server === 'string'
+              ? body.server.trim()
+              : typeof body.serverName === 'string'
+                ? body.serverName.trim()
+                : ''
           if (!serverName) {
             return json(
               { ok: false, error: 'Server name is required' },
               { status: 400 },
             )
           }
-          if (action !== 'toggle' && action !== 'remove') {
-            return json(
-              { ok: false, error: 'action must be "toggle" or "remove"' },
-              { status: 400 },
-            )
+
+          if (action === 'remove') {
+            deleteProfileMcpServer(profileName, serverName)
+            return json({ ok: true, profile: profileName, server: serverName })
           }
 
-          // Read current config to get the mcp_servers map
-          const profile = readProfile(profileName)
-          const mcpServers = (profile.config.mcp_servers ?? {}) as Record<
+          const nextEnabled =
+            typeof body.enabled === 'boolean' ? body.enabled : undefined
+          const current = readProfile(profileName)
+          const mcpServers = (current.config.mcp_servers ?? {}) as Record<
             string,
             unknown
           >
@@ -107,33 +163,19 @@ export const Route = createFileRoute('/api/profiles/mcp')({
               { status: 404 },
             )
           }
-
-          if (action === 'remove') {
-            delete mcpServers[serverName]
-            updateProfileConfig(profileName, {
-              mcp_servers: mcpServers,
-            })
-          } else {
-            // toggle
-            const currentEnabled =
-              typeof serverEntry === 'object' && serverEntry !== null
-                ? !((serverEntry as Record<string, unknown>).enabled === false)
-                : true
-            const nextEnabled = body.enabled ?? !currentEnabled
-            const updated =
-              typeof serverEntry === 'object' && serverEntry !== null
-                ? {
-                    ...(serverEntry as Record<string, unknown>),
-                    enabled: nextEnabled,
-                  }
-                : { enabled: nextEnabled }
-            mcpServers[serverName] = updated
-            updateProfileConfig(profileName, {
-              mcp_servers: mcpServers,
-            })
-          }
-
-          return json({ ok: true, profile: profileName, server: serverName })
+          const currentEnabled =
+            typeof serverEntry === 'object' && serverEntry !== null
+              ? !((serverEntry as Record<string, unknown>).enabled === false)
+              : true
+          const written = patchProfileMcpServer(profileName, serverName, {
+            enabled: nextEnabled ?? !currentEnabled,
+          })
+          return json({
+            ok: true,
+            profile: profileName,
+            server: serverName,
+            enabled: written.enabled,
+          })
         } catch (error) {
           return json(
             {

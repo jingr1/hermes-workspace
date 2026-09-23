@@ -69,6 +69,20 @@ async function buildLocalSkillPathMap(
   for (const cat of categoryEntries) {
     if (!cat.isDirectory() || cat.name.startsWith('.')) continue
     const catPath = path.join(root, cat.name)
+    // Flat: skills/<name>/SKILL.md
+    try {
+      await fs.access(path.join(catPath, 'SKILL.md'))
+      if (!map.has(cat.name)) {
+        collect.push(
+          readSkillAuthor(catPath).then((author) => {
+            map.set(cat.name, { path: catPath, author })
+          }),
+        )
+      }
+      continue
+    } catch {
+      /* nested category */
+    }
     let skillEntries: Array<{
       name: string
       isDirectory: () => boolean
@@ -401,21 +415,57 @@ async function listLocalInstalledSkills(
 ): Promise<Array<SkillSummary>> {
   const root = getSkillsDir(profileName)
   const results: Array<SkillSummary> = []
-  let categoryEntries: Array<{ name: string; isDirectory: () => boolean }>
+  let topEntries: Array<{ name: string; isDirectory: () => boolean }>
   try {
-    categoryEntries = (await fs.readdir(root, {
+    topEntries = (await fs.readdir(root, {
       withFileTypes: true,
     })) as unknown as Array<{ name: string; isDirectory: () => boolean }>
   } catch {
     return results
   }
 
-  for (const cat of categoryEntries) {
-    if (!cat.isDirectory() || cat.name.startsWith('.')) continue
-    const catPath = path.join(root, cat.name)
+  const pushSkill = async (
+    skillName: string,
+    category: string,
+    fullPath: string,
+  ) => {
+    try {
+      await fs.access(path.join(fullPath, 'SKILL.md'))
+    } catch {
+      return
+    }
+    const [author, description] = await Promise.all([
+      readSkillAuthor(fullPath),
+      readSkillDescription(fullPath),
+    ])
+    const normalized = normalizeSkill({
+      id: skillName,
+      name: skillName,
+      description,
+      author,
+      category,
+      path: fullPath,
+      installed: true,
+      enabled: true,
+    })
+    if (normalized) results.push(normalized)
+  }
+
+  for (const entry of topEntries) {
+    if (!entry.isDirectory() || entry.name.startsWith('.')) continue
+    const full = path.join(root, entry.name)
+    // Flat: skills/<name>/SKILL.md
+    try {
+      await fs.access(path.join(full, 'SKILL.md'))
+      await pushSkill(entry.name, 'General', full)
+      continue
+    } catch {
+      /* nested category */
+    }
+    // Nested: skills/<category>/<name>/SKILL.md
     let skillEntries: Array<{ name: string; isDirectory: () => boolean }>
     try {
-      skillEntries = (await fs.readdir(catPath, {
+      skillEntries = (await fs.readdir(full, {
         withFileTypes: true,
       })) as unknown as Array<{ name: string; isDirectory: () => boolean }>
     } catch {
@@ -423,27 +473,7 @@ async function listLocalInstalledSkills(
     }
     for (const skill of skillEntries) {
       if (!skill.isDirectory() || skill.name.startsWith('.')) continue
-      const fullPath = path.join(catPath, skill.name)
-      try {
-        await fs.access(path.join(fullPath, 'SKILL.md'))
-      } catch {
-        continue
-      }
-      const [author, description] = await Promise.all([
-        readSkillAuthor(fullPath),
-        readSkillDescription(fullPath),
-      ])
-      const normalized = normalizeSkill({
-        id: skill.name,
-        name: skill.name,
-        description,
-        author,
-        category: cat.name,
-        path: fullPath,
-        installed: true,
-        enabled: true,
-      })
-      if (normalized) results.push(normalized)
+      await pushSkill(skill.name, entry.name, path.join(full, skill.name))
     }
   }
   return results

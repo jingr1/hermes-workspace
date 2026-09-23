@@ -11,8 +11,11 @@ import {
   requireJsonContentType,
   safeErrorMessage,
 } from '../../../server/rate-limit'
-import { getConfig, saveConfig } from '../../../server/hermes-dashboard-api'
 import { createCapabilityUnavailablePayload } from '@/lib/feature-gates'
+import {
+  deleteProfileMcpServer,
+  resolveMcpProfileName,
+} from '../../../server/mcp-profile-config'
 
 const REQUEST_TIMEOUT_MS = 30_000
 
@@ -76,41 +79,14 @@ export const Route = createFileRoute('/api/mcp/$name')({
             }
             return json({ ok: true })
           }
-          // Phase 1.5 fallback — read map, drop entry, persist whole map.
-          // We cannot use saveConfig({ mcp_servers: { [name]: null } }) because
-          // deepMerge treats `null` only at the top scalar level; nested object
-          // keys go through `bothObjects` and won't trigger removal here.
-          // Re-write the full map instead.
-          const cfg = await getConfig()
-          const root: Record<string, unknown> =
-            'config' in cfg && cfg.config && typeof cfg.config === 'object'
-              ? (cfg.config as Record<string, unknown>)
-              : cfg
-          const rawServers = root.mcp_servers
-          const servers =
-            rawServers &&
-            typeof rawServers === 'object' &&
-            !Array.isArray(rawServers)
-              ? { ...(rawServers as Record<string, unknown>) }
-              : {}
-          if (!(name in servers)) {
-            return json(
-              { ok: false, error: `MCP server not found: ${name}` },
-              { status: 404 },
-            )
-          }
-          delete servers[name]
-          // Mark the deleted key as null so deepMerge in saveConfig removes it.
-          const patch: Record<string, unknown> = {
-            mcp_servers: { ...servers, [name]: null },
-          }
-          await saveConfig(patch)
-          return json({ ok: true })
+          const url = new URL(request.url)
+          const profile = resolveMcpProfileName(url.searchParams.get('profile'))
+          deleteProfileMcpServer(profile, name)
+          return json({ ok: true, profile })
         } catch (err) {
-          return json(
-            { ok: false, error: safeErrorMessage(err) },
-            { status: 500 },
-          )
+          const message = safeErrorMessage(err)
+          const status = message.includes('not found') ? 404 : 500
+          return json({ ok: false, error: message }, { status })
         }
       },
     },
