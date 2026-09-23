@@ -130,6 +130,8 @@ agents:
 
     const mission = getSwarmMission(created.missionId)
     expect(mission?.roomId ?? null).toBeNull()
+    expect(mission?.spec).toBe('Build it')
+    expect(mission?.specVersion).toBe(1)
     expect(mission?.assignments.length).toBe(2)
     expect(mission?.assignments.every((a) => a.dispatchable !== false)).toBe(
       true,

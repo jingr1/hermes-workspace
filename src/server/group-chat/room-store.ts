@@ -995,6 +995,27 @@ export function listPendingTurns(
   }
 }
 
+export function listAllPendingTurns(input?: {
+  dbPath?: string
+  status?: PendingTurnStatus
+}): Array<PendingTurn> {
+  ensureDb(input)
+  const d = openSqliteDatabase(dbPath(input), true)
+  try {
+    const sql = input?.status
+      ? `SELECT id, room_id, task_id, assignment_id, requested_by, target_participant_id, message_id, kind, reason, options, status, created_at, answered_at, answered_message_id
+         FROM pending_turns WHERE status = ? ORDER BY created_at ASC`
+      : `SELECT id, room_id, task_id, assignment_id, requested_by, target_participant_id, message_id, kind, reason, options, status, created_at, answered_at, answered_message_id
+         FROM pending_turns ORDER BY created_at ASC`
+    const rows = input?.status
+      ? d.prepare(sql).all(input.status)
+      : d.prepare(sql).all()
+    return rows.map((r) => rowToPendingTurn(r))
+  } finally {
+    d.close()
+  }
+}
+
 export function getPendingTurn(
   turnId: string,
   input?: { dbPath?: string },

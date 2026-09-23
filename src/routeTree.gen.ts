@@ -83,6 +83,7 @@ import { Route as ApiPreviewFileRouteImport } from './routes/api/preview-file'
 import { Route as ApiPluginsRouteImport } from './routes/api/plugins'
 import { Route as ApiPipelinesRouteImport } from './routes/api/pipelines'
 import { Route as ApiPingRouteImport } from './routes/api/ping'
+import { Route as ApiPendingTurnsRouteImport } from './routes/api/pending-turns'
 import { Route as ApiPathsRouteImport } from './routes/api/paths'
 import { Route as ApiOrchestratorStateRouteImport } from './routes/api/orchestrator-state'
 import { Route as ApiOrchestratorResumeRouteImport } from './routes/api/orchestrator-resume'
@@ -154,6 +155,7 @@ import { Route as ApiSkillsUninstallRouteImport } from './routes/api/skills/unin
 import { Route as ApiSkillsToggleRouteImport } from './routes/api/skills/toggle'
 import { Route as ApiSkillsInstallRouteImport } from './routes/api/skills/install'
 import { Route as ApiSkillsHubSearchRouteImport } from './routes/api/skills/hub-search'
+import { Route as ApiSkillsContentRouteImport } from './routes/api/skills/content'
 import { Route as ApiSessionsSendRouteImport } from './routes/api/sessions/send'
 import { Route as ApiSessionsSearchRouteImport } from './routes/api/sessions/search'
 import { Route as ApiRunsDetachRouteImport } from './routes/api/runs/detach'
@@ -220,6 +222,8 @@ import { Route as ApiRunsRunIdSteerRouteImport } from './routes/api/runs/$runId.
 import { Route as ApiRoomsRoomIdPendingTurnsRouteImport } from './routes/api/rooms/$roomId/pending-turns'
 import { Route as ApiRoomsRoomIdParticipantsRouteImport } from './routes/api/rooms/$roomId/participants'
 import { Route as ApiRoomsRoomIdMessagesRouteImport } from './routes/api/rooms/$roomId/messages'
+import { Route as ApiPendingTurnsTurnIdDismissRouteImport } from './routes/api/pending-turns/$turnId/dismiss'
+import { Route as ApiPendingTurnsTurnIdAnswerRouteImport } from './routes/api/pending-turns/$turnId/answer'
 import { Route as ApiMcpHubSourcesIdRouteImport } from './routes/api/mcp/hub-sources.$id'
 import { Route as ApiMcpNameLogsRouteImport } from './routes/api/mcp/$name.logs'
 import { Route as ApiAgentsCodexImplModelsRouteImport } from './routes/api/agents/codex-impl/models'
@@ -623,6 +627,11 @@ const ApiPingRoute = ApiPingRouteImport.update({
   path: '/api/ping',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPendingTurnsRoute = ApiPendingTurnsRouteImport.update({
+  id: '/api/pending-turns',
+  path: '/api/pending-turns',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPathsRoute = ApiPathsRouteImport.update({
   id: '/api/paths',
   path: '/api/paths',
@@ -980,6 +989,11 @@ const ApiSkillsHubSearchRoute = ApiSkillsHubSearchRouteImport.update({
   path: '/hub-search',
   getParentRoute: () => ApiSkillsRoute,
 } as any)
+const ApiSkillsContentRoute = ApiSkillsContentRouteImport.update({
+  id: '/content',
+  path: '/content',
+  getParentRoute: () => ApiSkillsRoute,
+} as any)
 const ApiSessionsSendRoute = ApiSessionsSendRouteImport.update({
   id: '/send',
   path: '/send',
@@ -1321,6 +1335,18 @@ const ApiRoomsRoomIdMessagesRoute = ApiRoomsRoomIdMessagesRouteImport.update({
   path: '/messages',
   getParentRoute: () => ApiRoomsRoomIdRoute,
 } as any)
+const ApiPendingTurnsTurnIdDismissRoute =
+  ApiPendingTurnsTurnIdDismissRouteImport.update({
+    id: '/$turnId/dismiss',
+    path: '/$turnId/dismiss',
+    getParentRoute: () => ApiPendingTurnsRoute,
+  } as any)
+const ApiPendingTurnsTurnIdAnswerRoute =
+  ApiPendingTurnsTurnIdAnswerRouteImport.update({
+    id: '/$turnId/answer',
+    path: '/$turnId/answer',
+    getParentRoute: () => ApiPendingTurnsRoute,
+  } as any)
 const ApiMcpHubSourcesIdRoute = ApiMcpHubSourcesIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -1567,6 +1593,7 @@ export interface FileRoutesByFullPath {
   '/api/orchestrator-resume': typeof ApiOrchestratorResumeRoute
   '/api/orchestrator-state': typeof ApiOrchestratorStateRoute
   '/api/paths': typeof ApiPathsRoute
+  '/api/pending-turns': typeof ApiPendingTurnsRouteWithChildren
   '/api/ping': typeof ApiPingRoute
   '/api/pipelines': typeof ApiPipelinesRoute
   '/api/plugins': typeof ApiPluginsRoute
@@ -1675,6 +1702,7 @@ export interface FileRoutesByFullPath {
   '/api/runs/detach': typeof ApiRunsDetachRoute
   '/api/sessions/search': typeof ApiSessionsSearchRoute
   '/api/sessions/send': typeof ApiSessionsSendRoute
+  '/api/skills/content': typeof ApiSkillsContentRoute
   '/api/skills/hub-search': typeof ApiSkillsHubSearchRoute
   '/api/skills/install': typeof ApiSkillsInstallRoute
   '/api/skills/toggle': typeof ApiSkillsToggleRoute
@@ -1711,6 +1739,8 @@ export interface FileRoutesByFullPath {
   '/api/agents/codex-impl/models': typeof ApiAgentsCodexImplModelsRoute
   '/api/mcp/$name/logs': typeof ApiMcpNameLogsRoute
   '/api/mcp/hub-sources/$id': typeof ApiMcpHubSourcesIdRoute
+  '/api/pending-turns/$turnId/answer': typeof ApiPendingTurnsTurnIdAnswerRoute
+  '/api/pending-turns/$turnId/dismiss': typeof ApiPendingTurnsTurnIdDismissRoute
   '/api/rooms/$roomId/messages': typeof ApiRoomsRoomIdMessagesRouteWithChildren
   '/api/rooms/$roomId/participants': typeof ApiRoomsRoomIdParticipantsRouteWithChildren
   '/api/rooms/$roomId/pending-turns': typeof ApiRoomsRoomIdPendingTurnsRouteWithChildren
@@ -1808,6 +1838,7 @@ export interface FileRoutesByTo {
   '/api/orchestrator-resume': typeof ApiOrchestratorResumeRoute
   '/api/orchestrator-state': typeof ApiOrchestratorStateRoute
   '/api/paths': typeof ApiPathsRoute
+  '/api/pending-turns': typeof ApiPendingTurnsRouteWithChildren
   '/api/ping': typeof ApiPingRoute
   '/api/pipelines': typeof ApiPipelinesRoute
   '/api/plugins': typeof ApiPluginsRoute
@@ -1916,6 +1947,7 @@ export interface FileRoutesByTo {
   '/api/runs/detach': typeof ApiRunsDetachRoute
   '/api/sessions/search': typeof ApiSessionsSearchRoute
   '/api/sessions/send': typeof ApiSessionsSendRoute
+  '/api/skills/content': typeof ApiSkillsContentRoute
   '/api/skills/hub-search': typeof ApiSkillsHubSearchRoute
   '/api/skills/install': typeof ApiSkillsInstallRoute
   '/api/skills/toggle': typeof ApiSkillsToggleRoute
@@ -1952,6 +1984,8 @@ export interface FileRoutesByTo {
   '/api/agents/codex-impl/models': typeof ApiAgentsCodexImplModelsRoute
   '/api/mcp/$name/logs': typeof ApiMcpNameLogsRoute
   '/api/mcp/hub-sources/$id': typeof ApiMcpHubSourcesIdRoute
+  '/api/pending-turns/$turnId/answer': typeof ApiPendingTurnsTurnIdAnswerRoute
+  '/api/pending-turns/$turnId/dismiss': typeof ApiPendingTurnsTurnIdDismissRoute
   '/api/rooms/$roomId/messages': typeof ApiRoomsRoomIdMessagesRouteWithChildren
   '/api/rooms/$roomId/participants': typeof ApiRoomsRoomIdParticipantsRouteWithChildren
   '/api/rooms/$roomId/pending-turns': typeof ApiRoomsRoomIdPendingTurnsRouteWithChildren
@@ -2052,6 +2086,7 @@ export interface FileRoutesById {
   '/api/orchestrator-resume': typeof ApiOrchestratorResumeRoute
   '/api/orchestrator-state': typeof ApiOrchestratorStateRoute
   '/api/paths': typeof ApiPathsRoute
+  '/api/pending-turns': typeof ApiPendingTurnsRouteWithChildren
   '/api/ping': typeof ApiPingRoute
   '/api/pipelines': typeof ApiPipelinesRoute
   '/api/plugins': typeof ApiPluginsRoute
@@ -2160,6 +2195,7 @@ export interface FileRoutesById {
   '/api/runs/detach': typeof ApiRunsDetachRoute
   '/api/sessions/search': typeof ApiSessionsSearchRoute
   '/api/sessions/send': typeof ApiSessionsSendRoute
+  '/api/skills/content': typeof ApiSkillsContentRoute
   '/api/skills/hub-search': typeof ApiSkillsHubSearchRoute
   '/api/skills/install': typeof ApiSkillsInstallRoute
   '/api/skills/toggle': typeof ApiSkillsToggleRoute
@@ -2196,6 +2232,8 @@ export interface FileRoutesById {
   '/api/agents/codex-impl/models': typeof ApiAgentsCodexImplModelsRoute
   '/api/mcp/$name/logs': typeof ApiMcpNameLogsRoute
   '/api/mcp/hub-sources/$id': typeof ApiMcpHubSourcesIdRoute
+  '/api/pending-turns/$turnId/answer': typeof ApiPendingTurnsTurnIdAnswerRoute
+  '/api/pending-turns/$turnId/dismiss': typeof ApiPendingTurnsTurnIdDismissRoute
   '/api/rooms/$roomId/messages': typeof ApiRoomsRoomIdMessagesRouteWithChildren
   '/api/rooms/$roomId/participants': typeof ApiRoomsRoomIdParticipantsRouteWithChildren
   '/api/rooms/$roomId/pending-turns': typeof ApiRoomsRoomIdPendingTurnsRouteWithChildren
@@ -2297,6 +2335,7 @@ export interface FileRouteTypes {
     | '/api/orchestrator-resume'
     | '/api/orchestrator-state'
     | '/api/paths'
+    | '/api/pending-turns'
     | '/api/ping'
     | '/api/pipelines'
     | '/api/plugins'
@@ -2405,6 +2444,7 @@ export interface FileRouteTypes {
     | '/api/runs/detach'
     | '/api/sessions/search'
     | '/api/sessions/send'
+    | '/api/skills/content'
     | '/api/skills/hub-search'
     | '/api/skills/install'
     | '/api/skills/toggle'
@@ -2441,6 +2481,8 @@ export interface FileRouteTypes {
     | '/api/agents/codex-impl/models'
     | '/api/mcp/$name/logs'
     | '/api/mcp/hub-sources/$id'
+    | '/api/pending-turns/$turnId/answer'
+    | '/api/pending-turns/$turnId/dismiss'
     | '/api/rooms/$roomId/messages'
     | '/api/rooms/$roomId/participants'
     | '/api/rooms/$roomId/pending-turns'
@@ -2538,6 +2580,7 @@ export interface FileRouteTypes {
     | '/api/orchestrator-resume'
     | '/api/orchestrator-state'
     | '/api/paths'
+    | '/api/pending-turns'
     | '/api/ping'
     | '/api/pipelines'
     | '/api/plugins'
@@ -2646,6 +2689,7 @@ export interface FileRouteTypes {
     | '/api/runs/detach'
     | '/api/sessions/search'
     | '/api/sessions/send'
+    | '/api/skills/content'
     | '/api/skills/hub-search'
     | '/api/skills/install'
     | '/api/skills/toggle'
@@ -2682,6 +2726,8 @@ export interface FileRouteTypes {
     | '/api/agents/codex-impl/models'
     | '/api/mcp/$name/logs'
     | '/api/mcp/hub-sources/$id'
+    | '/api/pending-turns/$turnId/answer'
+    | '/api/pending-turns/$turnId/dismiss'
     | '/api/rooms/$roomId/messages'
     | '/api/rooms/$roomId/participants'
     | '/api/rooms/$roomId/pending-turns'
@@ -2781,6 +2827,7 @@ export interface FileRouteTypes {
     | '/api/orchestrator-resume'
     | '/api/orchestrator-state'
     | '/api/paths'
+    | '/api/pending-turns'
     | '/api/ping'
     | '/api/pipelines'
     | '/api/plugins'
@@ -2889,6 +2936,7 @@ export interface FileRouteTypes {
     | '/api/runs/detach'
     | '/api/sessions/search'
     | '/api/sessions/send'
+    | '/api/skills/content'
     | '/api/skills/hub-search'
     | '/api/skills/install'
     | '/api/skills/toggle'
@@ -2925,6 +2973,8 @@ export interface FileRouteTypes {
     | '/api/agents/codex-impl/models'
     | '/api/mcp/$name/logs'
     | '/api/mcp/hub-sources/$id'
+    | '/api/pending-turns/$turnId/answer'
+    | '/api/pending-turns/$turnId/dismiss'
     | '/api/rooms/$roomId/messages'
     | '/api/rooms/$roomId/participants'
     | '/api/rooms/$roomId/pending-turns'
@@ -3025,6 +3075,7 @@ export interface RootRouteChildren {
   ApiOrchestratorResumeRoute: typeof ApiOrchestratorResumeRoute
   ApiOrchestratorStateRoute: typeof ApiOrchestratorStateRoute
   ApiPathsRoute: typeof ApiPathsRoute
+  ApiPendingTurnsRoute: typeof ApiPendingTurnsRouteWithChildren
   ApiPingRoute: typeof ApiPingRoute
   ApiPipelinesRoute: typeof ApiPipelinesRoute
   ApiPluginsRoute: typeof ApiPluginsRoute
@@ -3667,6 +3718,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/pending-turns': {
+      id: '/api/pending-turns'
+      path: '/api/pending-turns'
+      fullPath: '/api/pending-turns'
+      preLoaderRoute: typeof ApiPendingTurnsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/paths': {
       id: '/api/paths'
       path: '/api/paths'
@@ -4164,6 +4222,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSkillsHubSearchRouteImport
       parentRoute: typeof ApiSkillsRoute
     }
+    '/api/skills/content': {
+      id: '/api/skills/content'
+      path: '/content'
+      fullPath: '/api/skills/content'
+      preLoaderRoute: typeof ApiSkillsContentRouteImport
+      parentRoute: typeof ApiSkillsRoute
+    }
     '/api/sessions/send': {
       id: '/api/sessions/send'
       path: '/send'
@@ -4626,6 +4691,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiRoomsRoomIdMessagesRouteImport
       parentRoute: typeof ApiRoomsRoomIdRoute
     }
+    '/api/pending-turns/$turnId/dismiss': {
+      id: '/api/pending-turns/$turnId/dismiss'
+      path: '/$turnId/dismiss'
+      fullPath: '/api/pending-turns/$turnId/dismiss'
+      preLoaderRoute: typeof ApiPendingTurnsTurnIdDismissRouteImport
+      parentRoute: typeof ApiPendingTurnsRoute
+    }
+    '/api/pending-turns/$turnId/answer': {
+      id: '/api/pending-turns/$turnId/answer'
+      path: '/$turnId/answer'
+      fullPath: '/api/pending-turns/$turnId/answer'
+      preLoaderRoute: typeof ApiPendingTurnsTurnIdAnswerRouteImport
+      parentRoute: typeof ApiPendingTurnsRoute
+    }
     '/api/mcp/hub-sources/$id': {
       id: '/api/mcp/hub-sources/$id'
       path: '/$id'
@@ -4982,6 +5061,20 @@ const ApiMemoryRouteWithChildren = ApiMemoryRoute._addFileChildren(
   ApiMemoryRouteChildren,
 )
 
+interface ApiPendingTurnsRouteChildren {
+  ApiPendingTurnsTurnIdAnswerRoute: typeof ApiPendingTurnsTurnIdAnswerRoute
+  ApiPendingTurnsTurnIdDismissRoute: typeof ApiPendingTurnsTurnIdDismissRoute
+}
+
+const ApiPendingTurnsRouteChildren: ApiPendingTurnsRouteChildren = {
+  ApiPendingTurnsTurnIdAnswerRoute: ApiPendingTurnsTurnIdAnswerRoute,
+  ApiPendingTurnsTurnIdDismissRoute: ApiPendingTurnsTurnIdDismissRoute,
+}
+
+const ApiPendingTurnsRouteWithChildren = ApiPendingTurnsRoute._addFileChildren(
+  ApiPendingTurnsRouteChildren,
+)
+
 interface ApiRoomsRoomIdMessagesRouteChildren {
   ApiRoomsRoomIdMessagesMessageIdInteractionResponseRoute: typeof ApiRoomsRoomIdMessagesMessageIdInteractionResponseRoute
 }
@@ -5083,6 +5176,7 @@ const ApiSessionsRouteWithChildren = ApiSessionsRoute._addFileChildren(
 )
 
 interface ApiSkillsRouteChildren {
+  ApiSkillsContentRoute: typeof ApiSkillsContentRoute
   ApiSkillsHubSearchRoute: typeof ApiSkillsHubSearchRoute
   ApiSkillsInstallRoute: typeof ApiSkillsInstallRoute
   ApiSkillsToggleRoute: typeof ApiSkillsToggleRoute
@@ -5090,6 +5184,7 @@ interface ApiSkillsRouteChildren {
 }
 
 const ApiSkillsRouteChildren: ApiSkillsRouteChildren = {
+  ApiSkillsContentRoute: ApiSkillsContentRoute,
   ApiSkillsHubSearchRoute: ApiSkillsHubSearchRoute,
   ApiSkillsInstallRoute: ApiSkillsInstallRoute,
   ApiSkillsToggleRoute: ApiSkillsToggleRoute,
@@ -5271,6 +5366,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiOrchestratorResumeRoute: ApiOrchestratorResumeRoute,
   ApiOrchestratorStateRoute: ApiOrchestratorStateRoute,
   ApiPathsRoute: ApiPathsRoute,
+  ApiPendingTurnsRoute: ApiPendingTurnsRouteWithChildren,
   ApiPingRoute: ApiPingRoute,
   ApiPipelinesRoute: ApiPipelinesRoute,
   ApiPluginsRoute: ApiPluginsRoute,

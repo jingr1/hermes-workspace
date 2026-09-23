@@ -23,6 +23,7 @@ import { createCollabId, getCollabDbPath, insertCollabRow } from '../collab-db'
 import { openSqliteDatabase } from '../sqlite-helper'
 import { completeTaskRun } from '../mcp/task-runs'
 import { revokeRunTokensForRun } from '../mcp/run-tokens'
+import { publishChatEvent } from '../chat-event-bus'
 import {
   isProcessGroupAlive,
   killProcessGroup,
@@ -90,10 +91,11 @@ function openPendingTurn(input: {
   reason: string
   dbPath: string
 }): void {
+  const id = createCollabId('pt')
   insertCollabRow(
     'pending_turns',
     {
-      id: createCollabId('pt'),
+      id,
       room_id: input.roomId,
       task_id: input.taskId,
       assignment_id: input.assignmentId,
@@ -106,6 +108,16 @@ function openPendingTurn(input: {
     },
     input.dbPath,
   )
+  publishChatEvent('group_chat_human_attention', {
+    scope: 'global',
+    roomId: input.roomId,
+    pendingTurnId: id,
+    kind: input.kind,
+    reason: input.reason,
+    assignmentId: input.assignmentId,
+    taskId: input.taskId,
+    missionId: input.taskId,
+  })
 }
 
 export function reconcileOnBoot(input?: { dbPath?: string }): ReconcileReport {

@@ -137,6 +137,8 @@ export function instantiatePipeline(input: {
   })
   const mission = createOrUpdateMission({
     title: input.title,
+    spec: input.spec,
+    acceptanceCriteria: input.acceptanceCriteria,
     projectId: input.projectId ?? null,
     workspaceMode: input.template.workspaceMode,
     executionMode: 'pipeline',
@@ -260,6 +262,8 @@ export async function createMission(
       roomId = room.id
       mission = createOrUpdateMission({
         title: input.title,
+        spec: input.spec,
+        acceptanceCriteria: input.acceptanceCriteria ?? [],
         projectId: input.projectId ?? null,
         workspaceMode: 'canonical',
         executionMode: 'assignee',
@@ -285,6 +289,8 @@ export async function createMission(
       ].join('\n')
       mission = createOrUpdateMission({
         title: input.title,
+        spec: input.spec,
+        acceptanceCriteria: input.acceptanceCriteria ?? [],
         projectId: input.projectId ?? null,
         workspaceMode: 'canonical',
         executionMode: 'assignee',

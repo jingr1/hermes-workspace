@@ -83,6 +83,10 @@ export type SwarmMission = {
   updatedAt: number
   assignments: Array<SwarmMissionAssignment>
   events: Array<SwarmMissionEvent>
+  /** User-authored mission description (may include workspace path refs). */
+  spec?: string
+  /** Acceptance criteria lines persisted for edit / redisplay. */
+  acceptanceCriteria?: Array<string>
   /** Bumped on every spec edit; stale brief detection compares against this. */
   specVersion?: number
   /** Pipeline template this mission was instantiated from (P2a). */
@@ -356,6 +360,8 @@ export function assertAcyclicDependencies(
 export function createOrUpdateMission(input: {
   missionId?: string | null
   title: string
+  spec?: string
+  acceptanceCriteria?: Array<string>
   projectId?: string | null
   workspaceMode?: string | null
   executionMode?: MissionExecutionMode | null
@@ -394,6 +400,9 @@ export function createOrUpdateMission(input: {
       events: [
         event('created', `Mission created: ${input.title || missionId}`),
       ],
+      spec: input.spec ?? '',
+      acceptanceCriteria: input.acceptanceCriteria ?? [],
+      specVersion: 1,
       projectId: input.projectId ?? null,
       workspaceMode: input.workspaceMode ?? null,
       executionMode: input.executionMode ?? null,
@@ -408,6 +417,10 @@ export function createOrUpdateMission(input: {
   }
 
   mission.title = input.title || mission.title
+  if (input.spec !== undefined) mission.spec = input.spec
+  if (input.acceptanceCriteria !== undefined) {
+    mission.acceptanceCriteria = input.acceptanceCriteria
+  }
   if (input.projectId !== undefined) mission.projectId = input.projectId
   if (input.workspaceMode !== undefined)
     mission.workspaceMode = input.workspaceMode
@@ -418,6 +431,7 @@ export function createOrUpdateMission(input: {
   if (input.pipelineId !== undefined) mission.pipelineId = input.pipelineId
   if (input.priority !== undefined) mission.priority = input.priority
   if (input.labels !== undefined) mission.labels = input.labels
+  if (createdMission && mission.specVersion == null) mission.specVersion = 1
   for (const assignment of input.assignments) {
     // One active assignment per worker per mission. Skip if the worker already
     // has a non-terminal assignment, regardless of task text differences.
@@ -944,6 +958,8 @@ export function updateMissionRoomId(input: {
 export function patchMissionFields(input: {
   missionId: string
   title?: string
+  spec?: string
+  acceptanceCriteria?: Array<string>
   executionMode?: MissionExecutionMode | null
   assignee?: MissionAssignee | null
   roomId?: string | null
@@ -959,6 +975,25 @@ export function patchMissionFields(input: {
   if (input.title !== undefined) {
     const trimmed = input.title.trim()
     if (trimmed) mission.title = trimmed
+  }
+  let bumpSpecVersion = false
+  if (input.spec !== undefined) {
+    const next = String(input.spec)
+    if (next !== (mission.spec ?? '')) {
+      mission.spec = next
+      bumpSpecVersion = true
+    }
+  }
+  if (input.acceptanceCriteria !== undefined) {
+    const next = input.acceptanceCriteria.map((c) => String(c))
+    const prev = mission.acceptanceCriteria ?? []
+    if (next.join('\0') !== prev.join('\0')) {
+      mission.acceptanceCriteria = next
+      bumpSpecVersion = true
+    }
+  }
+  if (bumpSpecVersion) {
+    mission.specVersion = (mission.specVersion ?? 0) + 1
   }
   if (input.executionMode !== undefined)
     mission.executionMode = input.executionMode

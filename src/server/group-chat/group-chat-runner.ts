@@ -50,6 +50,7 @@ import {
   groupMemberKey,
   parseMentions,
 } from './mention-routing'
+import { openAttentionForRoom } from './pending-turn-service'
 import {
   isGroupPassText,
   isGroupTranscriptBusy,
@@ -506,6 +507,11 @@ async function runGroupChatRounds(
             ),
             runId: turnResult.runId ?? null,
           })
+          maybeOpenHumanAttentionFromMessage(
+            room.id,
+            newMessage,
+            member.participantId,
+          )
           posted += 1
           spokeThisRound += 1
           setWatermark(room.id, member.participantId, roomLog.length + 1)
@@ -625,6 +631,11 @@ async function runGroupChatRounds(
             ),
             runId: turnResult.runId ?? null,
           })
+          maybeOpenHumanAttentionFromMessage(
+            room.id,
+            newMessage,
+            member.participantId,
+          )
           posted += 1
           setWatermark(room.id, member.participantId, roomLog2.length + 1)
           publishChatEvent('group_chat_reply', {
@@ -798,6 +809,11 @@ async function harvestStrandedReply(
       participants,
     ),
   })
+  maybeOpenHumanAttentionFromMessage(
+    room.id,
+    newMessage,
+    member.participantId,
+  )
   setWatermark(room.id, member.participantId, roomLog.length + 1)
   publishChatEvent('group_chat_reply', {
     roomId: room.id,
@@ -852,6 +868,29 @@ function isDuplicateAppend(
   if (lastEntry.senderName !== member.displayName) return false
   if (lastEntry.content !== text) return false
   return Date.now() - lastEntry.createdAt < GROUP_DUPLICATE_APPEND_WINDOW_MS
+}
+
+/** When an agent @mentions a human, open a pending turn (P5). */
+function maybeOpenHumanAttentionFromMessage(
+  roomId: string,
+  message: RoomMessage,
+  requestedBy: string,
+): void {
+  if (message.autoHandoff) return
+  const humanTargets = message.mentions.filter((m) => m.type === 'human')
+  if (humanTargets.length === 0) return
+  void openAttentionForRoom({
+    roomId,
+    requestedBy,
+    kind: 'needs_input',
+    reason: message.content.slice(0, 500),
+    messageId: message.id,
+  }).catch((error) => {
+    console.warn(
+      '[group-chat-runner] openAttentionForRoom failed',
+      error instanceof Error ? error.message : String(error),
+    )
+  })
 }
 
 function finishDrive(

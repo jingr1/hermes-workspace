@@ -248,6 +248,38 @@ describe('responder-utils', () => {
       ]
       expect(unaddressedGroupMentions(messages, members)).toEqual([])
     })
+
+    it('ignores autoHandoff citations', () => {
+      const messages: Array<RoomMessage> = [
+        {
+          ...makeMsg('human', 'human', '@b go', [
+            { type: 'agent', participantId: 'b' },
+          ]),
+          senderKind: 'system',
+          autoHandoff: true,
+        },
+      ]
+      expect(unaddressedGroupMentions(messages, members)).toEqual([])
+    })
+  })
+
+  describe('resolveGroupResponders autoHandoff', () => {
+    it('skips autoHandoff @ so mentioned set stays empty', () => {
+      const messages: Array<RoomMessage> = [
+        makeMsg('human', 'human', 'hi'),
+        {
+          ...makeMsg('agent', 'a', '@b take over', [
+            { type: 'agent', participantId: 'b' },
+          ]),
+          senderKind: 'system',
+          autoHandoff: true,
+        },
+      ]
+      const responders = resolveGroupResponders(messages, members)
+      expect(responders.map((m) => m.participantId).sort()).toEqual(
+        ['a', 'b', 'h'].sort(),
+      )
+    })
   })
 })
 

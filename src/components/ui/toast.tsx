@@ -15,6 +15,7 @@ interface ToastItem {
   type: ToastType
   duration: number
   icon?: string
+  position: 'top-right' | 'bottom-right'
 }
 
 let toastId = 0
@@ -22,7 +23,12 @@ const listeners: Set<(t: ToastItem) => void> = new Set()
 
 export function toast(
   message: string,
-  opts?: { type?: ToastType; duration?: number; icon?: string },
+  opts?: {
+    type?: ToastType
+    duration?: number
+    icon?: string
+    position?: 'top-right' | 'bottom-right'
+  },
 ) {
   const item: ToastItem = {
     id: ++toastId,
@@ -30,6 +36,7 @@ export function toast(
     type: opts?.type ?? 'info',
     duration: opts?.duration ?? 5000,
     icon: opts?.icon,
+    position: opts?.position ?? 'top-right',
   }
   listeners.forEach((fn) => fn(item))
 }
@@ -75,30 +82,49 @@ export function Toaster() {
 
   if (!toasts.length) return null
 
-  return createPortal(
-    <div className="pointer-events-none fixed left-2 right-2 z-[9999] flex flex-col gap-2 top-[calc(var(--titlebar-h,0px)+1rem)] sm:left-auto sm:right-4 sm:w-auto">
-      {toasts.map((t) => (
-        <div
-          key={t.id}
-          className={cn(
-            'pointer-events-auto flex w-full max-w-[calc(100vw-1rem)] items-start gap-2.5 rounded-xl px-4 py-3 text-sm font-medium shadow-lg backdrop-blur-sm animate-in slide-in-from-right-5 fade-in duration-200 sm:w-auto',
-            typeStyles[t.type],
-          )}
-        >
-          <span className="text-base">{t.icon ?? defaultIcons[t.type]}</span>
-          <span className="min-w-0 break-words">{t.message}</span>
-          <button
-            type="button"
-            onClick={() =>
-              setToasts((prev) => prev.filter((x) => x.id !== t.id))
-            }
-            className="ml-2 shrink-0 rounded-full p-0.5 opacity-70 transition-opacity hover:opacity-100"
+  const top = toasts.filter((t) => t.position !== 'bottom-right')
+  const bottom = toasts.filter((t) => t.position === 'bottom-right')
+
+  const renderStack = (
+    items: Array<ToastItem>,
+    positionClass: string,
+  ) =>
+    items.length > 0 ? (
+      <div
+        className={cn(
+          'pointer-events-none fixed left-2 right-2 z-[9999] flex flex-col gap-2 sm:left-auto sm:right-4 sm:w-auto',
+          positionClass,
+        )}
+      >
+        {items.map((t) => (
+          <div
+            key={t.id}
+            className={cn(
+              'pointer-events-auto flex w-full max-w-[calc(100vw-1rem)] items-start gap-2.5 rounded-xl px-4 py-3 text-sm font-medium shadow-lg backdrop-blur-sm animate-in slide-in-from-right-5 fade-in duration-200 sm:w-auto',
+              typeStyles[t.type],
+            )}
           >
-            ✕
-          </button>
-        </div>
-      ))}
-    </div>,
+            <span className="text-base">{t.icon ?? defaultIcons[t.type]}</span>
+            <span className="min-w-0 break-words">{t.message}</span>
+            <button
+              type="button"
+              onClick={() =>
+                setToasts((prev) => prev.filter((x) => x.id !== t.id))
+              }
+              className="ml-2 shrink-0 rounded-full p-0.5 opacity-70 transition-opacity hover:opacity-100"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
+    ) : null
+
+  return createPortal(
+    <>
+      {renderStack(top, 'top-[calc(var(--titlebar-h,0px)+1rem)]')}
+      {renderStack(bottom, 'bottom-4')}
+    </>,
     document.body,
   )
 }

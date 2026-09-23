@@ -32,6 +32,7 @@
 ### Mission
 
 - Goal container with `executionMode: pipeline | assignee`
+- Persists user **spec** + **acceptanceCriteria** (editable after create)
 - **pipeline**: instantiate stages → Tasks; **auto-dispatch**; do **not** auto-create a room
 - **assignee + agent**: single Task, auto-dispatch
 - **assignee + chat_group**: bind existing room; no auto-decompose
@@ -85,4 +86,7 @@ Skills keep `SKILL.md` YAML front matter; optional `metadata.hermes.pipeline_sta
 - Task Summary is a short line with expand-to-full brief
 - Properties: editable priority / labels / project / assignee (assignee mode);
   status / pipeline / room remain informational（status 为单一生命周期字段）
+- Detail 主栏可编辑 **title / spec / acceptanceCriteria**（PATCH；变更 bump `specVersion`，既有 briefs 标 stale，不自动重生成）
+- Spec 支持引用 workspace 文件路径：`Attach path…` 或拖入 `application/x-hermes-workspace-file`，插入为 `` `path` `` 纯文本
 - Create Mission can optionally set `projectId`
+- Delete：detail 头栏 Confirm → `DELETE /api/missions/:id`

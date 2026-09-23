@@ -68,7 +68,14 @@ export function GroupChatLayout() {
 
   async function loadRooms() {
     const res = await listRooms()
-    setRooms(res.rooms)
+    // needs_human rooms float to the top for attention.
+    const sorted = [...res.rooms].sort((a, b) => {
+      const aNeed = a.state === 'needs_human' ? 0 : 1
+      const bNeed = b.state === 'needs_human' ? 0 : 1
+      if (aNeed !== bNeed) return aNeed - bNeed
+      return (b.updatedAt ?? 0) - (a.updatedAt ?? 0)
+    })
+    setRooms(sorted)
   }
 
   async function handleCreateRoom() {
@@ -213,7 +220,16 @@ export function GroupChatLayout() {
                 }
                 className="flex-1 min-w-0 text-left"
               >
-                <div className="font-medium truncate">{room.title}</div>
+                <div className="font-medium truncate flex items-center gap-1.5">
+                  {room.state === 'needs_human' ? (
+                    <span
+                      className="inline-block h-2 w-2 shrink-0 rounded-full bg-red-500"
+                      title="Needs human"
+                      aria-label="Needs human"
+                    />
+                  ) : null}
+                  <span className="truncate">{room.title}</span>
+                </div>
                 <div className="flex items-center gap-2 text-xs opacity-70">
                   <span>{room.state}</span>
                   {room.missionId ? <span>mission</span> : null}

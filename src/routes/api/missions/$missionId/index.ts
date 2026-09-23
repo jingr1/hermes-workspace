@@ -68,8 +68,8 @@ export const Route = createFileRoute('/api/missions/$missionId/')({
           task: {
             id: mission.id,
             title: mission.title,
-            spec: '',
-            acceptanceCriteria: [],
+            spec: mission.spec ?? '',
+            acceptanceCriteria: mission.acceptanceCriteria ?? [],
             status: summary.lane,
             missionId: mission.id,
           },
@@ -146,6 +146,8 @@ export const Route = createFileRoute('/api/missions/$missionId/')({
 
         let body: {
           title?: string
+          spec?: string
+          acceptanceCriteria?: Array<string>
           assignee?: MissionAssignee | null
           roomId?: string | null
           projectId?: string | null
@@ -192,6 +194,16 @@ export const Route = createFileRoute('/api/missions/$missionId/')({
           )
         }
 
+        if (
+          body.acceptanceCriteria !== undefined &&
+          !Array.isArray(body.acceptanceCriteria)
+        ) {
+          return json(
+            { error: 'acceptanceCriteria must be an array of strings' },
+            { status: 400 },
+          )
+        }
+
         const statusPin =
           body.status !== undefined
             ? body.status
@@ -208,6 +220,8 @@ export const Route = createFileRoute('/api/missions/$missionId/')({
         const patched = patchMissionFields({
           missionId: mission.id,
           title: body.title,
+          spec: body.spec,
+          acceptanceCriteria: body.acceptanceCriteria,
           assignee: body.assignee,
           roomId: body.roomId,
           projectId: body.projectId,
@@ -222,6 +236,14 @@ export const Route = createFileRoute('/api/missions/$missionId/')({
         return json({
           ok: true,
           mission: buildMissionSummary({ mission: patched }),
+          task: {
+            id: patched.id,
+            title: patched.title,
+            spec: patched.spec ?? '',
+            acceptanceCriteria: patched.acceptanceCriteria ?? [],
+            status: buildMissionSummary({ mission: patched }).lane,
+            missionId: patched.id,
+          },
         })
       },
 

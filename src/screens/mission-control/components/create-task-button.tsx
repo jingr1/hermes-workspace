@@ -8,6 +8,7 @@ import { PlusSignIcon } from '@hugeicons/core-free-icons'
 import { cn } from '@/lib/utils'
 import { toast } from '@/components/ui/toast'
 import { fetchAgentsStatus, fetchProjects } from '@/lib/mission-control-api'
+import { SpecField } from './spec-field'
 
 const PIPELINES_QUERY_KEY = ['mission-control', 'pipelines'] as const
 const ROOMS_QUERY_KEY = ['mission-control', 'rooms'] as const
@@ -210,11 +211,12 @@ export function CreateMissionButton({
               </label>
               <label className="block text-xs">
                 <span className="text-[var(--theme-muted)]">Spec</span>
-                <textarea
+                <SpecField
                   value={spec}
-                  onChange={(e) => setSpec(e.target.value)}
+                  onChange={setSpec}
                   rows={4}
-                  className="mt-1 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1.5 text-sm"
+                  className="mt-1"
+                  placeholder="Describe the mission. Attach workspace paths as needed."
                 />
               </label>
               <label className="block text-xs">

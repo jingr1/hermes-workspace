@@ -528,8 +528,7 @@ function handleTaskComplete(
   } else {
     status = blocker ? 'blocked' : 'done'
   }
-  // TODO(P1.4): needs_input should also open a pending_turns row so a human
-  // can answer from the room UI.
+  // needs_input / blocked open pending_turns via advance → openAttentionForMission.
 
   const completed = completeTaskRun({
     runId,

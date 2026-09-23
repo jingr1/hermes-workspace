@@ -31,6 +31,9 @@ export function resolveGroupResponders(
   let everyone = false
 
   for (const entry of sinceLastUser) {
+    // Platform auto-handoff messages must not drive @ responders — spawn
+    // stays with the task pipeline (advance → dispatchNext).
+    if (entry.autoHandoff) continue
     const parsed = parseMentions(entry.content, members)
     if (parsed.everyone) {
       everyone = true
@@ -165,6 +168,7 @@ export function unaddressedGroupMentions(
   for (let i = 0; i < messages.length; i++) {
     const entry = messages[i]!
     if (entry.senderKind === 'system') continue
+    if (entry.autoHandoff) continue
     const parsed = parseMentions(entry.content, members)
     if (parsed.everyone) {
       for (const member of members) {

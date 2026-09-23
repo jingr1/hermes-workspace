@@ -64,6 +64,11 @@ import { applyReviewVerdict } from '../task-pipeline/review'
 import { getPipelineTemplate } from '../task-pipeline/pipeline-templates'
 import { getProfileSshHost } from './agents-config'
 import type { RunTerminalEvent } from '../mcp/mcp-handler'
+import {
+  postPipelineComplete,
+  postStageHandoff,
+} from '../group-chat/auto-handoff'
+import { openAttentionForMission } from '../group-chat/pending-turn-service'
 
 export type AdvanceHooks = {
   /** Called with each newly-ready assignment after a terminal event. */
@@ -128,6 +133,21 @@ async function handleRunTerminal(
       reason: event.blocker ?? event.summary ?? event.status,
       source: 'mcp',
     })
+    try {
+      await openAttentionForMission({
+        missionId: event.missionId,
+        assignmentId: event.assignmentId,
+        requestedBy: event.agentId,
+        kind: event.status === 'needs_input' ? 'needs_input' : 'blocked',
+        reason: event.blocker ?? event.summary ?? event.status,
+        nextAction: event.nextAction,
+      })
+    } catch (error) {
+      console.warn(
+        '[advance] openAttentionForMission failed',
+        error instanceof Error ? error.message : String(error),
+      )
+    }
   } else if (event.status === 'done') {
     recordMissionCheckpoint({
       missionId: event.missionId,
@@ -221,6 +241,20 @@ async function handleRunTerminal(
           assignmentId: event.assignmentId,
           reason: reviewResult.reason,
         })
+        try {
+          await openAttentionForMission({
+            missionId: event.missionId,
+            assignmentId: event.assignmentId,
+            requestedBy: event.agentId,
+            kind: 'review',
+            reason: reviewResult.reason ?? 'Review gate needs human',
+          })
+        } catch (error) {
+          console.warn(
+            '[advance] openAttentionForMission (review) failed',
+            error instanceof Error ? error.message : String(error),
+          )
+        }
       }
     }
   }
@@ -240,6 +274,49 @@ async function handleRunTerminal(
   // Re-read the mission after checkpoint/baseRef/headSha updates so fan-in
   // merge sees persisted upstream heads, not the pre-write snapshot.
   const missionAfter = getSwarmMission(event.missionId) ?? mission
+
+  if (event.status === 'done' && ready.length > 0) {
+    try {
+      const assignment = missionAfter.assignments.find(
+        (a) => a.id === event.assignmentId,
+      )
+      await postStageHandoff({
+        missionId: event.missionId,
+        fromWorkerId: event.agentId,
+        nextAssignments: ready.map((a) => ({
+          id: a.id,
+          workerId: a.workerId,
+        })),
+        handoffSummary: {
+          result: event.summary ?? assignment?.checkpoint?.result ?? null,
+          nextAction:
+            event.nextAction ?? assignment?.checkpoint?.nextAction ?? null,
+          filesChanged:
+            filesChanged?.join(', ') ??
+            assignment?.checkpoint?.filesChanged ??
+            null,
+        },
+      })
+    } catch (error) {
+      console.warn(
+        '[advance] postStageHandoff failed',
+        error instanceof Error ? error.message : String(error),
+      )
+    }
+  } else if (event.status === 'done' && ready.length === 0) {
+    try {
+      await postPipelineComplete({
+        missionId: event.missionId,
+        summary: event.summary,
+      })
+    } catch (error) {
+      console.warn(
+        '[advance] postPipelineComplete failed',
+        error instanceof Error ? error.message : String(error),
+      )
+    }
+  }
+
   for (const next of ready) {
     // P2b: fan-in convergence. If the ready assignment has multiple upstream
     // dependencies, merge their head commits into the mission integration

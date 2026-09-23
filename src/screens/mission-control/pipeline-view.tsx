@@ -26,6 +26,7 @@ import {
 } from '@/lib/mission-detail-format'
 import { createRoomFromMission } from '@/lib/group-chat-api'
 import { toast } from '@/components/ui/toast'
+import { SpecField } from './components/spec-field'
 
 const MISSIONS_QUERY_KEY = ['mission-control', 'missions'] as const
 const PROJECTS_QUERY_KEY = ['mission-control', 'projects'] as const
@@ -239,6 +240,9 @@ export function PipelineView({
   const navigate = useNavigate()
   const [roomBusy, setRoomBusy] = useState(false)
   const [labelsDraft, setLabelsDraft] = useState('')
+  const [titleDraft, setTitleDraft] = useState('')
+  const [specDraft, setSpecDraft] = useState('')
+  const [criteriaDraft, setCriteriaDraft] = useState('')
 
   const missionsQuery = useQuery({
     queryKey: MISSIONS_QUERY_KEY,
@@ -297,6 +301,18 @@ export function PipelineView({
     setLabelsDraft(labelsKey)
   }, [missionView?.missionId, labelsKey])
 
+  const detailTitle = detail?.task?.title ?? missionView?.title ?? ''
+  const detailSpec = detail?.task?.spec ?? ''
+  const detailCriteria = (detail?.task?.acceptanceCriteria ?? []).join('\n')
+  useEffect(() => {
+    setTitleDraft(detailTitle)
+    setSpecDraft(detailSpec)
+    setCriteriaDraft(detailCriteria)
+  }, [missionView?.missionId, detailTitle, detailSpec, detailCriteria])
+
+  const specDirty =
+    specDraft !== detailSpec || criteriaDraft !== detailCriteria
+
   const invalidateMission = () => {
     void queryClient.invalidateQueries({
       queryKey: ['mission-control', 'mission', detailKey],
@@ -320,12 +336,30 @@ export function PipelineView({
       patchMission(detailKey!, patch),
     onSuccess: () => {
       invalidateMission()
-      toast('Mission updated', { type: 'success' })
     },
     onError: (error: Error) => {
       toast(error.message || 'Failed to update', { type: 'error' })
     },
   })
+
+  const saveDescription = () => {
+    if (!detailKey || !specDirty) return
+    const acceptanceCriteria = criteriaDraft
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+    patchMutation.mutate(
+      {
+        spec: specDraft,
+        acceptanceCriteria,
+      },
+      {
+        onSuccess: () => {
+          toast('Mission updated', { type: 'success' })
+        },
+      },
+    )
+  }
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteMission(detailKey!),
@@ -427,9 +461,23 @@ export function PipelineView({
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--theme-border)] px-4 py-3">
           <div className="min-w-0 flex-1">
-            <h2 className="break-words text-sm font-semibold">
-              {activeMission?.title ?? 'Mission'}
-            </h2>
+            <input
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={() => {
+                const next = titleDraft.trim()
+                if (!next || !detailKey || next === detailTitle.trim()) return
+                patchMutation.mutate({ title: next })
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  ;(e.target as HTMLInputElement).blur()
+                }
+              }}
+              disabled={!detailKey || patchMutation.isPending}
+              className="w-full break-words rounded-md border border-transparent bg-transparent px-1 py-0.5 text-sm font-semibold outline-none hover:border-[var(--theme-border)] focus:border-[var(--theme-border)] focus:bg-[var(--theme-bg)]"
+              aria-label="Mission title"
+            />
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
               {activeMission?.executionMode ? (
                 <span className="rounded bg-slate-500/10 px-1.5 py-0.5 text-[10px] font-medium capitalize text-slate-600">
@@ -515,6 +563,54 @@ export function PipelineView({
 
         <div className="flex min-h-0 flex-1 overflow-hidden">
           <div className="min-w-0 flex-1 overflow-y-auto p-4">
+            <section className="mb-6 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-card)] p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--theme-muted)]">
+                  Description
+                </h3>
+                <button
+                  type="button"
+                  disabled={
+                    !detailKey || !specDirty || patchMutation.isPending
+                  }
+                  onClick={saveDescription}
+                  className="rounded-md bg-[var(--theme-accent)] px-2.5 py-1 text-[10px] font-medium text-white disabled:opacity-40"
+                >
+                  {patchMutation.isPending ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+              <label className="block text-xs">
+                <span className="text-[var(--theme-muted)]">Spec</span>
+                <SpecField
+                  value={specDraft}
+                  onChange={setSpecDraft}
+                  rows={5}
+                  className="mt-1"
+                  disabled={!detailKey}
+                  placeholder="Mission description. Attach workspace paths as needed."
+                />
+              </label>
+              <label className="mt-3 block text-xs">
+                <span className="text-[var(--theme-muted)]">
+                  Acceptance criteria (one per line)
+                </span>
+                <textarea
+                  value={criteriaDraft}
+                  onChange={(e) => setCriteriaDraft(e.target.value)}
+                  rows={2}
+                  disabled={!detailKey}
+                  className="mt-1 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1.5 text-sm disabled:opacity-50"
+                />
+              </label>
+              {detail?.pipeline &&
+              detail.pipeline.specVersion > 1 &&
+              stages.some((s) => s.stale) ? (
+                <p className="mt-2 text-[10px] text-amber-700">
+                  Spec changed (v{detail.pipeline.specVersion}). Some stage
+                  briefs are stale until regenerated.
+                </p>
+              ) : null}
+            </section>
             {stages.length > 0 ? (
               <StageBar
                 stages={stages}

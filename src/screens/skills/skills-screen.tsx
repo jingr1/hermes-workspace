@@ -150,6 +150,28 @@ type HubSearchResponse = {
   error?: string
 }
 
+type SkillContentResponse = {
+  success?: boolean
+  name?: string
+  content?: string
+  path?: string
+  skill_dir?: string
+  linked_files?: Record<string, Array<string>>
+  error?: string
+}
+
+function stripYamlFrontmatter(content: string): {
+  frontmatter: string | null
+  body: string
+} {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(content)
+  if (!match) return { frontmatter: null, body: content }
+  return {
+    frontmatter: match[1] ?? null,
+    body: content.slice(match[0].length),
+  }
+}
+
 const PAGE_LIMIT = 30
 
 const DEFAULT_CATEGORIES = [
@@ -205,6 +227,10 @@ export function SkillsScreen() {
   const [selectedSkill, setSelectedSkill] = useState<SkillSummary | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [selectedProfile, setSelectedProfile] = useState<string>('')
+  const [detailLinkedFiles, setDetailLinkedFiles] = useState<
+    Record<string, Array<string>>
+  >({})
+  const [detailFilePath, setDetailFilePath] = useState<string | null>(null)
 
   const profilesQuery = useQuery({
     queryKey: ['skills-profiles-list'],
@@ -353,6 +379,63 @@ export function SkillsScreen() {
       return payload
     },
   })
+
+  // Lazy-load full SKILL.md like WebUI `/api/skills/content` — list payload
+  // is metadata-only so opening Details does not re-fetch the whole catalog.
+  const skillDetailQuery = useQuery({
+    queryKey: [
+      'skills-content',
+      selectedSkill?.id ?? '',
+      effectiveProfile,
+      detailFilePath ?? '',
+    ],
+    enabled: Boolean(selectedSkill?.installed && selectedSkill?.id),
+    queryFn: async function fetchSkillContent(): Promise<SkillContentResponse> {
+      const params = new URLSearchParams()
+      params.set('name', selectedSkill!.id)
+      if (effectiveProfile) params.set('profile', effectiveProfile)
+      if (detailFilePath) params.set('file', detailFilePath)
+
+      const response = await fetch(`/api/skills/content?${params.toString()}`)
+      const payload = (await response.json()) as SkillContentResponse
+      if (!response.ok || payload.success === false) {
+        throw new Error(payload.error || 'Failed to load skill content')
+      }
+      return payload
+    },
+  })
+
+  useEffect(() => {
+    setDetailFilePath(null)
+    setDetailLinkedFiles({})
+  }, [selectedSkill?.id])
+
+  useEffect(() => {
+    if (detailFilePath) return
+    const linked = skillDetailQuery.data?.linked_files
+    if (linked && typeof linked === 'object') {
+      setDetailLinkedFiles(linked)
+    }
+  }, [detailFilePath, skillDetailQuery.data?.linked_files])
+
+  const detailMarkdown = useMemo(() => {
+    if (!selectedSkill) return ''
+    const remote = skillDetailQuery.data?.content
+    if (typeof remote === 'string' && remote.trim()) return remote
+    if (selectedSkill.content?.trim()) return selectedSkill.content
+    return `# ${selectedSkill.name}\n\n${selectedSkill.description || 'No content available.'}`
+  }, [selectedSkill, skillDetailQuery.data?.content])
+
+  const { frontmatter, body: detailBody } = useMemo(
+    () => stripYamlFrontmatter(detailMarkdown),
+    [detailMarkdown],
+  )
+
+  const linkedFileEntries = useMemo(() => {
+    return Object.entries(detailLinkedFiles).filter(
+      ([, files]) => Array.isArray(files) && files.length > 0,
+    )
+  }, [detailLinkedFiles])
 
   const categories = useMemo(
     function resolveCategories() {
@@ -873,6 +956,8 @@ export function SkillsScreen() {
         onOpenChange={(open) => {
           if (!open) {
             setSelectedSkill(null)
+            setDetailFilePath(null)
+            setDetailLinkedFiles({})
           }
         }}
       >
@@ -884,8 +969,12 @@ export function SkillsScreen() {
                   {selectedSkill.icon} {selectedSkill.name}
                 </DialogTitle>
                 <DialogDescription className="mt-1 text-pretty">
-                  by {selectedSkill.author} • {selectedSkill.category} •{' '}
-                  {selectedSkill.fileCount.toLocaleString()} files
+                  by {selectedSkill.author || 'Unknown'} •{' '}
+                  {selectedSkill.category}
+                  {selectedSkill.fileCount > 0
+                    ? ` • ${selectedSkill.fileCount.toLocaleString()} files`
+                    : null}
+                  {detailFilePath ? ` • ${detailFilePath}` : null}
                 </DialogDescription>
                 {selectedSkill.security && (
                   <div className="mt-3 rounded-xl border border-primary-200 bg-primary-50/80 overflow-hidden">
@@ -924,19 +1013,102 @@ export function SkillsScreen() {
                             {trigger}
                           </span>
                         ))
+                      ) : selectedSkill.tags.length > 0 ? (
+                        selectedSkill.tags.slice(0, 8).map((tag) => (
+                          <span
+                            key={tag}
+                            className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5 text-xs text-primary-500"
+                          >
+                            {tag}
+                          </span>
+                        ))
                       ) : (
                         <span className="rounded-md border border-primary-200 bg-primary-100/50 px-2 py-0.5 text-xs text-primary-500">
-                          No triggers listed
+                          No tags listed
                         </span>
                       )}
                     </div>
 
-                    <article className="rounded-xl border border-primary-200 bg-primary-100/30 p-4 backdrop-blur-sm">
-                      <Markdown>
-                        {selectedSkill.content ||
-                          `# ${selectedSkill.name}\n\n${selectedSkill.description}`}
-                      </Markdown>
-                    </article>
+                    {detailFilePath ? (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setDetailFilePath(null)}
+                        >
+                          ← Back to SKILL.md
+                        </Button>
+                        <code className="inline-code text-xs">
+                          {detailFilePath}
+                        </code>
+                      </div>
+                    ) : null}
+
+                    {skillDetailQuery.isPending && selectedSkill.installed ? (
+                      <div className="space-y-2 rounded-xl border border-primary-200 bg-primary-100/30 p-4">
+                        {Array.from({ length: 5 }).map((_, index) => (
+                          <div
+                            key={index}
+                            className="h-4 animate-pulse rounded bg-primary-100"
+                          />
+                        ))}
+                      </div>
+                    ) : skillDetailQuery.isError && selectedSkill.installed ? (
+                      <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                        {skillDetailQuery.error instanceof Error
+                          ? skillDetailQuery.error.message
+                          : 'Failed to load skill content'}
+                      </div>
+                    ) : (
+                      <article className="space-y-3 rounded-xl border border-primary-200 bg-primary-100/30 p-4 backdrop-blur-sm">
+                        {!detailFilePath && frontmatter ? (
+                          <details className="rounded-lg border border-primary-200 bg-primary-50/80">
+                            <summary className="cursor-pointer px-3 py-2 text-xs font-medium uppercase tracking-wider text-primary-500">
+                              Metadata
+                            </summary>
+                            <pre className="overflow-x-auto border-t border-primary-200 px-3 py-2 text-xs text-primary-700">
+                              <code>{frontmatter}</code>
+                            </pre>
+                          </details>
+                        ) : null}
+                        <div className="prose prose-sm prose-primary max-w-none text-primary-800">
+                          <Markdown>
+                            {detailFilePath
+                              ? detailMarkdown || '(empty file)'
+                              : detailBody || '(no content)'}
+                          </Markdown>
+                        </div>
+                      </article>
+                    )}
+
+                    {!detailFilePath && linkedFileEntries.length > 0 ? (
+                      <div className="rounded-xl border border-primary-200 bg-primary-50/80 p-4">
+                        <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-primary-400">
+                          Linked files
+                        </p>
+                        <div className="space-y-3">
+                          {linkedFileEntries.map(([category, files]) => (
+                            <div key={category}>
+                              <h4 className="mb-1.5 text-xs font-medium capitalize text-primary-600">
+                                {category}
+                              </h4>
+                              <div className="flex flex-wrap gap-1.5">
+                                {files.map((file) => (
+                                  <button
+                                    key={file}
+                                    type="button"
+                                    onClick={() => setDetailFilePath(file)}
+                                    className="rounded-md border border-primary-200 bg-primary-100/60 px-2 py-1 text-xs text-primary-700 transition-colors hover:border-primary hover:text-ink"
+                                  >
+                                    {file}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </ScrollAreaViewport>
                 <ScrollAreaScrollbar>
@@ -968,7 +1140,7 @@ export function SkillsScreen() {
                   <p className="text-sm text-primary-500 text-pretty">
                     Source:{' '}
                     <code className="inline-code">
-                      {selectedSkill.sourcePath}
+                      {skillDetailQuery.data?.path || selectedSkill.sourcePath}
                     </code>
                   </p>
                 </div>

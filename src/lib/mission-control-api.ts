@@ -328,6 +328,8 @@ export async function startTask(taskId: string) {
 
 export type PatchMissionInput = {
   title?: string
+  spec?: string
+  acceptanceCriteria?: Array<string>
   assignee?: MissionAssignee | null
   roomId?: string | null
   projectId?: string | null

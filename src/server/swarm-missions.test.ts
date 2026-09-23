@@ -550,4 +550,37 @@ describe('swarm-missions', () => {
       mod.assertAcyclicDependencies([{ id: 'a', dependsOn: ['a'] }] as never),
     ).toThrow(/cycle detected/)
   })
+
+  it('persists and patches mission spec / acceptanceCriteria with specVersion bump', async () => {
+    const mod = await loadModule()
+    const mission = mod.createOrUpdateMission({
+      missionId: 'mission-spec-1',
+      title: 'Spec persist',
+      spec: 'See `src/app.ts`',
+      acceptanceCriteria: ['tests pass'],
+      assignments: [],
+    })
+    expect(mission.spec).toBe('See `src/app.ts`')
+    expect(mission.acceptanceCriteria).toEqual(['tests pass'])
+    expect(mission.specVersion).toBe(1)
+
+    const patched = mod.patchMissionFields({
+      missionId: mission.id,
+      spec: 'See `src/app.ts` and `README.md`',
+      acceptanceCriteria: ['tests pass', 'docs updated'],
+    })
+    expect(patched?.spec).toContain('README.md')
+    expect(patched?.acceptanceCriteria).toEqual([
+      'tests pass',
+      'docs updated',
+    ])
+    expect(patched?.specVersion).toBe(2)
+
+    const noop = mod.patchMissionFields({
+      missionId: mission.id,
+      spec: patched!.spec,
+      acceptanceCriteria: patched!.acceptanceCriteria,
+    })
+    expect(noop?.specVersion).toBe(2)
+  })
 })

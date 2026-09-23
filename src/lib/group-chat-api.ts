@@ -136,6 +136,33 @@ export function listPendingTurns(
   return apiFetch(`/api/rooms/${roomId}/pending-turns`)
 }
 
+export function listGlobalPendingTurns(
+  status: 'pending' | 'answered' | 'dismissed' | 'expired' = 'pending',
+): Promise<{
+  ok: boolean
+  pendingTurns: Array<PendingTurn & { missionId?: string | null }>
+}> {
+  return apiFetch(`/api/pending-turns?status=${status}`)
+}
+
+export function answerGlobalPendingTurn(
+  turnId: string,
+  req: AnswerPendingTurnRequest & { optionId?: string },
+): Promise<{ ok: boolean; turn: PendingTurn; message: RoomMessage }> {
+  return apiFetch(`/api/pending-turns/${turnId}/answer`, {
+    method: 'POST',
+    body: JSON.stringify(req),
+  })
+}
+
+export function dismissGlobalPendingTurn(
+  turnId: string,
+): Promise<{ ok: boolean; turn: PendingTurn }> {
+  return apiFetch(`/api/pending-turns/${turnId}/dismiss`, {
+    method: 'POST',
+  })
+}
+
 export function answerPendingTurn(
   roomId: string,
   turnId: string,
