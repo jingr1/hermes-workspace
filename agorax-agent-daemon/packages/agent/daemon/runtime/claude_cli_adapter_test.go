@@ -331,6 +331,37 @@ func TestClaudeCLIAdapterMissingInitFallsBackToTurnID(t *testing.T) {
 	}
 }
 
+func TestClaudeCLIAdapterAPIRetry429FailsFastAndKillsProcess(t *testing.T) {
+	t.Parallel()
+
+	// After the 429 frame the connection would otherwise block forever (Claude
+	// Code's internal retry loop). Fail-fast must kill and settle as failed.
+	conn := newClaudeFakeConnection(claudeStdoutFrames(
+		`{"type":"system","subtype":"init","session_id":"sess-429","model":"DeepSeek-V4-Flash"}`+"\n",
+		`{"type":"system","subtype":"api_retry","attempt":1,"max_retries":10,"retry_delay_ms":564,"error_status":429,"error":"rate_limit","session_id":"sess-429"}`+"\n",
+	)...)
+	transport := &claudeFakeTransport{conn: conn}
+	adapter := newClaudeTestAdapter(transport, nil)
+
+	events, err := adapter.Exec(context.Background(), claudeTestSession(), []PromptContentBlock{
+		{Type: "text", Text: "hi"},
+	}, "", "turn-429", nil, nil)
+	if err != nil {
+		t.Fatalf("Exec: %v", err)
+	}
+	if !conn.wasKilled() {
+		t.Fatal("expected Claude CLI process to be killed on 429 api_retry")
+	}
+	completed := eventsOfType(events, activityshared.EventRootProviderTurnCompleted)
+	if len(completed) != 1 || completed[0].Payload.TurnOutcome != string(activityshared.TurnOutcomeFailed) {
+		t.Fatalf("provider turn completed = %#v, want failed", completed)
+	}
+	message, _ := completed[0].Payload.Metadata["error"].(string)
+	if !strings.Contains(message, "429") || !strings.Contains(message, "rate_limit") {
+		t.Fatalf("error metadata = %q, want 429 rate_limit", message)
+	}
+}
+
 func TestClaudeCLIAdapterNonZeroExitWithoutResultFailsTurn(t *testing.T) {
 	t.Parallel()
 

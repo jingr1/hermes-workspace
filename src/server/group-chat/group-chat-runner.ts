@@ -541,7 +541,6 @@ async function runGroupChatRounds(
           reason: 'turn timed out — will harvest late reply if it finishes',
         })
       } else if (turnResult.kind === 'failed') {
-        setWatermark(room.id, member.participantId, roomLog.length)
         const failText = `⚠️ ${member.displayName} failed: ${turnResult.reason}`
         insertMessage({
           roomId: room.id,
@@ -551,6 +550,14 @@ async function runGroupChatRounds(
           content: failText,
           mentions: [],
         })
+        // Watermark must include the failure note. Advancing only to the
+        // pre-insert length makes the next round treat the failure as unseen
+        // delta and re-prompt the same member (@all → duplicate error spam).
+        setWatermark(
+          room.id,
+          member.participantId,
+          getLatestMessages(room.id, { limit: 200 }).length,
+        )
         publishChatEvent('group_chat_failed', {
           roomId: room.id,
           member: member.displayName,
@@ -564,95 +571,103 @@ async function runGroupChatRounds(
         getLatestMessages(room.id, { limit: 200 }),
         members,
       )
+      // Quiet round with nothing left to chase → settle. Do not burn the
+      // remaining MAX_ROUNDS re-driving the same delta.
+      if (pendingKeys.length === 0) {
+        finishDrive(room, members, 'settled')
+        return
+      }
       continuations += 1
       if (
-        pendingKeys.length > 0 &&
-        continuations <= GROUP_CHAT_MAX_CONTINUATIONS &&
-        posted < GROUP_CHAT_MAX_MESSAGES
+        continuations > GROUP_CHAT_MAX_CONTINUATIONS ||
+        posted >= GROUP_CHAT_MAX_MESSAGES
       ) {
-        const citedMembers = members.filter((m) =>
-          pendingKeys.includes(groupMemberKey(m)),
-        )
-        const stillInFlight = getInFlightMembers(room.id)
-        const continuationResponders = citedMembers.filter(
-          (m) =>
-            !stillInFlight.includes(groupMemberKey(m)) &&
-            !hasStranded(room.id, m) &&
-            !isMemberHeld(room.id, m),
-        )
-        for (const member of continuationResponders) {
-          if (
-            !isCurrent() ||
-            posted >= GROUP_CHAT_MAX_MESSAGES ||
-            continuations > GROUP_CHAT_MAX_CONTINUATIONS
-          ) {
-            finishDrive(room, members, 'capped')
-            return
-          }
-          const roomLog2 = getLatestMessages(room.id, { limit: 200 })
-          const watermark = getWatermark(room.id, member.participantId)
-          const delta = roomLog2
-            .slice(watermark)
-            .slice(-GROUP_CHAT_HISTORY_LIMIT)
-          if (delta.length === 0) continue
-          const turnResult = await runMemberTurn(room, member, delta, members, cwd)
-          if (turnResult.kind === 'reply') {
-            const newMessage = insertMessage({
-              roomId: room.id,
-              senderKind: 'agent',
-              senderParticipantId: member.participantId,
-              senderName: member.displayName,
-              content: turnResult.text,
-              mentions: expandMentionTargets(
-                parseMentions(turnResult.text, members),
-                room.id,
-                members,
-              ),
-              runId: turnResult.runId ?? null,
-            })
-            posted += 1
-            setWatermark(room.id, member.participantId, roomLog2.length + 1)
-            publishChatEvent('group_chat_reply', {
-              roomId: room.id,
-              messageId: newMessage.id,
-              member: member.displayName,
-              text: turnResult.text,
-            })
-            await maybeSummarizeRoom(room.id, {
-              profile: pickSummaryProfile(members, member.profile),
-            })
-          } else if (turnResult.kind === 'timeout') {
-            setWatermark(room.id, member.participantId, roomLog2.length)
-            setStranded(room.id, member, {
-              before: turnResult.before,
-              sessionId: turnResult.sessionId,
-            })
-            publishChatEvent('group_chat_failed', {
-              roomId: room.id,
-              member: member.displayName,
-              reason: 'turn timed out — will harvest late reply if it finishes',
-            })
-          } else if (
-            turnResult.kind === 'pass' ||
-            turnResult.kind === 'failed'
-          ) {
-            setWatermark(room.id, member.participantId, roomLog2.length)
-            if (turnResult.kind === 'failed') {
-              insertMessage({
-                roomId: room.id,
-                senderKind: 'agent',
-                senderParticipantId: member.participantId,
-                senderName: member.displayName,
-                content: `⚠️ ${member.displayName} failed: ${turnResult.reason}`,
-                mentions: [],
-              })
-              publishChatEvent('group_chat_failed', {
-                roomId: room.id,
-                member: member.displayName,
-                reason: turnResult.reason,
-              })
-            }
-          }
+        finishDrive(room, members, 'capped')
+        return
+      }
+      const citedMembers = members.filter((m) =>
+        pendingKeys.includes(groupMemberKey(m)),
+      )
+      const stillInFlight = getInFlightMembers(room.id)
+      const continuationResponders = citedMembers.filter(
+        (m) =>
+          !stillInFlight.includes(groupMemberKey(m)) &&
+          !hasStranded(room.id, m) &&
+          !isMemberHeld(room.id, m),
+      )
+      for (const member of continuationResponders) {
+        if (
+          !isCurrent() ||
+          posted >= GROUP_CHAT_MAX_MESSAGES ||
+          continuations > GROUP_CHAT_MAX_CONTINUATIONS
+        ) {
+          finishDrive(room, members, 'capped')
+          return
+        }
+        const roomLog2 = getLatestMessages(room.id, { limit: 200 })
+        const watermark = getWatermark(room.id, member.participantId)
+        const delta = roomLog2
+          .slice(watermark)
+          .slice(-GROUP_CHAT_HISTORY_LIMIT)
+        if (delta.length === 0) continue
+        const turnResult = await runMemberTurn(room, member, delta, members, cwd)
+        if (turnResult.kind === 'reply') {
+          const newMessage = insertMessage({
+            roomId: room.id,
+            senderKind: 'agent',
+            senderParticipantId: member.participantId,
+            senderName: member.displayName,
+            content: turnResult.text,
+            mentions: expandMentionTargets(
+              parseMentions(turnResult.text, members),
+              room.id,
+              members,
+            ),
+            runId: turnResult.runId ?? null,
+          })
+          posted += 1
+          setWatermark(room.id, member.participantId, roomLog2.length + 1)
+          publishChatEvent('group_chat_reply', {
+            roomId: room.id,
+            messageId: newMessage.id,
+            member: member.displayName,
+            text: turnResult.text,
+          })
+          await maybeSummarizeRoom(room.id, {
+            profile: pickSummaryProfile(members, member.profile),
+          })
+        } else if (turnResult.kind === 'timeout') {
+          setWatermark(room.id, member.participantId, roomLog2.length)
+          setStranded(room.id, member, {
+            before: turnResult.before,
+            sessionId: turnResult.sessionId,
+          })
+          publishChatEvent('group_chat_failed', {
+            roomId: room.id,
+            member: member.displayName,
+            reason: 'turn timed out — will harvest late reply if it finishes',
+          })
+        } else if (turnResult.kind === 'pass') {
+          setWatermark(room.id, member.participantId, roomLog2.length)
+        } else if (turnResult.kind === 'failed') {
+          insertMessage({
+            roomId: room.id,
+            senderKind: 'agent',
+            senderParticipantId: member.participantId,
+            senderName: member.displayName,
+            content: `⚠️ ${member.displayName} failed: ${turnResult.reason}`,
+            mentions: [],
+          })
+          setWatermark(
+            room.id,
+            member.participantId,
+            getLatestMessages(room.id, { limit: 200 }).length,
+          )
+          publishChatEvent('group_chat_failed', {
+            roomId: room.id,
+            member: member.displayName,
+            reason: turnResult.reason,
+          })
         }
       }
     }

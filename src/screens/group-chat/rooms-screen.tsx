@@ -72,13 +72,18 @@ export function RoomsScreen() {
     }>
   >([])
   const [loading, setLoading] = useState(false)
-  const [statusText, setStatusText] = useState<string | null>(null)
+  // Ephemeral turn status is per-room: switching rooms shows that room's last
+  // known status instead of leaking another room's or wiping this room's.
+  const [statusByRoom, setStatusByRoom] = useState<
+    Record<string, string | null>
+  >({})
   const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false)
   const [workspaceDraft, setWorkspaceDraft] = useState('')
   const [workspaceSaving, setWorkspaceSaving] = useState(false)
   const [workspaceError, setWorkspaceError] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const { events } = useGroupChatEvents(roomId)
+  const statusText = roomId ? (statusByRoom[roomId] ?? null) : null
 
   useEffect(() => {
     listAvailableAgents().then((res) => setAvailableAgents(res.agents))
@@ -110,17 +115,15 @@ export function RoomsScreen() {
 
   // Process *all* new SSE events, not just the latest. reply + settled often
   // land in the same React batch; looking only at lastEvent drops the refetch.
-  const handledEventIdRef = useRef(0)
+  // Cursor is per-room so revisiting a room does not replay its buffer.
+  const handledEventIdByRoomRef = useRef<Record<string, number>>({})
 
   useEffect(() => {
-    handledEventIdRef.current = 0
-  }, [roomId])
-
-  useEffect(() => {
-    if (!roomId || events.length === 0) return
-    const pending = events.filter((e) => e.id > handledEventIdRef.current)
+    if (!roomId) return
+    const handled = handledEventIdByRoomRef.current[roomId] ?? 0
+    const pending = events.filter((e) => e.id > handled)
     if (pending.length === 0) return
-    handledEventIdRef.current = pending[pending.length - 1]!.id
+    handledEventIdByRoomRef.current[roomId] = pending[pending.length - 1]!.id
 
     let refreshMessages = false
     let refreshPending = false
@@ -163,7 +166,7 @@ export function RoomsScreen() {
       )
     }
     if (nextStatus !== undefined) {
-      setStatusText(nextStatus)
+      setStatusByRoom((prev) => ({ ...prev, [roomId]: nextStatus }))
     }
   }, [events, roomId])
 
@@ -204,9 +207,10 @@ export function RoomsScreen() {
       setParticipants(res.participants)
     } catch (error) {
       console.error('[group-chat] remove participant failed:', error)
-      setStatusText(
-        `Remove failed: ${error instanceof Error ? error.message : String(error)}`,
-      )
+      setStatusByRoom((prev) => ({
+        ...prev,
+        [roomId]: `Remove failed: ${error instanceof Error ? error.message : String(error)}`,
+      }))
     }
   }
 

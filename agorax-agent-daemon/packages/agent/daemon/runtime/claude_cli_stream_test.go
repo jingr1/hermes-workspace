@@ -142,3 +142,40 @@ func TestClaudeStreamParserToolResultTextFlattening(t *testing.T) {
 		t.Fatalf("long content was not bounded: %d chars", len(text))
 	}
 }
+
+func TestClaudeStreamParserFailFastOnAPIRetry429(t *testing.T) {
+	t.Parallel()
+
+	parser := newClaudeStreamParser()
+	events := parser.push([]byte(
+		`{"type":"system","subtype":"init","session_id":"sess-429","model":"DeepSeek-V4-Flash"}` + "\n" +
+			`{"type":"system","subtype":"api_retry","attempt":1,"max_retries":10,"retry_delay_ms":564,"error_status":429,"error":"rate_limit","session_id":"sess-429"}` + "\n",
+	))
+	if len(events) != 2 {
+		t.Fatalf("events = %#v, want init + fatal 429 error", events)
+	}
+	if events[0].kind != "init" {
+		t.Fatalf("first event = %#v, want init", events[0])
+	}
+	if events[1].kind != "error" || !events[1].killProcess {
+		t.Fatalf("second event = %#v, want fatal error", events[1])
+	}
+	if !strings.Contains(events[1].message, "429") || !strings.Contains(events[1].message, "rate_limit") {
+		t.Fatalf("error message = %q", events[1].message)
+	}
+	if !strings.Contains(events[1].message, "retry 1/10") {
+		t.Fatalf("error message missing retry progress: %q", events[1].message)
+	}
+}
+
+func TestClaudeStreamParserIgnoresNonRateLimitAPIRetry(t *testing.T) {
+	t.Parallel()
+
+	parser := newClaudeStreamParser()
+	events := parser.push([]byte(
+		`{"type":"system","subtype":"api_retry","attempt":1,"max_retries":3,"error_status":500,"error":"server_error"}` + "\n",
+	))
+	if len(events) != 0 {
+		t.Fatalf("events = %#v, want none for non-429 api_retry", events)
+	}
+}

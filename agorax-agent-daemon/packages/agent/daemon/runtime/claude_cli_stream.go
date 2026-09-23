@@ -2,6 +2,7 @@ package agentruntime
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 )
 
@@ -20,6 +21,10 @@ type claudeStreamEvent struct {
 	toolError bool
 	result    claudeStreamResult
 	message   string
+	// killProcess asks the executor to SIGTERM the CLI immediately. Used for
+	// system.api_retry with HTTP 429: Claude Code otherwise burns up to 10
+	// exponential backoff retries (minutes) while emitting no assistant text.
+	killProcess bool
 }
 
 type claudeStreamResult struct {
@@ -99,14 +104,7 @@ func (p *claudeStreamParser) handleObject(object map[string]any) []claudeStreamE
 	}
 	switch eventType {
 	case "system":
-		if asString(object["subtype"]) != "init" {
-			return nil
-		}
-		return []claudeStreamEvent{{
-			kind:      "init",
-			sessionID: strings.TrimSpace(asString(object["session_id"])),
-			model:     strings.TrimSpace(asString(object["model"])),
-		}}
+		return p.handleSystemEvent(object)
 	case "assistant":
 		return p.handleAssistantMessage(payloadObject(object["message"]))
 	case "user":
@@ -123,6 +121,54 @@ func (p *claudeStreamParser) handleObject(object map[string]any) []claudeStreamE
 	default:
 		return nil
 	}
+}
+
+func (p *claudeStreamParser) handleSystemEvent(object map[string]any) []claudeStreamEvent {
+	switch asString(object["subtype"]) {
+	case "init":
+		return []claudeStreamEvent{{
+			kind:      "init",
+			sessionID: strings.TrimSpace(asString(object["session_id"])),
+			model:     strings.TrimSpace(asString(object["model"])),
+		}}
+	case "api_retry":
+		// Claude Code retries rate limits internally (max_retries often 10)
+		// with growing retry_delay_ms. Gateways that return permanent quota
+		// exhaustion as HTTP 429/rate_limit never recover — fail fast so the
+		// host surfaces the error instead of hanging until an outer timeout.
+		status := claudeInt(object["error_status"])
+		errName := strings.TrimSpace(firstNonEmpty(
+			asString(object["error"]),
+			asString(object["error_status"]),
+		))
+		if status != 429 && !strings.EqualFold(errName, "rate_limit") {
+			return nil
+		}
+		attempt := claudeInt(object["attempt"])
+		maxRetries := claudeInt(object["max_retries"])
+		detail := errName
+		if detail == "" {
+			detail = "rate_limit"
+		}
+		message := fmt.Sprintf("API Error: Request rejected (%d) · %s", statusOr429(status), detail)
+		if attempt > 0 && maxRetries > 0 {
+			message = fmt.Sprintf("%s (retry %d/%d aborted)", message, attempt, maxRetries)
+		}
+		return []claudeStreamEvent{{
+			kind:        "error",
+			message:     message,
+			killProcess: true,
+		}}
+	default:
+		return nil
+	}
+}
+
+func statusOr429(status int) int {
+	if status == 0 {
+		return 429
+	}
+	return status
 }
 
 func (p *claudeStreamParser) handleStreamEvent(event map[string]any) []claudeStreamEvent {

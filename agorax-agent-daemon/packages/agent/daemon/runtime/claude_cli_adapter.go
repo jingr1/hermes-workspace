@@ -290,6 +290,10 @@ type claudeCLITurnExecutor struct {
 
 	stderrTail string
 
+	// killProcess is set when a fatal stream event (HTTP 429 api_retry) asks
+	// the executor to stop waiting on Claude Code's internal retry loop.
+	killProcess bool
+
 	events     []activityshared.Event
 	eventsMu   sync.Mutex
 	emitEvents func([]activityshared.Event)
@@ -438,10 +442,17 @@ func (exec *claudeCLITurnExecutor) run(ctx context.Context, conn ProcessConnecti
 		switch {
 		case len(frame.Stdout) > 0:
 			exec.handleStreamEvents(exec.parser.push(frame.Stdout))
+			if exec.killProcess {
+				killProcessConnection(conn)
+				break
+			}
 		case len(frame.Stderr) > 0:
 			exec.stderrTail = joinBoundedTail(exec.stderrTail, string(frame.Stderr))
 		case frame.ExitCode != nil:
 			exitCode = frame.ExitCode
+		}
+		if exec.killProcess {
+			break
 		}
 		if ctx.Err() != nil {
 			exec.handleCanceled(conn)
@@ -521,6 +532,9 @@ func (exec *claudeCLITurnExecutor) handleStreamEvent(event claudeStreamEvent) {
 	case "error":
 		exec.sawError = true
 		exec.errorText = event.message
+		if event.killProcess {
+			exec.killProcess = true
+		}
 	}
 }
 

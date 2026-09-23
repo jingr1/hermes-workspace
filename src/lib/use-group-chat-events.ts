@@ -9,99 +9,81 @@ type GroupChatEvent = {
 
 const MAX_EVENTS = 50
 
+const GROUP_CHAT_SSE_EVENTS = [
+  'group_chat_reply',
+  'group_chat_message',
+  'group_chat_human_attention',
+  'group_chat_human_answered',
+  'group_chat_human_dismissed',
+  'group_chat_turn_started',
+  'group_chat_settled',
+  'group_chat_capped',
+  'group_chat_turn_ended',
+] as const
+
 export function useGroupChatEvents(roomId?: string) {
-  const [events, setEvents] = useState<Array<GroupChatEvent>>([])
+  // Events are keyed by room so switching rooms restores that room's buffer
+  // instead of wiping in-session turn status (Cap reached / settled / …).
+  const [eventsByRoom, setEventsByRoom] = useState<
+    Record<string, Array<GroupChatEvent>>
+  >({})
   const [connected, setConnected] = useState(false)
   const esRef = useRef<EventSource | null>(null)
 
-  const pushEvent = useCallback(
-    (event: string, data: Record<string, unknown>) => {
-      setEvents((prev) => {
+  const pushEventForRoom = useCallback(
+    (targetRoomId: string, event: string, data: Record<string, unknown>) => {
+      setEventsByRoom((prev) => {
+        const roomEvents = prev[targetRoomId] ?? []
         const next = [
-          ...prev,
+          ...roomEvents,
           {
-            id: prev.length ? prev[prev.length - 1]!.id + 1 : 1,
+            id: roomEvents.length ? roomEvents[roomEvents.length - 1]!.id + 1 : 1,
             event,
             data,
             receivedAt: Date.now(),
           },
         ]
         if (next.length > MAX_EVENTS) next.splice(0, next.length - MAX_EVENTS)
-        return next
+        return { ...prev, [targetRoomId]: next }
       })
     },
     [],
   )
 
   useEffect(() => {
-    const url = roomId
-      ? `/api/chat-events?roomId=${encodeURIComponent(roomId)}`
-      : '/api/chat-events'
+    setConnected(false)
+    if (!roomId) {
+      esRef.current?.close()
+      esRef.current = null
+      return
+    }
+
+    // Capture the room this socket is bound to so late messages never land on
+    // whatever room happens to be selected after a fast switch.
+    const subscribedRoomId = roomId
+    const url = `/api/chat-events?roomId=${encodeURIComponent(subscribedRoomId)}`
     const es = new EventSource(url)
     esRef.current = es
 
     es.addEventListener('connected', () => setConnected(true))
     es.addEventListener('error', () => setConnected(false))
-    es.addEventListener('group_chat_reply', (e) => {
-      pushEvent(
-        'group_chat_reply',
-        JSON.parse(e.data) as Record<string, unknown>,
-      )
-    })
-    es.addEventListener('group_chat_message', (e) => {
-      pushEvent(
-        'group_chat_message',
-        JSON.parse(e.data) as Record<string, unknown>,
-      )
-    })
-    es.addEventListener('group_chat_human_attention', (e) => {
-      pushEvent(
-        'group_chat_human_attention',
-        JSON.parse(e.data) as Record<string, unknown>,
-      )
-    })
-    es.addEventListener('group_chat_human_answered', (e) => {
-      pushEvent(
-        'group_chat_human_answered',
-        JSON.parse(e.data) as Record<string, unknown>,
-      )
-    })
-    es.addEventListener('group_chat_human_dismissed', (e) => {
-      pushEvent(
-        'group_chat_human_dismissed',
-        JSON.parse(e.data) as Record<string, unknown>,
-      )
-    })
-    es.addEventListener('group_chat_turn_started', (e) => {
-      pushEvent(
-        'group_chat_turn_started',
-        JSON.parse(e.data) as Record<string, unknown>,
-      )
-    })
-    es.addEventListener('group_chat_settled', (e) => {
-      pushEvent(
-        'group_chat_settled',
-        JSON.parse(e.data) as Record<string, unknown>,
-      )
-    })
-    es.addEventListener('group_chat_capped', (e) => {
-      pushEvent(
-        'group_chat_capped',
-        JSON.parse(e.data) as Record<string, unknown>,
-      )
-    })
-    es.addEventListener('group_chat_turn_ended', (e) => {
-      pushEvent(
-        'group_chat_turn_ended',
-        JSON.parse(e.data) as Record<string, unknown>,
-      )
-    })
+
+    for (const eventName of GROUP_CHAT_SSE_EVENTS) {
+      es.addEventListener(eventName, (e) => {
+        pushEventForRoom(
+          subscribedRoomId,
+          eventName,
+          JSON.parse((e as MessageEvent).data) as Record<string, unknown>,
+        )
+      })
+    }
 
     return () => {
       es.close()
       esRef.current = null
     }
-  }, [roomId, pushEvent])
+  }, [roomId, pushEventForRoom])
 
+  const events = roomId ? (eventsByRoom[roomId] ?? []) : []
   return { events, connected }
 }

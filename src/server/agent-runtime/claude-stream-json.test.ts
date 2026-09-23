@@ -133,4 +133,32 @@ describe('ClaudeStreamJsonParser', () => {
       { type: 'text_delta', text: 'x' },
     ])
   })
+
+  it('fails fast on system.api_retry with HTTP 429', () => {
+    const parser = new ClaudeStreamJsonParser()
+    expect(
+      parser.push(
+        [
+          '{"type":"system","subtype":"api_retry","attempt":1,"max_retries":10,"error_status":429,"error":"rate_limit"}',
+          '',
+        ].join('\n'),
+      ),
+    ).toEqual([
+      {
+        type: 'error',
+        message:
+          'API Error: Request rejected (429) · rate_limit (retry 1/10 aborted)',
+        fatal: true,
+      },
+    ])
+  })
+
+  it('ignores non-429 api_retry so transient 5xx can recover', () => {
+    const parser = new ClaudeStreamJsonParser()
+    expect(
+      parser.push(
+        '{"type":"system","subtype":"api_retry","attempt":1,"max_retries":3,"error_status":500,"error":"server_error"}\n',
+      ),
+    ).toEqual([])
+  })
 })

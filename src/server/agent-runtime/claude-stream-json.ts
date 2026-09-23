@@ -13,7 +13,7 @@ export type ClaudeParsedEvent =
       name: string
       args?: unknown
     }
-  | { type: 'error'; message: string }
+  | { type: 'error'; message: string; fatal?: boolean }
   | { type: 'session'; sessionId: string }
 
 type JsonObject = Record<string, unknown>
@@ -113,6 +113,27 @@ export class ClaudeStreamJsonParser {
             ? `Claude Code started (${model})`
             : 'Claude Code started',
         })
+      } else if (subtype === 'api_retry') {
+        // Claude Code retries HTTP 429 internally (often max_retries=10) with
+        // exponential backoff. Permanent quota exhaustion from proxy gateways
+        // is reported as rate_limit — fail fast instead of hanging for minutes.
+        const status =
+          typeof obj.error_status === 'number' ? obj.error_status : Number(obj.error_status)
+        const errName = (asString(obj.error) ?? '').trim() || 'rate_limit'
+        if (status === 429 || errName.toLowerCase() === 'rate_limit') {
+          const attempt =
+            typeof obj.attempt === 'number' ? obj.attempt : Number(obj.attempt)
+          const maxRetries =
+            typeof obj.max_retries === 'number'
+              ? obj.max_retries
+              : Number(obj.max_retries)
+          const code = Number.isFinite(status) && status > 0 ? status : 429
+          let message = `API Error: Request rejected (${code}) · ${errName}`
+          if (Number.isFinite(attempt) && attempt > 0 && Number.isFinite(maxRetries) && maxRetries > 0) {
+            message = `${message} (retry ${attempt}/${maxRetries} aborted)`
+          }
+          events.push({ type: 'error', message, fatal: true })
+        }
       }
       return events
     }

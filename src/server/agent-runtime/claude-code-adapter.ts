@@ -448,6 +448,14 @@ export class ClaudeCodeAdapter implements AgentRuntimeAdapter {
             runId: input.runId,
             message: event.message,
           })
+          // Fatal rate-limit/api_retry: stop Claude Code's internal retry loop.
+          if (event.fatal && child.pid && !run.done) {
+            try {
+              process.kill(child.pid, 'SIGTERM')
+            } catch {
+              // Process may have already exited.
+            }
+          }
         } else if (event.type === 'session') {
           push(run, {
             type: 'native_session',

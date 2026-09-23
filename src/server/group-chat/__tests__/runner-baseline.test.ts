@@ -353,4 +353,45 @@ describe('group-chat clean baseline', () => {
       expect(listStrandedMembers(room.id)).toEqual([])
     })
   })
+
+  describe('failed turns must not multi-round replay', () => {
+    it('posts one failure note per member on @all (no Cap-round duplicates)', async () => {
+      insertMessage({
+        roomId: room.id,
+        senderKind: 'human',
+        senderParticipantId: 'user',
+        senderName: 'user',
+        content: '@all',
+        dbPath,
+      })
+
+      const callsByMember = new Map<string, number>()
+      executeMemberTurn.mockImplementation(async ({ member }) => {
+        callsByMember.set(
+          member.participantId,
+          (callsByMember.get(member.participantId) ?? 0) + 1,
+        )
+        return {
+          kind: 'failed',
+          reason: 'rate_limit',
+        } satisfies GroupTurnResult
+      })
+
+      const { runRoom } = await importRunner()
+      await runRoom(room)
+
+      const botMessages = getLatestMessages(room.id, {
+        dbPath,
+        limit: 200,
+      }).filter((m) => m.senderKind === 'agent')
+
+      // One turn + one failure note per agent (3 in this fixture).
+      expect(botMessages).toHaveLength(3)
+      expect(callsByMember.size).toBe(3)
+      expect([...callsByMember.values()].every((n) => n === 1)).toBe(true)
+      for (const msg of botMessages) {
+        expect(msg.content).toMatch(/failed: rate_limit/)
+      }
+    })
+  })
 })
