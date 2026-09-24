@@ -51,9 +51,8 @@ func (o *providerOps) agentStatus() agentstatus.Service {
 }
 
 func (o *providerOps) handleProviderStatus(response http.ResponseWriter, request *http.Request) {
-	// Only probe Agorax-backed providers. Full agentstatus DefaultRegistry still
-	// contains Tutti Agent / Nexight / OpenClaw descriptors we must not install
-	// or update against Tutti CDN/npm packages.
+	// Only probe Agorax-backed providers. Full agentstatus DefaultRegistry may
+	// still contain unsupported stubs (Nexight / OpenClaw) we must not install.
 	listProviders := make([]string, 0, 4)
 	for _, descriptor := range knownProviderTargets() {
 		id := normalizeProviderID(descriptor.Identity.ID)

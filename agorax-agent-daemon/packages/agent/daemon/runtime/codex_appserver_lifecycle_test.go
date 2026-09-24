@@ -755,16 +755,11 @@ func TestAppServerCloseTreatsMissingSessionAsSuccess(t *testing.T) {
 }
 
 func TestAppServerCloseFailureRetainsUnusableHandleAndBackpressuresReplacement(t *testing.T) {
-	for _, provider := range []string{ProviderCodex, ProviderTuttiAgent} {
+	for _, provider := range []string{ProviderCodex} {
 		provider := provider
 		t.Run(provider, func(t *testing.T) {
 			transport := &multiProcAppServerTransport{}
-			var adapter *CodexAppServerAdapter
-			if provider == ProviderTuttiAgent {
-				adapter = NewTuttiAgentAppServerAdapterWithHostMetadata(transport, LegacyHostMetadata())
-			} else {
-				adapter = NewCodexAppServerAdapter(transport)
-			}
+			adapter := NewCodexAppServerAdapter(transport)
 			session := testAppServerSession()
 			session.Provider = provider
 			session.ProviderSessionID = "codex-thread-1"

@@ -398,11 +398,11 @@ func TestReportActivityInputProjectsRuntimeMessagesToMessageUpdates(t *testing.T
 	}
 }
 
-func TestReportActivityInputProjectsTuttiAgentRuntimeMessages(t *testing.T) {
+func TestReportActivityInputProjectsCodexRuntimeMessages(t *testing.T) {
 	t.Parallel()
 
 	session := reportTestSession()
-	session.Provider = ProviderTuttiAgent
+	session.Provider = ProviderCodex
 	userEvent := newTurnActivityEventWithID(session, "user-event-1", EventMessage, "turn-1", messageStreamStateCompleted, RoleUser, "inspect repo", nil)
 	assistantEvent := newTurnActivityEventWithID(session, "assistant-event-1", EventMessage, "turn-1", messageStreamStateCompleted, RoleAssistant, "found README", nil)
 
@@ -1662,7 +1662,7 @@ func ptrReportActivityReply(reply agentsessionstore.ReportActivityReply) *agents
 }
 
 func TestExplicitTurnLifecycleProjectionUsesDescriptorCatalog(t *testing.T) {
-	for _, provider := range []string{" CODEX ", ProviderClaudeCode, ProviderOpenCode, ProviderTuttiAgent} {
+	for _, provider := range []string{" CODEX ", ProviderClaudeCode, ProviderOpenCode, ProviderCodex} {
 		if !providerUsesExplicitTurnLifecyclePatch(provider) {
 			t.Fatalf("provider %q did not enable explicit turn lifecycle projection", provider)
 		}

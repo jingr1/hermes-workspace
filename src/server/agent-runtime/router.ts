@@ -4,9 +4,11 @@
  * they keep their existing send-stream / swarm-dispatch path (plan:
  * «hermes：完全不动») and appear in status via a read-only stub that
  * *does* probe the profile's gateway health so UI status reflects reachability.
+ *
+ * All managed backends (claude-code, codex, cursor, opencode, kimi) go through
+ * AgoraxManagedAgentBridge → daemon targets. There is no local CLI adapter
+ * fallback — without AGORAX_MANAGED_AGENT_URL the slot is unavailable.
  */
-import { ClaudeCodeAdapter } from './claude-code-adapter'
-import { CodexAdapter } from './codex-adapter'
 import { loadAgentsRegistry } from './agents-config'
 import type { AgentDeclaration, AgentsRegistry } from './agents-config'
 import type { AgentProbeResult, AgentRuntimeAdapter } from './types'
@@ -95,20 +97,7 @@ export class AgentRuntimeRouter {
       case 'hermes':
         return new HermesAdapterStub(decl)
       case 'claude-code':
-        if (agoraxManagedTransport) {
-          // NOTE: the daemon intentionally does not host claude-code, so the
-          // bridge reports it unavailable; the engine chat routes currently
-          // require daemon-backed sessions. Full claude-code support needs a
-          // canonical activity source (daemon adapter or a legacy→canonical
-          // event shim) — tracked as follow-up work.
-          return new AgoraxManagedAgentBridge('claude-code', agoraxManagedTransport)
-        }
-        return new ClaudeCodeAdapter(decl)
       case 'codex':
-        if (agoraxManagedTransport) {
-          return new AgoraxManagedAgentBridge('codex', agoraxManagedTransport)
-        }
-        return new CodexAdapter(decl)
       case 'cursor':
       case 'kimi':
       case 'opencode':
@@ -186,8 +175,8 @@ const ROUTER_KEY = '__agent_runtime_router__' as const
 
 export function getAgentRuntimeRouter(): AgentRuntimeRouter {
   const g = globalThis as Record<string, unknown>
-  // HMR: claude-code-adapter / this module call resetAgentRuntimeRouter() on
-  // dispose so the next access rebuilds with fresh adapter code. Do not
+  // HMR: this module calls resetAgentRuntimeRouter() on
+  // dispose so the next access rebuilds with fresh bridge code. Do not
   // reconstruct on every request — that would drop in-flight run lookups and
   // waste parse work on the hot chat path.
   if (!g[ROUTER_KEY]) {
@@ -213,7 +202,7 @@ export function setAgentRuntimeRouterForTests(
 
 if (import.meta.hot) {
   // Force this module to re-apply on edit; dispose drops the singleton so the
-  // next getAgentRuntimeRouter() rebuilds ClaudeCodeAdapter with new argv logic.
+  // next getAgentRuntimeRouter() rebuilds managed bridges with fresh code.
   import.meta.hot.accept()
   import.meta.hot.dispose(() => {
     resetAgentRuntimeRouter()

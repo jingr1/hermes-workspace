@@ -2,7 +2,10 @@ import { createFileRoute, useNavigate, useSearch } from '@tanstack/react-router'
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { z } from 'zod'
 import { ChatRouteLoading } from '../../../screens/chat/chat-route-loading'
-import { useAgentStore } from '../../../stores/agent-store'
+import {
+  sessionBelongsToAgent,
+  useAgentStore,
+} from '../../../stores/agent-store'
 import { fetchAgents, fetchSessionsForAgent } from '../../../lib/agent-api'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { resolveSessionForProfile } from '../../../screens/chat/last-session'
@@ -74,10 +77,9 @@ function ChatAgentRoute() {
       id: string,
     ): Promise<string | null> => {
       const fromUrl = search.session?.trim()
+      const store = useAgentStore.getState()
 
-      const agent = useAgentStore
-        .getState()
-        .agents.find((entry) => entry.agentId === id)
+      const agent = store.agents.find((entry) => entry.agentId === id)
       if (!agent) return null
 
       if (agent.runtime === 'hermes') {
@@ -108,18 +110,26 @@ function ChatAgentRoute() {
         return resolved === 'new' ? null : resolved
       }
 
-      // Claude Code / managed: restore from store (SQLite-backed list) or last-session.
-      const cached = useAgentStore.getState().sessionsByAgentId.get(id) ?? []
+      // Managed (Tutti-style): URL only if owned; else in-memory last; else
+      // localStorage last that appears in this agent's list.
+      const cached = store.sessionsByAgentId.get(id) ?? []
       const knownIds = new Set(cached.map((session) => session.sessionId))
-      if (fromUrl && fromUrl !== 'new' && knownIds.has(fromUrl)) return fromUrl
+      const sessionsLoaded = store.sessionsByAgentId.has(id)
+
+      if (fromUrl && fromUrl !== 'new') {
+        if (!sessionsLoaded || knownIds.has(fromUrl)) return fromUrl
+        // Foreign ?session= from a previous agent — ignore.
+      }
+
+      const remembered = store.lastActiveSessionIdByAgentId[id]?.trim()
+      if (remembered && (!sessionsLoaded || knownIds.has(remembered))) {
+        return remembered
+      }
+
       const local = cached.map((session) => ({
         friendlyId: session.sessionId,
       }))
-      const resolved = resolveSessionForProfile(local, id, {
-        sessionsLoaded:
-          cached.length > 0 ||
-          useAgentStore.getState().sessionsByAgentId.has(id),
-      })
+      const resolved = resolveSessionForProfile(local, id, { sessionsLoaded })
       return resolved === 'new' ? null : resolved
     }
 
@@ -145,6 +155,18 @@ function ChatAgentRoute() {
       const sessionId = await resolveSessionForAgent(agentId)
       if (cancelled) return
       setActiveAgentId(agentId || null, { sessionId })
+      // Drop a foreign ?session= that does not belong to this agent.
+      if (
+        search.session &&
+        sessionId !== search.session &&
+        useAgentStore.getState().sessionsByAgentId.has(agentId) &&
+        !sessionBelongsToAgent(agentId, search.session)
+      ) {
+        void navigate({
+          search: sessionId ? { session: sessionId } : {},
+          replace: true,
+        })
+      }
       setSeeded(true)
     }
 
@@ -166,23 +188,40 @@ function ChatAgentRoute() {
     // Only re-run on agentId. Session-only URL changes use the effect below;
     // putting search.session here would restore "last session" and undo New Chat.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
-  }, [agentId, queryClient, setActiveAgentId])
+  }, [agentId, queryClient, setActiveAgentId, navigate])
 
-  // Apply session from the URL when present (e.g. picking a session in-sidebar
-  // without changing agent). Agent switches set session atomically above.
+  // Apply session from the URL only when it belongs to the route agent.
   useEffect(() => {
-    if (search.session) {
+    if (!search.session || !agentId) return
+    const store = useAgentStore.getState()
+    if (!store.sessionsByAgentId.has(agentId)) {
+      // List not loaded yet — applyAgent owns the first paint.
+      return
+    }
+    if (!sessionBelongsToAgent(agentId, search.session)) {
+      void navigate({ search: {}, replace: true })
+      return
+    }
+    if (store.activeAgentId === agentId) {
       setActiveSessionId(search.session)
     }
-  }, [search.session, setActiveSessionId])
+  }, [search.session, agentId, setActiveSessionId, navigate])
 
-  // Keep the URL in sync with the active session selection.
+  // Keep the URL in sync with the active session — only for THIS route agent.
   useEffect(() => {
     return useAgentStore.subscribe((state, prev) => {
+      // Never rewrite URL from a stale global session while another agent is active.
+      if (state.activeAgentId !== agentId) return
+
       const currentSession = state.activeSessionId
       const agentChanged = state.activeAgentId !== prev.activeAgentId
 
-      if (currentSession && currentSession !== search.session) {
+      if (
+        currentSession &&
+        currentSession !== search.session &&
+        (sessionBelongsToAgent(agentId, currentSession) ||
+          !state.sessionsByAgentId.has(agentId))
+      ) {
         void navigate({
           search: { session: currentSession },
           replace: true,
@@ -190,17 +229,20 @@ function ChatAgentRoute() {
         return
       }
 
-      // Only clear ?session= for an intentional New Chat on the same agent.
-      // Agent switches briefly null the session before restore — wiping the
-      // URL here caused Claude Code to land on blank "New Chat".
-      if (!currentSession && search.session && !agentChanged) {
-        void navigate({
-          search: {},
-          replace: true,
-        })
+      // Clear foreign or New-Chat URL when this agent has no active session.
+      if (!currentSession && search.session) {
+        const foreign =
+          state.sessionsByAgentId.has(agentId) &&
+          !sessionBelongsToAgent(agentId, search.session)
+        if (foreign || !agentChanged) {
+          void navigate({
+            search: {},
+            replace: true,
+          })
+        }
       }
     })
-  }, [navigate, search.session])
+  }, [navigate, search.session, agentId])
 
   if (!seeded) {
     return <ChatRouteLoading />

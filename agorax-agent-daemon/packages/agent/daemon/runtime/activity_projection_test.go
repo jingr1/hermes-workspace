@@ -748,7 +748,7 @@ func TestRootProviderTurnFailurePersistsVisibleErrorCode(t *testing.T) {
 	t.Parallel()
 
 	session := reportTestSession()
-	session.Provider = ProviderTuttiAgent
+	session.Provider = ProviderCodex
 	ctx, ok := activityEventContext(session, "root-provider-turn-failed", "root-turn-1")
 	if !ok {
 		t.Fatal("activityEventContext() returned !ok")

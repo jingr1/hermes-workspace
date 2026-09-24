@@ -12,7 +12,6 @@ var migratedDescriptors = []ProviderDescriptor{
 	codexDescriptor(),
 	claudeCodeDescriptor(),
 	cursorDescriptor(),
-	tuttiAgentDescriptor(),
 	openCodeDescriptor(),
 	nexightDescriptor(),
 	openClawDescriptor(),
@@ -128,7 +127,7 @@ func Validate(descriptor ProviderDescriptor) error {
 		return fmt.Errorf("provider %q desktop usage probe kind %q is unsupported", providerID, descriptor.Desktop.UsageProbeKind)
 	}
 	switch descriptor.Desktop.VisibilityGate {
-	case "", DesktopVisibilityGateTuttiAgent:
+	case "":
 	default:
 		return fmt.Errorf("provider %q desktop visibility gate %q is unsupported", providerID, descriptor.Desktop.VisibilityGate)
 	}
@@ -292,7 +291,7 @@ func Validate(descriptor ProviderDescriptor) error {
 		return fmt.Errorf("provider %q auth output parser kind %q is unsupported", providerID, descriptor.Status.AuthOutputParserKind)
 	}
 	switch descriptor.Status.AuthMarkerParserKind {
-	case AuthMarkerParserKindFileExists, AuthMarkerParserKindClaude, AuthMarkerParserKindOpenCode, AuthMarkerParserKindTuttiToken:
+	case AuthMarkerParserKindFileExists, AuthMarkerParserKindClaude, AuthMarkerParserKindOpenCode:
 	default:
 		return fmt.Errorf("provider %q auth marker parser kind %q is unsupported", providerID, descriptor.Status.AuthMarkerParserKind)
 	}
@@ -440,7 +439,7 @@ func Validate(descriptor ProviderDescriptor) error {
 		return fmt.Errorf("provider %q remote auth probe: %w", providerID, err)
 	}
 	switch descriptor.ComposerProfile.ModelCatalog {
-	case "", ModelCatalogKindCodexCLI, ModelCatalogKindOpenCodeCLI, ModelCatalogKindTuttiCLI:
+	case "", ModelCatalogKindCodexCLI, ModelCatalogKindOpenCodeCLI:
 	default:
 		return fmt.Errorf("provider %q model catalog kind %q is unsupported", providerID, descriptor.ComposerProfile.ModelCatalog)
 	}

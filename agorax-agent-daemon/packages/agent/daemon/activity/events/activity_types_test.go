@@ -7,8 +7,6 @@ func TestNormalizeProviderMapsSupportedAgentsToServerValues(t *testing.T) {
 
 	tests := map[string]Provider{
 		"codex":       ProviderCodex,
-		"tutti-agent": ProviderTuttiAgent,
-		"tutti_agent": ProviderTuttiAgent,
 		"nexight":     ProviderNexight,
 		" claude ":    ProviderClaudeCode,
 		"claude-code": ProviderClaudeCode,

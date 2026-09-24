@@ -59,7 +59,7 @@ func appServerForkStrategyForTest(
 }
 
 func tuttiAgentForkUserAgent() string {
-	return "tutti_agent/" + providerregistry.TuttiAgentThroughTurnForkMinVersion
+	return "codex_cli/" + providerregistry.CodexThroughTurnForkMinVersion
 }
 
 func appServerRequestParamsList(t *testing.T, conn *scriptedAppServerConnection, method string) []map[string]any {

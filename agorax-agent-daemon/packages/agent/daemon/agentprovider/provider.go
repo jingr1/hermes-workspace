@@ -13,7 +13,6 @@ const (
 	Nexight    = providerregistry.NexightProviderID
 	OpenClaw   = providerregistry.OpenClawProviderID
 	OpenCode   = providerregistry.OpenCodeProviderID
-	TuttiAgent = providerregistry.TuttiAgentProviderID
 )
 
 func All() []string {

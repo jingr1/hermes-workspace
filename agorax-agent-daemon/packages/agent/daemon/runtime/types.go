@@ -14,7 +14,6 @@ import (
 const (
 	ProviderClaudeCode = providerregistry.ClaudeCodeProviderID
 	ProviderCodex      = providerregistry.CodexProviderID
-	ProviderTuttiAgent = providerregistry.TuttiAgentProviderID
 	ProviderCursor     = providerregistry.CursorProviderID
 	ProviderNexight    = providerregistry.NexightProviderID
 	ProviderOpenClaw   = providerregistry.OpenClawProviderID

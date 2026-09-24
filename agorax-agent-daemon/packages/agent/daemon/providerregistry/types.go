@@ -143,7 +143,6 @@ const (
 	AuthMarkerParserKindFileExists AuthMarkerParserKind = "file_exists"
 	AuthMarkerParserKindClaude     AuthMarkerParserKind = "claude"
 	AuthMarkerParserKindOpenCode   AuthMarkerParserKind = "opencode"
-	AuthMarkerParserKindTuttiToken AuthMarkerParserKind = "tutti_token"
 )
 
 type AuthCommandRunnerKind string
@@ -467,7 +466,6 @@ type ModelCatalogKind string
 const (
 	ModelCatalogKindCodexCLI    ModelCatalogKind = "codex-cli"
 	ModelCatalogKindOpenCodeCLI ModelCatalogKind = "opencode-cli"
-	ModelCatalogKindTuttiCLI    ModelCatalogKind = "tutti-agent-cli"
 )
 
 type ReasoningEffortOptionsKind string
@@ -625,7 +623,6 @@ const (
 type DesktopVisibilityGate string
 
 const (
-	DesktopVisibilityGateTuttiAgent DesktopVisibilityGate = "tutti_agent"
 )
 
 type DesktopRuntimeProbeFallback string

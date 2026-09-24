@@ -11,7 +11,6 @@ type Provider string
 
 const (
 	ProviderCodex      Provider = providerregistry.CodexProviderID
-	ProviderTuttiAgent Provider = "tutti-agent"
 	ProviderCursor     Provider = "cursor"
 	ProviderNexight    Provider = "nexight"
 	ProviderClaudeCode Provider = providerregistry.ClaudeCodeProviderID

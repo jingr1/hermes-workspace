@@ -39,7 +39,7 @@ func TestNewRuntimeAppliesCommandNetworkAccessPolicyToDefaultAppServerAdapters(t
 		HostMetadata:     testHostMetadata(),
 		CommandNetworkAccessPolicy: func(provider string) bool {
 			policyProviders[provider]++
-			return provider == agentruntime.ProviderTuttiAgent
+			return false
 		},
 	})
 	if err != nil {
@@ -48,8 +48,7 @@ func TestNewRuntimeAppliesCommandNetworkAccessPolicyToDefaultAppServerAdapters(t
 	t.Cleanup(runtime.Close)
 
 	if policyProviders[agentruntime.ProviderCodex] != 1 ||
-		policyProviders[agentruntime.ProviderTuttiAgent] != 1 ||
-		len(policyProviders) != 2 {
+		len(policyProviders) != 1 {
 		t.Fatalf("command network access policy providers = %#v", policyProviders)
 	}
 }

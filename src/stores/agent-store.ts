@@ -10,7 +10,13 @@ interface AgentStore {
   activeAgentId: string | null
   sessionsByAgentId: Map<string, Array<AgentSession>>
   sessionsLoading: Set<string>
+  /** Currently selected session in the single chat pane (Tutti: activeConversationId). */
   activeSessionId: string | null
+  /**
+   * Per-agent last active session (Tutti: lastActiveAgentSessionIdByAgentTargetId).
+   * Switching agents restores from this map instead of leaking a global session.
+   */
+  lastActiveSessionIdByAgentId: Record<string, string>
 
   setAgents: (agents: Array<AgentWithStatus>) => void
   setAgentsLoading: (loading: boolean) => void
@@ -26,6 +32,26 @@ interface AgentStore {
   clearSessions: (agentId: string) => void
   setSessionsLoading: (agentId: string, loading: boolean) => void
   setActiveSessionId: (sessionId: string | null) => void
+  /** Drop remembered sessions (e.g. after delete). */
+  forgetSessionMemories: (sessionIds: ReadonlySet<string>) => void
+}
+
+function rememberSession(
+  memories: Record<string, string>,
+  agentId: string | null,
+  sessionId: string | null,
+): Record<string, string> {
+  if (!agentId) return memories
+  const trimmedAgent = agentId.trim()
+  const trimmedSession = sessionId?.trim() ?? ''
+  if (!trimmedAgent) return memories
+  if (!trimmedSession || trimmedSession === 'new') {
+    const next = { ...memories }
+    delete next[trimmedAgent]
+    return next
+  }
+  if (memories[trimmedAgent] === trimmedSession) return memories
+  return { ...memories, [trimmedAgent]: trimmedSession }
 }
 
 export const useAgentStore = create<AgentStore>((set, get) => ({
@@ -36,25 +62,64 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   sessionsByAgentId: new Map(),
   sessionsLoading: new Set(),
   activeSessionId: null,
+  lastActiveSessionIdByAgentId: {},
 
   setAgents: (agents) => set({ agents }),
   setAgentsLoading: (agentsLoading) => set({ agentsLoading }),
   setAgentsError: (agentsError) => set({ agentsError }),
   setActiveAgentId: (activeAgentId, options) => {
-    if (activeAgentId === get().activeAgentId) {
+    const state = get()
+    if (activeAgentId === state.activeAgentId) {
       if (
         options &&
         'sessionId' in options &&
-        options.sessionId !== get().activeSessionId
+        options.sessionId !== state.activeSessionId
       ) {
-        set({ activeSessionId: options.sessionId ?? null })
+        const sessionId = options.sessionId ?? null
+        set({
+          activeSessionId: sessionId,
+          // Only remember non-null selections; New Chat keeps prior memory.
+          ...(sessionId
+            ? {
+                lastActiveSessionIdByAgentId: rememberSession(
+                  state.lastActiveSessionIdByAgentId,
+                  activeAgentId,
+                  sessionId,
+                ),
+              }
+            : {}),
+        })
       }
       return
     }
+
+    // Tutti: write previous target's last, then restore (or clear) for the next.
+    let memories = state.lastActiveSessionIdByAgentId
+    if (state.activeAgentId && state.activeSessionId) {
+      memories = rememberSession(
+        memories,
+        state.activeAgentId,
+        state.activeSessionId,
+      )
+    }
+
+    let nextSession: string | null
+    if (options && 'sessionId' in options) {
+      nextSession = options.sessionId ?? null
+    } else if (activeAgentId) {
+      nextSession = memories[activeAgentId] ?? null
+    } else {
+      nextSession = null
+    }
+
+    if (activeAgentId && nextSession) {
+      memories = rememberSession(memories, activeAgentId, nextSession)
+    }
+
     set({
       activeAgentId,
-      activeSessionId:
-        options && 'sessionId' in options ? (options.sessionId ?? null) : null,
+      activeSessionId: nextSession,
+      lastActiveSessionIdByAgentId: memories,
     })
   },
   updateAgent: (update) =>
@@ -92,13 +157,29 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
         agentId,
         current.filter((s) => s.sessionId !== sessionId),
       )
-      return { sessionsByAgentId: next }
+      const forgotten = new Set([sessionId])
+      const memories = Object.fromEntries(
+        Object.entries(state.lastActiveSessionIdByAgentId).filter(
+          ([, id]) => !forgotten.has(id),
+        ),
+      )
+      return {
+        sessionsByAgentId: next,
+        lastActiveSessionIdByAgentId: memories,
+        activeSessionId:
+          state.activeSessionId === sessionId ? null : state.activeSessionId,
+      }
     }),
   clearSessions: (agentId) =>
     set((state) => {
       const next = new Map(state.sessionsByAgentId)
       next.delete(agentId)
-      return { sessionsByAgentId: next }
+      const memories = { ...state.lastActiveSessionIdByAgentId }
+      delete memories[agentId]
+      return {
+        sessionsByAgentId: next,
+        lastActiveSessionIdByAgentId: memories,
+      }
     }),
   setSessionsLoading: (agentId, loading) =>
     set((state) => {
@@ -107,7 +188,38 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       else next.delete(agentId)
       return { sessionsLoading: next }
     }),
-  setActiveSessionId: (activeSessionId) => set({ activeSessionId }),
+  setActiveSessionId: (activeSessionId) =>
+    set((state) => {
+      if (!activeSessionId) {
+        // New Chat: clear the pane selection but keep per-agent memory so
+        // switching away and back can restore (Tutti Home composer behavior).
+        return { activeSessionId: null }
+      }
+      return {
+        activeSessionId,
+        lastActiveSessionIdByAgentId: rememberSession(
+          state.lastActiveSessionIdByAgentId,
+          state.activeAgentId,
+          activeSessionId,
+        ),
+      }
+    }),
+  forgetSessionMemories: (sessionIds) =>
+    set((state) => {
+      if (sessionIds.size === 0) return state
+      const memories = Object.fromEntries(
+        Object.entries(state.lastActiveSessionIdByAgentId).filter(
+          ([, id]) => !sessionIds.has(id),
+        ),
+      )
+      return {
+        lastActiveSessionIdByAgentId: memories,
+        activeSessionId:
+          state.activeSessionId && sessionIds.has(state.activeSessionId)
+            ? null
+            : state.activeSessionId,
+      }
+    }),
 }))
 
 export function getActiveAgent(): AgentWithStatus | undefined {
@@ -119,4 +231,16 @@ export function getActiveSessions(): Array<AgentSession> {
   const state = useAgentStore.getState()
   if (!state.activeAgentId) return []
   return state.sessionsByAgentId.get(state.activeAgentId) ?? []
+}
+
+/** Whether a session id is known to belong to the given agent. */
+export function sessionBelongsToAgent(
+  agentId: string,
+  sessionId: string | null | undefined,
+): boolean {
+  const trimmed = sessionId?.trim()
+  if (!trimmed || trimmed === 'new') return false
+  const sessions = useAgentStore.getState().sessionsByAgentId.get(agentId)
+  if (!sessions) return false
+  return sessions.some((session) => session.sessionId === trimmed)
 }

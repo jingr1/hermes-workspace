@@ -28,9 +28,8 @@ hermes-workspace 的 agent 运行时分为两类：
 
 - `agents.yaml` — 声明 agent 的 runtime/command/args/execution/capabilities。
 - `src/server/agent-runtime/types.ts` — `AgentRuntimeKind`、`AgentRuntimeAdapter`、`AgentRunInput`、`AgentStreamEvent`。
-- `src/server/agent-runtime/router.ts` — 根据 `agents.yaml` 选择 adapter，统一提供 `startRun` / `streamEvents` / `interrupt` / `probe`。
-- `src/server/agent-runtime/claude-code-adapter.ts` — Claude Code 专用 adapter。
-- `src/server/agent-runtime/codex-adapter.ts` — Codex 专用 adapter。
+- `src/server/agent-runtime/router.ts` — 根据 `agents.yaml` 选择 adapter；managed runtime 一律 `AgoraxManagedAgentBridge` → daemon target。
+- `src/server/agent-runtime/agorax-managed-agent-bridge.ts` — managed runtime 与 daemon 的适配边界。
 - `src/server/agent-runtime/run-managed-turn.ts` — 统一的单轮执行器，被 chat、群聊、mission control 复用。
 - `src/server/claude-code-settings.ts` — 读写 `~/.claude/settings.json`，处理 alias、provider 显示、模型列表等。
 - `src/server/codex-settings.ts` — 读写 `~/.codex/config.toml`，复用 Hermes Provider Catalog 的 provider/model/key。
@@ -111,12 +110,7 @@ Codex 复用与 Claude Code 相同的 managed-runtime 接入模式，但认证�
 
 ### 4.1 Runtime 与 Chat 路由
 
-- `src/server/agent-runtime/codex-adapter.ts`：实现 `AgentRuntimeAdapter`。
-  - `kind = 'codex'`
-  - `probe()` — 检查 `codex` 命令是否可用。
-  - `startRun()` — 生成 `codex exec --skip-git-repo-check --model <model> -- <task>`，注入 `HERMES_MCP_TOKEN` 与 provider API key。
-  - `streamEvents()` — 解析 Codex stdout/stderr 为 `AgentStreamEvent`。
-  - **注意：** Codex 0.146+ 没有 `--mcp-config` 参数，MCP 必须在 `~/.codex/config.toml` 中预配。
+- Managed Codex 通过 `AgoraxManagedAgentBridge('codex')` → daemon `local:codex` 执行；Workspace 侧不再 spawn 本地 `codex` 子进程。
 - `src/screens/chat/components/chat-workspace.tsx`：将 `codex` runtime 路由到 `ManagedAgentChatView`。
 - `src/screens/chat/agent-chat-brands.tsx`：新增 `CODEX_CHAT_BRAND`。
 - `src/screens/chat/components/managed-agent-chat-view.tsx`：按 runtime 选择 brand、models endpoint、头像/label。
@@ -146,15 +140,13 @@ Codex 使用 `~/.codex/config.toml`，通过 `src/server/codex-settings.ts` 管�
 - `src/routes/api/agents/codex-impl/models.ts` — GET `/api/agents/codex-impl/models`。
 - 使用静态 `codex-impl` 目录而非动态 `$agentId`，避免 TanStack Router 生成问题。
 
-### 4.5 API Key 注入
+### 4.5 API Key / 认证
 
-Codex 0.146+ 不识别 `-c model_providers.<id>.api_key=...` 命令行覆盖，因此：
+Codex 0.146+ 认证由 daemon runtime + `~/.codex/config.toml` 负责：
 
-- 不在 TOML 中写死 `api_key`。
-- 在 `codex-adapter.ts#buildCodexSpawnEnv` 中读取 `~/.codex/config.toml` 当前 provider 的 `env_key`：
-  1. 先用 `getCatalogProviderCredential()` 从 Hermes catalog 的 `.env` 取真实 key。
-  2. fallback 直接读 `~/.hermes/.env`（当 key 未同步到 default profile 时）。
-  3. 将真实 key 以该 env_key 注入 Codex 子进程。
+- 不在 TOML 中写死 `api_key`，使用 `env_key`（如 catalog 的 `TOKENX_API_KEY_VPEL`）。
+- Host/daemon 启动 Codex 时按 config 的 `env_key` 注入真实凭证（Workspace 侧不再维护本地 spawn env）。
+- MCP 须在 `~/.codex/config.toml` 中预配（无 `--mcp-config` 参数）。
 
 ### 4.6 在 agents.yaml 声明
 
@@ -262,7 +254,7 @@ Agents 列表继续用 `GET /api/agents`；详情用 `GET /api/agents/:id/capabi
 - **Provider 显示：** 优先从 Hermes catalog 反查 provider 名称，而不是用 URL host。
 - **Subagent model 不进入 picker：** `CLAUDE_CODE_SUBAGENT_MODEL` 用于 workflow/subagent，不应在 chat picker 中与 alias 模型重复显示。
 - **Codex 不写硬编码 `api_key`：** 因为 Codex 0.146+ 对 `[model_providers.<id>].api_key` 解析/优先级有问题，导致 401。应在 TOML 中写 `env_key = "TOKENX_API_KEY_VPEL"`（对应 Hermes catalog 的 `key_env`），由 adapter 启动时注入真实 key。
-- **Codex 子进程 key 注入 fallback：** 服务端进程可能没继承用户 shell 的环境变量。adapter 先从 Hermes catalog 的 `.env` 读取，失败再 fallback 读 `~/.hermes/.env`。
+- **Codex 认证 env：** daemon 启动 Codex 时按 `~/.codex/config.toml` 的 `env_key` 注入凭证；Settings / `codex-settings.ts` 只维护 TOML，不在 Workspace 进程内 spawn Codex。
 - **Codex 配置 patch 要避免 duplicate key：** 原文件 block 缺失 `env_key`/`requires_openai_auth` 时，不能往文件末尾追加，必须紧跟对应 table header 插入到 block 内部。
 - **Codex 切换 provider 时清理旧 block：** 从 catalog provider 切回 `openai` 时，要把旧 catalog block 的 `env_key` 注释掉，否则 Codex 仍可能用旧 gateway 认证。
 - **Chat 品牌动态化：** `ChatComposer` / `AgentChatFrame` 不要写死 "Claude Code"，通过 `runtimeLabel` / `runtimeConfigHint` props 由 `ManagedAgentChatView` 按 agent runtime/brand 传入，并同步切换头像（`ClaudeCodeMark` / `CodexMark`）。
@@ -270,14 +262,9 @@ Agents 列表继续用 `GET /api/agents`；详情用 `GET /api/agents/:id/capabi
 - **动态路由与静态路径并存：** `env-check` / `env-action` 使用 `src/routes/api/agents/$agentId/*`，对所有 managed agent 通用；专属路由（如 `codex-impl/config` 、`codex-impl/models`）仍然保留静态目录。
 - **sudo 密码仅用于本机提权：** 传输过程中不做加密，如需更高安全等级别请改用 keyring / pkexec / sudo -A。
 
-## 7. Claude Code adapter 启动时的环境传递
+## 7. Managed runtime 执行路径
 
-`claude-code-adapter.ts` 的 `buildClaudeSpawnEnv` 会：
-
-1. 继承 `process.env`，但删除 Cursor sandbox 变量、空的 Anthropic 认证变量。
-2. 叠加 `~/.claude/settings.json` 中的 `env`。
-3. 如果 `ANTHROPIC_AUTH_TOKEN` 有值而 `ANTHROPIC_API_KEY` 没有，则将 AUTH_TOKEN 镜像到 API_KEY（print mode 下一些版本需要此 fallback）。
-4. 注入 `HERMES_MCP_TOKEN` 和 `CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1`。
+Claude Code / Codex / Cursor / OpenCode / Kimi 均经 `AgoraxManagedAgentBridge` 调 daemon target（`local:claude-code`、`local:codex` 等）。CLI 进程由 daemon 托管；Workspace 只做 session 绑定、activity reconcile 与 UI。本地 settings（`~/.claude/settings.json`、`~/.codex/config.toml`）仍由 Settings UI / `claude-code-settings.ts` / `codex-settings.ts` 管理。
 
 ## 8. 测试要点
 
@@ -292,7 +279,8 @@ Agents 列表继续用 `GET /api/agents`；详情用 `GET /api/agents/:id/capabi
   - `maskSecrets` 脱敏 `api_key` 但保留 `env_key` 可读。
   - `listCodexModels` 正确返回 catalog provider 的模型。
 - `src/server/agent-runtime/agent-runtime.test.ts` 要覆盖：
-  - `CodexAdapter.probe()` 在 PATH 中存在/不存在 codex 时的行为。
+  - 无 transport 时 claude-code / codex slot 为 unavailable。
+  - 注入 transport 时 CC/Codex 走 `AgoraxManagedAgentBridge`。
 - 类型检查：`pnpm tsc -p tsconfig.json --noEmit` 无新增报错。
 - 本地环境检查测试：
   - `src/server/local-env-check.test.ts` 要覆盖 `cc-impl` 和 `codex-impl` 的版本检测。

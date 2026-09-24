@@ -95,7 +95,7 @@ const (
 
 // appServerAdapterConfig captures the provider-specific identity of an
 // app-server CLI so a single adapter implementation can serve Codex and
-// Codex-compatible forks (Tutti Agent) without sharing brand, command, or
+// Codex-compatible forks without sharing brand, command, or
 // auth assumptions.
 type appServerAdapterConfig struct {
 	provider                         string
@@ -537,51 +537,6 @@ func NewCodexAppServerAdapterWithHostMetadataAndCommandResolver(
 	return codexAdapter
 }
 
-// NewTuttiAgentAppServerAdapterWithHostMetadata serves the tutti-agent
-// provider through the shared app-server adapter with Tutti-branded command,
-// client identity, and auth messaging.
-func NewTuttiAgentAppServerAdapterWithHostMetadata(transport ProcessTransport, host HostMetadata) *CodexAppServerAdapter {
-	return newTuttiAgentAppServerAdapterWithHostMetadata(transport, host)
-}
-
-// NewTuttiAgentAppServerAdapterWithHostMetadataAndOptions serves the
-// tutti-agent provider through the shared app-server adapter while applying
-// host-owned command execution policy.
-func NewTuttiAgentAppServerAdapterWithHostMetadataAndOptions(
-	transport ProcessTransport,
-	host HostMetadata,
-	options CodexAppServerAdapterOptions,
-) *CodexAppServerAdapter {
-	adapter := newTuttiAgentAppServerAdapterWithHostMetadata(transport, host)
-	adapter.config.commandNetworkAccess = options.CommandNetworkAccess
-	adapter.startupSpanObserver = options.StartupSpanObserver
-	adapter.startupObserver = options.StartupObserver
-	adapter.startupResourceObserver = options.StartupResourceObserver
-	return adapter
-}
-
-func newTuttiAgentAppServerAdapterWithHostMetadata(
-	transport ProcessTransport,
-	host HostMetadata,
-) *CodexAppServerAdapter {
-	descriptor, ok := providerregistry.Find(ProviderTuttiAgent)
-	if !ok {
-		panic("tutti-agent provider descriptor is missing")
-	}
-	adapter := newAdapterFromProviderDescriptor(
-		descriptor,
-		transport,
-		host,
-		nil,
-		providerAdapterOptions{},
-	)
-	appServerAdapter, ok := adapter.(*CodexAppServerAdapter)
-	if !ok {
-		panic(fmt.Sprintf("Tutti Agent provider descriptor constructed %T", adapter))
-	}
-	return appServerAdapter
-}
-
 func newAppServerAdapter(
 	transport ProcessTransport,
 	host HostMetadata,
@@ -634,7 +589,7 @@ func (a *CodexAppServerAdapter) resolveCLIVersion(env []string) string {
 // clientInfoParams builds the app-server initialize clientInfo. The served
 // CLI derives its outbound originator/User-Agent from clientInfo.name, so the
 // name comes from the adapter config: the official Codex originator for the
-// codex provider, the Tutti identity for tutti-agent.
+// codex provider.
 func (a *CodexAppServerAdapter) clientInfoParams(env []string) map[string]any {
 	return clientInfoParamsForVersion(a.host, a.config.clientInfoName, a.resolveCLIVersion(env))
 }

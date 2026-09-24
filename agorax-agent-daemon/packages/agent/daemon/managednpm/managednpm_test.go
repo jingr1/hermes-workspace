@@ -9,32 +9,32 @@ import (
 )
 
 func TestDescriptorValidationAndVersionDecision(t *testing.T) {
-	descriptor := Descriptor{PackageName: "@tutti-os/tutti-agent", BinaryName: "tutti-agent", MinimumVersion: "0.0.4", RecommendedVersion: "0.0.4", IncludeOptional: true}
+	descriptor := Descriptor{PackageName: "@openai/codex", BinaryName: "codex", MinimumVersion: "0.0.4", RecommendedVersion: "0.0.4", IncludeOptional: true}
 	if err := descriptor.Validate(); err != nil {
 		t.Fatalf("Validate() error = %v", err)
 	}
 	want := map[string]VersionDecision{
 		"":                  VersionDecisionInstallMissing,
 		"unknown":           VersionDecisionInstallUnknown,
-		"tutti-agent 0.0.3": VersionDecisionInstallBelowFloor,
-		"tutti-agent 0.0.4": VersionDecisionReady,
-		"tutti-agent 1.0.0": VersionDecisionReady,
+		"codex 0.0.3": VersionDecisionInstallBelowFloor,
+		"codex 0.0.4": VersionDecisionReady,
+		"codex 1.0.0": VersionDecisionReady,
 	}
 	for output, expected := range want {
 		if got := DecideVersion(output, descriptor.MinimumVersion); got != expected {
 			t.Fatalf("DecideVersion(%q) = %q, want %q", output, got, expected)
 		}
 	}
-	for _, output := range []string{"tutti-agent 0.0.4-beta.1", "tutti-agent 0.0.4.1"} {
+	for _, output := range []string{"codex 0.0.4-beta.1", "codex 0.0.4.1"} {
 		if got := DecideVersion(output, descriptor.MinimumVersion); got != VersionDecisionInstallUnknown {
 			t.Fatalf("DecideVersion(%q) = %q, want %q", output, got, VersionDecisionInstallUnknown)
 		}
 	}
-	descriptor.PackageName = " @tutti-os/tutti-agent"
+	descriptor.PackageName = " @openai/codex"
 	if err := descriptor.Validate(); err == nil {
 		t.Fatal("Validate() error = nil, want non-canonical package rejection")
 	}
-	descriptor.PackageName = "@tutti-os/tutti-agent"
+	descriptor.PackageName = "@openai/codex"
 	descriptor.RecommendedVersion = "0.0.3"
 	if err := descriptor.Validate(); err == nil {
 		t.Fatal("Validate() error = nil, want recommended-below-floor rejection")
@@ -42,7 +42,7 @@ func TestDescriptorValidationAndVersionDecision(t *testing.T) {
 }
 
 func TestRankRegistriesRequiresCompletenessAndAvoidsTimingNoise(t *testing.T) {
-	descriptor := Descriptor{PackageName: "@tutti-os/tutti-agent", BinaryName: "tutti-agent", MinimumVersion: "0.0.4", RecommendedVersion: "0.0.4", IncludeOptional: true}
+	descriptor := Descriptor{PackageName: "@openai/codex", BinaryName: "codex", MinimumVersion: "0.0.4", RecommendedVersion: "0.0.4", IncludeOptional: true}
 	prober := fakeExecutor{registryProbes: map[string]RegistryProbeResult{
 		"official": {Reachable: true, Complete: true, Duration: 90 * time.Millisecond},
 		"fast-bad": {Reachable: true, Complete: false, Duration: 5 * time.Millisecond},
@@ -84,26 +84,26 @@ func TestResolveOptionalPlatformPackageSupportsNPMAlias(t *testing.T) {
 	}
 	for _, target := range targets {
 		t.Run(target.goOS+"-"+target.goArch, func(t *testing.T) {
-			alias := "@tutti-os/tutti-agent-" + target.npmOS + "-" + target.npmArch
+			alias := "@openai/codex-" + target.npmOS + "-" + target.npmArch
 			version := "0.0.5-" + target.npmOS + "-" + target.npmArch
 			name, gotVersion, ok := ResolveOptionalPlatformPackage(
-				"@tutti-os/tutti-agent",
-				map[string]string{alias: "npm:@tutti-os/tutti-agent@" + version},
+				"@openai/codex",
+				map[string]string{alias: "npm:@openai/codex@" + version},
 				target.goOS,
 				target.goArch,
 			)
-			if !ok || name != "@tutti-os/tutti-agent" || gotVersion != version {
+			if !ok || name != "@openai/codex" || gotVersion != version {
 				t.Fatalf("ResolveOptionalPlatformPackage() = %q, %q, %v", name, gotVersion, ok)
 			}
 		})
 	}
-	if _, _, ok := ResolveOptionalPlatformPackage("@tutti-os/tutti-agent", nil, "freebsd", "amd64"); ok {
+	if _, _, ok := ResolveOptionalPlatformPackage("@openai/codex", nil, "freebsd", "amd64"); ok {
 		t.Fatal("ResolveOptionalPlatformPackage() accepted unsupported target")
 	}
 }
 
 func testDescriptor() Descriptor {
-	return Descriptor{PackageName: "@tutti-os/tutti-agent", BinaryName: "tutti-agent", MinimumVersion: "0.0.4", RecommendedVersion: "0.0.4", IncludeOptional: true}
+	return Descriptor{PackageName: "@openai/codex", BinaryName: "codex", MinimumVersion: "0.0.4", RecommendedVersion: "0.0.4", IncludeOptional: true}
 }
 
 type fakeExecutor struct {

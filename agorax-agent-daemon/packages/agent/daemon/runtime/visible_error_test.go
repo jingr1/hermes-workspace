@@ -310,8 +310,8 @@ func TestVisibleFailureCodeClassifiesSubscriptionAndQuotaBeforeAuthWrapper(t *te
 }
 
 func TestVisibleFailureContentDescribesProviderInsufficientCredits(t *testing.T) {
-	got := visibleFailureContent(ProviderTuttiAgent, "turn", "insufficient_credits")
-	want := "Tutti Agent could not continue because the account has insufficient credits or balance."
+	got := visibleFailureContent(ProviderCodex, "turn", "insufficient_credits")
+	want := "Codex could not continue because the account has insufficient credits or balance."
 	if got != want {
 		t.Fatalf("visibleFailureContent() = %q, want %q", got, want)
 	}

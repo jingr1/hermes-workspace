@@ -111,11 +111,6 @@ func (s Service) authFromMarkerFile(spec ProviderSpec, path string) (AuthInfo, b
 			return auth, true
 		}
 		return AuthInfo{}, false
-	case providerregistry.AuthMarkerParserKindTuttiToken:
-		if auth, ok := parseTuttiAgentAuthMarkerFile(path); ok {
-			return auth, true
-		}
-		return AuthInfo{}, false
 	case providerregistry.AuthMarkerParserKindFileExists:
 		return AuthInfo{Status: AuthAuthenticated}, true
 	default:
@@ -135,7 +130,7 @@ func authMarkerParserKind(spec ProviderSpec) providerregistry.AuthMarkerParserKi
 
 func authMarkerIsAuthoritative(spec ProviderSpec) bool {
 	switch authMarkerParserKind(spec) {
-	case providerregistry.AuthMarkerParserKindOpenCode, providerregistry.AuthMarkerParserKindTuttiToken:
+	case providerregistry.AuthMarkerParserKindOpenCode:
 		return true
 	default:
 		return false
@@ -157,34 +152,3 @@ func parseOpenCodeAuthMarkerFile(path string) (AuthInfo, bool) {
 	return AuthInfo{Status: AuthAuthenticated}, true
 }
 
-// parseTuttiAgentAuthMarkerFile validates that the Tutti Agent auth.json holds
-// a usable `tutti_llm` token bundle instead of treating file existence as
-// authenticated.
-func parseTuttiAgentAuthMarkerFile(path string) (AuthInfo, bool) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return AuthInfo{}, false
-	}
-	var payload struct {
-		TuttiLLM *struct {
-			AppID        string `json:"app_id"`
-			AccessToken  string `json:"access_token"`
-			RefreshToken string `json:"refresh_token"`
-		} `json:"tutti_llm"`
-	}
-	if err := json.Unmarshal(raw, &payload); err != nil {
-		return AuthInfo{}, false
-	}
-	if payload.TuttiLLM == nil ||
-		strings.TrimSpace(payload.TuttiLLM.AccessToken) == "" ||
-		strings.TrimSpace(payload.TuttiLLM.RefreshToken) == "" {
-		return AuthInfo{Status: AuthRequired}, true
-	}
-	// app_id identifies the Agorax LLM application, not the signed-in user.
-	// The marker does not contain user-facing account identity, so leave the
-	// account label empty rather than showing the shared application ID.
-	return AuthInfo{
-		AuthMethod: "tutti_llm",
-		Status:     AuthAuthenticated,
-	}, true
-}

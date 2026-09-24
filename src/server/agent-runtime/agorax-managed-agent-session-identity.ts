@@ -9,10 +9,10 @@ export type AgoraxManagedSessionIdentity =
 
 /**
  * Resolves an Agorax display session id to the canonical daemon agentSessionId
- * for a managed-backend agent declaration. Mirrors the lookup the legacy
- * activity route uses: the display-session binding wins when its backend
- * matches the declaration, then the raw id is tried as a run id, and the
- * display id itself is the last-resort canonical id (daemon-native sessions).
+ * for a managed-backend agent declaration.
+ *
+ * Ownership is fail-closed (Tutti-style): a binding that belongs to a different
+ * backend must not hydrate into this agent's chat pane.
  */
 export async function resolveAgoraxManagedSessionIdentity(input: {
   agentId: string
@@ -30,11 +30,38 @@ export async function resolveAgoraxManagedSessionIdentity(input: {
   }
   const runStore = input.runStore ?? new AgoraxManagedRunStore()
   const displayBinding = await runStore.getByDisplaySession(sessionId)
-  const binding =
-    displayBinding?.backend === declaration.runtime
-      ? displayBinding
-      : await runStore.get(sessionId)
-  const agentSessionId =
-    binding?.backend === declaration.runtime ? binding.agentSessionId : sessionId
-  return { ok: true, backend: declaration.runtime, agentSessionId }
+  if (displayBinding) {
+    if (displayBinding.backend !== declaration.runtime) {
+      return {
+        ok: false,
+        status: 404,
+        error: 'session does not belong to this agent',
+      }
+    }
+    return {
+      ok: true,
+      backend: declaration.runtime,
+      agentSessionId: displayBinding.agentSessionId,
+    }
+  }
+
+  const runBinding = await runStore.get(sessionId)
+  if (runBinding) {
+    if (runBinding.backend !== declaration.runtime) {
+      return {
+        ok: false,
+        status: 404,
+        error: 'session does not belong to this agent',
+      }
+    }
+    return {
+      ok: true,
+      backend: declaration.runtime,
+      agentSessionId: runBinding.agentSessionId,
+    }
+  }
+
+  // Daemon-native session id (no collab display binding yet): allow through so
+  // reconcile can attach; engine/sessions already filters by agentTargetId.
+  return { ok: true, backend: declaration.runtime, agentSessionId: sessionId }
 }

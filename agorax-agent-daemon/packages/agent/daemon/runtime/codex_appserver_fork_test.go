@@ -2,7 +2,6 @@ package agentruntime
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"testing"
 )
@@ -46,53 +45,7 @@ func TestCodexAppServerForkCapabilitiesRequireExactSupportedRuntime(t *testing.T
 		}
 	})
 
-	t.Run("supported tutti agent", func(t *testing.T) {
-		transport := &multiProcAppServerTransport{}
-		transport.setConfigure(func(server *fakeCodexAppServer) {
-			server.userAgent = tuttiAgentForkUserAgent()
-		})
-		adapter := NewTuttiAgentAppServerAdapterWithHostMetadata(
-			transport,
-			LegacyHostMetadata(),
-		)
-		source := testAppServerSession()
-		source.Provider = ProviderTuttiAgent
-		if _, err := adapter.Start(context.Background(), source); err != nil {
-			t.Fatalf("Start: %v", err)
-		}
-		source.ProviderSessionID = "codex-thread-1"
-		capabilities, err := adapter.ForkCapabilities(context.Background(), source)
-		if err != nil {
-			t.Fatalf("ForkCapabilities: %v", err)
-		}
-		if capabilities.FullSession || !capabilities.ThroughTurn {
-			t.Fatalf("capabilities = %#v, want through-turn only", capabilities)
-		}
-	})
 
-	t.Run("older tutti agent", func(t *testing.T) {
-		transport := &multiProcAppServerTransport{}
-		transport.setConfigure(func(server *fakeCodexAppServer) {
-			server.userAgent = "tutti_agent/0.0.9"
-		})
-		adapter := NewTuttiAgentAppServerAdapterWithHostMetadata(
-			transport,
-			LegacyHostMetadata(),
-		)
-		source := testAppServerSession()
-		source.Provider = ProviderTuttiAgent
-		if _, err := adapter.Start(context.Background(), source); err != nil {
-			t.Fatalf("Start: %v", err)
-		}
-		source.ProviderSessionID = "tutti-thread-1"
-		capabilities, err := adapter.ForkCapabilities(context.Background(), source)
-		if err != nil {
-			t.Fatalf("ForkCapabilities: %v", err)
-		}
-		if capabilities.FullSession || capabilities.ThroughTurn {
-			t.Fatalf("capabilities = %#v, want unsupported", capabilities)
-		}
-	})
 }
 
 func TestCodexAppServerForkCapabilitiesUsePersistedRuntimeAttestation(t *testing.T) {
@@ -120,36 +73,6 @@ func TestCodexAppServerForkCapabilitiesUsePersistedRuntimeAttestation(t *testing
 	}
 }
 
-func TestTuttiAgentAppServerForkCapabilitiesUsePersistedRuntimeAttestation(
-	t *testing.T,
-) {
-	transport := &multiProcAppServerTransport{}
-	adapter := NewTuttiAgentAppServerAdapterWithHostMetadata(
-		transport,
-		LegacyHostMetadata(),
-	)
-	source := testAppServerSession()
-	source.Provider = ProviderTuttiAgent
-	source.ProviderSessionID = "codex-thread-1"
-	source.RuntimeContext = map[string]any{
-		"agent": map[string]any{"userAgent": tuttiAgentForkUserAgent()},
-	}
-
-	capabilities, err := adapter.ForkCapabilities(t.Context(), source)
-	if err != nil {
-		t.Fatalf("ForkCapabilities: %v", err)
-	}
-	if capabilities.FullSession || !capabilities.ThroughTurn {
-		t.Fatalf("capabilities = %#v, want through-turn only", capabilities)
-	}
-	if spawned, live := transport.snapshot(); spawned != 0 || len(live) != 0 {
-		t.Fatalf(
-			"capability projection processes = spawned %d/live %d, want 0/0",
-			spawned,
-			len(live),
-		)
-	}
-}
 
 func TestCodexAppServerForkCapabilitiesRequirePersistedAttestation(t *testing.T) {
 	t.Run("missing attestation", func(t *testing.T) {
@@ -226,49 +149,6 @@ func TestCodexAppServerForkThroughProviderTurn(t *testing.T) {
 	}
 }
 
-func TestTuttiAgentAppServerForkThroughProviderTurn(t *testing.T) {
-	transport := &multiProcAppServerTransport{}
-	transport.setConfigure(func(server *fakeCodexAppServer) {
-		server.userAgent = tuttiAgentForkUserAgent()
-		server.threadReadTurnIDs = []string{
-			"provider-turn-1",
-			"provider-turn-2",
-		}
-	})
-	adapter := NewTuttiAgentAppServerAdapterWithHostMetadata(
-		transport,
-		LegacyHostMetadata(),
-	)
-	source := testAppServerSession()
-	source.Provider = ProviderTuttiAgent
-	if _, err := adapter.Start(t.Context(), source); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	source.ProviderSessionID = "codex-thread-1"
-	controller := NewController([]Adapter{adapter}, nil)
-
-	result, err := controller.Fork(t.Context(), SessionForkInput{
-		Source:                  source,
-		ProviderTurnID:          "provider-turn-2",
-		ProviderTurnBindingJSON: json.RawMessage(`{"schemaVersion":1}`),
-	})
-	if err != nil {
-		t.Fatalf("Fork: %v", err)
-	}
-	if result.ProviderSessionID != "codex-thread-fork" ||
-		result.ForkedFromProviderSessionID != source.ProviderSessionID ||
-		result.ThroughProviderTurnID != "provider-turn-2" {
-		t.Fatalf("result = %#v", result)
-	}
-	request := appServerRequestParams(
-		t,
-		transport.conn(1),
-		appServerMethodThreadFork,
-	)
-	if got := asString(request["lastTurnId"]); got != "provider-turn-2" {
-		t.Fatalf("lastTurnId = %q, want provider-turn-2", got)
-	}
-}
 
 func TestCodexAppServerForkedChildCanResumeAndStartTurn(t *testing.T) {
 	adapter, source, transport := startForkCapableCodexAdapter(t)
@@ -628,42 +508,6 @@ func TestCodexAppServerUserAgentVersionGate(t *testing.T) {
 	}
 }
 
-func TestTuttiAgentAppServerUserAgentVersionGate(t *testing.T) {
-	strategy := appServerForkStrategyForTest(t, ProviderTuttiAgent)
-	tests := []struct {
-		userAgent string
-		want      bool
-	}{
-		{userAgent: tuttiAgentForkUserAgent(), want: true},
-		{
-			userAgent: tuttiAgentForkUserAgent() + " (Mac OS 26.5.0; arm64) dumb",
-			want:      true,
-		},
-		{userAgent: "tutti-agent/0.0.9", want: false},
-		{userAgent: "codex/0.144.0", want: false},
-		{userAgent: "", want: false},
-	}
-	for _, test := range tests {
-		t.Run(test.userAgent, func(t *testing.T) {
-			version, ok := appServerForkVersion(
-				strategy,
-				map[string]any{"userAgent": test.userAgent},
-			)
-			got := ok && versionAtLeast(
-				version,
-				strategy.throughTurnMinimumVersion,
-			)
-			if got != test.want {
-				t.Fatalf(
-					"gate(%q) = %v, want %v",
-					test.userAgent,
-					got,
-					test.want,
-				)
-			}
-		})
-	}
-}
 
 func startForkCapableCodexAdapter(
 	t *testing.T,

@@ -4,6 +4,7 @@ import { isAuthenticated } from '../../../../../server/auth-middleware'
 import { AgoraxManagedAgentHttpClient } from '../../../../../server/agent-runtime/agorax-managed-agent-http-client'
 import { isAgoraxManagedAgentBackend } from '../../../../../server/agent-runtime/agorax-managed-agent-bridge'
 import { getAgentRuntimeRouter } from '../../../../../server/agent-runtime/router'
+import { managedAgentTargetIdForRuntime } from '@/lib/managed-agent-runtime/agent-targets'
 
 export const Route = createFileRoute('/api/agents/$agentId/engine/sessions')({
   server: {
@@ -22,7 +23,14 @@ export const Route = createFileRoute('/api/agents/$agentId/engine/sessions')({
         }
         try {
           const client = new AgoraxManagedAgentHttpClient({ baseUrl, workspaceId })
-          const sessions = await client.listSessions()
+          const targetId = managedAgentTargetIdForRuntime(
+            declaration.runtime,
+            agentId,
+          )
+          // Tutti-style: only surface sessions owned by this agent's target.
+          const sessions = (await client.listSessions()).filter(
+            (session) => session.agentTargetId === targetId,
+          )
           const cursors = Object.fromEntries(
             sessions.map((session) => [session.agentSessionId, session.messageVersion]),
           )

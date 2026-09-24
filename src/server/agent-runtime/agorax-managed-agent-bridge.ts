@@ -71,9 +71,9 @@ export class AgoraxManagedAgentBridge {
   }
 
   /**
-   * True when the daemon actually serves this backend's target. Some backends
-   * are intentionally NOT daemon-hosted (claude-code is served by the direct
-   * CLI adapter) — those report unavailable so callers fall back.
+   * True when the daemon serves this backend's catalog target
+   * (`local:claude-code`, `local:codex`, …). All managed backends are
+   * daemon-hosted; optional `fallback` is a test seam only.
    */
   private async daemonAvailable(): Promise<boolean> {
     if (this.probeCache && Date.now() - this.probeCache.at < PROBE_CACHE_MS) {

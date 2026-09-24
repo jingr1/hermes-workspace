@@ -51,6 +51,7 @@ describe.skip('useAgentWorkspace', () => {
       sessionsByAgentId: new Map(),
       sessionsLoading: new Set(),
       activeSessionId: null,
+      lastActiveSessionIdByAgentId: {},
     })
   })
 

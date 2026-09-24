@@ -237,7 +237,7 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
         return
       }
 
-      // Non-Hermes agent: restore last session from store / last-session helper.
+      // Non-Hermes agent (Tutti-style): remember current, restore target's last.
       if (activeFriendlyId && activeFriendlyId !== 'new') {
         const currentAgentId = useAgentStore.getState().activeAgentId
         if (currentAgentId) {
@@ -247,20 +247,24 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
         }
       }
 
-      const cached =
-        useAgentStore.getState().sessionsByAgentId.get(agent.agentId) ?? []
-      const localSessions = cached.map((session) => ({
-        friendlyId: session.sessionId,
-      }))
-      const resolvedSession = resolveSessionForProfile(
-        localSessions,
-        agent.agentId,
-        {
-          sessionsLoaded:
-            cached.length > 0 ||
-            useAgentStore.getState().sessionsByAgentId.has(agent.agentId),
-        },
-      )
+      const store = useAgentStore.getState()
+      const cached = store.sessionsByAgentId.get(agent.agentId) ?? []
+      const knownIds = new Set(cached.map((session) => session.sessionId))
+      const sessionsLoaded =
+        cached.length > 0 || store.sessionsByAgentId.has(agent.agentId)
+
+      // Prefer in-memory per-agent last (same contract as Tutti ByAgentTargetId).
+      const remembered = store.lastActiveSessionIdByAgentId[agent.agentId]
+      let resolvedSession =
+        remembered && (!sessionsLoaded || knownIds.has(remembered))
+          ? remembered
+          : resolveSessionForProfile(
+              cached.map((session) => ({ friendlyId: session.sessionId })),
+              agent.agentId,
+              { sessionsLoaded },
+            )
+
+      if (resolvedSession === 'new') resolvedSession = 'new'
 
       navigate({
         to: '/chat/agent/$agentId',

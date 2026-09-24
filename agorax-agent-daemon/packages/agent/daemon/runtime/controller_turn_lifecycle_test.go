@@ -477,7 +477,7 @@ func TestControllerFinishTurnReconcilesCreatedStatusToReady(t *testing.T) {
 	session := Session{
 		RoomID:         "room-1",
 		AgentSessionID: "agent-session-1",
-		Provider:       ProviderTuttiAgent,
+		Provider:       ProviderCodex,
 		Status:         "created",
 		TurnLifecycle: &TurnLifecycle{
 			ActiveTurnID: &turnID,

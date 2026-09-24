@@ -250,9 +250,15 @@ agents:
     expect(router.getAdapter('dev')?.kind).toBe('hermes')
     expect(router.getAdapter('cc')?.kind).toBe('claude-code')
     expect(router.getAdapter('cx')?.kind).toBe('codex')
-    const codexProbe = await router.getAdapter('cx')!.probe()
-    expect(codexProbe.available).toBe(false)
-    expect(codexProbe.detail).toMatch(/codex executable not found/)
+    // Without managed transport, CC/Codex are unavailable (daemon-only path).
+    await expect(router.getAdapter('cc')!.probe()).resolves.toEqual({
+      available: false,
+      detail: 'Agorax Managed Agent transport is not configured',
+    })
+    await expect(router.getAdapter('cx')!.probe()).resolves.toEqual({
+      available: false,
+      detail: 'Agorax Managed Agent transport is not configured',
+    })
   })
 
   it('recognizes cursor and kimi as Agorax Managed Agent slots', async () => {
@@ -293,6 +299,44 @@ agents:
       available: false,
       detail: 'Agorax Managed Agent transport is not configured',
     })
+  })
+
+  it('routes claude-code and codex through the managed daemon bridge when transport is configured', async () => {
+    const transport = {
+      probe: vi.fn(async (backend: string) => ({
+        available: true,
+        detail: `daemon:${backend}`,
+      })),
+      startRun: vi.fn(async () => ({ runId: 'run-1' })),
+      streamEvents: vi.fn(() => (async function* () {})()),
+      interrupt: vi.fn(async () => undefined),
+    }
+    const router = new AgentRuntimeRouter({
+      agoraxManagedTransport: transport,
+      rawYaml: `
+version: 1
+agents:
+  - id: cc-impl
+    runtime: claude-code
+    command: claude
+  - id: codex-impl
+    runtime: codex
+    command: codex
+`,
+    })
+
+    expect(router.getAdapter('cc-impl')?.kind).toBe('claude-code')
+    expect(router.getAdapter('codex-impl')?.kind).toBe('codex')
+    await expect(router.getAdapter('cc-impl')!.probe()).resolves.toEqual({
+      available: true,
+      detail: 'daemon:claude-code',
+    })
+    await expect(router.getAdapter('codex-impl')!.probe()).resolves.toEqual({
+      available: true,
+      detail: 'daemon:codex',
+    })
+    expect(transport.probe).toHaveBeenCalledWith('claude-code')
+    expect(transport.probe).toHaveBeenCalledWith('codex')
   })
 
   it('uses the injected Agorax Managed Agent transport when configured', async () => {
@@ -351,165 +395,10 @@ agents:
     const rows = await router.probeAll()
     expect(rows).toHaveLength(2)
     const cc = rows.find((r) => r.agentId === 'cc')!
-    expect(cc.available).toBe(false) // binary doesn't exist
+    expect(cc.available).toBe(false) // transport not configured
+    expect(cc.detail).toMatch(/Managed Agent transport is not configured/)
     const dev = rows.find((r) => r.agentId === 'dev')!
     expect(dev.available).toBe(true) // hermes gateway probe (mocked healthy)
     expect(dev.detail).toMatch(/hermes gateway/)
   })
-})
-
-describe('ClaudeCodeAdapter process management', () => {
-  it('withManagedPermissionBypass injects skip-permissions unless already set', async () => {
-    const { withManagedPermissionBypass } = await import('./claude-code-adapter')
-    expect(withManagedPermissionBypass(undefined)).toEqual([
-      '--dangerously-skip-permissions',
-      '-p',
-    ])
-    expect(withManagedPermissionBypass(['-p'])).toEqual([
-      '--dangerously-skip-permissions',
-      '-p',
-    ])
-    expect(
-      withManagedPermissionBypass(['--dangerously-skip-permissions', '-p']),
-    ).toEqual(['--dangerously-skip-permissions', '-p'])
-    expect(
-      withManagedPermissionBypass(['--permission-mode', 'acceptEdits', '-p']),
-    ).toEqual(['--permission-mode', 'acceptEdits', '-p'])
-  })
-
-  it('startRun argv includes stream-json flags', async () => {
-    const fakeBin = join(tempRoot, 'fake-claude-stream')
-    writeFileSync(fakeBin, '#!/bin/bash\necho ok\nsleep 2\n')
-    const { chmodSync, readFileSync } = await import('node:fs')
-    chmodSync(fakeBin, 0o755)
-
-    const { ClaudeCodeAdapter } = await import('./claude-code-adapter')
-    const adapter = new ClaudeCodeAdapter({
-      id: 'cc',
-      runtime: 'claude-code',
-      command: fakeBin,
-      args: ['-p'],
-      execution: 'local',
-      modes: [],
-      tools: [],
-      skills: [],
-      plugins: [],
-      pluginToolsets: [],
-      mcpServers: [],
-      preferredTaskTypes: [],
-      greenlightRequiredFor: [],
-      acceptsBroadcast: false,
-      reviewRequired: false,
-      dispatchable: true,
-      capabilities: [],
-    })
-
-    const runId = 'run-cc-stream-argv'
-    await adapter.startRun({
-      runId,
-      agentId: 'cc',
-      task: 'noop',
-      mcp: {
-        endpoint: 'http://127.0.0.1:1/api/mcp-rpc',
-        runToken: 'tok',
-        toolAllowlist: [],
-      },
-    })
-    await new Promise((r) => setTimeout(r, 200))
-    await adapter.interrupt(runId, 'done')
-
-    const argv = JSON.parse(
-      readFileSync(
-        join(
-          getStateDir(),
-          'agent-runs',
-          runId,
-          'argv.txt',
-        ),
-        'utf8',
-      ),
-    ) as { args: Array<string> }
-    expect(argv.args).toContain('--dangerously-skip-permissions')
-    expect(argv.args).toContain('--output-format')
-    expect(argv.args).toContain('stream-json')
-    expect(argv.args).toContain('--include-partial-messages')
-    expect(argv.args).toContain('--verbose')
-  }, 10_000)
-
-  it('startRun spawns a detached process, streams output, interrupt kills the group', async () => {
-    // Use a stand-in "claude" binary: a shell script echoing then sleeping.
-    const fakeBin = join(tempRoot, 'fake-claude')
-    writeFileSync(
-      fakeBin,
-      '#!/bin/bash\necho "hello from fake claude"\nsleep 60\n',
-    )
-    const { chmodSync } = await import('node:fs')
-    chmodSync(fakeBin, 0o755)
-
-    const { ClaudeCodeAdapter } = await import('./claude-code-adapter')
-    const adapter = new ClaudeCodeAdapter({
-      id: 'cc',
-      runtime: 'claude-code',
-      command: fakeBin,
-      execution: 'local',
-      modes: [],
-      tools: [],
-      skills: [],
-      plugins: [],
-      pluginToolsets: [],
-      mcpServers: [],
-      preferredTaskTypes: [],
-      greenlightRequiredFor: [],
-      acceptsBroadcast: false,
-      reviewRequired: false,
-      dispatchable: true,
-      capabilities: [],
-    })
-
-    const probe = await adapter.probe()
-    expect(probe.available).toBe(false) // --version flag not handled by fake → non-zero/timeout is fine
-
-    const { runId } = await adapter.startRun({
-      runId: 'run-cc-1',
-      agentId: 'cc',
-      task: 'do something',
-      mcp: {
-        endpoint: 'http://127.0.0.1:1/api/mcp-rpc',
-        runToken: 'tok',
-        toolAllowlist: [],
-      },
-    })
-    expect(runId).toBe('run-cc-1')
-
-    const entry = lookupPid(runId)
-    expect(entry).not.toBeNull()
-    expect(isProcessGroupAlive(entry!.pid)).toBe(true)
-
-    // Collect stream events
-    const seen: Array<string> = []
-    const reader = (async () => {
-      for await (const evt of adapter.streamEvents(runId)) {
-        seen.push(evt.type)
-        if (evt.type === 'run_exited') break
-      }
-    })()
-
-    // Wait briefly for text_delta, then interrupt
-    await new Promise((r) => setTimeout(r, 500))
-    await adapter.interrupt(runId, 'test interrupt')
-    await reader
-
-    expect(seen).toContain('run_started')
-    expect(seen).toContain('text_delta')
-    expect(seen).toContain('run_exited')
-    expect(lookupPid(runId)).toBeNull()
-    // SIGKILL'd group leader may briefly appear alive as a zombie until the
-    // parent reaps it; poll instead of asserting immediately.
-    let alive = true
-    for (let i = 0; i < 20 && alive; i++) {
-      alive = isProcessGroupAlive(entry!.pid)
-      if (alive) await new Promise((r) => setTimeout(r, 100))
-    }
-    expect(alive).toBe(false)
-  }, 15_000)
 })
