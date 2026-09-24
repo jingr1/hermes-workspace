@@ -372,7 +372,7 @@ func logProcessStartEnvDiagnostics(spec ProcessSpec, env []string, resolvedComma
 		"path_override_count", diag["path_override_count"],
 		"path_entry_count", diag["path_entry_count"],
 		"path_head", diag["path_head"],
-		"path_contains_tutti_bin", diag["path_contains_tutti_bin"],
+		"path_contains_agorax_bin", diag["path_contains_agorax_bin"],
 		"path_contains_app_node_bin", diag["path_contains_app_node_bin"],
 		"path_contains_app_npm_bin", diag["path_contains_app_npm_bin"],
 		"workspace_env_present", diag["workspace_env_present"],
@@ -385,18 +385,18 @@ func logProcessStartEnvDiagnostics(spec ProcessSpec, env []string, resolvedComma
 func processStartEnvDiagnostics(spec ProcessSpec, env []string) map[string]any {
 	pathValue := envValueFromList(env, "PATH")
 	pathDirs := filepath.SplitList(pathValue)
-	appNodeBin := filepath.Dir(envValueFromList(env, "TUTTI_APP_NODE"))
-	appNPMBin := filepath.Dir(envValueFromList(env, "TUTTI_APP_NPM"))
+	appNodeBin := filepath.Dir(envValueFromList(env, "AGORAX_APP_NODE"))
+	appNPMBin := filepath.Dir(envValueFromList(env, "AGORAX_APP_NPM"))
 	proxyPresent, proxySource := proxyDiagnostics(spec, env)
 	return map[string]any{
 		"path_override_count":        envKeyCount(spec.Env, "PATH"),
 		"path_entry_count":           len(pathDirs),
 		"path_head":                  pathHeadForLog(pathDirs, 6),
-		"path_contains_tutti_bin":    pathContainsTuttiBin(pathDirs),
+		"path_contains_agorax_bin":   pathContainsAgoraxBin(pathDirs),
 		"path_contains_app_node_bin": appNodeBin != "." && pathContainsDir(pathDirs, appNodeBin),
 		"path_contains_app_npm_bin":  appNPMBin != "." && pathContainsDir(pathDirs, appNPMBin),
-		"workspace_env_present":      envHasKey(env, "TUTTI_WORKSPACE_ID"),
-		"agent_session_env_present":  envHasKey(env, "TUTTI_AGENT_SESSION_ID"),
+		"workspace_env_present":      envHasKey(env, "AGORAX_WORKSPACE_ID"),
+		"agent_session_env_present":  envHasKey(env, "AGORAX_AGENT_SESSION_ID"),
 		"proxy_env_present":          proxyPresent,
 		"proxy_source":               proxySource,
 	}
@@ -453,9 +453,10 @@ func pathHeadForLog(dirs []string, limit int) []string {
 	return head
 }
 
-func pathContainsTuttiBin(dirs []string) bool {
+func pathContainsAgoraxBin(dirs []string) bool {
 	for _, dir := range dirs {
-		if filepath.Base(filepath.Clean(dir)) == "bin" && filepath.Base(filepath.Dir(filepath.Clean(dir))) == ".tutti" {
+		base := filepath.Base(filepath.Dir(filepath.Clean(dir)))
+		if filepath.Base(filepath.Clean(dir)) == "bin" && (base == ".agorax" || base == ".agorax-dev") {
 			return true
 		}
 	}

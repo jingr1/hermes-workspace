@@ -34,8 +34,8 @@ func RunRuntimeConfigurationRebind(ctx context.Context, driver RuntimeConfigurat
 }
 
 func runRuntimeReplacementCommitsConfigurationBeforeTurnAdmission(ctx context.Context, driver RuntimeConfigurationRebindDriver) error {
-	expected := map[string]any{"connectionRevision": float64(1), "tuttiInitialTitleEstablished": false}
-	replacement := map[string]any{"connectionRevision": float64(2), "tuttiInitialTitleEstablished": false}
+	expected := map[string]any{"connectionRevision": float64(1), "agoraxInitialTitleEstablished": false}
+	replacement := map[string]any{"connectionRevision": float64(2), "agoraxInitialTitleEstablished": false}
 	ref := agenthost.SessionRef{WorkspaceID: "workspace-rebind", AgentSessionID: "session-rebind"}
 	if err := driver.Reset(ctx, Fixture{Session: &SessionSeed{
 		WorkspaceID: ref.WorkspaceID, AgentSessionID: ref.AgentSessionID,

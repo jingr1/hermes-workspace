@@ -180,7 +180,7 @@ JavaScript runner injects the replay-created Workspace identity only into
 product Activity Event envelopes.
 The runner also binds every scenario to one user-project root outside the Agorax
 checkout. A caller may supply an absolute
-`TUTTI_AGENT_SESSION_REPLAY_PROJECT_ROOT`; otherwise the direct CLI creates a
+`AGORAX_AGENT_SESSION_REPLAY_PROJECT_ROOT`; otherwise the direct CLI creates a
 run-scoped Git project under the operating-system temporary directory and
 removes it on exit. `--keep-runtime` retains that project for diagnosis.
 Semantic settings readiness compares every recorded composer setting with the

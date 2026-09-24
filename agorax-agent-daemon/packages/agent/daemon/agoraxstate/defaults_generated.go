@@ -33,7 +33,7 @@ var generatedDefaults = generatedDefaultsSpec{
 		AppVersion:    "0.0.0",
 	},
 	AgentExtensions: generatedAgentExtensionDefaults{
-		// Agorax does not consume Tutti agent-release CDN indexes. Extension
+		// Agorax does not consume Agorax agent-release CDN indexes. Extension
 		// installs stay off until an Agorax-owned catalog is wired.
 		Sources: []generatedAgentExtensionSourceDefaults{},
 	},

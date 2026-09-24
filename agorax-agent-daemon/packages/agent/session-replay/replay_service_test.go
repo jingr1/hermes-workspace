@@ -10,7 +10,7 @@ import (
 	"agorax.local/agent-daemon/packages/agent/store-sqlite/canonical"
 )
 
-func TestServiceKeepsTuttiTargetPolicyOutsideSharedWorkflow(t *testing.T) {
+func TestServiceKeepsAgoraxTargetPolicyOutsideSharedWorkflow(t *testing.T) {
 	service := &Service{}
 	_, err := service.Start(context.Background(), StartInput{
 		WorkspaceID: "workspace-1", AgentTargetID: "local:cursor",

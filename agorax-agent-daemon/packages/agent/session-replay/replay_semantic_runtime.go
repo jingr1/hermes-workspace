@@ -35,16 +35,16 @@ type SemanticWorkspaceStore interface {
 	ReplayWorkspaceExists(context.Context, string) (bool, error)
 	Create(context.Context, ReplayScopeSummary) error
 	PutWorkbenchSnapshot(context.Context, ReplayWorkbenchSnapshot) error
-	RestoreTuttiReplayProductState(
+	RestoreAgoraxReplayProductState(
 		context.Context,
 		string,
-		TuttiReplayMergedState,
+		AgoraxReplayMergedState,
 	) error
-	CaptureTuttiReplayStateWithAgent(
+	CaptureAgoraxReplayStateWithAgent(
 		context.Context,
 		string,
 		agenthost.HistoricalSessionGraph,
-	) (TuttiReplayState, error)
+	) (AgoraxReplayState, error)
 }
 
 type SemanticRuntime struct {
@@ -54,7 +54,7 @@ type SemanticRuntime struct {
 	profile       SemanticProfile
 	registrations map[string]SemanticRegistration
 	plans         map[string]CheckpointPlan
-	expected      map[string]TuttiReplayState
+	expected      map[string]AgoraxReplayState
 	// expectedBindings holds the expected Agent graphs with portable Session
 	// binding paths (cwd, rail project path, rail section key) resolved against
 	// the replay runtime cwd. Checkpoint readiness compares them against
@@ -81,7 +81,7 @@ func PrepareSemanticRuntime(
 	byID := make(map[string]SemanticRegistration, len(registrations))
 	plans := make(map[string]CheckpointPlan, len(registrations))
 	expectedStates := make(
-		map[string]TuttiReplayState,
+		map[string]AgoraxReplayState,
 		len(registrations),
 	)
 	expectedBindings := make(
@@ -98,11 +98,11 @@ func PrepareSemanticRuntime(
 	}
 	// The replay runner resolves portable `${REPLAY_CWD}` activity payloads
 	// against the repository workspace root and passes the same anchor through
-	// TUTTI_AGENT_SESSION_REPLAY_CWD. The daemon process cwd is only a
-	// fallback: desktop launchers may start tuttid from a different directory
+	// AGORAX_AGENT_SESSION_REPLAY_CWD. The daemon process cwd is only a
+	// fallback: desktop launchers may start agoraxd from a different directory
 	// (for example `apps/desktop`), which would desynchronize the two anchors.
 	replayCWD := strings.TrimSpace(
-		os.Getenv("TUTTI_AGENT_SESSION_REPLAY_CWD"),
+		os.Getenv("AGORAX_AGENT_SESSION_REPLAY_CWD"),
 	)
 	if replayCWD == "" {
 		var err error
@@ -111,7 +111,7 @@ func PrepareSemanticRuntime(
 			return nil, fmt.Errorf("resolve Replay runtime cwd: %w", err)
 		}
 	}
-	initialStates := make([]TuttiReplayState, 0, len(registrations))
+	initialStates := make([]AgoraxReplayState, 0, len(registrations))
 	for _, registration := range registrations {
 		registration.CassetteID = strings.TrimSpace(registration.CassetteID)
 		registration.RootSessionID = strings.TrimSpace(registration.RootSessionID)
@@ -143,7 +143,7 @@ func PrepareSemanticRuntime(
 		}
 		manifest := artifact.Manifest
 		if artifact.InitialState != nil {
-			if err := ValidateTuttiReplayStateForProfile(*artifact.InitialState, profile); err != nil {
+			if err := ValidateAgoraxReplayStateForProfile(*artifact.InitialState, profile); err != nil {
 				return nil, fmt.Errorf(
 					"Replay Cassette %q initial state profile: %w",
 					registration.CassetteID,
@@ -151,7 +151,7 @@ func PrepareSemanticRuntime(
 				)
 			}
 		}
-		if err := ValidateTuttiReplayStateForProfile(artifact.ExpectedState, profile); err != nil {
+		if err := ValidateAgoraxReplayStateForProfile(artifact.ExpectedState, profile); err != nil {
 			return nil, fmt.Errorf(
 				"Replay Cassette %q expected state profile: %w",
 				registration.CassetteID,
@@ -234,7 +234,7 @@ func PrepareSemanticRuntime(
 		}
 		observationStates[registration.CassetteID] = observationState
 	}
-	merged, err := MergeTuttiReplayStatesForProfile(initialStates, profile)
+	merged, err := MergeAgoraxReplayStatesForProfile(initialStates, profile)
 	if err != nil {
 		return nil, fmt.Errorf("merge Agent Session Replay initial states: %w", err)
 	}
@@ -284,7 +284,7 @@ func PrepareSemanticRuntime(
 			)
 		}
 	}
-	if err := store.RestoreTuttiReplayProductState(ctx, workspaceID, merged); err != nil {
+	if err := store.RestoreAgoraxReplayProductState(ctx, workspaceID, merged); err != nil {
 		return nil, err
 	}
 	return &SemanticRuntime{
@@ -394,7 +394,7 @@ func (r *SemanticRuntime) Verify(
 	if err != nil {
 		return err
 	}
-	actual, err := r.store.CaptureTuttiReplayStateWithAgent(
+	actual, err := r.store.CaptureAgoraxReplayStateWithAgent(
 		ctx,
 		r.workspaceID,
 		actualAgent,
@@ -402,5 +402,5 @@ func (r *SemanticRuntime) Verify(
 	if err != nil {
 		return err
 	}
-	return CompareTuttiReplayStateForProfile(expected, actual, r.profile)
+	return CompareAgoraxReplayStateForProfile(expected, actual, r.profile)
 }

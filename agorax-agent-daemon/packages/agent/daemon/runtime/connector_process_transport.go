@@ -18,7 +18,7 @@ import (
 const (
 	defaultConnectorStdoutLimit = int64(64 * 1024 * 1024)
 	defaultConnectorStderrLimit = int64(16 * 1024 * 1024)
-	connectorFDEnvPrefix        = "TUTTI_CONNECTOR_FD_"
+	connectorFDEnvPrefix        = "AGORAX_CONNECTOR_FD_"
 )
 
 // ErrProcessSpecInvalid marks a deterministic connector process contract
@@ -148,7 +148,7 @@ func connectorTreeInventoryDigest(root string) (string, error) {
 		if err != nil {
 			return err
 		}
-		if relative == "." || relative == ".tutti-connector-receipt.json" {
+		if relative == "." || relative == ".agorax-connector-receipt.json" {
 			return nil
 		}
 		info, err := entry.Info()

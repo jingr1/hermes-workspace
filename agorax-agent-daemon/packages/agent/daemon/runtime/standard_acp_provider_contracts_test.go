@@ -100,7 +100,7 @@ func TestCursorAdapterInjectsAskUserQuestionMCPBinding(t *testing.T) {
 		t.Fatalf("session/new MCP servers = %#v, want one Cursor interaction binding", servers)
 	}
 	binding, _ := servers[0].(map[string]any)
-	if binding["name"] != "tutti-interaction" || binding["type"] != "http" {
+	if binding["name"] != "agorax-interaction" || binding["type"] != "http" {
 		t.Fatalf("Cursor interaction MCP binding = %#v", binding)
 	}
 	if url := asString(binding["url"]); !strings.HasPrefix(url, "http://127.0.0.1:") {
@@ -201,12 +201,12 @@ func TestCursorAdapterStartUsesPluginDirWithInjectedProviderCommand(t *testing.T
 		},
 	)
 	session := standardTestSession(ProviderCursor)
-	session.Env = []string{cursorPluginDirEnv + "=/state/cursor-plugin/tutti-cli"}
+	session.Env = []string{cursorPluginDirEnv + "=/state/cursor-plugin/agorax-cli"}
 
 	if _, err := adapter.Start(context.Background(), session); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	if got := strings.Join(transport.specs[0].Command, " "); got != "/home/user/.local/bin/agent --plugin-dir /state/cursor-plugin/tutti-cli acp" {
+	if got := strings.Join(transport.specs[0].Command, " "); got != "/home/user/.local/bin/agent --plugin-dir /state/cursor-plugin/agorax-cli acp" {
 		t.Fatalf("command = %q, want resolved cursor binary with plugin-dir", got)
 	}
 }
@@ -506,7 +506,7 @@ func TestOpenClawAdapterStartCreatesStandardACPSession(t *testing.T) {
 		t.Fatalf("session/new missing _meta params snapshot")
 	}
 	sk, _ := meta["sessionKey"].(string)
-	wantKey := "agent:main:tsh-" + session.AgentSessionID
+	wantKey := "agent:main:agorax-" + session.AgentSessionID
 	if sk != wantKey {
 		t.Fatalf("session/new sessionKey = %q, want %q", sk, wantKey)
 	}
@@ -528,7 +528,7 @@ func TestOpenClawAdapterResumePassesGatewayChatSessionKeyMeta(t *testing.T) {
 		t.Fatalf("session/load missing _meta params snapshot")
 	}
 	sk, _ := meta["sessionKey"].(string)
-	wantKey := "agent:main:tsh-" + session.AgentSessionID
+	wantKey := "agent:main:agorax-" + session.AgentSessionID
 	if sk != wantKey {
 		t.Fatalf("session/load sessionKey = %q, want %q", sk, wantKey)
 	}

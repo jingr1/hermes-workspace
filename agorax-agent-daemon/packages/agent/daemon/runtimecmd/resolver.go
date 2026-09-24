@@ -22,7 +22,7 @@ type Resolver struct {
 }
 
 // nestingGuardEnvKeys are the environment variables a parent Claude Code
-// session exports to detect (and refuse) nested launches. When tuttid itself
+// session exports to detect (and refuse) nested launches. When agoraxd itself
 // runs inside a Claude Code session these leak into spawned agent subprocesses, causing
 // a child `claude` to abort with "cannot be launched inside another Claude Code
 // session". They are stripped from the base environment so each spawned agent
@@ -200,7 +200,7 @@ func (r Resolver) fallbackExecutableDirs() []string {
 	home, err := r.homeDir()
 	if err == nil && strings.TrimSpace(home) != "" {
 		homeDirs = []string{
-			filepath.Join(home, ".tutti", "bin"),
+			filepath.Join(home, ".agorax", "bin"),
 			filepath.Join(home, ".opencode", "bin"),
 			// Official kimi-code installer defaults to $HOME/.kimi-code/bin and
 			// only mutates shell rc files — the daemon process never re-reads

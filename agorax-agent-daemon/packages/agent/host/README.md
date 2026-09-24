@@ -164,9 +164,9 @@ from the local registry, but it applies only to first initialization and never
 allows an existing session's immutable placement to change.
 Before provider startup, Host resolves the final placement from the immutable
 existing session, an explicit caller placement, or the prepared cwd through the
-canonical store. It then installs the prepared cwd in `TUTTI_AGENT_CWD` and the
+canonical store. It then installs the prepared cwd in `AGORAX_AGENT_CWD` and the
 normalized versioned `RailPlacement` JSON in
-`TUTTI_AGENT_RAIL_PLACEMENT`. Create, resume, runtime reprepare, and historical
+`AGORAX_AGENT_RAIL_PLACEMENT`. Create, resume, runtime reprepare, and historical
 Session Fork sources all receive that same pair. Nested callers inherit it when
 they omit an explicit cwd; an explicit cwd is a new placement-selection request,
 not a request to reinterpret the caller's environment. Adapters must not derive

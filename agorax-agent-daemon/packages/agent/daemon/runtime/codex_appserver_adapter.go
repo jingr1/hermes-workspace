@@ -159,7 +159,7 @@ type CodexAppServerSpanObserver func(CodexAppServerSpanObservation)
 
 // CodexAppServerStartupObservation is one bounded summary of a Codex
 // app-server session start or resume. Counts describe resources bound to the
-// Tutti session and completed allowlisted Codex spans.
+// Agorax session and completed allowlisted Codex spans.
 type CodexAppServerStartupObservation struct {
 	Provider           string
 	RoomID             string
@@ -177,7 +177,7 @@ type CodexAppServerStartupObserver func(CodexAppServerStartupObservation)
 
 // CodexAppServerResourceObservation is a bounded snapshot of the resources
 // visible to one app-server startup attempt. MCPServerCount is the number of
-// bindings supplied by the Tutti session. PluginCount and SkillCount are
+// bindings supplied by the Agorax session. PluginCount and SkillCount are
 // Codex-native counts; -1 means that the corresponding list request did not
 // produce a trustworthy response.
 type CodexAppServerResourceObservation struct {
@@ -375,10 +375,10 @@ type codexAppServerSession struct {
 	planModeMask    map[string]any
 	defaultModeMask map[string]any
 	defaultModel    string
-	// tuttiModeHostContext is the latest Tutti-owned developer context applied
+	// agoraxModeHostContext is the latest Agorax-owned developer context applied
 	// to this thread. A Side fork preserves it alongside the provider mode so
 	// the fork cannot silently lose session and workspace context.
-	tuttiModeHostContext string
+	agoraxModeHostContext string
 	authState            string
 	authMessage          string
 	activeTurnID         string

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://tutti.dev/schemas/agent-activity-live-event.json",
+  "$id": "https://agorax.dev/schemas/agent-activity-live-event.json",
   "title": "AgentActivityLiveEvent",
   "description": "Lossy optimistic AgentGUI event contract. The public agent.activity.updated WebSocket may carry the same live variants before canonical confirmation.",
   "oneOf": [

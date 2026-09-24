@@ -12,32 +12,32 @@ import (
 	storesqlite "agorax.local/agent-daemon/packages/agent/store-sqlite"
 )
 
-var ErrTuttiReplayStateConflict = errors.New("tutti replay state conflict")
+var ErrAgoraxReplayStateConflict = errors.New("agorax replay state conflict")
 
 const SchemaVersion = 1
-const StateFormat = "tutti.agent-session-replay-state.v1"
+const StateFormat = "agorax.agent-session-replay-state.v1"
 
-type TuttiReplayState struct {
+type AgoraxReplayState struct {
 	SchemaVersion int                   `json:"schemaVersion"`
-	Agent         TuttiReplayAgent      `json:"agent"`
-	TuttiMode     TuttiReplayTuttiMode  `json:"tuttiMode"`
-	Workflows     []TuttiReplayWorkflow `json:"workflows"`
-	Issues        []TuttiReplayIssue    `json:"issues"`
+	Agent         AgoraxReplayAgent      `json:"agent"`
+	AgoraxMode     AgoraxReplayAgoraxMode  `json:"agoraxMode"`
+	Workflows     []AgoraxReplayWorkflow `json:"workflows"`
+	Issues        []AgoraxReplayIssue    `json:"issues"`
 }
 
-type TuttiReplayAgent = agenthost.HistoricalSessionGraph
-type TuttiReplaySession = agenthost.HistoricalSession
-type TuttiReplayTurn = agenthost.HistoricalTurn
-type TuttiReplayMessage = agenthost.HistoricalMessage
-type TuttiReplayInteraction = agenthost.HistoricalInteraction
-type TuttiReplayGoal = agenthost.HistoricalGoal
+type AgoraxReplayAgent = agenthost.HistoricalSessionGraph
+type AgoraxReplaySession = agenthost.HistoricalSession
+type AgoraxReplayTurn = agenthost.HistoricalTurn
+type AgoraxReplayMessage = agenthost.HistoricalMessage
+type AgoraxReplayInteraction = agenthost.HistoricalInteraction
+type AgoraxReplayGoal = agenthost.HistoricalGoal
 
-type TuttiReplayTuttiMode struct {
-	Activations   []TuttiReplayActivation   `json:"activations"`
-	TurnSnapshots []TuttiReplayTurnSnapshot `json:"turnSnapshots"`
+type AgoraxReplayAgoraxMode struct {
+	Activations   []AgoraxReplayActivation   `json:"activations"`
+	TurnSnapshots []AgoraxReplayTurnSnapshot `json:"turnSnapshots"`
 }
 
-type TuttiReplayActivation struct {
+type AgoraxReplayActivation struct {
 	ID                string `json:"id"`
 	SessionID         string `json:"sessionId"`
 	CurrentRevisionID string `json:"currentRevisionId"`
@@ -48,7 +48,7 @@ type TuttiReplayActivation struct {
 	Speed             int    `json:"speed"`
 }
 
-type TuttiReplayTurnSnapshot struct {
+type AgoraxReplayTurnSnapshot struct {
 	SessionID         string `json:"sessionId"`
 	TurnID            string `json:"turnId"`
 	ActivationID      string `json:"activationId,omitempty"`
@@ -62,7 +62,7 @@ type TuttiReplayTurnSnapshot struct {
 	DispatchState     string `json:"dispatchState"`
 }
 
-type TuttiReplayWorkflow struct {
+type AgoraxReplayWorkflow struct {
 	ID                string   `json:"id"`
 	Type              string   `json:"type"`
 	TriggerKind       string   `json:"triggerKind"`
@@ -74,15 +74,15 @@ type TuttiReplayWorkflow struct {
 	IssueIDs          []string `json:"issueIds"`
 }
 
-type TuttiReplayIssue struct {
+type AgoraxReplayIssue struct {
 	ID      string                 `json:"id"`
 	Title   string                 `json:"title"`
 	Content string                 `json:"content,omitempty"`
 	Status  string                 `json:"status"`
-	Tasks   []TuttiReplayIssueTask `json:"tasks"`
+	Tasks   []AgoraxReplayIssueTask `json:"tasks"`
 }
 
-type TuttiReplayIssueTask struct {
+type AgoraxReplayIssueTask struct {
 	ID       string `json:"id"`
 	Title    string `json:"title"`
 	Content  string `json:"content,omitempty"`
@@ -91,36 +91,36 @@ type TuttiReplayIssueTask struct {
 	Position int    `json:"position"`
 }
 
-type TuttiReplayStateConflictError struct {
+type AgoraxReplayStateConflictError struct {
 	Path string
 }
 
-func (e *TuttiReplayStateConflictError) Error() string {
-	return fmt.Sprintf("%s at %s", ErrTuttiReplayStateConflict, e.Path)
+func (e *AgoraxReplayStateConflictError) Error() string {
+	return fmt.Sprintf("%s at %s", ErrAgoraxReplayStateConflict, e.Path)
 }
 
-func (*TuttiReplayStateConflictError) Unwrap() error {
-	return ErrTuttiReplayStateConflict
+func (*AgoraxReplayStateConflictError) Unwrap() error {
+	return ErrAgoraxReplayStateConflict
 }
 
-type TuttiReplayMergedState struct {
+type AgoraxReplayMergedState struct {
 	Agents    []agenthost.HistoricalSessionGraph
-	TuttiMode TuttiReplayTuttiMode
-	Workflows []TuttiReplayWorkflow
-	Issues    []TuttiReplayIssue
+	AgoraxMode AgoraxReplayAgoraxMode
+	Workflows []AgoraxReplayWorkflow
+	Issues    []AgoraxReplayIssue
 }
 
 // ProjectPortableAgentState removes provider runtime context that is not part
-// of Tutti's semantic replay contract. Tool-owned nested arguments remain
+// of Agorax's semantic replay contract. Tool-owned nested arguments remain
 // untouched; canceled-Turn completion watermarks, durable turn.fileChanges
 // paths, materialized attachment paths, and runtime message envelopes are
 // projected.
 func ProjectPortableAgentState(
-	agent TuttiReplayAgent,
+	agent AgoraxReplayAgent,
 	stateDirectory string,
-) TuttiReplayAgent {
+) AgoraxReplayAgent {
 	projected := agent
-	projected.Sessions = make([]TuttiReplaySession, len(agent.Sessions))
+	projected.Sessions = make([]AgoraxReplaySession, len(agent.Sessions))
 	copy(projected.Sessions, agent.Sessions)
 	rootCWD := replayRootCWD(agent)
 	for sessionIndex := range projected.Sessions {
@@ -140,7 +140,7 @@ func ProjectPortableAgentState(
 				storesqlite.RailSectionKeyForProject(sourceSession.RailProjectPath) {
 			session.RailSectionKey = "project:" + session.RailProjectPath
 		}
-		session.Turns = make([]TuttiReplayTurn, len(sourceSession.Turns))
+		session.Turns = make([]AgoraxReplayTurn, len(sourceSession.Turns))
 		copy(session.Turns, sourceSession.Turns)
 		for turnIndex := range session.Turns {
 			projectPortableCanceledTurnCompletionWatermark(
@@ -148,7 +148,7 @@ func ProjectPortableAgentState(
 			)
 			projectPortableTurnFileChanges(&session.Turns[turnIndex], rootCWD)
 		}
-		session.Messages = make([]TuttiReplayMessage, len(session.Messages))
+		session.Messages = make([]AgoraxReplayMessage, len(session.Messages))
 		copy(session.Messages, sourceSession.Messages)
 		for messageIndex := range session.Messages {
 			message := &session.Messages[messageIndex]
@@ -157,7 +157,7 @@ func ProjectPortableAgentState(
 			projectPortableMessagePayload(message, rootCWD)
 		}
 		session.Interactions = make(
-			[]TuttiReplayInteraction,
+			[]AgoraxReplayInteraction,
 			len(sourceSession.Interactions),
 		)
 		copy(session.Interactions, sourceSession.Interactions)
@@ -173,7 +173,7 @@ func ProjectPortableAgentState(
 }
 
 func replayProviderHome(
-	session TuttiReplaySession,
+	session AgoraxReplaySession,
 	stateDirectory string,
 ) string {
 	descriptor, ok := ResolveProviderReplay(
@@ -202,7 +202,7 @@ func replayProviderHome(
 }
 
 func projectPortableGeneratedImageMessage(
-	message *TuttiReplayMessage,
+	message *AgoraxReplayMessage,
 	providerHome string,
 ) {
 	if message.Kind != "tool_call" || !filepath.IsAbs(providerHome) {
@@ -242,7 +242,7 @@ func projectPortableGeneratedImageMessage(
 }
 
 func projectPortableMessagePayload(
-	message *TuttiReplayMessage,
+	message *AgoraxReplayMessage,
 	rootCWD string,
 ) {
 	payload := cloneReplayMap(message.Payload)
@@ -317,7 +317,7 @@ func portableGeneratedImagePath(value, providerHome string) (string, bool) {
 	return PortableReplayHomeToken + "/" + portable, true
 }
 
-func projectPortableCanceledTurnCompletionWatermark(turn *TuttiReplayTurn) {
+func projectPortableCanceledTurnCompletionWatermark(turn *AgoraxReplayTurn) {
 	if strings.TrimSpace(turn.Outcome) != "canceled" ||
 		turn.CompletedCommand == nil {
 		return
@@ -331,7 +331,7 @@ func projectPortableCanceledTurnCompletionWatermark(turn *TuttiReplayTurn) {
 	turn.CompletedCommand = completedCommand
 }
 
-func projectPortableTurnFileChanges(turn *TuttiReplayTurn, rootCWD string) {
+func projectPortableTurnFileChanges(turn *AgoraxReplayTurn, rootCWD string) {
 	if len(turn.FileChanges) == 0 {
 		return
 	}
@@ -340,7 +340,7 @@ func projectPortableTurnFileChanges(turn *TuttiReplayTurn, rootCWD string) {
 }
 
 func resolvePortableTurnFileChanges(
-	turn *TuttiReplayTurn,
+	turn *AgoraxReplayTurn,
 	replayCWD string,
 ) error {
 	if len(turn.FileChanges) == 0 {
@@ -359,29 +359,29 @@ func resolvePortableTurnFileChanges(
 // turn.fileChanges paths relative to the replay runtime root. User-authored
 // payloads remain untouched.
 func ResolvePortableAgentState(
-	agent TuttiReplayAgent,
+	agent AgoraxReplayAgent,
 	replayCWD string,
-) (TuttiReplayAgent, error) {
+) (AgoraxReplayAgent, error) {
 	replayCWD = filepath.Clean(strings.TrimSpace(replayCWD))
 	if replayCWD == "." || !filepath.IsAbs(replayCWD) {
-		return TuttiReplayAgent{}, errors.New("replay cwd must be absolute")
+		return AgoraxReplayAgent{}, errors.New("replay cwd must be absolute")
 	}
 	resolved := agent
-	resolved.Sessions = make([]TuttiReplaySession, len(agent.Sessions))
+	resolved.Sessions = make([]AgoraxReplaySession, len(agent.Sessions))
 	copy(resolved.Sessions, agent.Sessions)
 	for index := range resolved.Sessions {
 		session := &resolved.Sessions[index]
 		var err error
 		session.Cwd, err = resolvePortableReplayPath(session.Cwd, replayCWD)
 		if err != nil {
-			return TuttiReplayAgent{}, err
+			return AgoraxReplayAgent{}, err
 		}
 		session.RailProjectPath, err = resolvePortableReplayPath(
 			session.RailProjectPath,
 			replayCWD,
 		)
 		if err != nil {
-			return TuttiReplayAgent{}, err
+			return AgoraxReplayAgent{}, err
 		}
 		if strings.HasPrefix(
 			session.RailSectionKey,
@@ -390,23 +390,23 @@ func ResolvePortableAgentState(
 			portablePath := strings.TrimPrefix(session.RailSectionKey, "project:")
 			projectPath, err := resolvePortableReplayPath(portablePath, replayCWD)
 			if err != nil {
-				return TuttiReplayAgent{}, err
+				return AgoraxReplayAgent{}, err
 			}
 			session.RailSectionKey = storesqlite.RailSectionKeyForProject(projectPath)
 		}
 		sourceTurns := session.Turns
-		session.Turns = make([]TuttiReplayTurn, len(sourceTurns))
+		session.Turns = make([]AgoraxReplayTurn, len(sourceTurns))
 		copy(session.Turns, sourceTurns)
 		for turnIndex := range session.Turns {
 			if err := resolvePortableTurnFileChanges(
 				&session.Turns[turnIndex],
 				replayCWD,
 			); err != nil {
-				return TuttiReplayAgent{}, err
+				return AgoraxReplayAgent{}, err
 			}
 		}
 		sourceMessages := session.Messages
-		session.Messages = make([]TuttiReplayMessage, len(sourceMessages))
+		session.Messages = make([]AgoraxReplayMessage, len(sourceMessages))
 		copy(session.Messages, sourceMessages)
 		for messageIndex := range session.Messages {
 			message := &session.Messages[messageIndex]
@@ -420,19 +420,19 @@ func ResolvePortableAgentState(
 					replayCWD,
 				)
 				if err != nil {
-					return TuttiReplayAgent{}, err
+					return AgoraxReplayAgent{}, err
 				}
 				payload["input"] = resolvedInput
 			}
 			resolvedPayload, err := resolvePortablePathFields(payload, replayCWD)
 			if err != nil {
-				return TuttiReplayAgent{}, err
+				return AgoraxReplayAgent{}, err
 			}
 			message.Payload, _ = resolvedPayload.(map[string]any)
 		}
 		sourceInteractions := session.Interactions
 		session.Interactions = make(
-			[]TuttiReplayInteraction,
+			[]AgoraxReplayInteraction,
 			len(sourceInteractions),
 		)
 		copy(session.Interactions, sourceInteractions)
@@ -443,7 +443,7 @@ func ResolvePortableAgentState(
 				replayCWD,
 			)
 			if err != nil {
-				return TuttiReplayAgent{}, err
+				return AgoraxReplayAgent{}, err
 			}
 			interaction.Input = resolvedInput
 		}
@@ -451,7 +451,7 @@ func ResolvePortableAgentState(
 	return resolved, nil
 }
 
-func replayRootCWD(agent TuttiReplayAgent) string {
+func replayRootCWD(agent AgoraxReplayAgent) string {
 	for _, session := range agent.Sessions {
 		if session.ID == agent.RootSessionID {
 			return strings.TrimSpace(session.Cwd)
@@ -515,7 +515,7 @@ func resolvePortableReplayPath(path, replayCWD string) (string, error) {
 	return resolved, nil
 }
 
-func projectPortablePlanDecisionMessage(message *TuttiReplayMessage) {
+func projectPortablePlanDecisionMessage(message *AgoraxReplayMessage) {
 	clientSubmitID, _ := message.Payload["clientSubmitId"].(string)
 	if strings.HasPrefix(
 		strings.TrimSpace(clientSubmitID),
@@ -682,23 +682,23 @@ func cloneReplayMap(source map[string]any) map[string]any {
 	return cloned
 }
 
-func ValidateTuttiReplayState(state TuttiReplayState) error {
+func ValidateAgoraxReplayState(state AgoraxReplayState) error {
 	if state.SchemaVersion != SchemaVersion {
-		return fmt.Errorf("unsupported tutti replay state schema %d", state.SchemaVersion)
+		return fmt.Errorf("unsupported agorax replay state schema %d", state.SchemaVersion)
 	}
 	if err := agenthost.ValidateHistoricalSessionGraph(state.Agent); err != nil {
 		return err
 	}
-	if state.TuttiMode.Activations == nil ||
-		state.TuttiMode.TurnSnapshots == nil ||
+	if state.AgoraxMode.Activations == nil ||
+		state.AgoraxMode.TurnSnapshots == nil ||
 		state.Workflows == nil ||
 		state.Issues == nil {
-		return errors.New("tutti replay state sections must be explicit arrays")
+		return errors.New("agorax replay state sections must be explicit arrays")
 	}
 	for _, workflow := range state.Workflows {
 		if workflow.IssueIDs == nil {
 			return fmt.Errorf(
-				"tutti replay state workflow %q must have explicit issueIds",
+				"agorax replay state workflow %q must have explicit issueIds",
 				workflow.ID,
 			)
 		}
@@ -719,7 +719,7 @@ func validateReplayPortableValue(path, key string, value any) error {
 	case map[string]any:
 		for childKey, child := range value {
 			if childKey == "workspaceId" {
-				return fmt.Errorf("tutti replay state contains non-portable %s.%s", path, childKey)
+				return fmt.Errorf("agorax replay state contains non-portable %s.%s", path, childKey)
 			}
 			if err := validateReplayPortableValue(
 				path+"."+childKey,
@@ -743,34 +743,34 @@ func validateReplayPortableValue(path, key string, value any) error {
 		lowerKey := strings.ToLower(key)
 		if (strings.Contains(lowerKey, "path") || lowerKey == "cwd") &&
 			(filepath.IsAbs(value) || strings.HasPrefix(value, "file://")) {
-			return fmt.Errorf("tutti replay state contains absolute path at %s", path)
+			return fmt.Errorf("agorax replay state contains absolute path at %s", path)
 		}
 	}
 	return nil
 }
 
-func MergeTuttiReplayStates(
-	states []TuttiReplayState,
-) (TuttiReplayMergedState, error) {
+func MergeAgoraxReplayStates(
+	states []AgoraxReplayState,
+) (AgoraxReplayMergedState, error) {
 	for _, state := range states {
-		if err := ValidateTuttiReplayState(state); err != nil {
-			return TuttiReplayMergedState{}, err
+		if err := ValidateAgoraxReplayState(state); err != nil {
+			return AgoraxReplayMergedState{}, err
 		}
 	}
-	return mergeTuttiReplayStatesValidated(states)
+	return mergeAgoraxReplayStatesValidated(states)
 }
 
-func mergeTuttiReplayStatesValidated(
-	states []TuttiReplayState,
-) (TuttiReplayMergedState, error) {
-	merged := TuttiReplayMergedState{
+func mergeAgoraxReplayStatesValidated(
+	states []AgoraxReplayState,
+) (AgoraxReplayMergedState, error) {
+	merged := AgoraxReplayMergedState{
 		Agents: []agenthost.HistoricalSessionGraph{},
-		TuttiMode: TuttiReplayTuttiMode{
-			Activations:   []TuttiReplayActivation{},
-			TurnSnapshots: []TuttiReplayTurnSnapshot{},
+		AgoraxMode: AgoraxReplayAgoraxMode{
+			Activations:   []AgoraxReplayActivation{},
+			TurnSnapshots: []AgoraxReplayTurnSnapshot{},
 		},
-		Workflows: []TuttiReplayWorkflow{},
-		Issues:    []TuttiReplayIssue{},
+		Workflows: []AgoraxReplayWorkflow{},
+		Issues:    []AgoraxReplayIssue{},
 	}
 	sessionObjects := map[string]any{}
 	activationObjects := map[string]any{}
@@ -785,29 +785,29 @@ func mergeTuttiReplayStatesValidated(
 				session,
 				sessionObjects,
 			); err != nil {
-				return TuttiReplayMergedState{}, err
+				return AgoraxReplayMergedState{}, err
 			}
 		}
 		merged.Agents = append(merged.Agents, state.Agent)
-		for _, activation := range state.TuttiMode.Activations {
+		for _, activation := range state.AgoraxMode.Activations {
 			if err := mergeReplayObject(
-				"$.tuttiMode.activations["+activation.ID+"]",
+				"$.agoraxMode.activations["+activation.ID+"]",
 				activation.ID,
 				activation,
 				activationObjects,
 			); err != nil {
-				return TuttiReplayMergedState{}, err
+				return AgoraxReplayMergedState{}, err
 			}
 		}
-		for _, snapshot := range state.TuttiMode.TurnSnapshots {
+		for _, snapshot := range state.AgoraxMode.TurnSnapshots {
 			key := snapshot.SessionID + "\x00" + snapshot.TurnID
 			if err := mergeReplayObject(
-				"$.tuttiMode.turnSnapshots["+snapshot.SessionID+"/"+snapshot.TurnID+"]",
+				"$.agoraxMode.turnSnapshots["+snapshot.SessionID+"/"+snapshot.TurnID+"]",
 				key,
 				snapshot,
 				snapshotObjects,
 			); err != nil {
-				return TuttiReplayMergedState{}, err
+				return AgoraxReplayMergedState{}, err
 			}
 		}
 		for _, workflow := range state.Workflows {
@@ -817,7 +817,7 @@ func mergeTuttiReplayStatesValidated(
 				workflow,
 				workflowObjects,
 			); err != nil {
-				return TuttiReplayMergedState{}, err
+				return AgoraxReplayMergedState{}, err
 			}
 		}
 		for _, issue := range state.Issues {
@@ -827,14 +827,14 @@ func mergeTuttiReplayStatesValidated(
 				issue,
 				issueObjects,
 			); err != nil {
-				return TuttiReplayMergedState{}, err
+				return AgoraxReplayMergedState{}, err
 			}
 		}
 	}
-	merged.TuttiMode.Activations = replayObjectValues[TuttiReplayActivation](activationObjects)
-	merged.TuttiMode.TurnSnapshots = replayObjectValues[TuttiReplayTurnSnapshot](snapshotObjects)
-	merged.Workflows = replayObjectValues[TuttiReplayWorkflow](workflowObjects)
-	merged.Issues = replayObjectValues[TuttiReplayIssue](issueObjects)
+	merged.AgoraxMode.Activations = replayObjectValues[AgoraxReplayActivation](activationObjects)
+	merged.AgoraxMode.TurnSnapshots = replayObjectValues[AgoraxReplayTurnSnapshot](snapshotObjects)
+	merged.Workflows = replayObjectValues[AgoraxReplayWorkflow](workflowObjects)
+	merged.Issues = replayObjectValues[AgoraxReplayIssue](issueObjects)
 	sort.Slice(merged.Agents, func(i, j int) bool {
 		return merged.Agents[i].RootSessionID < merged.Agents[j].RootSessionID
 	})
@@ -849,7 +849,7 @@ func mergeReplayObject(
 	if existing, ok := objects[key]; ok {
 		mismatch := firstReplayStateMismatch(path, existing, value)
 		if mismatch != "" {
-			return &TuttiReplayStateConflictError{Path: mismatch}
+			return &AgoraxReplayStateConflictError{Path: mismatch}
 		}
 		return nil
 	}
@@ -870,23 +870,23 @@ func replayObjectValues[T any](objects map[string]any) []T {
 	return result
 }
 
-func CompareTuttiReplayState(expected, actual TuttiReplayState) error {
-	if err := ValidateTuttiReplayState(expected); err != nil {
-		return fmt.Errorf("invalid expected Tutti Replay State: %w", err)
+func CompareAgoraxReplayState(expected, actual AgoraxReplayState) error {
+	if err := ValidateAgoraxReplayState(expected); err != nil {
+		return fmt.Errorf("invalid expected Agorax Replay State: %w", err)
 	}
-	if err := ValidateTuttiReplayState(actual); err != nil {
-		return fmt.Errorf("invalid actual Tutti Replay State: %w", err)
+	if err := ValidateAgoraxReplayState(actual); err != nil {
+		return fmt.Errorf("invalid actual Agorax Replay State: %w", err)
 	}
-	return compareTuttiReplayStateValidated(expected, actual)
+	return compareAgoraxReplayStateValidated(expected, actual)
 }
 
-func compareTuttiReplayStateValidated(
-	expected, actual TuttiReplayState,
+func compareAgoraxReplayStateValidated(
+	expected, actual AgoraxReplayState,
 ) error {
 	expected = normalizeReplayStateForComparison(expected)
 	actual = normalizeReplayStateForComparison(actual)
 	if mismatch := firstReplayStateMismatch("$", expected, actual); mismatch != "" {
-		return &TuttiReplayStateConflictError{Path: mismatch}
+		return &AgoraxReplayStateConflictError{Path: mismatch}
 	}
 	return nil
 }

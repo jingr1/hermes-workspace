@@ -177,7 +177,7 @@ func (r *Runtime) Close() {
 // Codex app-server, the Claude Code SDK sidecar, and subprocess adapters for
 // providers that use ACP,
 // before the daemon process exits. A spawned subprocess is not killed automatically
-// just because tuttid exits — it is reparented to init and keeps running —
+// just because agoraxd exits — it is reparented to init and keeps running —
 // so without this step, every daemon shutdown (or a desktop-parent-monitor
 // triggered shutdown after the host app disappears) would orphan any
 // in-flight provider processes, leaving them running unmanaged against the

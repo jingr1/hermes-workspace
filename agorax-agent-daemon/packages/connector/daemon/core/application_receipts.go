@@ -112,7 +112,7 @@ func releaseCLIInstallation(release Release) *NodePackageInstallation {
 }
 
 func validateCLIInstallationReceipt(operation Operation, release Release, install NodePackageInstallation, receipt CLIInstallationReceipt) error {
-	if receipt.SchemaVersion != "tutti.connector.cli-installation.v1" ||
+	if receipt.SchemaVersion != "agorax.connector.cli-installation.v1" ||
 		receipt.OperationID != operation.OperationID || receipt.ConnectorKey != release.ConnectorKey ||
 		receipt.ReleaseDigest != release.ReleaseDigest || receipt.Package != install.Package ||
 		receipt.PackageVersion != install.Version || receipt.PackageIntegrity != install.Integrity ||

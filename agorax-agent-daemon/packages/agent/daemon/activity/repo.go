@@ -20,7 +20,7 @@ type ReadRepository interface {
 // inject their own persistence via WithSyncStateStore. FileAgentSyncStateStore
 // is a ready-made file-backed implementation.
 //
-// All methods are keyed by roomID, an opaque scope identifier: on the tutti
+// All methods are keyed by roomID, an opaque scope identifier: on the agorax
 // side it is the workspace ID; for external daemons such as tsh it is the
 // control-plane room ID. workspace ≡ room, one-to-one — the same value as the
 // WorkspaceID carried by report inputs (sent on the wire as roomId), with no
@@ -46,7 +46,7 @@ type SyncStateStore interface {
 // behavior).
 //
 // Like SyncStateStore, all methods are keyed by roomID, an opaque scope
-// identifier: tutti side = workspace ID, external daemons (tsh) = control-plane
+// identifier: agorax side = workspace ID, external daemons (tsh) = control-plane
 // room ID; workspace ≡ room, one-to-one, no implicit translation.
 // Implementations must be safe for concurrent use, and deleting an absent
 // cursor must not be an error. FileAgentSyncStateStore implements this

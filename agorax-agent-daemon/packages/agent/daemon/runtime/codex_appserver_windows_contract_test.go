@@ -13,9 +13,9 @@ import (
 )
 
 func TestLocalProcessTransportUsesWindowsEnvironmentKeySemantics(t *testing.T) {
-	const helperEnvironment = "TUTTI_TEST_WINDOWS_AGENT_ENVIRONMENT_HELPER"
+	const helperEnvironment = "AGORAX_TEST_WINDOWS_AGENT_ENVIRONMENT_HELPER"
 	if os.Getenv(helperEnvironment) == "1" {
-		fmt.Printf("cwd=%s\nplacement=%s\n", os.Getenv("TUTTI_AGENT_CWD"), os.Getenv("TUTTI_AGENT_RAIL_PLACEMENT"))
+		fmt.Printf("cwd=%s\nplacement=%s\n", os.Getenv("AGORAX_AGENT_CWD"), os.Getenv("AGORAX_AGENT_RAIL_PLACEMENT"))
 		return
 	}
 
@@ -29,12 +29,12 @@ func TestLocalProcessTransportUsesWindowsEnvironmentKeySemantics(t *testing.T) {
 		Command: []string{executable, "-test.run=^TestLocalProcessTransportUsesWindowsEnvironmentKeySemantics$"},
 		Env: []string{
 			helperEnvironment + "=1",
-			"TUTTI_AGENT_CWD=C:\\stale-exact",
-			"tutti_agent_cwd=C:\\stale-case-variant",
-			"TUTTI_AGENT_CWD=C:\\workspace\\canonical",
-			`TUTTI_AGENT_RAIL_PLACEMENT={"version":1,"kind":"conversations","sectionKey":"stale"}`,
-			`tutti_agent_rail_placement={"version":1,"kind":"conversations","sectionKey":"case-variant"}`,
-			`TUTTI_AGENT_RAIL_PLACEMENT={"version":1,"kind":"project","projectPath":"C:\\workspace","sectionKey":"project:C:\\workspace"}`,
+			"AGORAX_AGENT_CWD=C:\\stale-exact",
+			"agorax_agent_cwd=C:\\stale-case-variant",
+			"AGORAX_AGENT_CWD=C:\\workspace\\canonical",
+			`AGORAX_AGENT_RAIL_PLACEMENT={"version":1,"kind":"conversations","sectionKey":"stale"}`,
+			`agorax_agent_rail_placement={"version":1,"kind":"conversations","sectionKey":"case-variant"}`,
+			`AGORAX_AGENT_RAIL_PLACEMENT={"version":1,"kind":"project","projectPath":"C:\\workspace","sectionKey":"project:C:\\workspace"}`,
 		},
 	})
 	if err != nil {
@@ -77,9 +77,9 @@ func TestLocalProcessTransportUsesWindowsEnvironmentKeySemantics(t *testing.T) {
 // app-server process boundary. Unit request-shape tests cannot catch Rust's
 // platform-aware AbsolutePathBuf deserialization failures.
 func TestCodexAppServerWindowsTurnStartContract(t *testing.T) {
-	command := strings.TrimSpace(os.Getenv("TUTTI_CODEX_APP_SERVER_CONTRACT_BIN"))
+	command := strings.TrimSpace(os.Getenv("AGORAX_CODEX_APP_SERVER_CONTRACT_BIN"))
 	if command == "" {
-		t.Skip("set TUTTI_CODEX_APP_SERVER_CONTRACT_BIN to the native codex.exe")
+		t.Skip("set AGORAX_CODEX_APP_SERVER_CONTRACT_BIN to the native codex.exe")
 	}
 	command, err := filepath.Abs(command)
 	if err != nil {
@@ -113,7 +113,7 @@ func TestCodexAppServerWindowsTurnStartContract(t *testing.T) {
 
 	if _, err := client.Initialize(ctx, 10*time.Second, map[string]any{
 		"clientInfo": map[string]any{
-			"name": "tutti-windows-contract-test", "title": "Tutti", "version": "0",
+			"name": "agorax-windows-contract-test", "title": "Agorax", "version": "0",
 		},
 		"capabilities": map[string]any{"experimentalApi": true},
 	}, nil); err != nil {

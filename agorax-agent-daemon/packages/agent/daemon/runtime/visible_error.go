@@ -265,7 +265,7 @@ func visibleFailureCode(detail string) string {
 	switch {
 	case transportCode != "":
 		return transportCode
-	// Tutti billing failures are actionable account state, not a generic provider
+	// Agorax billing failures are actionable account state, not a generic provider
 	// crash. Prefer the structured code emitted by llm-token-usage, while also
 	// recognizing the legacy 402 text already present in persisted conversations.
 	case structuredCode == FailureCodeInsufficientCredits ||
@@ -338,7 +338,7 @@ func visibleFailureCode(detail string) string {
 		// A clean exit (code 0) or a signal-termination (128+N, e.g. 137 SIGKILL,
 		// 143 SIGTERM) means the app-server was stopped/killed externally — the host
 		// quit, the OS OOM-killed it, or (as seen in the field) an agent killed the
-		// very Tutti process tree hosting its own session. That is the session being
+		// very Agorax process tree hosting its own session. That is the session being
 		// interrupted, not Codex erroring out, so it reads calmer and is retryable.
 		// A non-zero, non-signal exit (1/2/101…) is a genuine crash and stays
 		// process_exited ("request failed").
@@ -487,7 +487,7 @@ func codexExitCodeFromDetail(normalized string) (int, bool) {
 // via Go's exec.ExitError.ExitCode(): per its docs, that returns -1 "if the
 // process ... was terminated by a signal" — a different convention than the
 // 128+N one Node-based app-servers (e.g. codex's) use for the same event. Seen
-// in the field: tuttid's own graceful-shutdown path (CloseAllLiveSessions)
+// in the field: agoraxd's own graceful-shutdown path (CloseAllLiveSessions)
 // calls Close() on a live claude-code session, which sends SIGTERM to the
 // sidecar; the in-flight turn's reader observed the resulting exit and (before
 // this fix) reported it as a hard "Claude Code request failed" instead of a

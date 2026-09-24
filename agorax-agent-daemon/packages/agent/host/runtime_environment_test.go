@@ -12,9 +12,9 @@ func TestAgentRailPlacementEnvironmentSuppliesCanonicalValuesLast(t *testing.T) 
 	env, err := withAgentRailPlacementEnvironment([]string{
 		"KEEP=value",
 		AgentCWDEnvironmentVariable + "=/stale",
-		"tutti_agent_cwd=/case-distinct-cwd",
+		"agorax_agent_cwd=/case-distinct-cwd",
 		AgentRailPlacementEnvironmentVariable + "={\"version\":1,\"kind\":\"conversations\",\"sectionKey\":\"conversations\"}",
-		"tutti_agent_rail_placement=case-distinct-placement",
+		"agorax_agent_rail_placement=case-distinct-placement",
 		AgentRailPlacementEnvironmentVariable + "=duplicate",
 		"TAIL=value",
 	}, "/workspace/app/pkg", &RailPlacement{
@@ -49,8 +49,8 @@ func TestAgentRailPlacementEnvironmentSuppliesCanonicalValuesLast(t *testing.T) 
 	}
 	want := []string{
 		"KEEP=value",
-		"tutti_agent_cwd=/case-distinct-cwd",
-		"tutti_agent_rail_placement=case-distinct-placement",
+		"agorax_agent_cwd=/case-distinct-cwd",
+		"agorax_agent_rail_placement=case-distinct-placement",
 		"TAIL=value",
 		AgentCWDEnvironmentVariable + "=/workspace/app/pkg",
 		AgentRailPlacementEnvironmentVariable + "=" + encoded,

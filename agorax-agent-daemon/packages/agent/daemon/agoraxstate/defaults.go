@@ -434,53 +434,5 @@ func resolveStringOverride(name string, fallback string) string {
 	if override != "" {
 		return override
 	}
-	// Accept historical TUTTI_* / TUTTID_* names so existing shells keep working.
-	if legacy := legacyEnvAlias(name); legacy != "" {
-		if override = strings.TrimSpace(os.Getenv(legacy)); override != "" {
-			return override
-		}
-	}
 	return fallback
-}
-
-func legacyEnvAlias(name string) string {
-	switch name {
-	case "AGORAX_ENV":
-		return "TUTTI_ENV"
-	case "AGORAX_STATE_DIR":
-		return "TUTTI_STATE_DIR"
-	case "AGORAX_LOG_DIR":
-		return "TUTTI_LOG_DIR"
-	case "AGORAX_DESKTOP_LOG_PATH":
-		return "TUTTI_DESKTOP_LOG_PATH"
-	case "AGORAX_ANALYTICS_DISABLED":
-		return "TUTTI_ANALYTICS_DISABLED"
-	case "AGORAX_ANALYTICS_APP_ID":
-		return "TUTTI_ANALYTICS_APP_ID"
-	case "AGORAX_ANALYTICS_APP_VERSION":
-		return "TUTTI_ANALYTICS_APP_VERSION"
-	case "AGORAX_ANALYTICS_APP_KEY":
-		return "TUTTI_ANALYTICS_APP_KEY"
-	case "AGORAX_ANALYTICS_CHANNEL_DOMAIN":
-		return "TUTTI_ANALYTICS_CHANNEL_DOMAIN"
-	case "AGORAX_APP_VERSION":
-		return "TUTTI_APP_VERSION"
-	case "AGORAX_AGENTD_RUN_DIR":
-		return "TUTTID_RUN_DIR"
-	case "AGORAX_AGENTD_DB_PATH":
-		return "TUTTID_DB_PATH"
-	case "AGORAX_AGENTD_LOG_PATH":
-		return "TUTTID_LOG_PATH"
-	case "AGORAX_AGENTD_PID_PATH":
-		return "TUTTID_PID_PATH"
-	case "AGORAX_AGENTD_LISTENER_INFO_PATH":
-		return "TUTTID_LISTENER_INFO_PATH"
-	case "AGORAX_AGENTD_ADDR":
-		return "TUTTID_ADDR"
-	default:
-		if strings.HasPrefix(name, "AGORAX_AGENT_EXTENSION_") {
-			return "TUTTI_AGENT_EXTENSION_" + strings.TrimPrefix(name, "AGORAX_AGENT_EXTENSION_")
-		}
-		return ""
-	}
 }

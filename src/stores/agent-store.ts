@@ -10,10 +10,10 @@ interface AgentStore {
   activeAgentId: string | null
   sessionsByAgentId: Map<string, Array<AgentSession>>
   sessionsLoading: Set<string>
-  /** Currently selected session in the single chat pane (Tutti: activeConversationId). */
+  /** Currently selected session in the single chat pane (Agorax: activeConversationId). */
   activeSessionId: string | null
   /**
-   * Per-agent last active session (Tutti: lastActiveAgentSessionIdByAgentTargetId).
+   * Per-agent last active session (Agorax: lastActiveAgentSessionIdByAgentTargetId).
    * Switching agents restores from this map instead of leaking a global session.
    */
   lastActiveSessionIdByAgentId: Record<string, string>
@@ -93,7 +93,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       return
     }
 
-    // Tutti: write previous target's last, then restore (or clear) for the next.
+    // Agorax: write previous target's last, then restore (or clear) for the next.
     let memories = state.lastActiveSessionIdByAgentId
     if (state.activeAgentId && state.activeSessionId) {
       memories = rememberSession(
@@ -192,7 +192,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     set((state) => {
       if (!activeSessionId) {
         // New Chat: clear the pane selection but keep per-agent memory so
-        // switching away and back can restore (Tutti Home composer behavior).
+        // switching away and back can restore (Agorax Home composer behavior).
         return { activeSessionId: null }
       }
       return {

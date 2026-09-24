@@ -25,7 +25,7 @@ func TestControllerStateMergesAdapterRuntimeContextWithoutDroppingLaunchContext(
 		RoomID:         "room-1",
 		AgentSessionID: "agent-session-1",
 		Provider:       ProviderCodex,
-		CWD:            "/Users/example/Documents/tutti/session-agent-session-1",
+		CWD:            "/Users/example/Documents/agorax/session-agent-session-1",
 		Title:          "No project session",
 		Visible:        true,
 		RuntimeContext: map[string]any{
@@ -64,7 +64,7 @@ func TestEnrichReportWithSessionSnapshotPreservesNoProjectLaunchContext(t *testi
 		RoomID:         "room-1",
 		AgentSessionID: "agent-session-1",
 		Provider:       ProviderCodex,
-		CWD:            "/Users/example/Documents/tutti/session-agent-session-1",
+		CWD:            "/Users/example/Documents/agorax/session-agent-session-1",
 		RuntimeContext: map[string]any{"noProject": true},
 	}
 	controller.store(session)

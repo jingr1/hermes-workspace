@@ -104,7 +104,7 @@ func completeArtifactCandidate(
 	for path, contents := range map[string]string{
 		layout.ProviderTapeKey + "/manifest.json": `{"schemaVersion":4,"projectionVersion":1,"status":"complete","connections":[{"connectionId":"connection-1","provider":"codex"}]}` + "\n",
 		layout.ProviderTapeKey + "/frames.jsonl":  "",
-		layout.ExpectedStateKey:                   `{"schemaVersion":1,"agent":{"rootSessionId":"session-1","sessions":[{"id":"session-1","kind":"root","agentTargetId":"local:codex","provider":"codex","providerSessionId":"provider-session-1","settings":{},"pinned":false,"turns":[],"messages":[],"interactions":[]}]},"tuttiMode":{"activations":[],"turnSnapshots":[]},"workflows":[],"issues":[]}` + "\n",
+		layout.ExpectedStateKey:                   `{"schemaVersion":1,"agent":{"rootSessionId":"session-1","sessions":[{"id":"session-1","kind":"root","agentTargetId":"local:codex","provider":"codex","providerSessionId":"provider-session-1","settings":{},"pinned":false,"turns":[],"messages":[],"interactions":[]}]},"agoraxMode":{"activations":[],"turnSnapshots":[]},"workflows":[],"issues":[]}` + "\n",
 	} {
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			t.Fatal(err)

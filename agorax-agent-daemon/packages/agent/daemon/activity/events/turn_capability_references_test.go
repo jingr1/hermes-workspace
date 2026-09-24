@@ -8,8 +8,8 @@ import (
 func TestTurnCapabilityReferencesSurviveJSONRoundTrip(t *testing.T) {
 	event := Event{Payload: EventPayload{}}
 	StampTurnCapabilityReferences(&event, []CapabilityReference{
-		{Capability: " tutti ", Source: "slash_command"},
-		{Capability: "tutti", Source: "slash_command"},
+		{Capability: " agorax ", Source: "slash_command"},
+		{Capability: "agorax", Source: "slash_command"},
 		{Capability: "", Source: "slash_command"},
 	})
 
@@ -22,7 +22,7 @@ func TestTurnCapabilityReferencesSurviveJSONRoundTrip(t *testing.T) {
 		t.Fatalf("unmarshal metadata: %v", err)
 	}
 	got := TurnCapabilityReferencesFromEvent(Event{Payload: EventPayload{Metadata: metadata}})
-	if len(got) != 1 || got[0] != (CapabilityReference{Capability: "tutti", Source: "slash_command"}) {
+	if len(got) != 1 || got[0] != (CapabilityReference{Capability: "agorax", Source: "slash_command"}) {
 		t.Fatalf("capability refs = %#v", got)
 	}
 }

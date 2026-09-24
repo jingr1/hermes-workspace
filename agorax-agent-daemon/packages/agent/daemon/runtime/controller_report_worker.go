@@ -246,7 +246,7 @@ func (c *Controller) reportSubmittedTurnDurable(
 	}
 	if c == nil || c.reporter == nil {
 		// Reporter-less controllers are used as standalone runtimes and have no
-		// durable projection. The wired tuttid runtime always provides a reporter.
+		// durable projection. The wired agoraxd runtime always provides a reporter.
 		return nil
 	}
 	if keepProvisional {

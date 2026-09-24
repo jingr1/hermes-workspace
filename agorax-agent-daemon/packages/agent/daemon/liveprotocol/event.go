@@ -379,7 +379,7 @@ func validateTurnUpdate(data TurnUpdateData) error {
 		return fmt.Errorf("%w: empty source goal operation identity", ErrInvalidLiveEvent)
 	}
 	for _, reference := range turn.CapabilityRefs {
-		if reference.Capability != "tutti" || reference.Source != "slash_command" {
+		if reference.Capability != "agorax" || reference.Source != "slash_command" {
 			return fmt.Errorf("%w: invalid turn capability reference", ErrInvalidLiveEvent)
 		}
 	}

@@ -12,7 +12,7 @@ function session(agentId: string, sessionId: string): AgentSession {
   }
 }
 
-describe('agent-store Tutti-style session memory', () => {
+describe('agent-store Agorax-style session memory', () => {
   beforeEach(() => {
     useAgentStore.setState({
       agents: [],

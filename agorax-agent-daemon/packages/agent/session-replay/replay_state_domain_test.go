@@ -21,7 +21,7 @@ func TestProjectAndResolvePortableAgentSessionBinding(t *testing.T) {
 		"repo",
 	)
 	projectPath := filepath.Join(recordedRoot, "packages", "agent")
-	agent := TuttiReplayAgent{
+	agent := AgoraxReplayAgent{
 		RootSessionID: "session-1",
 		Sessions: []agenthost.HistoricalSession{{
 			ID: "session-1", Cwd: recordedRoot,
@@ -63,7 +63,7 @@ func TestProjectAndResolvePortableAgentSessionBinding(t *testing.T) {
 
 func TestProjectPortableAgentStateProjectsSharedWorkspaceRemappedCWD(t *testing.T) {
 	logicalProject := "/workspace/agent-session-replay"
-	agent := TuttiReplayAgent{
+	agent := AgoraxReplayAgent{
 		RootSessionID: "session-1",
 		Sessions: []agenthost.HistoricalSession{{
 			ID: "session-1",
@@ -90,7 +90,7 @@ func TestProjectPortableAgentStateNormalizesSymlinkEquivalentPaths(t *testing.T)
 	if canonicalDir == "" || canonicalDir == rawDir {
 		t.Skip("temp dir has no symlink path form to exercise")
 	}
-	agent := TuttiReplayAgent{
+	agent := AgoraxReplayAgent{
 		RootSessionID: "session-1",
 		Sessions: []agenthost.HistoricalSession{{
 			ID:              "session-1",
@@ -132,7 +132,7 @@ func TestProjectPortableAgentStateNormalizesSymlinkEquivalentPaths(t *testing.T)
 }
 
 func TestResolvePortableAgentStateRejectsPathEscape(t *testing.T) {
-	agent := TuttiReplayAgent{
+	agent := AgoraxReplayAgent{
 		RootSessionID: "session-1",
 		Sessions: []agenthost.HistoricalSession{{
 			ID:  "session-1",
@@ -157,7 +157,7 @@ func TestProjectPortableAgentStateProjectsTurnFileChangePaths(t *testing.T) {
 		"agent-session-replay-r09",
 		"delete-me.txt",
 	)
-	agent := TuttiReplayAgent{
+	agent := AgoraxReplayAgent{
 		RootSessionID: "session-1",
 		Sessions: []agenthost.HistoricalSession{{
 			ID:  "session-1",
@@ -219,7 +219,7 @@ func TestProjectPortableAgentStateProjectsGeneratedImagePaths(t *testing.T) {
 		"call-1",
 		"image.png",
 	)
-	agent := TuttiReplayAgent{
+	agent := AgoraxReplayAgent{
 		RootSessionID: "session-1",
 		Sessions: []agenthost.HistoricalSession{{
 			ID: "session-1", AgentTargetID: "local:codex", Provider: "codex",
@@ -264,7 +264,7 @@ func TestProjectPortableAgentStateDoesNotApplyCodexHomeToUnregisteredProvider(
 		"generated_images",
 		"image.png",
 	)
-	agent := TuttiReplayAgent{
+	agent := AgoraxReplayAgent{
 		RootSessionID: "session-1",
 		Sessions: []agenthost.HistoricalSession{{
 			ID: "session-1", AgentTargetID: "local:cursor", Provider: "cursor",
@@ -285,7 +285,7 @@ func TestProjectPortableAgentStateDoesNotApplyCodexHomeToUnregisteredProvider(
 }
 
 func TestProjectPortableAgentStateExcludesOnlyToolRuntimeCWD(t *testing.T) {
-	agent := TuttiReplayAgent{
+	agent := AgoraxReplayAgent{
 		RootSessionID: "session-1",
 		Sessions: []agenthost.HistoricalSession{{
 			ID: "session-1",
@@ -406,7 +406,7 @@ func TestProjectPortableAgentStateProjectsMaterializedMessageFields(t *testing.T
 			"path":         "/Users/recording/repo/attached.png",
 		},
 	}
-	agent := TuttiReplayAgent{
+	agent := AgoraxReplayAgent{
 		RootSessionID: "session-1",
 		Sessions: []agenthost.HistoricalSession{{
 			ID: "session-1",
@@ -455,7 +455,7 @@ func TestProjectPortableAgentStateProjectsMaterializedMessageFields(t *testing.T
 }
 
 func TestProjectPortableAgentStateProjectsImagePathWithoutAttachmentID(t *testing.T) {
-	agent := TuttiReplayAgent{
+	agent := AgoraxReplayAgent{
 		RootSessionID: "session-1",
 		Sessions: []agenthost.HistoricalSession{{
 			ID: "session-1",
@@ -490,7 +490,7 @@ func TestProjectPortableAgentStateProjectsImagePathWithoutAttachmentID(t *testin
 func TestProjectPortableAgentStateNormalizesOnlyPlanDecisionRuntimeOperationIDs(
 	t *testing.T,
 ) {
-	agent := TuttiReplayAgent{
+	agent := AgoraxReplayAgent{
 		RootSessionID: "session-1",
 		Sessions: []agenthost.HistoricalSession{{
 			ID: "session-1",
@@ -549,7 +549,7 @@ func TestProjectPortableAgentStateNormalizesOnlyPlanDecisionRuntimeOperationIDs(
 func TestProjectPortableAgentStateExcludesCanceledTurnCompletionWatermarks(
 	t *testing.T,
 ) {
-	agent := TuttiReplayAgent{
+	agent := AgoraxReplayAgent{
 		RootSessionID: "session-1",
 		Sessions: []agenthost.HistoricalSession{{
 			ID: "session-1",
@@ -611,13 +611,13 @@ func TestProjectPortableAgentStateExcludesCanceledTurnCompletionWatermarks(
 	}
 }
 
-func TestCompareTuttiReplayStateTreatsRootProviderTurnIDsAsAlphaEquivalent(
+func TestCompareAgoraxReplayStateTreatsRootProviderTurnIDsAsAlphaEquivalent(
 	t *testing.T,
 ) {
-	buildState := func(turnID, rootProviderTurnID string) TuttiReplayState {
-		return TuttiReplayState{
+	buildState := func(turnID, rootProviderTurnID string) AgoraxReplayState {
+		return AgoraxReplayState{
 			SchemaVersion: SchemaVersion,
-			Agent: TuttiReplayAgent{
+			Agent: AgoraxReplayAgent{
 				RootSessionID: "session-1",
 				Sessions: []agenthost.HistoricalSession{{
 					ID:                "session-1",
@@ -634,15 +634,15 @@ func TestCompareTuttiReplayStateTreatsRootProviderTurnIDsAsAlphaEquivalent(
 					}},
 				}},
 			},
-			TuttiMode: TuttiReplayTuttiMode{
-				Activations:   []TuttiReplayActivation{},
-				TurnSnapshots: []TuttiReplayTurnSnapshot{},
+			AgoraxMode: AgoraxReplayAgoraxMode{
+				Activations:   []AgoraxReplayActivation{},
+				TurnSnapshots: []AgoraxReplayTurnSnapshot{},
 			},
-			Workflows: []TuttiReplayWorkflow{},
-			Issues:    []TuttiReplayIssue{},
+			Workflows: []AgoraxReplayWorkflow{},
+			Issues:    []AgoraxReplayIssue{},
 		}
 	}
-	if err := CompareTuttiReplayState(
+	if err := CompareAgoraxReplayState(
 		buildState("recorded-turn", "recorded-root-provider-turn"),
 		buildState("replayed-turn", "replayed-root-provider-turn"),
 	); err != nil {
@@ -653,13 +653,13 @@ func TestCompareTuttiReplayStateTreatsRootProviderTurnIDsAsAlphaEquivalent(
 	}
 }
 
-func TestCompareTuttiReplayStateTreatsGoalControlOperationIDsAsAlphaEquivalent(
+func TestCompareAgoraxReplayStateTreatsGoalControlOperationIDsAsAlphaEquivalent(
 	t *testing.T,
 ) {
-	buildState := func(operationID string) TuttiReplayState {
-		return TuttiReplayState{
+	buildState := func(operationID string) AgoraxReplayState {
+		return AgoraxReplayState{
 			SchemaVersion: SchemaVersion,
-			Agent: TuttiReplayAgent{
+			Agent: AgoraxReplayAgent{
 				RootSessionID: "session-1",
 				Sessions: []agenthost.HistoricalSession{{
 					ID:                "session-1",
@@ -682,15 +682,15 @@ func TestCompareTuttiReplayStateTreatsGoalControlOperationIDsAsAlphaEquivalent(
 					}},
 				}},
 			},
-			TuttiMode: TuttiReplayTuttiMode{
-				Activations:   []TuttiReplayActivation{},
-				TurnSnapshots: []TuttiReplayTurnSnapshot{},
+			AgoraxMode: AgoraxReplayAgoraxMode{
+				Activations:   []AgoraxReplayActivation{},
+				TurnSnapshots: []AgoraxReplayTurnSnapshot{},
 			},
-			Workflows: []TuttiReplayWorkflow{},
-			Issues:    []TuttiReplayIssue{},
+			Workflows: []AgoraxReplayWorkflow{},
+			Issues:    []AgoraxReplayIssue{},
 		}
 	}
-	if err := CompareTuttiReplayState(
+	if err := CompareAgoraxReplayState(
 		buildState("operation-record"),
 		buildState("operation-replay"),
 	); err != nil {
@@ -701,10 +701,10 @@ func TestCompareTuttiReplayStateTreatsGoalControlOperationIDsAsAlphaEquivalent(
 	}
 }
 
-func TestCompareTuttiReplayStateCanonicalizesGoalControlIdentityRelations(
+func TestCompareAgoraxReplayStateCanonicalizesGoalControlIdentityRelations(
 	t *testing.T,
 ) {
-	buildState := func(prefix string) TuttiReplayState {
+	buildState := func(prefix string) AgoraxReplayState {
 		messages := make([]agenthost.HistoricalMessage, 2)
 		turns := make([]agenthost.HistoricalTurn, 2)
 		for index, action := range []string{"set", "clear"} {
@@ -732,9 +732,9 @@ func TestCompareTuttiReplayStateCanonicalizesGoalControlIdentityRelations(
 				},
 			}
 		}
-		return TuttiReplayState{
+		return AgoraxReplayState{
 			SchemaVersion: SchemaVersion,
-			Agent: TuttiReplayAgent{
+			Agent: AgoraxReplayAgent{
 				RootSessionID: "session-1",
 				Sessions: []agenthost.HistoricalSession{{
 					ID:                "session-1",
@@ -746,15 +746,15 @@ func TestCompareTuttiReplayStateCanonicalizesGoalControlIdentityRelations(
 					Messages:          messages,
 				}},
 			},
-			TuttiMode: TuttiReplayTuttiMode{
-				Activations:   []TuttiReplayActivation{},
-				TurnSnapshots: []TuttiReplayTurnSnapshot{},
+			AgoraxMode: AgoraxReplayAgoraxMode{
+				Activations:   []AgoraxReplayActivation{},
+				TurnSnapshots: []AgoraxReplayTurnSnapshot{},
 			},
-			Workflows: []TuttiReplayWorkflow{},
-			Issues:    []TuttiReplayIssue{},
+			Workflows: []AgoraxReplayWorkflow{},
+			Issues:    []AgoraxReplayIssue{},
 		}
 	}
-	if err := CompareTuttiReplayState(
+	if err := CompareAgoraxReplayState(
 		buildState("recorded"),
 		buildState("replayed"),
 	); err != nil {
@@ -762,13 +762,13 @@ func TestCompareTuttiReplayStateCanonicalizesGoalControlIdentityRelations(
 	}
 }
 
-func TestCompareTuttiReplayStateTreatsPayloadMessageIDsAsAlphaEquivalent(
+func TestCompareAgoraxReplayStateTreatsPayloadMessageIDsAsAlphaEquivalent(
 	t *testing.T,
 ) {
-	buildState := func(clientSubmitID string) TuttiReplayState {
-		return TuttiReplayState{
+	buildState := func(clientSubmitID string) AgoraxReplayState {
+		return AgoraxReplayState{
 			SchemaVersion: SchemaVersion,
-			Agent: TuttiReplayAgent{
+			Agent: AgoraxReplayAgent{
 				RootSessionID: "session-1",
 				Sessions: []agenthost.HistoricalSession{{
 					ID:                "session-1",
@@ -789,15 +789,15 @@ func TestCompareTuttiReplayStateTreatsPayloadMessageIDsAsAlphaEquivalent(
 					}},
 				}},
 			},
-			TuttiMode: TuttiReplayTuttiMode{
-				Activations:   []TuttiReplayActivation{},
-				TurnSnapshots: []TuttiReplayTurnSnapshot{},
+			AgoraxMode: AgoraxReplayAgoraxMode{
+				Activations:   []AgoraxReplayActivation{},
+				TurnSnapshots: []AgoraxReplayTurnSnapshot{},
 			},
-			Workflows: []TuttiReplayWorkflow{},
-			Issues:    []TuttiReplayIssue{},
+			Workflows: []AgoraxReplayWorkflow{},
+			Issues:    []AgoraxReplayIssue{},
 		}
 	}
-	if err := CompareTuttiReplayState(
+	if err := CompareAgoraxReplayState(
 		buildState("recorded-submit"),
 		buildState("replayed-submit"),
 	); err != nil {
@@ -808,10 +808,10 @@ func TestCompareTuttiReplayStateTreatsPayloadMessageIDsAsAlphaEquivalent(
 	}
 }
 
-func TestCompareTuttiReplayStateTreatsOrdinaryClientSubmitIDsAsAlphaEquivalent(
+func TestCompareAgoraxReplayStateTreatsOrdinaryClientSubmitIDsAsAlphaEquivalent(
 	t *testing.T,
 ) {
-	if err := CompareTuttiReplayState(
+	if err := CompareAgoraxReplayState(
 		replayStateWithOrdinaryClientSubmitIDs("recorded-submit"),
 		replayStateWithOrdinaryClientSubmitIDs("replayed-submit"),
 	); err != nil {
@@ -819,19 +819,19 @@ func TestCompareTuttiReplayStateTreatsOrdinaryClientSubmitIDsAsAlphaEquivalent(
 	}
 }
 
-func TestCompareTuttiReplayStatePreservesClientSubmitIDRelationships(
+func TestCompareAgoraxReplayStatePreservesClientSubmitIDRelationships(
 	t *testing.T,
 ) {
-	err := CompareTuttiReplayState(
+	err := CompareAgoraxReplayState(
 		replayStateWithOrdinaryClientSubmitIDs("recorded-shared", "recorded-shared"),
 		replayStateWithOrdinaryClientSubmitIDs("replayed-first", "replayed-second"),
 	)
-	if !errors.Is(err, ErrTuttiReplayStateConflict) {
+	if !errors.Is(err, ErrAgoraxReplayStateConflict) {
 		t.Fatalf("cross-message clientSubmitId relationship must remain semantic, got %v", err)
 	}
 }
 
-func replayStateWithOrdinaryClientSubmitIDs(clientSubmitIDs ...string) TuttiReplayState {
+func replayStateWithOrdinaryClientSubmitIDs(clientSubmitIDs ...string) AgoraxReplayState {
 	messages := make([]agenthost.HistoricalMessage, len(clientSubmitIDs))
 	for index, clientSubmitID := range clientSubmitIDs {
 		messages[index] = agenthost.HistoricalMessage{
@@ -845,9 +845,9 @@ func replayStateWithOrdinaryClientSubmitIDs(clientSubmitIDs ...string) TuttiRepl
 			},
 		}
 	}
-	return TuttiReplayState{
+	return AgoraxReplayState{
 		SchemaVersion: SchemaVersion,
-		Agent: TuttiReplayAgent{
+		Agent: AgoraxReplayAgent{
 			RootSessionID: "session-1",
 			Sessions: []agenthost.HistoricalSession{{
 				ID:                "session-1",
@@ -858,22 +858,22 @@ func replayStateWithOrdinaryClientSubmitIDs(clientSubmitIDs ...string) TuttiRepl
 				Messages:          messages,
 			}},
 		},
-		TuttiMode: TuttiReplayTuttiMode{
-			Activations:   []TuttiReplayActivation{},
-			TurnSnapshots: []TuttiReplayTurnSnapshot{},
+		AgoraxMode: AgoraxReplayAgoraxMode{
+			Activations:   []AgoraxReplayActivation{},
+			TurnSnapshots: []AgoraxReplayTurnSnapshot{},
 		},
-		Workflows: []TuttiReplayWorkflow{},
-		Issues:    []TuttiReplayIssue{},
+		Workflows: []AgoraxReplayWorkflow{},
+		Issues:    []AgoraxReplayIssue{},
 	}
 }
 
-func TestCompareTuttiReplayStatePreservesCrossMessageIDRelationships(
+func TestCompareAgoraxReplayStatePreservesCrossMessageIDRelationships(
 	t *testing.T,
 ) {
-	buildState := func(firstID, secondID, referencedID string) TuttiReplayState {
-		return TuttiReplayState{
+	buildState := func(firstID, secondID, referencedID string) AgoraxReplayState {
+		return AgoraxReplayState{
 			SchemaVersion: SchemaVersion,
-			Agent: TuttiReplayAgent{
+			Agent: AgoraxReplayAgent{
 				RootSessionID: "session-1",
 				Sessions: []agenthost.HistoricalSession{{
 					ID:                "session-1",
@@ -896,30 +896,30 @@ func TestCompareTuttiReplayStatePreservesCrossMessageIDRelationships(
 					}},
 				}},
 			},
-			TuttiMode: TuttiReplayTuttiMode{
-				Activations:   []TuttiReplayActivation{},
-				TurnSnapshots: []TuttiReplayTurnSnapshot{},
+			AgoraxMode: AgoraxReplayAgoraxMode{
+				Activations:   []AgoraxReplayActivation{},
+				TurnSnapshots: []AgoraxReplayTurnSnapshot{},
 			},
-			Workflows: []TuttiReplayWorkflow{},
-			Issues:    []TuttiReplayIssue{},
+			Workflows: []AgoraxReplayWorkflow{},
+			Issues:    []AgoraxReplayIssue{},
 		}
 	}
-	err := CompareTuttiReplayState(
+	err := CompareAgoraxReplayState(
 		buildState("recorded-first", "recorded-second", "recorded-second"),
 		buildState("replayed-first", "replayed-second", "replayed-first"),
 	)
-	if !errors.Is(err, ErrTuttiReplayStateConflict) {
+	if !errors.Is(err, ErrAgoraxReplayStateConflict) {
 		t.Fatalf("cross-message messageId relationship must remain semantic, got %v", err)
 	}
 }
 
-func TestCompareTuttiReplayStateTreatsAttachmentIDsAsAlphaEquivalent(
+func TestCompareAgoraxReplayStateTreatsAttachmentIDsAsAlphaEquivalent(
 	t *testing.T,
 ) {
-	buildState := func(attachmentID string) TuttiReplayState {
-		return TuttiReplayState{
+	buildState := func(attachmentID string) AgoraxReplayState {
+		return AgoraxReplayState{
 			SchemaVersion: SchemaVersion,
-			Agent: TuttiReplayAgent{
+			Agent: AgoraxReplayAgent{
 				RootSessionID: "session-1",
 				Sessions: []agenthost.HistoricalSession{{
 					ID:                "session-1",
@@ -941,16 +941,16 @@ func TestCompareTuttiReplayStateTreatsAttachmentIDsAsAlphaEquivalent(
 					}},
 				}},
 			},
-			TuttiMode: TuttiReplayTuttiMode{
-				Activations:   []TuttiReplayActivation{},
-				TurnSnapshots: []TuttiReplayTurnSnapshot{},
+			AgoraxMode: AgoraxReplayAgoraxMode{
+				Activations:   []AgoraxReplayActivation{},
+				TurnSnapshots: []AgoraxReplayTurnSnapshot{},
 			},
-			Workflows: []TuttiReplayWorkflow{},
-			Issues:    []TuttiReplayIssue{},
+			Workflows: []AgoraxReplayWorkflow{},
+			Issues:    []AgoraxReplayIssue{},
 		}
 	}
 
-	if err := CompareTuttiReplayState(
+	if err := CompareAgoraxReplayState(
 		buildState("attachment-recorded"),
 		buildState("attachment-replayed"),
 	); err != nil {
@@ -961,13 +961,13 @@ func TestCompareTuttiReplayStateTreatsAttachmentIDsAsAlphaEquivalent(
 	}
 }
 
-func TestCompareTuttiReplayStateIgnoresSharedObjectUploadImageLocators(
+func TestCompareAgoraxReplayStateIgnoresSharedObjectUploadImageLocators(
 	t *testing.T,
 ) {
-	buildState := func(content map[string]any) TuttiReplayState {
-		return TuttiReplayState{
+	buildState := func(content map[string]any) AgoraxReplayState {
+		return AgoraxReplayState{
 			SchemaVersion: SchemaVersion,
-			Agent: TuttiReplayAgent{
+			Agent: AgoraxReplayAgent{
 				RootSessionID: "session-1",
 				Sessions: []agenthost.HistoricalSession{{
 					ID:                "session-1",
@@ -984,12 +984,12 @@ func TestCompareTuttiReplayStateIgnoresSharedObjectUploadImageLocators(
 					}},
 				}},
 			},
-			TuttiMode: TuttiReplayTuttiMode{
-				Activations:   []TuttiReplayActivation{},
-				TurnSnapshots: []TuttiReplayTurnSnapshot{},
+			AgoraxMode: AgoraxReplayAgoraxMode{
+				Activations:   []AgoraxReplayActivation{},
+				TurnSnapshots: []AgoraxReplayTurnSnapshot{},
 			},
-			Workflows: []TuttiReplayWorkflow{},
-			Issues:    []TuttiReplayIssue{},
+			Workflows: []AgoraxReplayWorkflow{},
+			Issues:    []AgoraxReplayIssue{},
 		}
 	}
 
@@ -1007,7 +1007,7 @@ func TestCompareTuttiReplayStateIgnoresSharedObjectUploadImageLocators(
 		"url":      "https://example.com/object-uploads/image.png",
 		"uri":      "asset://shared/image.png",
 	})
-	if err := CompareTuttiReplayState(recorded, sharedReplay); err != nil {
+	if err := CompareAgoraxReplayState(recorded, sharedReplay); err != nil {
 		t.Fatalf(
 			"shared object-upload image locators must not conflict with recorded attachmentId, got %v",
 			err,
@@ -1015,13 +1015,13 @@ func TestCompareTuttiReplayStateIgnoresSharedObjectUploadImageLocators(
 	}
 }
 
-func TestCompareTuttiReplayStateIgnoresLiveOnlyComposerSettingsDefaults(
+func TestCompareAgoraxReplayStateIgnoresLiveOnlyComposerSettingsDefaults(
 	t *testing.T,
 ) {
-	buildState := func(settings map[string]any) TuttiReplayState {
-		return TuttiReplayState{
+	buildState := func(settings map[string]any) AgoraxReplayState {
+		return AgoraxReplayState{
 			SchemaVersion: SchemaVersion,
-			Agent: TuttiReplayAgent{
+			Agent: AgoraxReplayAgent{
 				RootSessionID: "session-1",
 				Sessions: []agenthost.HistoricalSession{{
 					ID:                "session-1",
@@ -1032,12 +1032,12 @@ func TestCompareTuttiReplayStateIgnoresLiveOnlyComposerSettingsDefaults(
 					Settings:          settings,
 				}},
 			},
-			TuttiMode: TuttiReplayTuttiMode{
-				Activations:   []TuttiReplayActivation{},
-				TurnSnapshots: []TuttiReplayTurnSnapshot{},
+			AgoraxMode: AgoraxReplayAgoraxMode{
+				Activations:   []AgoraxReplayActivation{},
+				TurnSnapshots: []AgoraxReplayTurnSnapshot{},
 			},
-			Workflows: []TuttiReplayWorkflow{},
-			Issues:    []TuttiReplayIssue{},
+			Workflows: []AgoraxReplayWorkflow{},
+			Issues:    []AgoraxReplayIssue{},
 		}
 	}
 
@@ -1056,7 +1056,7 @@ func TestCompareTuttiReplayStateIgnoresLiveOnlyComposerSettingsDefaults(
 		"reasoningEffort":  "medium",
 		"speed":            "standard",
 	})
-	if err := CompareTuttiReplayState(expected, actual); err != nil {
+	if err := CompareAgoraxReplayState(expected, actual); err != nil {
 		t.Fatalf(
 			"live-only composer defaults must match recorded settings, got %v",
 			err,
@@ -1066,7 +1066,7 @@ func TestCompareTuttiReplayStateIgnoresLiveOnlyComposerSettingsDefaults(
 		t.Fatal("final compare and settings.equal must share composer contract")
 	}
 
-	err := CompareTuttiReplayState(
+	err := CompareAgoraxReplayState(
 		buildState(map[string]any{
 			"codexSaverMode": true,
 			"model":          "gpt-5.3-codex-spark",
@@ -1079,24 +1079,24 @@ func TestCompareTuttiReplayStateIgnoresLiveOnlyComposerSettingsDefaults(
 	if err == nil {
 		t.Fatal("explicit non-default composer setting must still fail compare")
 	}
-	var conflict *TuttiReplayStateConflictError
+	var conflict *AgoraxReplayStateConflictError
 	if !errors.As(err, &conflict) {
-		t.Fatalf("expected TuttiReplayStateConflictError, got %v", err)
+		t.Fatalf("expected AgoraxReplayStateConflictError, got %v", err)
 	}
 	if conflict.Path != "$.agent.sessions[0].settings.codexSaverMode" {
 		t.Fatalf("conflict path = %q", conflict.Path)
 	}
 }
 
-func TestCompareTuttiReplayStateIgnoresVolatileGoalTimingFields(
+func TestCompareAgoraxReplayStateIgnoresVolatileGoalTimingFields(
 	t *testing.T,
 ) {
 	buildState := func(
 		desiredStartedAt, observedStartedAt, durationMs int64,
-	) TuttiReplayState {
-		return TuttiReplayState{
+	) AgoraxReplayState {
+		return AgoraxReplayState{
 			SchemaVersion: SchemaVersion,
-			Agent: TuttiReplayAgent{
+			Agent: AgoraxReplayAgent{
 				RootSessionID: "session-1",
 				Sessions: []agenthost.HistoricalSession{{
 					ID:                "session-1",
@@ -1126,16 +1126,16 @@ func TestCompareTuttiReplayStateIgnoresVolatileGoalTimingFields(
 					},
 				}},
 			},
-			TuttiMode: TuttiReplayTuttiMode{
-				Activations:   []TuttiReplayActivation{},
-				TurnSnapshots: []TuttiReplayTurnSnapshot{},
+			AgoraxMode: AgoraxReplayAgoraxMode{
+				Activations:   []AgoraxReplayActivation{},
+				TurnSnapshots: []AgoraxReplayTurnSnapshot{},
 			},
-			Workflows: []TuttiReplayWorkflow{},
-			Issues:    []TuttiReplayIssue{},
+			Workflows: []AgoraxReplayWorkflow{},
+			Issues:    []AgoraxReplayIssue{},
 		}
 	}
 
-	if err := CompareTuttiReplayState(
+	if err := CompareAgoraxReplayState(
 		buildState(1_000, 1_001, 50),
 		buildState(9_000, 9_500, 999),
 	); err != nil {
@@ -1145,9 +1145,9 @@ func TestCompareTuttiReplayStateIgnoresVolatileGoalTimingFields(
 		)
 	}
 
-	err := CompareTuttiReplayState(
+	err := CompareAgoraxReplayState(
 		buildState(1_000, 1_001, 50),
-		func() TuttiReplayState {
+		func() AgoraxReplayState {
 			state := buildState(9_000, 9_500, 999)
 			state.Agent.Sessions[0].Goal.Observed["status"] = "active"
 			return state
@@ -1156,22 +1156,22 @@ func TestCompareTuttiReplayStateIgnoresVolatileGoalTimingFields(
 	if err == nil {
 		t.Fatal("Goal status mismatch must still fail comparison")
 	}
-	var conflict *TuttiReplayStateConflictError
+	var conflict *AgoraxReplayStateConflictError
 	if !errors.As(err, &conflict) {
-		t.Fatalf("expected TuttiReplayStateConflictError, got %v", err)
+		t.Fatalf("expected AgoraxReplayStateConflictError, got %v", err)
 	}
 	if conflict.Path != "$.agent.sessions[0].goal.observed.status" {
 		t.Fatalf("conflict path = %q", conflict.Path)
 	}
 }
 
-func TestCompareTuttiReplayStateCanonicalizesAddedFileChangeBodies(
+func TestCompareAgoraxReplayStateCanonicalizesAddedFileChangeBodies(
 	t *testing.T,
 ) {
-	buildState := func(fileChanges map[string]any) TuttiReplayState {
-		return TuttiReplayState{
+	buildState := func(fileChanges map[string]any) AgoraxReplayState {
+		return AgoraxReplayState{
 			SchemaVersion: SchemaVersion,
-			Agent: TuttiReplayAgent{
+			Agent: AgoraxReplayAgent{
 				RootSessionID: "session-1",
 				Sessions: []agenthost.HistoricalSession{{
 					ID:                "session-1",
@@ -1188,12 +1188,12 @@ func TestCompareTuttiReplayStateCanonicalizesAddedFileChangeBodies(
 					}},
 				}},
 			},
-			TuttiMode: TuttiReplayTuttiMode{
-				Activations:   []TuttiReplayActivation{},
-				TurnSnapshots: []TuttiReplayTurnSnapshot{},
+			AgoraxMode: AgoraxReplayAgoraxMode{
+				Activations:   []AgoraxReplayActivation{},
+				TurnSnapshots: []AgoraxReplayTurnSnapshot{},
 			},
-			Workflows: []TuttiReplayWorkflow{},
-			Issues:    []TuttiReplayIssue{},
+			Workflows: []AgoraxReplayWorkflow{},
+			Issues:    []AgoraxReplayIssue{},
 		}
 	}
 	recorded := buildState(map[string]any{
@@ -1211,7 +1211,7 @@ func TestCompareTuttiReplayStateCanonicalizesAddedFileChangeBodies(
 			"newString": "R36_NOTES_BODY\n",
 		}},
 	})
-	if err := CompareTuttiReplayState(recorded, live); err != nil {
+	if err := CompareAgoraxReplayState(recorded, live); err != nil {
 		t.Fatalf(
 			"added-file bodies under obsolete diff must match live newString, got %v",
 			err,
@@ -1219,13 +1219,13 @@ func TestCompareTuttiReplayStateCanonicalizesAddedFileChangeBodies(
 	}
 }
 
-func TestCompareTuttiReplayStateCanonicalizesModifiedFileChangeBodies(
+func TestCompareAgoraxReplayStateCanonicalizesModifiedFileChangeBodies(
 	t *testing.T,
 ) {
-	buildState := func(fileChanges map[string]any) TuttiReplayState {
-		return TuttiReplayState{
+	buildState := func(fileChanges map[string]any) AgoraxReplayState {
+		return AgoraxReplayState{
 			SchemaVersion: SchemaVersion,
-			Agent: TuttiReplayAgent{
+			Agent: AgoraxReplayAgent{
 				RootSessionID: "session-1",
 				Sessions: []agenthost.HistoricalSession{{
 					ID:                "session-1",
@@ -1242,12 +1242,12 @@ func TestCompareTuttiReplayStateCanonicalizesModifiedFileChangeBodies(
 					}},
 				}},
 			},
-			TuttiMode: TuttiReplayTuttiMode{
-				Activations:   []TuttiReplayActivation{},
-				TurnSnapshots: []TuttiReplayTurnSnapshot{},
+			AgoraxMode: AgoraxReplayAgoraxMode{
+				Activations:   []AgoraxReplayActivation{},
+				TurnSnapshots: []AgoraxReplayTurnSnapshot{},
 			},
-			Workflows: []TuttiReplayWorkflow{},
-			Issues:    []TuttiReplayIssue{},
+			Workflows: []AgoraxReplayWorkflow{},
+			Issues:    []AgoraxReplayIssue{},
 		}
 	}
 	recorded := buildState(map[string]any{
@@ -1265,7 +1265,7 @@ func TestCompareTuttiReplayStateCanonicalizesModifiedFileChangeBodies(
 			"newString": "R14_ONE_UPDATED\n",
 		}},
 	})
-	if err := CompareTuttiReplayState(recorded, live); err != nil {
+	if err := CompareAgoraxReplayState(recorded, live); err != nil {
 		t.Fatalf(
 			"modified-file bodies under obsolete diff must match live newString, got %v",
 			err,
@@ -1273,13 +1273,13 @@ func TestCompareTuttiReplayStateCanonicalizesModifiedFileChangeBodies(
 	}
 }
 
-func TestCompareTuttiReplayStateTreatsToolCallIDsAsAlphaEquivalent(
+func TestCompareAgoraxReplayStateTreatsToolCallIDsAsAlphaEquivalent(
 	t *testing.T,
 ) {
-	buildState := func(callID string) TuttiReplayState {
-		return TuttiReplayState{
+	buildState := func(callID string) AgoraxReplayState {
+		return AgoraxReplayState{
 			SchemaVersion: SchemaVersion,
-			Agent: TuttiReplayAgent{
+			Agent: AgoraxReplayAgent{
 				RootSessionID: "session-1",
 				Sessions: []agenthost.HistoricalSession{{
 					ID:                "session-1",
@@ -1301,15 +1301,15 @@ func TestCompareTuttiReplayStateTreatsToolCallIDsAsAlphaEquivalent(
 					}},
 				}},
 			},
-			TuttiMode: TuttiReplayTuttiMode{
-				Activations:   []TuttiReplayActivation{},
-				TurnSnapshots: []TuttiReplayTurnSnapshot{},
+			AgoraxMode: AgoraxReplayAgoraxMode{
+				Activations:   []AgoraxReplayActivation{},
+				TurnSnapshots: []AgoraxReplayTurnSnapshot{},
 			},
-			Workflows: []TuttiReplayWorkflow{},
-			Issues:    []TuttiReplayIssue{},
+			Workflows: []AgoraxReplayWorkflow{},
+			Issues:    []AgoraxReplayIssue{},
 		}
 	}
-	if err := CompareTuttiReplayState(
+	if err := CompareAgoraxReplayState(
 		buildState("approval:recorded-call"),
 		buildState("approval:replayed-call"),
 	); err != nil {
@@ -1317,17 +1317,17 @@ func TestCompareTuttiReplayStateTreatsToolCallIDsAsAlphaEquivalent(
 	}
 }
 
-func TestCompareTuttiReplayStateCanonicalizesTerminalCommandOutputAliases(
+func TestCompareAgoraxReplayStateCanonicalizesTerminalCommandOutputAliases(
 	t *testing.T,
 ) {
-	buildState := func(text *string) TuttiReplayState {
+	buildState := func(text *string) AgoraxReplayState {
 		output := map[string]any{"stdout": "command output\n"}
 		if text != nil {
 			output["text"] = *text
 		}
-		return TuttiReplayState{
+		return AgoraxReplayState{
 			SchemaVersion: SchemaVersion,
-			Agent: TuttiReplayAgent{
+			Agent: AgoraxReplayAgent{
 				RootSessionID: "session-1",
 				Sessions: []agenthost.HistoricalSession{{
 					ID:                "session-1",
@@ -1349,17 +1349,17 @@ func TestCompareTuttiReplayStateCanonicalizesTerminalCommandOutputAliases(
 					}},
 				}},
 			},
-			TuttiMode: TuttiReplayTuttiMode{
-				Activations:   []TuttiReplayActivation{},
-				TurnSnapshots: []TuttiReplayTurnSnapshot{},
+			AgoraxMode: AgoraxReplayAgoraxMode{
+				Activations:   []AgoraxReplayActivation{},
+				TurnSnapshots: []AgoraxReplayTurnSnapshot{},
 			},
-			Workflows: []TuttiReplayWorkflow{},
-			Issues:    []TuttiReplayIssue{},
+			Workflows: []AgoraxReplayWorkflow{},
+			Issues:    []AgoraxReplayIssue{},
 		}
 	}
 
 	reconstructible := "command output"
-	if err := CompareTuttiReplayState(
+	if err := CompareAgoraxReplayState(
 		buildState(&reconstructible),
 		buildState(nil),
 	); err != nil {
@@ -1367,21 +1367,21 @@ func TestCompareTuttiReplayStateCanonicalizesTerminalCommandOutputAliases(
 	}
 
 	distinct := "formatted command output"
-	if err := CompareTuttiReplayState(
+	if err := CompareAgoraxReplayState(
 		buildState(&distinct),
 		buildState(nil),
-	); !errors.Is(err, ErrTuttiReplayStateConflict) {
+	); !errors.Is(err, ErrAgoraxReplayStateConflict) {
 		t.Fatalf("distinct command text must remain semantic, got %v", err)
 	}
 }
 
-func TestCompareTuttiReplayStateCanonicalizesNestedAndBudgetedCommandOutput(
+func TestCompareAgoraxReplayStateCanonicalizesNestedAndBudgetedCommandOutput(
 	t *testing.T,
 ) {
-	buildState := func(status string, payload map[string]any) TuttiReplayState {
-		return TuttiReplayState{
+	buildState := func(status string, payload map[string]any) AgoraxReplayState {
+		return AgoraxReplayState{
 			SchemaVersion: SchemaVersion,
-			Agent: TuttiReplayAgent{
+			Agent: AgoraxReplayAgent{
 				RootSessionID: "session-1",
 				Sessions: []agenthost.HistoricalSession{{
 					ID:                "session-1",
@@ -1398,12 +1398,12 @@ func TestCompareTuttiReplayStateCanonicalizesNestedAndBudgetedCommandOutput(
 					}},
 				}},
 			},
-			TuttiMode: TuttiReplayTuttiMode{
-				Activations:   []TuttiReplayActivation{},
-				TurnSnapshots: []TuttiReplayTurnSnapshot{},
+			AgoraxMode: AgoraxReplayAgoraxMode{
+				Activations:   []AgoraxReplayActivation{},
+				TurnSnapshots: []AgoraxReplayTurnSnapshot{},
 			},
-			Workflows: []TuttiReplayWorkflow{},
-			Issues:    []TuttiReplayIssue{},
+			Workflows: []AgoraxReplayWorkflow{},
+			Issues:    []AgoraxReplayIssue{},
 		}
 	}
 
@@ -1428,7 +1428,7 @@ func TestCompareTuttiReplayStateCanonicalizesNestedAndBudgetedCommandOutput(
 			}},
 		}
 	}
-	if err := CompareTuttiReplayState(
+	if err := CompareAgoraxReplayState(
 		buildState("running", nestedPayload(true)),
 		buildState("running", nestedPayload(false)),
 	); err != nil {
@@ -1455,7 +1455,7 @@ func TestCompareTuttiReplayStateCanonicalizesNestedAndBudgetedCommandOutput(
 	); !fits {
 		t.Fatal("expected comparison fixture to fit aggregate payload budget")
 	}
-	if err := CompareTuttiReplayState(
+	if err := CompareAgoraxReplayState(
 		buildState("completed", rawPayload),
 		buildState("completed", budgetedPayload),
 	); err != nil {
@@ -1463,13 +1463,13 @@ func TestCompareTuttiReplayStateCanonicalizesNestedAndBudgetedCommandOutput(
 	}
 }
 
-func TestCompareTuttiReplayStateTreatsInteractionToolCallIDsAsAlphaEquivalent(
+func TestCompareAgoraxReplayStateTreatsInteractionToolCallIDsAsAlphaEquivalent(
 	t *testing.T,
 ) {
-	buildState := func(requestID, toolCallID string) TuttiReplayState {
-		return TuttiReplayState{
+	buildState := func(requestID, toolCallID string) AgoraxReplayState {
+		return AgoraxReplayState{
 			SchemaVersion: SchemaVersion,
-			Agent: TuttiReplayAgent{
+			Agent: AgoraxReplayAgent{
 				RootSessionID: "session-0",
 				Sessions: []agenthost.HistoricalSession{{
 					ID:                "session-0",
@@ -1504,15 +1504,15 @@ func TestCompareTuttiReplayStateTreatsInteractionToolCallIDsAsAlphaEquivalent(
 					}},
 				}},
 			},
-			TuttiMode: TuttiReplayTuttiMode{
-				Activations:   []TuttiReplayActivation{},
-				TurnSnapshots: []TuttiReplayTurnSnapshot{},
+			AgoraxMode: AgoraxReplayAgoraxMode{
+				Activations:   []AgoraxReplayActivation{},
+				TurnSnapshots: []AgoraxReplayTurnSnapshot{},
 			},
-			Workflows: []TuttiReplayWorkflow{},
-			Issues:    []TuttiReplayIssue{},
+			Workflows: []AgoraxReplayWorkflow{},
+			Issues:    []AgoraxReplayIssue{},
 		}
 	}
-	if err := CompareTuttiReplayState(
+	if err := CompareAgoraxReplayState(
 		buildState("req-recorded", "call_recorded"),
 		buildState("req-replayed", "call_replayed"),
 	); err != nil {

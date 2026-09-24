@@ -173,7 +173,7 @@ func TestCodexAppServerAdapterStartUsesInjectedProviderCommand(t *testing.T) {
 			}
 			return ProviderCommand{
 				Command: []string{"/user/bin/codex", "app-server"},
-				Env:     []string{"PATH=/managed/node/bin:/user/bin", "TUTTI_APP_NODE=/managed/node/bin/node"},
+				Env:     []string{"PATH=/managed/node/bin:/user/bin", "AGORAX_APP_NODE=/managed/node/bin/node"},
 			}, nil
 		},
 	)
@@ -190,7 +190,7 @@ func TestCodexAppServerAdapterStartUsesInjectedProviderCommand(t *testing.T) {
 	if !reflect.DeepEqual(spec.Command, []string{"/user/bin/codex", "app-server"}) {
 		t.Fatalf("Command = %#v", spec.Command)
 	}
-	if !containsString(spec.Env, "SESSION_ENV=1") || !containsString(spec.Env, "TUTTI_APP_NODE=/managed/node/bin/node") {
+	if !containsString(spec.Env, "SESSION_ENV=1") || !containsString(spec.Env, "AGORAX_APP_NODE=/managed/node/bin/node") {
 		t.Fatalf("Env = %#v, want session and managed runtime env", spec.Env)
 	}
 }

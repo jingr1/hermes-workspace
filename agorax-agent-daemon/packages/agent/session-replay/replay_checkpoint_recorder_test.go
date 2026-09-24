@@ -337,7 +337,7 @@ func TestAttachmentUpdateReusesExistingAddresses(t *testing.T) {
 func TestContinueInitialStateSeedsStructuralAddressesAndActivityTargetsChild(
 	t *testing.T,
 ) {
-	state := TuttiReplayState{
+	state := AgoraxReplayState{
 		SchemaVersion: SchemaVersion,
 		Agent: agenthost.HistoricalSessionGraph{
 			RootSessionID: "root-runtime",

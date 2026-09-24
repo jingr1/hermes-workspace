@@ -488,7 +488,7 @@ func TestCodexAppServerUserAgentVersionGate(t *testing.T) {
 		{userAgent: "codex-cli 0.145.2", want: true},
 		{userAgent: "codex/0.143.99", want: false},
 		{userAgent: "codex/0.146.0-alpha.3.1", want: true},
-		{userAgent: "tutti-agent/9.0.0", want: false},
+		{userAgent: "agorax-agent/9.0.0", want: false},
 		{userAgent: "", want: false},
 	}
 	for _, test := range tests {

@@ -164,15 +164,15 @@ func (c *Controller) Exec(ctx context.Context, input ExecInput) (result ExecResu
 	if canonicalSubmit.clientSubmitID == "" {
 		runCtx = withPromptActivityMessageID(runCtx, newTurnUserPromptActivityMessageID())
 	}
-	tuttiModeSnapshot := normalizeTuttiModeTurnSnapshot(input.TuttiModeSnapshot)
-	runCtx = withTuttiModeTurnSnapshot(runCtx, tuttiModeSnapshot)
+	agoraxModeSnapshot := normalizeAgoraxModeTurnSnapshot(input.AgoraxModeSnapshot)
+	runCtx = withAgoraxModeTurnSnapshot(runCtx, agoraxModeSnapshot)
 	var dispatchObserver *providerDispatchObserver
 	if historyAdapter != nil || acceptanceAdapter != nil {
 		dispatchObserver = newProviderDispatchObserver()
 	}
 	// beginTurn returns the zero session on failure; keep the real session
 	// for the goal-control fallback below.
-	startedSession, err := c.beginTurnWithTuttiModeSnapshot(session, turnID, cancel, tuttiModeSnapshot)
+	startedSession, err := c.beginTurnWithAgoraxModeSnapshot(session, turnID, cancel, agoraxModeSnapshot)
 	if err != nil {
 		cancel()
 		return ExecResult{}, err
@@ -421,7 +421,7 @@ func (c *Controller) guideActiveTurn(
 	// Guidance belongs to the already-running canonical turn. Reuse the
 	// snapshot frozen when that turn began rather than observing a later badge
 	// toggle from the session.
-	runCtx = withTuttiModeTurnSnapshot(runCtx, c.activeTurnTuttiModeSnapshot(session.RoomID, session.AgentSessionID))
+	runCtx = withAgoraxModeTurnSnapshot(runCtx, c.activeTurnAgoraxModeSnapshot(session.RoomID, session.AgentSessionID))
 	var emittedMu sync.Mutex
 	var emitted []activityshared.Event
 	emit := func(next []activityshared.Event) {

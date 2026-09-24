@@ -899,7 +899,7 @@ func sanitizeSchemaFile(path string) (string, func(), error) {
 	if err != nil {
 		return "", nil, err
 	}
-	tempDir, err := os.MkdirTemp("", "tutti-codexproto-sanitized-*")
+	tempDir, err := os.MkdirTemp("", "agorax-codexproto-sanitized-*")
 	if err != nil {
 		return "", nil, err
 	}

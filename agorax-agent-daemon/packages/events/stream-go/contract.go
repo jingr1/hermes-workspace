@@ -1,7 +1,7 @@
 // Package streamgo is the catalog-agnostic server-side core for the business
 // event stream (daemon ↔ renderer over WS). It owns the in-memory pub/sub
 // registry, scope routing and session fan-out; it knows nothing about concrete
-// topics or scope axes. Each product (tutti workspace, tsh chat) instantiates
+// topics or scope axes. Each product (agorax workspace, tsh chat) instantiates
 // Service with its own scope type S and injects a Catalog + scope normalizer.
 package streamgo
 
@@ -40,7 +40,7 @@ func (e *ValidationError) Error() string {
 }
 
 // Catalog is the minimal contract the registry needs from a product catalog.
-// Products implement it (e.g. tutti's StaticCatalog) and inject it into Service.
+// Products implement it (e.g. agorax's StaticCatalog) and inject it into Service.
 type Catalog interface {
 	// TopicVersion returns the wire version of a known topic.
 	TopicVersion(topic string) (int, bool)

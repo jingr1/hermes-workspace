@@ -85,7 +85,7 @@ func (resolver AccountRuntimeBindingResolver) ResolveRuntimeBinding(
 	}
 	managed := request.Release.Manifest.Implementation.ManagedStdio
 	if remote {
-		// Remote MCP routes authenticate to tsh-server with the Tutti account
+		// Remote MCP routes authenticate to tsh-server with the Agorax account
 		// session. Provider credentials never cross the daemon boundary.
 		return projectionRuntimeBinding(connectionID, true, projection.State, projection, nil), nil
 	}

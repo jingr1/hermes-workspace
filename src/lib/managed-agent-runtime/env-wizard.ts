@@ -1,7 +1,7 @@
 /**
  * Agorax Env wizard stages derived from the compact provider-status DTO.
- * Mirrors Tutti's detect → install → login → ready track (network/adapter are
- * folded into install/update discovery until the daemon ships full Tutti
+ * Mirrors Agorax's detect → install → login → ready track (network/adapter are
+ * folded into install/update discovery until the daemon ships full Agorax
  * availability/network/actions).
  */
 

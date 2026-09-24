@@ -403,7 +403,7 @@ func newHostEditRetryFixture(t *testing.T) (*agenthost.Host, *storesqlite.Store,
 		WorkspaceID: "workspace-1", AgentSessionID: "session-1", TurnID: "turn-original",
 		ContentJSON:   `[{"type":"text","text":"original"},{"type":"image","mimeType":"image/png","attachmentId":"attachment-1"},{"type":"mention","name":"README","path":"README.md"}]`,
 		DisplayPrompt: "original", CapabilityRefsJSON: `[]`,
-		TuttiModeSnapshotJSON: `null`, ClientSubmitID: "submit-original",
+		AgoraxModeSnapshotJSON: `null`, ClientSubmitID: "submit-original",
 		CreatedAtUnixMS: 3, UpdatedAtUnixMS: 3,
 	}); err != nil {
 		t.Fatal(err)

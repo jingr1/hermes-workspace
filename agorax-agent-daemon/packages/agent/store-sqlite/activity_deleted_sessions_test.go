@@ -632,7 +632,7 @@ func TestDeletedSessionListUsesRailSectionKeyWhenPersistedPathsDisagree(t *testi
 	}
 	if _, err := store.db.ExecContext(ctx, `
 UPDATE workspace_agent_sessions
-SET rail_section_key=?, rail_project_path='/project/wrong', cwd='/project/wrong/.tutti/agent/worktrees/project-session'
+SET rail_section_key=?, rail_project_path='/project/wrong', cwd='/project/wrong/.agorax/agent/worktrees/project-session'
 WHERE workspace_id='ws-key-authority' AND agent_session_id='project-session';
 UPDATE workspace_agent_sessions
 SET rail_section_key='conversations', rail_project_path='/project/wrong', cwd='/project/right'

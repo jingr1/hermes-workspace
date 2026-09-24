@@ -12,11 +12,11 @@ import (
 // of any host ledger.
 const schemaMigrationsTable = "agent_store_schema_migrations"
 
-// legacySchemaMigrationsTable is the tuttid ledger these migrations lived in
+// legacySchemaMigrationsTable is the agoraxd ledger these migrations lived in
 // before the store was extracted. On first Migrate against a database that
 // has it, already-applied agent migrations are claimed (copied) into the
 // package ledger so they are not replayed.
-const legacySchemaMigrationsTable = "tuttid_schema_migrations"
+const legacySchemaMigrationsTable = "agoraxd_schema_migrations"
 
 const schemaMigrationLegacyClaimV1 = "agent_store_legacy_claim_v1"
 
@@ -94,7 +94,7 @@ const schemaMigrationWorkspaceAgentCommandOutputAliasesV1 = "workspace_agent_com
 const schemaMigrationWorkspaceAgentToolPayloadBudgetV1 = "workspace_agent_tool_payload_budget_v1"
 
 // claimableMigrationIDs are the migration IDs that may already be recorded
-// in the legacy tuttid ledger; the claim copies exactly these.
+// in the legacy agoraxd ledger; the claim copies exactly these.
 var claimableMigrationIDs = []string{
 	schemaMigrationWorkspaceAgentActivityV1,
 	schemaMigrationWorkspaceAgentActivityV2,
@@ -344,14 +344,14 @@ CREATE TABLE IF NOT EXISTS `+schemaMigrationsTable+` (
 }
 
 // claimLegacyMigrations copies agent-store migration records that were
-// applied under the legacy tuttid ledger into the package ledger, exactly
+// applied under the legacy agoraxd ledger into the package ledger, exactly
 // once, so already-applied migrations are not replayed against upgraded
 // databases.
 //
 // Deliberate compatibility trade-off: because v1 is claimed instead of
 // replayed, an upgraded legacy database keeps its original
 // workspace_agent_sessions table including the FOREIGN KEY into the host's
-// workspaces table. That FK is harmless there (the tuttid host always has
+// workspaces table. That FK is harmless there (the agoraxd host always has
 // the workspaces table, and its cascade is redundant with the host's
 // explicit ClearSessionsTx call); only databases created fresh by this
 // package get the FK-free schema. Rebuilding existing tables just to drop

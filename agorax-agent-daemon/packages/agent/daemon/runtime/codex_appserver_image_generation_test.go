@@ -12,7 +12,7 @@ func TestAppServerImageGenerationPublishesFileBackedContentWithoutBase64(t *test
 	t.Parallel()
 
 	const (
-		savedPath = "/Users/demo/.tutti/agent/runs/session/codex-home/generated_images/thread/ig_123.png"
+		savedPath = "/Users/demo/.agorax/agent/runs/session/codex-home/generated_images/thread/ig_123.png"
 		base64    = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
 	)
 	update, ok := appServerItemToolCallUpdate(map[string]any{

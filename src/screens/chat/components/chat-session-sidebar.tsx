@@ -237,7 +237,7 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
         return
       }
 
-      // Non-Hermes agent (Tutti-style): remember current, restore target's last.
+      // Non-Hermes agent: remember current, restore target's last.
       if (activeFriendlyId && activeFriendlyId !== 'new') {
         const currentAgentId = useAgentStore.getState().activeAgentId
         if (currentAgentId) {
@@ -253,7 +253,7 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
       const sessionsLoaded =
         cached.length > 0 || store.sessionsByAgentId.has(agent.agentId)
 
-      // Prefer in-memory per-agent last (same contract as Tutti ByAgentTargetId).
+      // Prefer in-memory per-agent last (same contract as Agorax ByAgentTargetId).
       const remembered = store.lastActiveSessionIdByAgentId[agent.agentId]
       let resolvedSession =
         remembered && (!sessionsLoaded || knownIds.has(remembered))

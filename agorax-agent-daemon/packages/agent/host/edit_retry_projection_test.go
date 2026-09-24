@@ -10,7 +10,7 @@ func TestEditRetryReplacementInputPreservesSubmissionMetadata(t *testing.T) {
 	input, err := editRetryReplacementInput(storesqlite.TurnSubmission{
 		ContentJSON:           `[{"type":"text","text":"before"}]`,
 		CapabilityRefsJSON:    `[]`,
-		TuttiModeSnapshotJSON: `null`,
+		AgoraxModeSnapshotJSON: `null`,
 		MetadataJSON:          `{"uiMode":"agent"}`,
 	}, "after")
 	if err != nil {

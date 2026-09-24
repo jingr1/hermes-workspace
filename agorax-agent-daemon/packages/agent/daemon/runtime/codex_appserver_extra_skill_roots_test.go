@@ -17,7 +17,7 @@ func TestCodexStartSetsPreparedExtraSkillRootsBeforeThread(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "session-skills")
 	session := testAppServerSession()
 	session.Provider = ProviderCodex
-	session.Env = []string{tuttiAgentExtraSkillRootsEnv + "=" + mustEncodeExtraRoots(t, root)}
+	session.Env = []string{agoraxAgentExtraSkillRootsEnv + "=" + mustEncodeExtraRoots(t, root)}
 	if _, err := adapter.Start(context.Background(), session); err != nil {
 		t.Fatalf("Start: %v", err)
 	}

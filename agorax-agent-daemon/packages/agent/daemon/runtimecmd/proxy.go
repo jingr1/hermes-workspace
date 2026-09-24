@@ -35,7 +35,7 @@ import (
 // Out of scope, deliberately: SOCKS proxies and PAC resolution (scutil only
 // exposes only a PAC URL; the desktop's Chromium stack handles PAC natively for
 // its own requests). Windows support intentionally covers the static per-user
-// proxy only. Setting TUTTI_DISABLE_PROXY_AUTODETECT=1 disables system-proxy
+// proxy only. Setting AGORAX_DISABLE_PROXY_AUTODETECT=1 disables system-proxy
 // detection and injection entirely; explicit env proxies keep working.
 
 // noProxyDefault matches the value the Claude desktop app injects.
@@ -43,7 +43,7 @@ const noProxyDefault = "localhost,127.0.0.1,::1,.local"
 
 // disableProxyAutodetectEnvKey is the escape hatch for machines where the
 // detected system proxy is broken but direct connections work.
-const disableProxyAutodetectEnvKey = "TUTTI_DISABLE_PROXY_AUTODETECT"
+const disableProxyAutodetectEnvKey = "AGORAX_DISABLE_PROXY_AUTODETECT"
 
 func proxyAutodetectDisabled() bool {
 	value := strings.TrimSpace(os.Getenv(disableProxyAutodetectEnvKey))

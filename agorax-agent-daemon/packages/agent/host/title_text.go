@@ -9,7 +9,7 @@ import (
 
 const MaxSessionTitleRunes = 120
 
-// NormalizeTitle converts provider/Tutti rich-text serialization to a plain
+// NormalizeTitle converts provider/Agorax rich-text serialization to a plain
 // title. It intentionally does not apply UI-local labels or localization.
 // Call it only at a rich-text-to-title boundary; persisted canonical titles
 // must flow through the rest of the system without being parsed again.

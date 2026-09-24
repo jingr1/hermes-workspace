@@ -276,7 +276,7 @@ func applyRuntimeContextPatch(
 }
 
 func sessionTitleEstablished(runtimeContext map[string]any) bool {
-	established, _ := runtimeContext["tuttiInitialTitleEstablished"].(bool)
+	established, _ := runtimeContext["agoraxInitialTitleEstablished"].(bool)
 	return established
 }
 

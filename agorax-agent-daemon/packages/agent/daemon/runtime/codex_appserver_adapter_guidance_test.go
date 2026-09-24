@@ -506,8 +506,8 @@ func TestCodexAppServerAdapterSteerRoutesAgentTargetMention(t *testing.T) {
 		t.Fatalf("turn/steer user text = %q, want %q", asString(first["text"]), prompt)
 	}
 	last, _ := input[len(input)-1].(map[string]any)
-	if asString(last["text"]) != tuttiAgentMentionRoutingReminder {
-		t.Fatalf("turn/steer routing text = %q, want %q", asString(last["text"]), tuttiAgentMentionRoutingReminder)
+	if asString(last["text"]) != agoraxAgentMentionRoutingReminder {
+		t.Fatalf("turn/steer routing text = %q, want %q", asString(last["text"]), agoraxAgentMentionRoutingReminder)
 	}
 
 	userContent := firstUserMessageContent(t, events)

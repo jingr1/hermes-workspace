@@ -122,7 +122,7 @@ type TurnStartParams struct {
 	ResponsesAPIClientMetadata map[string]string          `json:"responsesapiClientMetadata,omitempty"`
 }
 
-// ReviewStartParams is maintained manually because tutti sends the live
+// ReviewStartParams is maintained manually because agorax sends the live
 // `summary` field used by the runtime but omitted from the generated schema.
 type ReviewStartParams struct {
 	ThreadID string `json:"threadId"`

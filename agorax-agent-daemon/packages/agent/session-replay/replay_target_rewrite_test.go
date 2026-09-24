@@ -8,7 +8,7 @@ import (
 )
 
 func TestRewriteReplayAgentTargetFieldsRewritesNestedStateWithoutMutation(t *testing.T) {
-	original := TuttiReplayState{
+	original := AgoraxReplayState{
 		SchemaVersion: SchemaVersion,
 		Agent: agenthost.HistoricalSessionGraph{
 			RootSessionID: "root-1",
@@ -60,7 +60,7 @@ func TestProjectPortableAgentStateUsesProviderDescriptorForSharedTarget(t *testi
 		"generated_images",
 		"image.png",
 	)
-	state := TuttiReplayAgent{
+	state := AgoraxReplayAgent{
 		RootSessionID: "session-1",
 		Sessions: []agenthost.HistoricalSession{{
 			ID:            "session-1",

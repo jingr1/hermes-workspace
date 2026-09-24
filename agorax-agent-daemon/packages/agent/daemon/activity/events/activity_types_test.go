@@ -43,11 +43,11 @@ func TestNormalizeProviderUsesMigratedProviderIdentities(t *testing.T) {
 	}
 }
 
-func TestNormalizeProviderRejectsTuttiAsNexightAlias(t *testing.T) {
+func TestNormalizeProviderRejectsAgoraxAsNexightAlias(t *testing.T) {
 	t.Parallel()
 
-	if provider, ok := NormalizeProvider("tutti"); ok {
-		t.Fatalf("NormalizeProvider(tutti) = %q, true; want unsupported", provider)
+	if provider, ok := NormalizeProvider("agorax"); ok {
+		t.Fatalf("NormalizeProvider(agorax) = %q, true; want unsupported", provider)
 	}
 }
 

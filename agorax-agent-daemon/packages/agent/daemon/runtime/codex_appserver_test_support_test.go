@@ -58,7 +58,7 @@ func appServerForkStrategyForTest(
 	}
 }
 
-func tuttiAgentForkUserAgent() string {
+func agoraxAgentForkUserAgent() string {
 	return "codex_cli/" + providerregistry.CodexThroughTurnForkMinVersion
 }
 

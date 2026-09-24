@@ -13,14 +13,14 @@ import (
 )
 
 func (c *Controller) beginTurn(session Session, turnID string, cancel context.CancelFunc) (Session, error) {
-	return c.beginTurnWithTuttiModeSnapshot(session, turnID, cancel, nil)
+	return c.beginTurnWithAgoraxModeSnapshot(session, turnID, cancel, nil)
 }
 
-func (c *Controller) beginTurnWithTuttiModeSnapshot(
+func (c *Controller) beginTurnWithAgoraxModeSnapshot(
 	session Session,
 	turnID string,
 	cancel context.CancelFunc,
-	tuttiModeSnapshot *TuttiModeTurnSnapshot,
+	agoraxModeSnapshot *AgoraxModeTurnSnapshot,
 ) (Session, error) {
 	if c == nil {
 		return Session{}, fmt.Errorf("agent session controller is unavailable")
@@ -39,7 +39,7 @@ func (c *Controller) beginTurnWithTuttiModeSnapshot(
 	c.turns[key] = activeTurn{
 		turnID:            turnID,
 		cancel:            cancel,
-		tuttiModeSnapshot: cloneTuttiModeTurnSnapshot(tuttiModeSnapshot),
+		agoraxModeSnapshot: cloneAgoraxModeTurnSnapshot(agoraxModeSnapshot),
 	}
 	return session, nil
 }
@@ -59,7 +59,7 @@ func (c *Controller) rollbackSubmittedTurn(session Session, turnID string) {
 	c.sessions[key] = session
 }
 
-func (c *Controller) activeTurnTuttiModeSnapshot(roomID string, agentSessionID string) *TuttiModeTurnSnapshot {
+func (c *Controller) activeTurnAgoraxModeSnapshot(roomID string, agentSessionID string) *AgoraxModeTurnSnapshot {
 	if c == nil {
 		return nil
 	}
@@ -70,7 +70,7 @@ func (c *Controller) activeTurnTuttiModeSnapshot(roomID string, agentSessionID s
 	if !ok {
 		return nil
 	}
-	return cloneTuttiModeTurnSnapshot(turn.tuttiModeSnapshot)
+	return cloneAgoraxModeTurnSnapshot(turn.agoraxModeSnapshot)
 }
 
 func (c *Controller) runExecTurn(ctx context.Context, session Session, adapter Adapter, content []PromptContentBlock, displayPrompt string, turnID string) {
@@ -275,7 +275,7 @@ func (c *Controller) runBlockingExecTurn(
 	if err != nil {
 		if rootProviderLifecycle && errors.Is(err, context.Canceled) {
 			// Provider interruption is a fact emitted by the adapter.
-			// Do not fabricate a canonical root terminal here: tuttid owns that
+			// Do not fabricate a canonical root terminal here: agoraxd owns that
 			// transition after child-turn aggregation.
 			events = retainTurnCallLifecycleEvents(events, turnID)
 		} else if !rootProviderLifecycle && errors.Is(err, context.Canceled) {

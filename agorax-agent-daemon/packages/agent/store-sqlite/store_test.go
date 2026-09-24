@@ -35,8 +35,8 @@ func testSeedTargets(now int64) []Target {
 			LaunchRefJSON:   `{"type":"local_cli","provider":"codex"}`,
 			Name:            "Codex",
 			IconKey:         "codex",
-			IconURL:         "tutti-asset://agent/codex.png",
-			MaskIconURL:     "tutti-asset://agent/codex-mask.svg",
+			IconURL:         "agorax-asset://agent/codex.png",
+			MaskIconURL:     "agorax-asset://agent/codex-mask.svg",
 			Enabled:         true,
 			Source:          "system",
 			SortOrder:       10,
@@ -49,8 +49,8 @@ func testSeedTargets(now int64) []Target {
 			LaunchRefJSON:   `{"type":"local_cli","provider":"claude-code"}`,
 			Name:            "Claude Code",
 			IconKey:         "claude-code",
-			IconURL:         "tutti-asset://agent/claudecode.png",
-			MaskIconURL:     "tutti-asset://agent/claudecode-mask.svg",
+			IconURL:         "agorax-asset://agent/claudecode.png",
+			MaskIconURL:     "agorax-asset://agent/claudecode-mask.svg",
 			Enabled:         true,
 			Source:          "system",
 			SortOrder:       20,
@@ -184,8 +184,8 @@ FROM agent_targets WHERE id = ?
 	}
 	if codex.Provider != "codex" || codex.LaunchRefJSON != `{"type":"local_cli","provider":"codex"}` ||
 		codex.Name != "Codex" || codex.IconKey != "codex" ||
-		codex.IconURL != "tutti-asset://agent/codex.png" ||
-		codex.MaskIconURL != "tutti-asset://agent/codex-mask.svg" ||
+		codex.IconURL != "agorax-asset://agent/codex.png" ||
+		codex.MaskIconURL != "agorax-asset://agent/codex-mask.svg" ||
 		codex.HeroImageURL != "" || codex.Enabled || codex.SortOrder != 10 {
 		t.Fatalf("refreshed system target = %#v", codex)
 	}
@@ -392,7 +392,7 @@ WHERE workspace_id = 'ws-1' AND agent_session_id = 'session-1'
 	}
 
 	blankRenamed, ok, err := store.UpdateSessionTitle(ctx, "ws-1", "session-1", "   ")
-	if err != nil || !ok || blankRenamed.Title != "" || blankRenamed.InternalRuntimeContext["tuttiInitialTitleEstablished"] != true {
+	if err != nil || !ok || blankRenamed.Title != "" || blankRenamed.InternalRuntimeContext["agoraxInitialTitleEstablished"] != true {
 		t.Fatalf("UpdateSessionTitle(blank) = %#v ok=%v error=%v, want cleared canonical title", blankRenamed, ok, err)
 	}
 	sessionAfterBlankTitle, ok, err := store.GetSession(ctx, "ws-1", "session-1")

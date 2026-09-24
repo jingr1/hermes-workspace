@@ -45,7 +45,7 @@ func prepareProcessExecutable(path string, expected *ExecutableIdentity) (prepar
 		return preparedProcessExecutable{}, fmt.Errorf("rewind verified process executable: %w", err)
 	}
 
-	privateDir, err := os.MkdirTemp("", ".tutti-verified-exec-")
+	privateDir, err := os.MkdirTemp("", ".agorax-verified-exec-")
 	if err != nil {
 		return preparedProcessExecutable{}, err
 	}
@@ -182,7 +182,7 @@ func prepareWindowsNodeInterpreterSnapshot(
 		return preparedProcessExecutable{}, errors.New("node interpreter identity is invalid")
 	}
 	if snapshotRoot == "" {
-		privateDir, err := os.MkdirTemp("", ".tutti-verified-node-")
+		privateDir, err := os.MkdirTemp("", ".agorax-verified-node-")
 		if err != nil {
 			return preparedProcessExecutable{}, err
 		}

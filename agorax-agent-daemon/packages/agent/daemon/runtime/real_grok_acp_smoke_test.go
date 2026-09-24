@@ -17,11 +17,11 @@ import (
 // transport tests; this smoke limits itself to executable/version discovery,
 // initialize/model capability projection, and a clean process close.
 func TestRealGrokACPInitializeSmoke(t *testing.T) {
-	if os.Getenv("TUTTI_REAL_GROK_ACP_SMOKE") != "1" {
-		t.Skip("set TUTTI_REAL_GROK_ACP_SMOKE=1 to run the local Grok initialize smoke")
+	if os.Getenv("AGORAX_REAL_GROK_ACP_SMOKE") != "1" {
+		t.Skip("set AGORAX_REAL_GROK_ACP_SMOKE=1 to run the local Grok initialize smoke")
 	}
 
-	binary := strings.TrimSpace(os.Getenv("TUTTI_GROK_BIN"))
+	binary := strings.TrimSpace(os.Getenv("AGORAX_GROK_BIN"))
 	if binary == "" {
 		var err error
 		binary, err = exec.LookPath("grok")

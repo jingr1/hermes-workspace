@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	cursorACPQuestionMCPServerName = "tutti-interaction"
+	cursorACPQuestionMCPServerName = "agorax-interaction"
 	cursorACPQuestionMCPToolName   = "AskUserQuestion"
 	cursorACPQuestionMCPPath       = "/mcp/cursor-interaction"
 	cursorACPQuestionMCPVersion    = "2025-06-18"

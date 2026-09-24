@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-const testConnectorIconURL = "https://cdn.example.test/tutti/connector-market/test/1.0.0/test-1.0.0-icon.svg"
+const testConnectorIconURL = "https://cdn.example.test/agorax/connector-market/test/1.0.0/test-1.0.0-icon.svg"
 
 func TestValidateManifestShapeRequiresSafePublishedHTTPSIcon(t *testing.T) {
 	manifest := Manifest{
@@ -377,7 +377,7 @@ func testArtifact() Artifact {
 		Key:       "connectors/github/1.0.0.tgz",
 		SHA256:    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 		SizeBytes: 1024,
-		MediaType: "application/vnd.tutti.connector+tar+gzip",
+		MediaType: "application/vnd.agorax.connector+tar+gzip",
 	}
 }
 

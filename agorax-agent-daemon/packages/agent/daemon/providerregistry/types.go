@@ -32,7 +32,7 @@ const (
 type AppServerSkillRootsStrategy string
 
 const (
-	AppServerSkillRootsStrategyTuttiStable AppServerSkillRootsStrategy = "tutti_stable"
+	AppServerSkillRootsStrategyAgoraxStable AppServerSkillRootsStrategy = "agorax_stable"
 )
 
 // EndpointConfigKind identifies an optional provider-owned config source for
@@ -46,7 +46,7 @@ const (
 )
 
 // ModelPlanProtocol identifies the external model API protocol that a runtime
-// can consume through Tutti's model-plan endpoint injection.
+// can consume through Agorax's model-plan endpoint injection.
 type ModelPlanProtocol string
 
 const (
@@ -91,7 +91,7 @@ type RuntimeEndpointDescriptor struct {
 	NativeSubscription bool
 }
 
-// InstallerKind is a transport-neutral installer identifier. tuttid converts
+// InstallerKind is a transport-neutral installer identifier. agoraxd converts
 // it to the concrete installer service contract at its composition boundary.
 type InstallerKind string
 
@@ -284,7 +284,7 @@ func (d ProviderDescriptor) ManagedNPMDescriptor() (managednpm.Descriptor, bool)
 	}, true
 }
 
-// UpdateCapability declares whether tuttid may safely discover and apply CLI
+// UpdateCapability declares whether agoraxd may safely discover and apply CLI
 // updates for a provider. Unsupported is explicit: callers must not infer an
 // update path from the install command or provider identity.
 type UpdateCapability string
@@ -643,7 +643,7 @@ type DesktopIntegrationDescriptor struct {
 	VisibilityGate               DesktopVisibilityGate
 	RuntimeProbeFallback         DesktopRuntimeProbeFallback
 	// CommandNetworkAccess explicitly opts a Codex-compatible app-server into
-	// command networking when it runs under the Tutti Desktop host.
+	// command networking when it runs under the Agorax Desktop host.
 	CommandNetworkAccess       bool
 	InstallBootstrap           bool
 	RefreshOnAccountChange     bool

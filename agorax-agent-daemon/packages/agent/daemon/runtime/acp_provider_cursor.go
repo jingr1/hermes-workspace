@@ -55,8 +55,8 @@ const (
 	cursorPermissionFullAccess = "full-access"
 )
 
-const cursorPluginDirEnv = "TUTTI_CURSOR_PLUGIN_DIR"
-const cursorPromptContextFileEnv = "TUTTI_CURSOR_PROMPT_CONTEXT_FILE"
+const cursorPluginDirEnv = "AGORAX_CURSOR_PLUGIN_DIR"
+const cursorPromptContextFileEnv = "AGORAX_CURSOR_PROMPT_CONTEXT_FILE"
 
 const cursorACPSessionNewRetryLimit = 1
 const cursorACPStartupTimeout = 75 * time.Second
@@ -76,7 +76,7 @@ func cursorACPShouldRetrySessionNew(err error) bool {
 	return strings.Contains(detail, "failed to initialize session services")
 }
 
-// cursorACPModeID maps Tutti permission tiers onto Cursor's ACP session
+// cursorACPModeID maps Agorax permission tiers onto Cursor's ACP session
 // modes (switched via session/set_mode). Approval strictness within "agent"
 // is governed by the spawn command, not the session mode.
 func cursorACPModeID(mode string) string {

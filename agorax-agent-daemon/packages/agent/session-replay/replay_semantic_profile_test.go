@@ -9,106 +9,106 @@ import (
 
 func TestAgentSemanticProfileRejectsUnsupportedProductDomains(t *testing.T) {
 	state := agentOnlyReplayState()
-	if err := ValidateTuttiReplayStateForProfile(state, AgentSemanticProfile()); err != nil {
+	if err := ValidateAgoraxReplayStateForProfile(state, AgentSemanticProfile()); err != nil {
 		t.Fatalf("Agent-only state error = %v", err)
 	}
 
-	withInactiveTuttiMode := state
-	withInactiveTuttiMode.TuttiMode.TurnSnapshots = []TuttiReplayTurnSnapshot{{
+	withInactiveAgoraxMode := state
+	withInactiveAgoraxMode.AgoraxMode.TurnSnapshots = []AgoraxReplayTurnSnapshot{{
 		SessionID: "session-root", TurnID: "turn-1", State: "inactive",
 		DispatchState: "accepted",
 	}}
-	if err := ValidateTuttiReplayStateForProfile(
-		withInactiveTuttiMode,
+	if err := ValidateAgoraxReplayStateForProfile(
+		withInactiveAgoraxMode,
 		AgentSemanticProfile(),
 	); err != nil {
-		t.Fatalf("inactive Tutti Mode snapshot error = %v", err)
+		t.Fatalf("inactive Agorax Mode snapshot error = %v", err)
 	}
 
-	withConfiguredTuttiMode := state
-	withConfiguredTuttiMode.TuttiMode.TurnSnapshots = []TuttiReplayTurnSnapshot{{
+	withConfiguredAgoraxMode := state
+	withConfiguredAgoraxMode.AgoraxMode.TurnSnapshots = []AgoraxReplayTurnSnapshot{{
 		SessionID: "session-root", TurnID: "turn-1",
 		ActivationID: "activation-1", RevisionID: "revision-1", Revision: 1,
 		State: "inactive", Source: "badge_remove", PreferenceVersion: 1,
 		DispatchState: "accepted",
 	}}
-	if err := ValidateTuttiReplayStateForProfile(
-		withConfiguredTuttiMode,
+	if err := ValidateAgoraxReplayStateForProfile(
+		withConfiguredAgoraxMode,
 		AgentSemanticProfile(),
 	); !errors.Is(err, ErrUnsupportedReplaySemanticDomain) {
-		t.Fatalf("configured Tutti Mode dependency error = %v", err)
+		t.Fatalf("configured Agorax Mode dependency error = %v", err)
 	}
 
 	withWorkflow := state
-	withWorkflow.Workflows = []TuttiReplayWorkflow{{
+	withWorkflow.Workflows = []AgoraxReplayWorkflow{{
 		ID: "workflow-1", IssueIDs: []string{},
 	}}
-	if err := ValidateTuttiReplayStateForProfile(
+	if err := ValidateAgoraxReplayStateForProfile(
 		withWorkflow,
 		AgentSemanticProfile(),
 	); !errors.Is(err, ErrUnsupportedReplaySemanticDomain) {
 		t.Fatalf("Workflow dependency error = %v", err)
 	}
-	if err := ValidateTuttiReplayStateForProfile(
+	if err := ValidateAgoraxReplayStateForProfile(
 		withWorkflow,
-		TuttiSemanticProfile(),
+		AgoraxSemanticProfile(),
 	); err != nil {
-		t.Fatalf("Tutti profile rejected Workflow state: %v", err)
+		t.Fatalf("Agorax profile rejected Workflow state: %v", err)
 	}
 }
 
-func TestAgentSemanticProfileIgnoresInactiveTuttiModeSnapshots(t *testing.T) {
+func TestAgentSemanticProfileIgnoresInactiveAgoraxModeSnapshots(t *testing.T) {
 	withInactiveSnapshot := agentOnlyReplayState()
-	withInactiveSnapshot.TuttiMode.TurnSnapshots = []TuttiReplayTurnSnapshot{{
+	withInactiveSnapshot.AgoraxMode.TurnSnapshots = []AgoraxReplayTurnSnapshot{{
 		SessionID: "session-root", TurnID: "turn-1", State: "inactive",
 		DispatchState: "accepted",
 	}}
 
-	merged, err := MergeTuttiReplayStatesForProfile(
-		[]TuttiReplayState{withInactiveSnapshot},
+	merged, err := MergeAgoraxReplayStatesForProfile(
+		[]AgoraxReplayState{withInactiveSnapshot},
 		AgentSemanticProfile(),
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(merged.TuttiMode.TurnSnapshots) != 0 {
-		t.Fatalf("merged inactive Tutti Mode snapshots = %#v", merged.TuttiMode.TurnSnapshots)
+	if len(merged.AgoraxMode.TurnSnapshots) != 0 {
+		t.Fatalf("merged inactive Agorax Mode snapshots = %#v", merged.AgoraxMode.TurnSnapshots)
 	}
 
-	if err := CompareTuttiReplayStateForProfile(
+	if err := CompareAgoraxReplayStateForProfile(
 		withInactiveSnapshot,
 		agentOnlyReplayState(),
 		AgentSemanticProfile(),
 	); err != nil {
-		t.Fatalf("compare inactive Tutti Mode snapshot error = %v", err)
+		t.Fatalf("compare inactive Agorax Mode snapshot error = %v", err)
 	}
 
-	tuttiMerged, err := MergeTuttiReplayStatesForProfile(
-		[]TuttiReplayState{withInactiveSnapshot},
-		TuttiSemanticProfile(),
+	agoraxMerged, err := MergeAgoraxReplayStatesForProfile(
+		[]AgoraxReplayState{withInactiveSnapshot},
+		AgoraxSemanticProfile(),
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tuttiMerged.TuttiMode.TurnSnapshots) != 1 {
-		t.Fatalf("Tutti profile snapshots = %#v", tuttiMerged.TuttiMode.TurnSnapshots)
+	if len(agoraxMerged.AgoraxMode.TurnSnapshots) != 1 {
+		t.Fatalf("Agorax profile snapshots = %#v", agoraxMerged.AgoraxMode.TurnSnapshots)
 	}
-	if err := CompareTuttiReplayStateForProfile(
+	if err := CompareAgoraxReplayStateForProfile(
 		withInactiveSnapshot,
 		agentOnlyReplayState(),
-		TuttiSemanticProfile(),
-	); !errors.Is(err, ErrTuttiReplayStateConflict) {
-		t.Fatalf("Tutti profile snapshot mismatch error = %v", err)
+		AgoraxSemanticProfile(),
+	); !errors.Is(err, ErrAgoraxReplayStateConflict) {
+		t.Fatalf("Agorax profile snapshot mismatch error = %v", err)
 	}
 }
 
 func TestSemanticProfileFailsFastOnIndirectIssueDependency(t *testing.T) {
 	state := agentOnlyReplayState()
-	state.Workflows = []TuttiReplayWorkflow{{
+	state.Workflows = []AgoraxReplayWorkflow{{
 		ID: "workflow-1", IssueIDs: []string{"issue-1"},
 	}}
 	profile := SemanticProfile{Agent: true, Workflows: true}
-	err := ValidateTuttiReplayStateForProfile(state, profile)
+	err := ValidateAgoraxReplayStateForProfile(state, profile)
 	if !errors.Is(err, ErrUnsupportedReplaySemanticDomain) {
 		t.Fatalf("indirect Issue dependency error = %v", err)
 	}
@@ -118,8 +118,8 @@ func TestSemanticProfileFailsFastOnIndirectIssueDependency(t *testing.T) {
 	}
 }
 
-func agentOnlyReplayState() TuttiReplayState {
-	return TuttiReplayState{
+func agentOnlyReplayState() AgoraxReplayState {
+	return AgoraxReplayState{
 		SchemaVersion: SchemaVersion,
 		Agent: agenthost.HistoricalSessionGraph{
 			RootSessionID: "session-root",
@@ -133,11 +133,11 @@ func agentOnlyReplayState() TuttiReplayState {
 				Interactions:      []agenthost.HistoricalInteraction{},
 			}},
 		},
-		TuttiMode: TuttiReplayTuttiMode{
-			Activations:   []TuttiReplayActivation{},
-			TurnSnapshots: []TuttiReplayTurnSnapshot{},
+		AgoraxMode: AgoraxReplayAgoraxMode{
+			Activations:   []AgoraxReplayActivation{},
+			TurnSnapshots: []AgoraxReplayTurnSnapshot{},
 		},
-		Workflows: []TuttiReplayWorkflow{},
-		Issues:    []TuttiReplayIssue{},
+		Workflows: []AgoraxReplayWorkflow{},
+		Issues:    []AgoraxReplayIssue{},
 	}
 }

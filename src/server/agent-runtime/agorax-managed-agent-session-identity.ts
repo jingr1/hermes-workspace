@@ -11,7 +11,7 @@ export type AgoraxManagedSessionIdentity =
  * Resolves an Agorax display session id to the canonical daemon agentSessionId
  * for a managed-backend agent declaration.
  *
- * Ownership is fail-closed (Tutti-style): a binding that belongs to a different
+ * Ownership is fail-closed (Agorax-style): a binding that belongs to a different
  * backend must not hydrate into this agent's chat pane.
  */
 export async function resolveAgoraxManagedSessionIdentity(input: {

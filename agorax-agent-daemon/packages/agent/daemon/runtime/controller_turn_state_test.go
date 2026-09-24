@@ -13,8 +13,8 @@ func TestSubmittedTurnActivityEventProjectsCapabilityReferences(t *testing.T) {
 	t.Parallel()
 	session := Session{Provider: ProviderCodex, AgentSessionID: "agent-1", RoomID: "room-1"}
 	events := submittedTurnActivityEvents(context.Background(), session, textPrompt("hello"), "", "turn-1", []CapabilityReference{
-		{Capability: " tutti ", Source: "slash_command"},
-		{Capability: "tutti", Source: "slash_command"},
+		{Capability: " agorax ", Source: "slash_command"},
+		{Capability: "agorax", Source: "slash_command"},
 	}, "")
 	if len(events) != 2 {
 		t.Fatalf("submitted events = %#v", events)
@@ -31,7 +31,7 @@ func TestSubmittedTurnActivityEventProjectsCapabilityReferences(t *testing.T) {
 		100,
 	)
 	if !ok || patch.Turn == nil || len(patch.Turn.CapabilityRefs) != 1 ||
-		patch.Turn.CapabilityRefs[0] != (agentsessionstore.WorkspaceAgentCapabilityReference{Capability: "tutti", Source: "slash_command"}) {
+		patch.Turn.CapabilityRefs[0] != (agentsessionstore.WorkspaceAgentCapabilityReference{Capability: "agorax", Source: "slash_command"}) {
 		t.Fatalf("submitted turn patch = %#v ok=%v", patch.Turn, ok)
 	}
 }
@@ -165,8 +165,8 @@ func TestGuidanceCapabilityReferencePatchDoesNotClaimTurnLifecycle(t *testing.T)
 		TurnLifecycle: &TurnLifecycle{ActiveTurnID: &activeTurnID, Phase: string(activityshared.TurnPhaseWaitingInput)},
 	}
 	patch, ok := guidanceTurnCapabilityReferenceStatePatch(session, activeTurnID, []CapabilityReference{
-		{Capability: " tutti ", Source: "slash_command"},
-		{Capability: "tutti", Source: "slash_command"},
+		{Capability: " agorax ", Source: "slash_command"},
+		{Capability: "agorax", Source: "slash_command"},
 	})
 	if !ok || patch.Turn == nil || patch.Turn.TurnID != activeTurnID || len(patch.Turn.CapabilityRefs) != 1 {
 		t.Fatalf("guidance provenance patch = %#v ok=%v", patch, ok)
@@ -176,7 +176,7 @@ func TestGuidanceCapabilityReferencePatchDoesNotClaimTurnLifecycle(t *testing.T)
 		t.Fatalf("guidance provenance patch owns lifecycle state: %#v", patch)
 	}
 	if got := patch.Turn.CapabilityRefs[0]; got != (agentsessionstore.WorkspaceAgentCapabilityReference{
-		Capability: "tutti", Source: "slash_command",
+		Capability: "agorax", Source: "slash_command",
 	}) {
 		t.Fatalf("guidance capability reference = %#v", got)
 	}

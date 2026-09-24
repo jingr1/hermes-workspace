@@ -22,29 +22,29 @@ func (p Paths) AgentPath(parts ...string) string {
 }
 
 func defaultStateDir() string {
-	if override := strings.TrimSpace(os.Getenv("TUTTI_STATE_DIR")); override != "" {
+	if override := strings.TrimSpace(os.Getenv("AGORAX_STATE_DIR")); override != "" {
 		return override
 	}
 
 	homeDir, err := os.UserHomeDir()
 	if err != nil || strings.TrimSpace(homeDir) == "" {
 		if IsDevelopmentEnv() {
-			return ".tutti-dev"
+			return ".agorax-dev"
 		}
-		return ".tutti"
+		return ".agorax"
 	}
 
-	dirName := ".tutti"
+	dirName := ".agorax"
 	if IsDevelopmentEnv() {
-		dirName = ".tutti-dev"
+		dirName = ".agorax-dev"
 	}
 	return filepath.Join(homeDir, dirName)
 }
 
 // IsDevelopmentEnv reports whether this process runs against the development
-// state root, which also selects the development Tutti CLI binary name.
+// state root, which also selects the development Agorax CLI binary name.
 func IsDevelopmentEnv() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("TUTTI_ENV"))) {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("AGORAX_ENV"))) {
 	case "dev", "development", "local":
 		return true
 	default:

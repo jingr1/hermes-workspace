@@ -376,7 +376,7 @@ func acpPermissionOutOfBandResolvedEvents(session Session, turnID string, pendin
 		newTurnActivityEventWithID(session, pending.eventID, EventCallFailed, turnID, messageStreamStateFailed, "", pending.name, map[string]any{
 			"callId": pending.callID, "callType": callType, "name": pending.name, "toolName": pending.toolName,
 			"status": messageStreamStateFailed,
-			"error":  map[string]any{"requestId": pending.requestID, "message": "Codex resolved this request without a response from tutti (it may have timed out or been canceled); outcome unknown."},
+			"error":  map[string]any{"requestId": pending.requestID, "message": "Codex resolved this request without a response from agorax (it may have timed out or been canceled); outcome unknown."},
 		}),
 		newTurnActivityEvent(session, EventTurnUpdated, turnID, SessionStatusWorking, "", "", map[string]any{
 			"phase": string(activityshared.TurnPhaseWorking), "requestId": pending.requestID,

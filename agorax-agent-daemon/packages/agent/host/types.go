@@ -276,7 +276,7 @@ const (
 )
 
 // SessionForkProviderStateBinding describes the provider-local durable state
-// that must become independently discoverable from the target Tutti session's
+// that must become independently discoverable from the target Agorax session's
 // runtime namespace before the canonical child can be committed.
 type SessionForkProviderStateBinding struct {
 	WorkspaceID             string
@@ -409,7 +409,7 @@ type RuntimeExecInput struct {
 	Guidance                        bool
 	HistoryReplacement              bool
 	RequireProviderAcceptance       bool
-	TuttiModeSnapshot               *TuttiModeTurnSnapshot
+	AgoraxModeSnapshot               *AgoraxModeTurnSnapshot
 	// ConnectorRoutingUpdate carries the current connector alias index when it
 	// diverged from the index materialized into the session's instructions.
 	// The runtime renders it into provider-only content; canonical prompt
@@ -419,11 +419,11 @@ type RuntimeExecInput struct {
 
 type CapabilityReference = storesqlite.CapabilityReference
 
-// TuttiModeTurnSnapshot is the immutable activation revision observed by one
+// AgoraxModeTurnSnapshot is the immutable activation revision observed by one
 // turn. It is an execution input, not a reconstruction from capability refs.
-const TuttiModePreferenceVersionEffectSpeed = 1
+const AgoraxModePreferenceVersionEffectSpeed = 1
 
-type TuttiModeTurnSnapshot struct {
+type AgoraxModeTurnSnapshot struct {
 	ActivationID      string
 	RevisionID        string
 	Revision          int64
@@ -435,7 +435,7 @@ type TuttiModeTurnSnapshot struct {
 	// OrchestrationIntensity is the legacy single-axis alias of Effect.
 	//
 	// Deprecated: use Effect and Speed with PreferenceVersion set to
-	// TuttiModePreferenceVersionEffectSpeed.
+	// AgoraxModePreferenceVersionEffectSpeed.
 	OrchestrationIntensity int
 }
 
@@ -675,7 +675,7 @@ type CreateSessionInput struct {
 	ClientSubmitID         string
 	TurnID                 string
 	CapabilityRefs         []CapabilityReference
-	TuttiModeSnapshot      *TuttiModeTurnSnapshot
+	AgoraxModeSnapshot      *AgoraxModeTurnSnapshot
 	Title                  *string
 	Cwd                    *string
 	PermissionModeID       *string
@@ -702,7 +702,7 @@ type CreateSessionInput struct {
 type SendInput struct {
 	CapabilityRefs    []CapabilityReference
 	TurnID            string
-	TuttiModeSnapshot *TuttiModeTurnSnapshot
+	AgoraxModeSnapshot *AgoraxModeTurnSnapshot
 	Content           []PromptContentBlock
 	DisplayPrompt     string
 	Metadata          map[string]any

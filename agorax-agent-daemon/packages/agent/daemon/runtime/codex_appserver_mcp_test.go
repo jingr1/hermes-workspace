@@ -21,7 +21,7 @@ func TestAppServerMCPToolCallProjectsResultBody(t *testing.T) {
 		"status":    "completed",
 		"server":    "example",
 		"tool":      "search",
-		"arguments": map[string]any{"query": "tutti"},
+		"arguments": map[string]any{"query": "agorax"},
 		"result": map[string]any{
 			"content":           content,
 			"structuredContent": structuredContent,

@@ -6,8 +6,8 @@ import (
 )
 
 const (
-	defaultWorkspaceEnvName         = "TUTTI_WORKSPACE_ID"
-	defaultOpenClawSessionKeyPrefix = "agent:main:tsh-"
+	defaultWorkspaceEnvName         = "AGORAX_WORKSPACE_ID"
+	defaultOpenClawSessionKeyPrefix = "agent:main:agorax-"
 )
 
 type ClientInfo struct {
@@ -56,8 +56,8 @@ type ProviderCommandResolver func(context.Context, string) (ProviderCommand, err
 func LegacyHostMetadata() HostMetadata {
 	return HostMetadata{
 		ClientInfo: ClientInfo{
-			Name:    "tsh-desktop",
-			Title:   "tsh",
+			Name:    "agorax-desktop",
+			Title:   "Agorax",
 			Version: "0.1.0",
 		},
 		WorkspaceEnvName:         defaultWorkspaceEnvName,

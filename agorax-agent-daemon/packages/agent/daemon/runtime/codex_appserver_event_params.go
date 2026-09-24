@@ -56,7 +56,7 @@ func appServerTurnStartParams(
 	planModeMask map[string]any,
 	defaultModeMask map[string]any,
 	defaultModel string,
-	tuttiModeHostContext string,
+	agoraxModeHostContext string,
 	commandNetworkAccess bool,
 ) map[string]any {
 	settings := session.SettingsValue()
@@ -72,11 +72,11 @@ func appServerTurnStartParams(
 		// workspace projection as thread/start and the provider process.
 		params["cwd"] = cwd
 	}
-	if collaborationMode := appServerCollaborationMode(settings, planModeMask, defaultModeMask, defaultModel, tuttiModeHostContext); collaborationMode != nil {
+	if collaborationMode := appServerCollaborationMode(settings, planModeMask, defaultModeMask, defaultModel, agoraxModeHostContext); collaborationMode != nil {
 		params["collaborationMode"] = collaborationMode
-	} else if hostContext := strings.TrimSpace(tuttiModeHostContext); hostContext != "" {
+	} else if hostContext := strings.TrimSpace(agoraxModeHostContext); hostContext != "" {
 		// collaborationMode/list is an experimental capability and can be absent
-		// or fail transiently. Preserve Tutti-owned turn state through a
+		// or fail transiently. Preserve Agorax-owned turn state through a
 		// provider-transport-only synthetic block instead of silently dropping
 		// it. User prompt previews and activity projection continue to use the
 		// original content passed to this function.
@@ -119,7 +119,7 @@ func appServerCollaborationMode(
 	planModeMask map[string]any,
 	defaultModeMask map[string]any,
 	defaultModel string,
-	tuttiModeHostContext string,
+	agoraxModeHostContext string,
 ) map[string]any {
 	if planModeMask == nil && defaultModeMask == nil {
 		return nil
@@ -139,7 +139,7 @@ func appServerCollaborationMode(
 	}
 	baseDeveloperInstructions, _ := appServerCollaborationModeDeveloperInstructions(modeMask).(string)
 	developerInstructions := strings.TrimSpace(baseDeveloperInstructions)
-	if hostContext := strings.TrimSpace(tuttiModeHostContext); hostContext != "" {
+	if hostContext := strings.TrimSpace(agoraxModeHostContext); hostContext != "" {
 		if developerInstructions == "" {
 			developerInstructions = hostContext
 		} else {
@@ -325,7 +325,7 @@ func splitSlashCommand(prompt string) (string, string) {
 	return strings.ToLower(strings.TrimSpace(command)), strings.TrimSpace(args)
 }
 
-// codexAppServerApprovalPolicy maps Tutti permission modes onto the
+// codexAppServerApprovalPolicy maps Agorax permission modes onto the
 // app-server AskForApproval policy.
 func codexAppServerApprovalPolicy(modeID string) string {
 	switch codexACPModeID(modeID) {

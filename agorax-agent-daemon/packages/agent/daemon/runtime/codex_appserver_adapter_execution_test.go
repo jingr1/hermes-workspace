@@ -193,8 +193,8 @@ func TestCodexAppServerAdapterExecRoutesAgentTargetMention(t *testing.T) {
 		t.Fatalf("turn/start user text = %q, want %q", asString(first["text"]), prompt)
 	}
 	last, _ := input[len(input)-1].(map[string]any)
-	if asString(last["text"]) != tuttiAgentMentionRoutingReminder {
-		t.Fatalf("turn/start routing text = %q, want %q", asString(last["text"]), tuttiAgentMentionRoutingReminder)
+	if asString(last["text"]) != agoraxAgentMentionRoutingReminder {
+		t.Fatalf("turn/start routing text = %q, want %q", asString(last["text"]), agoraxAgentMentionRoutingReminder)
 	}
 
 	userContent := firstUserMessageContent(t, events)
@@ -208,7 +208,7 @@ func TestCodexAppServerAdapterDoesNotProjectInternalMentionRoutingTitle(t *testi
 
 	adapter, transport, session := startedAppServerAdapter(t)
 	transport.server.mu.Lock()
-	transport.server.threadName = tuttiMentionRoutingReminder
+	transport.server.threadName = agoraxMentionRoutingReminder
 	transport.server.mu.Unlock()
 
 	events, err := adapter.Exec(context.Background(), session, textPrompt("inspect repo"), "", "turn-internal-title", nil, nil)
@@ -217,7 +217,7 @@ func TestCodexAppServerAdapterDoesNotProjectInternalMentionRoutingTitle(t *testi
 	}
 
 	for _, event := range events {
-		if event.Type == activityshared.EventSessionUpdated && event.Payload.Title == tuttiMentionRoutingReminder {
+		if event.Type == activityshared.EventSessionUpdated && event.Payload.Title == agoraxMentionRoutingReminder {
 			t.Fatalf("events = %#v, want internal mention routing title excluded from title updates", events)
 		}
 	}

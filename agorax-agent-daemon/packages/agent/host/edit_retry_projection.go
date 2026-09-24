@@ -106,8 +106,8 @@ func editRetryReplacementInput(
 	if err := json.Unmarshal([]byte(envelope.CapabilityRefsJSON), &capabilityRefs); err != nil {
 		return SendInput{}, err
 	}
-	var tuttiModeSnapshot *TuttiModeTurnSnapshot
-	if err := json.Unmarshal([]byte(envelope.TuttiModeSnapshotJSON), &tuttiModeSnapshot); err != nil {
+	var agoraxModeSnapshot *AgoraxModeTurnSnapshot
+	if err := json.Unmarshal([]byte(envelope.AgoraxModeSnapshotJSON), &agoraxModeSnapshot); err != nil {
 		return SendInput{}, err
 	}
 	var metadata map[string]any
@@ -118,7 +118,7 @@ func editRetryReplacementInput(
 	}
 	return SendInput{
 		Content: normalized, DisplayPrompt: editedText,
-		CapabilityRefs: capabilityRefs, Metadata: metadata, TuttiModeSnapshot: tuttiModeSnapshot,
+		CapabilityRefs: capabilityRefs, Metadata: metadata, AgoraxModeSnapshot: agoraxModeSnapshot,
 	}, nil
 }
 

@@ -48,7 +48,7 @@ func TestExternalConsumerCompilesWithoutDaemonDependency(t *testing.T) {
 	modules := runExternalGo(t, tempDir, "list", "-mod=mod", "-m", "all")
 	for _, forbidden := range []string{
 		"agorax.local/agent-daemon/packages/agent/daemon",
-		"github.com/jingr1/agorax/services/tuttid",
+		"github.com/jingr1/agorax/services/agoraxd",
 		"sidecar",
 	} {
 		if strings.Contains(dependencies, forbidden) || strings.Contains(modules, forbidden) {

@@ -274,7 +274,7 @@ func (h *Host) createSession(ctx context.Context, workspaceID string, input Crea
 		ClientSubmitID: claim.ClientSubmitID, CanonicalSubmitOccurredAtUnixMS: claim.CreatedAtUnixMS,
 		CapabilityRefs: append([]CapabilityReference(nil), input.CapabilityRefs...), Content: preparedContent.Hydrated,
 		DisplayPrompt: displayPrompt, InitialTitle: initialTitle, InitialTitleBase: session.Title,
-		Metadata: cloneMap(metadata), TuttiModeSnapshot: input.TuttiModeSnapshot,
+		Metadata: cloneMap(metadata), AgoraxModeSnapshot: input.AgoraxModeSnapshot,
 		RequireProviderAcceptance: true,
 	})
 	recordProviderAcceptanceDiagnostics(ctx, execResult.ProviderDispatch)
@@ -288,7 +288,7 @@ func (h *Host) createSession(ctx context.Context, workspaceID string, input Crea
 				ctx, SessionRef{WorkspaceID: workspaceID, AgentSessionID: session.ID}, execResult,
 				firstNonEmpty(claim.ClientSubmitID, input.ClientSubmitID, legacyClientSubmitID(metadata)),
 				claim.CreatedAtUnixMS, preparedContent, displayPrompt, input.CapabilityRefs,
-				metadata, input.TuttiModeSnapshot,
+				metadata, input.AgoraxModeSnapshot,
 			); persistErr != nil {
 				claimPending = false
 				return createSessionCreatedErrorResult(input, session, canonicalSession, errors.Join(ErrSubmitDeliveryUnknown, err, persistErr))
@@ -335,7 +335,7 @@ func (h *Host) createSession(ctx context.Context, workspaceID string, input Crea
 	}
 	if err := h.recordTurnSubmission(
 		ctx, ref, turnID, input.ClientSubmitID, preparedContent.Persisted,
-		displayPrompt, input.CapabilityRefs, metadata, input.TuttiModeSnapshot,
+		displayPrompt, input.CapabilityRefs, metadata, input.AgoraxModeSnapshot,
 	); err != nil {
 		claimPending = false
 		return createSessionCreatedErrorResult(input, session, canonicalSession, errors.Join(ErrSubmitDeliveryUnknown, err))
@@ -635,7 +635,7 @@ func (h *Host) sendInputSerialized(
 			CanonicalSubmitOccurredAtUnixMS: claim.CreatedAtUnixMS,
 			CapabilityRefs:                  append([]CapabilityReference(nil), input.CapabilityRefs...), Content: preparedContent.Hydrated,
 			DisplayPrompt: displayPrompt, InitialTitle: initialTitle, InitialTitleBase: session.Title,
-			Guidance: input.Guidance, Metadata: cloneMap(metadata), TuttiModeSnapshot: input.TuttiModeSnapshot,
+			Guidance: input.Guidance, Metadata: cloneMap(metadata), AgoraxModeSnapshot: input.AgoraxModeSnapshot,
 			RequireProviderAcceptance: !input.Guidance,
 			ConnectorRoutingUpdate:    cloneStringPointer(input.ConnectorRoutingUpdate),
 		})
@@ -656,7 +656,7 @@ func (h *Host) sendInputSerialized(
 				ctx, ref, execResult,
 				firstNonEmpty(claim.ClientSubmitID, input.ClientSubmitID, legacyClientSubmitID(metadata)),
 				claim.CreatedAtUnixMS, preparedContent, displayPrompt, input.CapabilityRefs,
-				metadata, input.TuttiModeSnapshot,
+				metadata, input.AgoraxModeSnapshot,
 			); persistErr != nil {
 				claimPending = false
 				return SendInputResult{}, errors.Join(ErrSubmitDeliveryUnknown, err, persistErr)
@@ -713,7 +713,7 @@ func (h *Host) sendInputSerialized(
 	if !input.Guidance {
 		if err := h.recordTurnSubmission(
 			ctx, ref, turnID, input.ClientSubmitID, preparedContent.Persisted,
-			displayPrompt, input.CapabilityRefs, metadata, input.TuttiModeSnapshot,
+			displayPrompt, input.CapabilityRefs, metadata, input.AgoraxModeSnapshot,
 		); err != nil {
 			claimPending = false
 			return SendInputResult{}, errors.Join(ErrSubmitDeliveryUnknown, err)

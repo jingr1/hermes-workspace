@@ -419,7 +419,7 @@ func isAgentSessionScratchCWD(cwd string) bool {
 	if home == "" || cwd == "" {
 		return false
 	}
-	for _, providerDir := range []string{"Codex", "Tutti"} {
+	for _, providerDir := range []string{"Codex", "Agorax"} {
 		root := NormalizeProjectPath(filepath.Join(home, "Documents", providerDir))
 		rel, err := filepath.Rel(root, cwd)
 		if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {

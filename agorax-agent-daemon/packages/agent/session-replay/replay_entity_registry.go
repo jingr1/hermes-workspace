@@ -259,7 +259,7 @@ func (r *replayEntityRegistry) seedInitialState(raw []byte) error {
 	if len(raw) == 0 {
 		return nil
 	}
-	var state TuttiReplayState
+	var state AgoraxReplayState
 	if err := json.Unmarshal(raw, &state); err != nil {
 		return fmt.Errorf("decode replay initial state identities: %w", err)
 	}
@@ -267,7 +267,7 @@ func (r *replayEntityRegistry) seedInitialState(raw []byte) error {
 }
 
 func (r *replayEntityRegistry) seedState(
-	state TuttiReplayState,
+	state AgoraxReplayState,
 ) error {
 	for sessionIndex, session := range state.Agent.Sessions {
 		sessionPath := fmt.Sprintf("/agent/sessions/%d", sessionIndex)

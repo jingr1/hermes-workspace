@@ -75,7 +75,7 @@ func TestCursorAdapterStartUsesPluginDirEnv(t *testing.T) {
 	transport := newStandardACPTransport("Cursor Agent", "cursor-session-plugin")
 	adapter := newCursorAdapterWithHostMetadata(transport, LegacyHostMetadata(), nil)
 	session := standardTestSession(ProviderCursor)
-	session.Env = []string{cursorPluginDirEnv + "=/state/runs/session/cursor-plugin/tutti-cli"}
+	session.Env = []string{cursorPluginDirEnv + "=/state/runs/session/cursor-plugin/agorax-cli"}
 
 	if _, err := adapter.Start(context.Background(), session); err != nil {
 		t.Fatalf("Start: %v", err)
@@ -83,7 +83,7 @@ func TestCursorAdapterStartUsesPluginDirEnv(t *testing.T) {
 	if len(transport.specs) != 1 {
 		t.Fatalf("process starts = %d, want 1", len(transport.specs))
 	}
-	if got := strings.Join(transport.specs[0].Command, " "); got != "cursor-agent --plugin-dir /state/runs/session/cursor-plugin/tutti-cli acp" {
+	if got := strings.Join(transport.specs[0].Command, " "); got != "cursor-agent --plugin-dir /state/runs/session/cursor-plugin/agorax-cli acp" {
 		t.Fatalf("command = %q, want cursor plugin-dir before acp", got)
 	}
 }

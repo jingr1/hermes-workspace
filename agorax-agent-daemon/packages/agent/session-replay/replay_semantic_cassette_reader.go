@@ -131,21 +131,21 @@ func (r *SemanticCassetteReader) ReadSemanticCassette(
 
 func readSemanticReplayState(
 	path string,
-) (TuttiReplayState, []byte, error) {
+) (AgoraxReplayState, []byte, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return TuttiReplayState{}, nil, err
+		return AgoraxReplayState{}, nil, err
 	}
-	var state TuttiReplayState
+	var state AgoraxReplayState
 	if err := json.Unmarshal(raw, &state); err != nil {
-		return TuttiReplayState{}, nil, fmt.Errorf(
+		return AgoraxReplayState{}, nil, fmt.Errorf(
 			"decode semantic replay state %s: %w",
 			filepath.Base(path),
 			err,
 		)
 	}
-	if err := ValidateTuttiReplayState(state); err != nil {
-		return TuttiReplayState{}, nil, err
+	if err := ValidateAgoraxReplayState(state); err != nil {
+		return AgoraxReplayState{}, nil, err
 	}
 	return state, raw, nil
 }

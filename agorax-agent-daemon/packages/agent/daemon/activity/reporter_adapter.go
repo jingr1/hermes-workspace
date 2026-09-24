@@ -25,7 +25,7 @@ import (
 // tracking. No activity package code needs to be forked.
 //
 // Scope identifier: ReportActivityInput.WorkspaceID is used verbatim as the
-// SyncStateStore roomID — tutti side = workspace ID, external daemons (tsh) =
+// SyncStateStore roomID — agorax side = workspace ID, external daemons (tsh) =
 // control-plane room ID; workspace ≡ room, one-to-one. The adapter never
 // translates or remaps this value.
 type SessionActivityReporterAdapter struct {
@@ -246,7 +246,7 @@ func (a *SessionActivityReporterAdapter) reportSessionWork(
 // RoomSyncStates returns the adapter's current sync states for a room keyed by
 // agent session id, seeding from the injected SyncStateStore on first touch.
 // roomID is the scope identifier: it is exactly the WorkspaceID passed to
-// Report (tutti side = workspace ID, tsh side = control-plane room ID;
+// Report (agorax side = workspace ID, tsh side = control-plane room ID;
 // workspace ≡ room, one-to-one).
 func (a *SessionActivityReporterAdapter) RoomSyncStates(roomID string) map[string]WorkspaceAgentSyncState {
 	roomID = strings.TrimSpace(roomID)

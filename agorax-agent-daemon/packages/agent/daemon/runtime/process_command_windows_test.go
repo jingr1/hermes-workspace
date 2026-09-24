@@ -34,10 +34,10 @@ func TestNewManagedProcessCommandRunsCmdShimWithSpaces(t *testing.T) {
 
 func TestLocalProcessTransportKillsCmdDescendantAfterShimExit(t *testing.T) {
 	const (
-		roleEnv       = "TUTTI_TEST_WINDOWS_PROCESS_TREE_ROLE"
-		releaseEnv    = "TUTTI_TEST_WINDOWS_PROCESS_TREE_RELEASE"
-		childReadyEnv = "TUTTI_TEST_WINDOWS_PROCESS_TREE_CHILD_READY"
-		rootDoneEnv   = "TUTTI_TEST_WINDOWS_PROCESS_TREE_ROOT_DONE"
+		roleEnv       = "AGORAX_TEST_WINDOWS_PROCESS_TREE_ROLE"
+		releaseEnv    = "AGORAX_TEST_WINDOWS_PROCESS_TREE_RELEASE"
+		childReadyEnv = "AGORAX_TEST_WINDOWS_PROCESS_TREE_CHILD_READY"
+		rootDoneEnv   = "AGORAX_TEST_WINDOWS_PROCESS_TREE_ROOT_DONE"
 	)
 
 	switch os.Getenv(roleEnv) {

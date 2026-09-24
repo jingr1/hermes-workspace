@@ -347,7 +347,7 @@ func (c *Controller) cleanupDetachedLiveSessionResources(ctx context.Context, fa
 // requests. Unlike ReleaseIdleLiveSessions (the periodic reaper, which only
 // reclaims idle, non-busy sessions so it never interrupts work in
 // progress), this exists for daemon shutdown: an OS process is not killed
-// automatically just because its parent (tuttid) exits — it is reparented
+// automatically just because its parent (agoraxd) exits — it is reparented
 // and keeps running. A provider subprocess (e.g. a Codex app-server) left
 // behind here would keep running unmanaged, still able to act on the
 // session's working directory, until something else notices and kills it.

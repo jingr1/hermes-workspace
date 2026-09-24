@@ -13,11 +13,11 @@ func TestStableSystemSkillsReuseCanonicalTargetAcrossHomes(t *testing.T) {
 	storeRoot := filepath.Join(t.TempDir(), "system-skill-bundles")
 	targets := make([]string, 0, 2)
 	for _, session := range []string{"session-a", "session-b"} {
-		home := filepath.Join(t.TempDir(), session, "tutti-agent-home")
+		home := filepath.Join(t.TempDir(), session, "agorax-agent-home")
 		writeTestSystemSkills(t, filepath.Join(home, "skills", ".system"), "same-version")
-		target, _, err := stabilizeTuttiAgentSystemSkills(home, storeRoot)
+		target, _, err := stabilizeAgoraxAgentSystemSkills(home, storeRoot)
 		if err != nil {
-			t.Fatalf("stabilizeTuttiAgentSystemSkills(%s): %v", session, err)
+			t.Fatalf("stabilizeAgoraxAgentSystemSkills(%s): %v", session, err)
 		}
 		targets = append(targets, target)
 		canonicalTarget, err := filepath.EvalSymlinks(target)
@@ -58,11 +58,11 @@ func TestStableSystemSkillsDigestChangesWithProviderContent(t *testing.T) {
 	homeB := filepath.Join(t.TempDir(), "home-b")
 	writeTestSystemSkills(t, filepath.Join(homeA, "skills", ".system"), "version-a")
 	writeTestSystemSkills(t, filepath.Join(homeB, "skills", ".system"), "version-b")
-	targetA, _, err := stabilizeTuttiAgentSystemSkills(homeA, storeRoot)
+	targetA, _, err := stabilizeAgoraxAgentSystemSkills(homeA, storeRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
-	targetB, _, err := stabilizeTuttiAgentSystemSkills(homeB, storeRoot)
+	targetB, _, err := stabilizeAgoraxAgentSystemSkills(homeB, storeRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,11 +75,11 @@ func TestStableSystemSkillsReuseExistingSymlink(t *testing.T) {
 	storeRoot := filepath.Join(t.TempDir(), "system-skill-bundles")
 	home := filepath.Join(t.TempDir(), "home")
 	writeTestSystemSkills(t, filepath.Join(home, "skills", ".system"), "same-version")
-	firstTarget, firstDigest, err := stabilizeTuttiAgentSystemSkills(home, storeRoot)
+	firstTarget, firstDigest, err := stabilizeAgoraxAgentSystemSkills(home, storeRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
-	secondTarget, secondDigest, err := stabilizeTuttiAgentSystemSkills(home, storeRoot)
+	secondTarget, secondDigest, err := stabilizeAgoraxAgentSystemSkills(home, storeRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestStableSystemSkillsConcurrentMaterialization(t *testing.T) {
 			defer group.Done()
 			home := filepath.Join(t.TempDir(), "home", string(rune('a'+index)))
 			writeSystemSkillsForConcurrentTest(t, filepath.Join(home, "skills", ".system"))
-			target, _, err := stabilizeTuttiAgentSystemSkills(home, storeRoot)
+			target, _, err := stabilizeAgoraxAgentSystemSkills(home, storeRoot)
 			if err != nil {
 				errors <- err
 				return
@@ -138,7 +138,7 @@ func TestStableSystemSkillsRejectSymlinkInProviderBundle(t *testing.T) {
 		}
 		t.Fatal(err)
 	}
-	if _, _, err := stabilizeTuttiAgentSystemSkills(home, filepath.Join(t.TempDir(), "store")); err == nil {
+	if _, _, err := stabilizeAgoraxAgentSystemSkills(home, filepath.Join(t.TempDir(), "store")); err == nil {
 		t.Fatal("stabilization accepted a symlink in provider system skills")
 	}
 }

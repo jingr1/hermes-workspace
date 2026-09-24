@@ -9,7 +9,7 @@ import (
 
 const (
 	nexightACPCommand    = "nexight-acp"
-	codexAgentRoutingEnv = "TUTTI_AGENT_ROUTING=1"
+	codexAgentRoutingEnv = "AGORAX_AGENT_ROUTING=1"
 	codexRoutingPreload  = "LD_PRELOAD=" + runtimepaths.BundlePreloadSOPath
 	// Codex app-server emits its tracing spans through stderr. Keep the
 	// managed process output structured so the runtime trace can preserve

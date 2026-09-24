@@ -187,7 +187,7 @@ UPDATE workspace_agent_sessions
 SET title = ?,
     internal_runtime_context_json = json_set(
       internal_runtime_context_json,
-      '$.tuttiInitialTitleEstablished',
+      '$.agoraxInitialTitleEstablished',
       json('true')
     ),
     updated_at_unix_ms = CASE

@@ -15,7 +15,7 @@ func (s *Store) applyWorkspaceAgentActivityV1(ctx context.Context) error {
 		return nil
 	}
 
-	// Unlike the pre-extraction tuttid schema, workspace_agent_sessions has
+	// Unlike the pre-extraction agoraxd schema, workspace_agent_sessions has
 	// no foreign key into a host workspaces table; hosts delete a
 	// workspace's rows explicitly via ClearSessions.
 	_, err = s.db.ExecContext(ctx, `

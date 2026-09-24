@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	RegistryOverrideEnv = "TUTTI_AGENT_NPM_REGISTRY"
+	RegistryOverrideEnv = "AGORAX_AGENT_NPM_REGISTRY"
 	OfficialRegistryURL = "https://registry.npmjs.org"
 	HuaweiRegistryURL   = "https://repo.huaweicloud.com/repository/npm/"
 	TencentRegistryURL  = "https://mirrors.cloud.tencent.com/npm/"

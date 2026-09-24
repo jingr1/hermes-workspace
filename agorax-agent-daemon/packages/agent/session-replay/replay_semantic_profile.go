@@ -11,14 +11,14 @@ var ErrUnsupportedReplaySemanticDomain = errors.New(
 
 type SemanticProfile struct {
 	Agent     bool
-	TuttiMode bool
+	AgoraxMode bool
 	Workflows bool
 	Issues    bool
 }
 
-func TuttiSemanticProfile() SemanticProfile {
+func AgoraxSemanticProfile() SemanticProfile {
 	return SemanticProfile{
-		Agent: true, TuttiMode: true, Workflows: true, Issues: true,
+		Agent: true, AgoraxMode: true, Workflows: true, Issues: true,
 	}
 }
 
@@ -44,23 +44,23 @@ func (*UnsupportedReplaySemanticDomainError) Unwrap() error {
 	return ErrUnsupportedReplaySemanticDomain
 }
 
-func ValidateTuttiReplayStateForProfile(
-	state TuttiReplayState,
+func ValidateAgoraxReplayStateForProfile(
+	state AgoraxReplayState,
 	profile SemanticProfile,
 ) error {
 	if err := validateSemanticProfile(profile); err != nil {
 		return err
 	}
-	if err := ValidateTuttiReplayState(state); err != nil {
+	if err := ValidateAgoraxReplayState(state); err != nil {
 		return err
 	}
-	if !profile.TuttiMode {
-		if len(state.TuttiMode.Activations) != 0 {
-			return unsupportedReplaySemanticDomain("tuttiMode", "$.tuttiMode.activations")
+	if !profile.AgoraxMode {
+		if len(state.AgoraxMode.Activations) != 0 {
+			return unsupportedReplaySemanticDomain("agoraxMode", "$.agoraxMode.activations")
 		}
-		for _, snapshot := range state.TuttiMode.TurnSnapshots {
-			if !isUnconfiguredTuttiModeTurnSnapshot(snapshot) {
-				return unsupportedReplaySemanticDomain("tuttiMode", "$.tuttiMode.turnSnapshots")
+		for _, snapshot := range state.AgoraxMode.TurnSnapshots {
+			if !isUnconfiguredAgoraxModeTurnSnapshot(snapshot) {
+				return unsupportedReplaySemanticDomain("agoraxMode", "$.agoraxMode.turnSnapshots")
 			}
 		}
 	}
@@ -83,56 +83,56 @@ func ValidateTuttiReplayStateForProfile(
 	return nil
 }
 
-func MergeTuttiReplayStatesForProfile(
-	states []TuttiReplayState,
+func MergeAgoraxReplayStatesForProfile(
+	states []AgoraxReplayState,
 	profile SemanticProfile,
-) (TuttiReplayMergedState, error) {
+) (AgoraxReplayMergedState, error) {
 	if err := validateSemanticProfile(profile); err != nil {
-		return TuttiReplayMergedState{}, err
+		return AgoraxReplayMergedState{}, err
 	}
-	profileStates := make([]TuttiReplayState, len(states))
+	profileStates := make([]AgoraxReplayState, len(states))
 	for index, state := range states {
-		if err := ValidateTuttiReplayStateForProfile(state, profile); err != nil {
-			return TuttiReplayMergedState{}, err
+		if err := ValidateAgoraxReplayStateForProfile(state, profile); err != nil {
+			return AgoraxReplayMergedState{}, err
 		}
-		profileStates[index] = projectTuttiReplayStateForProfile(state, profile)
+		profileStates[index] = projectAgoraxReplayStateForProfile(state, profile)
 	}
-	return mergeTuttiReplayStatesValidated(profileStates)
+	return mergeAgoraxReplayStatesValidated(profileStates)
 }
 
-func CompareTuttiReplayStateForProfile(
-	expected TuttiReplayState,
-	actual TuttiReplayState,
+func CompareAgoraxReplayStateForProfile(
+	expected AgoraxReplayState,
+	actual AgoraxReplayState,
 	profile SemanticProfile,
 ) error {
-	if err := ValidateTuttiReplayStateForProfile(expected, profile); err != nil {
-		return fmt.Errorf("invalid expected Tutti Replay State: %w", err)
+	if err := ValidateAgoraxReplayStateForProfile(expected, profile); err != nil {
+		return fmt.Errorf("invalid expected Agorax Replay State: %w", err)
 	}
-	if err := ValidateTuttiReplayStateForProfile(actual, profile); err != nil {
-		return fmt.Errorf("invalid actual Tutti Replay State: %w", err)
+	if err := ValidateAgoraxReplayStateForProfile(actual, profile); err != nil {
+		return fmt.Errorf("invalid actual Agorax Replay State: %w", err)
 	}
-	return compareTuttiReplayStateValidated(
-		projectTuttiReplayStateForProfile(expected, profile),
-		projectTuttiReplayStateForProfile(actual, profile),
+	return compareAgoraxReplayStateValidated(
+		projectAgoraxReplayStateForProfile(expected, profile),
+		projectAgoraxReplayStateForProfile(actual, profile),
 	)
 }
 
-func projectTuttiReplayStateForProfile(
-	state TuttiReplayState,
+func projectAgoraxReplayStateForProfile(
+	state AgoraxReplayState,
 	profile SemanticProfile,
-) TuttiReplayState {
-	if profile.TuttiMode {
+) AgoraxReplayState {
+	if profile.AgoraxMode {
 		return state
 	}
-	state.TuttiMode.TurnSnapshots = []TuttiReplayTurnSnapshot{}
+	state.AgoraxMode.TurnSnapshots = []AgoraxReplayTurnSnapshot{}
 	return state
 }
 
-// Tutti records one turn snapshot before dispatch even when Tutti Mode is not
-// configured for the Session. That row only proves the absence of Tutti Mode;
-// it does not require a consumer to own Tutti Mode product state.
-func isUnconfiguredTuttiModeTurnSnapshot(
-	snapshot TuttiReplayTurnSnapshot,
+// Agorax records one turn snapshot before dispatch even when Agorax Mode is not
+// configured for the Session. That row only proves the absence of Agorax Mode;
+// it does not require a consumer to own Agorax Mode product state.
+func isUnconfiguredAgoraxModeTurnSnapshot(
+	snapshot AgoraxReplayTurnSnapshot,
 ) bool {
 	return snapshot.ActivationID == "" &&
 		snapshot.RevisionID == "" &&

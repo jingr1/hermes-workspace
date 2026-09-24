@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-const codexAppServerStartupTraceFileName = "tutti-codex-appserver-startup.jsonl"
+const codexAppServerStartupTraceFileName = "agorax-codex-appserver-startup.jsonl"
 const codexAppServerStartupTraceMaxBytes = 64 * 1024 * 1024
 const codexAppServerStderrTailLimit = 8 * 1024
 

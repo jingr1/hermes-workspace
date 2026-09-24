@@ -124,7 +124,7 @@ func TestCodexAppServerSideUsesEphemeralForkAndInjectedBoundary(t *testing.T) {
 		RoomID: "workspace-side-codex", AgentSessionID: "parent",
 		TurnID:            "parent-turn",
 		Content:           []PromptContentBlock{{Type: "text", Text: "continue parent"}},
-		TuttiModeSnapshot: testActiveTuttiModeSnapshot(),
+		AgoraxModeSnapshot: testActiveAgoraxModeSnapshot(),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +179,7 @@ func TestCodexAppServerSideUsesEphemeralForkAndInjectedBoundary(t *testing.T) {
 		) ||
 		!strings.Contains(
 			asString(fork["developerInstructions"]),
-			"<tutti-host-context",
+			"<agorax-host-context",
 		) {
 		t.Fatalf("thread/fork params = %#v", fork)
 	}
@@ -248,7 +248,7 @@ func TestCodexAppServerSideUsesEphemeralForkAndInjectedBoundary(t *testing.T) {
 	sideDeveloperInstructions := asString(
 		sideSettings["developer_instructions"],
 	)
-	if !strings.Contains(sideDeveloperInstructions, "<tutti-host-context") ||
+	if !strings.Contains(sideDeveloperInstructions, "<agorax-host-context") ||
 		!strings.Contains(
 			sideDeveloperInstructions,
 			"You are operating in a Side conversation",

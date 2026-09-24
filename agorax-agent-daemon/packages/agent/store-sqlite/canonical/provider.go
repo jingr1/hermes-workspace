@@ -40,7 +40,7 @@ var providerContracts = []providerContract{
 	{identity: ProviderIdentity{ID: ClaudeCodeProviderID, DisplayName: "Claude Code", IconKey: "claude-code", LocaleKey: "agentHost.agentGui.conversationFilterClaudeCode", Aliases: []string{"claude", "claude code"}}},
 	{identity: ProviderIdentity{ID: CursorProviderID, DisplayName: "Cursor", IconKey: "cursor", LocaleKey: "agentHost.agentGui.conversationFilterCursor", Aliases: []string{"cursor-agent", "cursor agent", "cursor-cli"}}},
 	{identity: ProviderIdentity{ID: OpenCodeProviderID, DisplayName: "OpenCode", IconKey: "opencode", LocaleKey: "agentHost.agentGui.conversationFilterOpenCode", Aliases: []string{"open-code", "open code", "opencode-ai", "opencode_ai"}}},
-	{identity: ProviderIdentity{ID: NexightProviderID, DisplayName: "Nexight", IconKey: "tutti", LocaleKey: "agentHost.agentGui.conversationFilterNexight", Aliases: []string{"tutti"}}},
+	{identity: ProviderIdentity{ID: NexightProviderID, DisplayName: "Nexight", IconKey: "agorax", LocaleKey: "agentHost.agentGui.conversationFilterNexight", Aliases: []string{"agorax"}}},
 	{identity: ProviderIdentity{ID: HermesProviderID, DisplayName: "Hermes Agent", IconKey: "hermes", LocaleKey: "agentHost.agentGui.conversationFilterHermes", Aliases: []string{"hermes-agent", "hermes agent"}}},
 	{identity: ProviderIdentity{ID: OpenClawProviderID, DisplayName: "OpenClaw", IconKey: "openclaw", LocaleKey: "agentHost.agentGui.conversationFilterOpenClaw", Aliases: []string{"open-claw"}}},
 }

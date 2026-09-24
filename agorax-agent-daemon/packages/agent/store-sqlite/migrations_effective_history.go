@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS workspace_agent_turn_submissions (
   content_json TEXT NOT NULL CHECK (json_valid(content_json)),
   display_prompt TEXT NOT NULL DEFAULT '',
   capability_refs_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(capability_refs_json)),
-  tutti_mode_snapshot_json TEXT NOT NULL DEFAULT 'null' CHECK (json_valid(tutti_mode_snapshot_json)),
+  agorax_mode_snapshot_json TEXT NOT NULL DEFAULT 'null' CHECK (json_valid(agorax_mode_snapshot_json)),
   client_submit_id TEXT NOT NULL DEFAULT '',
   created_at_unix_ms INTEGER NOT NULL,
   updated_at_unix_ms INTEGER NOT NULL,

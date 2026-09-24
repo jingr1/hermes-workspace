@@ -1,5 +1,5 @@
 // Package conformance provides lifecycle scenarios shared by the legacy
-// tuttid Service, the Agent Host implementation, and downstream host adapters.
+// agoraxd Service, the Agent Host implementation, and downstream host adapters.
 package conformance
 
 import (
@@ -282,7 +282,7 @@ func RunWorkspaceRuntimeDisconnect(
 // Runtime that durably fails the exact canonical Turn before it acquires a
 // provider identity. It stays separate from Fixture so downstream conformance
 // drivers can adopt this lifecycle scenario before upgrading their pinned
-// Tutti dependency; an extra test-driver method is source-compatible with the
+// Agorax dependency; an extra test-driver method is source-compatible with the
 // previous conformance contract.
 type ProviderlessTerminalDriver interface {
 	ResetProviderlessTerminalExec(context.Context, *SessionSeed) error

@@ -18,7 +18,7 @@ func (h *Host) recordTurnSubmission(
 	displayPrompt string,
 	capabilityRefs []CapabilityReference,
 	metadata map[string]any,
-	tuttiModeSnapshot *TuttiModeTurnSnapshot,
+	agoraxModeSnapshot *AgoraxModeTurnSnapshot,
 ) error {
 	if h == nil || h.turnSubmissions == nil {
 		return nil
@@ -38,9 +38,9 @@ func (h *Host) recordTurnSubmission(
 			return fmt.Errorf("encode turn submission metadata: %w", err)
 		}
 	}
-	tuttiModeSnapshotJSON, err := json.Marshal(tuttiModeSnapshot)
+	agoraxModeSnapshotJSON, err := json.Marshal(agoraxModeSnapshot)
 	if err != nil {
-		return fmt.Errorf("encode turn submission tutti mode snapshot: %w", err)
+		return fmt.Errorf("encode turn submission agorax mode snapshot: %w", err)
 	}
 	now := h.now().UnixMilli()
 	_, _, err = h.turnSubmissions.RecordTurnSubmission(ctx, storesqlite.TurnSubmission{
@@ -48,7 +48,7 @@ func (h *Host) recordTurnSubmission(
 		TurnID: strings.TrimSpace(turnID), ContentJSON: string(contentJSON),
 		DisplayPrompt:         strings.TrimSpace(displayPrompt),
 		CapabilityRefsJSON:    string(capabilityRefsJSON),
-		TuttiModeSnapshotJSON: string(tuttiModeSnapshotJSON),
+		AgoraxModeSnapshotJSON: string(agoraxModeSnapshotJSON),
 		MetadataJSON:          string(metadataJSON),
 		ClientSubmitID:        strings.TrimSpace(clientSubmitID),
 		CreatedAtUnixMS:       now, UpdatedAtUnixMS: now,

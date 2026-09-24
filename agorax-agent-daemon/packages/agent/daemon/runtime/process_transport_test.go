@@ -17,15 +17,15 @@ import (
 )
 
 func TestVerifiedProcessExecutableFixture(_ *testing.T) {
-	if os.Getenv("TUTTI_TEST_VERIFIED_PROCESS_EXECUTABLE") == "1" {
+	if os.Getenv("AGORAX_TEST_VERIFIED_PROCESS_EXECUTABLE") == "1" {
 		fmt.Print("verified-original")
 	}
-	if os.Getenv("TUTTI_TEST_BOUNDED_PROCESS_EXECUTABLE") == "ok" {
+	if os.Getenv("AGORAX_TEST_BOUNDED_PROCESS_EXECUTABLE") == "ok" {
 		fmt.Print("ok")
 		_, _ = fmt.Fprint(os.Stderr, "secret-stderr")
 		os.Exit(0)
 	}
-	if os.Getenv("TUTTI_TEST_BOUNDED_PROCESS_EXECUTABLE") == "overflow" {
+	if os.Getenv("AGORAX_TEST_BOUNDED_PROCESS_EXECUTABLE") == "overflow" {
 		fmt.Print("too-large")
 		os.Exit(0)
 	}
@@ -48,7 +48,7 @@ func TestPrepareProcessExecutableExecutesVerifiedDescriptorAfterPathReplacement(
 	if prepared.file != nil {
 		cmd.ExtraFiles = []*os.File{prepared.file}
 	}
-	cmd.Env = append(os.Environ(), "TUTTI_TEST_VERIFIED_PROCESS_EXECUTABLE=1")
+	cmd.Env = append(os.Environ(), "AGORAX_TEST_VERIFIED_PROCESS_EXECUTABLE=1")
 	output, err := cmd.CombinedOutput()
 	if err != nil || !strings.Contains(string(output), "verified-original") {
 		t.Fatalf("descriptor execution output = %q, error = %v", output, err)
@@ -57,7 +57,7 @@ func TestPrepareProcessExecutableExecutesVerifiedDescriptorAfterPathReplacement(
 
 func TestRunVerifiedExecutableUsesVerifiedIdentity(t *testing.T) {
 	path, identity := copyCurrentExecutableWithIdentity(t)
-	t.Setenv("TUTTI_TEST_VERIFIED_PROCESS_EXECUTABLE", "1")
+	t.Setenv("AGORAX_TEST_VERIFIED_PROCESS_EXECUTABLE", "1")
 	output, err := RunVerifiedExecutable(
 		context.Background(), path, []string{"-test.run=TestVerifiedProcessExecutableFixture"}, identity,
 	)
@@ -75,7 +75,7 @@ func TestRunVerifiedExecutableUsesVerifiedIdentity(t *testing.T) {
 
 func TestRunVerifiedExecutableBoundedCapturesOnlyBoundedStdout(t *testing.T) {
 	path, identity := copyCurrentExecutableWithIdentity(t)
-	t.Setenv("TUTTI_TEST_BOUNDED_PROCESS_EXECUTABLE", "ok")
+	t.Setenv("AGORAX_TEST_BOUNDED_PROCESS_EXECUTABLE", "ok")
 
 	output, err := RunVerifiedExecutableBounded(
 		context.Background(), path, []string{"-test.run=TestVerifiedProcessExecutableFixture"}, identity, 8,
@@ -87,7 +87,7 @@ func TestRunVerifiedExecutableBoundedCapturesOnlyBoundedStdout(t *testing.T) {
 		t.Fatalf("output = %q", output)
 	}
 
-	t.Setenv("TUTTI_TEST_BOUNDED_PROCESS_EXECUTABLE", "overflow")
+	t.Setenv("AGORAX_TEST_BOUNDED_PROCESS_EXECUTABLE", "overflow")
 	if _, err := RunVerifiedExecutableBounded(
 		context.Background(), path, []string{"-test.run=TestVerifiedProcessExecutableFixture"}, identity, 3,
 	); err == nil {
@@ -379,18 +379,18 @@ func TestLocalProcessTransportCloseKillsProcessAfterGracefulShutdownFails(t *tes
 }
 
 func TestProcessStartEnvDiagnosticsSummarizesFinalPath(t *testing.T) {
-	tuttiBin := filepath.Join(string(os.PathSeparator), "Users", "Sun", ".tutti", "bin")
+	agoraxBin := filepath.Join(string(os.PathSeparator), "Users", "Sun", ".agorax", "bin")
 	managedBin := filepath.Join(string(os.PathSeparator), "managed", "node", "bin")
 	env := []string{
-		"PATH=" + managedBin + string(os.PathListSeparator) + tuttiBin + string(os.PathListSeparator) + "/usr/bin",
-		"TUTTI_APP_NODE=" + filepath.Join(managedBin, "node"),
-		"TUTTI_AGENT_SESSION_ID=agent-session-1",
+		"PATH=" + managedBin + string(os.PathListSeparator) + agoraxBin + string(os.PathListSeparator) + "/usr/bin",
+		"AGORAX_APP_NODE=" + filepath.Join(managedBin, "node"),
+		"AGORAX_AGENT_SESSION_ID=agent-session-1",
 	}
 	diag := processStartEnvDiagnostics(ProcessSpec{
 		Provider:       ProviderClaudeCode,
 		AgentSessionID: "agent-session-1",
 		Env: []string{
-			"PATH=" + tuttiBin + string(os.PathListSeparator) + "/usr/bin",
+			"PATH=" + agoraxBin + string(os.PathListSeparator) + "/usr/bin",
 			"PATH=" + managedBin + string(os.PathListSeparator) + "/usr/bin",
 		},
 	}, env)
@@ -398,8 +398,8 @@ func TestProcessStartEnvDiagnosticsSummarizesFinalPath(t *testing.T) {
 	if got := diag["path_override_count"]; got != 2 {
 		t.Fatalf("path_override_count = %v, want 2", got)
 	}
-	if got := diag["path_contains_tutti_bin"]; got != true {
-		t.Fatalf("path_contains_tutti_bin = %v, want true", got)
+	if got := diag["path_contains_agorax_bin"]; got != true {
+		t.Fatalf("path_contains_agorax_bin = %v, want true", got)
 	}
 	if got := diag["path_contains_app_node_bin"]; got != true {
 		t.Fatalf("path_contains_app_node_bin = %v, want true", got)
@@ -407,7 +407,7 @@ func TestProcessStartEnvDiagnosticsSummarizesFinalPath(t *testing.T) {
 	if got := diag["agent_session_env_present"]; got != true {
 		t.Fatalf("agent_session_env_present = %v, want true", got)
 	}
-	wantHead := []string{managedBin, tuttiBin, "/usr/bin"}
+	wantHead := []string{managedBin, agoraxBin, "/usr/bin"}
 	if got := diag["path_head"]; !reflect.DeepEqual(got, wantHead) {
 		t.Fatalf("path_head = %#v, want %#v", got, wantHead)
 	}

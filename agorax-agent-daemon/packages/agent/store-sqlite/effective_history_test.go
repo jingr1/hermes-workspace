@@ -59,7 +59,7 @@ func TestEffectiveHistorySubmissionIsLosslessIdempotentAndConflictFenced(t *test
 		WorkspaceID: "ws-1", AgentSessionID: "session-1", TurnID: "turn-1",
 		ContentJSON:   `[{"type":"text","text":"hello"},{"type":"image","attachmentId":"attachment-1"}]`,
 		DisplayPrompt: "hello", CapabilityRefsJSON: `[{"Capability":"browser"}]`,
-		TuttiModeSnapshotJSON: `{"Revision":2}`, MetadataJSON: `{"uiMode":"agent"}`, ClientSubmitID: "submit-1",
+		AgoraxModeSnapshotJSON: `{"Revision":2}`, MetadataJSON: `{"uiMode":"agent"}`, ClientSubmitID: "submit-1",
 		CreatedAtUnixMS: 21, UpdatedAtUnixMS: 21,
 	}
 	if _, created, err := store.RecordTurnSubmission(ctx, input); err != nil || !created {
@@ -99,7 +99,7 @@ func TestEffectiveHistoryRetractedTurnIsHiddenButAuditable(t *testing.T) {
 			WorkspaceID: "ws-1", AgentSessionID: "session-1", TurnID: turnID,
 			ContentJSON:   `[{"type":"text","text":"` + turnID + `"}]`,
 			DisplayPrompt: turnID, CapabilityRefsJSON: `[]`,
-			TuttiModeSnapshotJSON: `null`, ClientSubmitID: "submit-" + turnID,
+			AgoraxModeSnapshotJSON: `null`, ClientSubmitID: "submit-" + turnID,
 			CreatedAtUnixMS: occurred, UpdatedAtUnixMS: occurred,
 		}); err != nil || !created {
 			t.Fatalf("seed %s submission created=%v error=%v", turnID, created, err)

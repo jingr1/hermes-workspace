@@ -17,7 +17,7 @@ func TestResolveConfigUsesExplicitRoomID(t *testing.T) {
 }
 
 func TestResolveConfigReadsAgentContextConfig(t *testing.T) {
-	t.Setenv("TUTTI_WORKSPACE_ID", "")
+	t.Setenv("AGORAX_WORKSPACE_ID", "")
 	dir := t.TempDir()
 	path := filepath.Join(dir, "agent-context.json")
 	if err := os.WriteFile(path, []byte(`{
@@ -29,7 +29,7 @@ func TestResolveConfigReadsAgentContextConfig(t *testing.T) {
 	}`), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	t.Setenv("TUTTI_AGENT_CONTEXT_CONFIG", path)
+	t.Setenv("AGORAX_AGENT_CONTEXT_CONFIG", path)
 
 	cfg, err := ResolveConfig(ConfigInput{})
 	if err != nil {
@@ -41,8 +41,8 @@ func TestResolveConfigReadsAgentContextConfig(t *testing.T) {
 }
 
 func TestResolveConfigAllowsCWDOnlyContext(t *testing.T) {
-	t.Setenv("TUTTI_AGENT_CONTEXT_CONFIG", "")
-	t.Setenv("TUTTI_WORKSPACE_ID", "")
+	t.Setenv("AGORAX_AGENT_CONTEXT_CONFIG", "")
+	t.Setenv("AGORAX_WORKSPACE_ID", "")
 	cfg, err := ResolveConfig(ConfigInput{CWD: "/workspace/runtime-ws-1/project"})
 	if err != nil {
 		t.Fatalf("ResolveConfig() error = %v", err)

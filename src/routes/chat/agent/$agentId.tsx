@@ -110,7 +110,7 @@ function ChatAgentRoute() {
         return resolved === 'new' ? null : resolved
       }
 
-      // Managed (Tutti-style): URL only if owned; else in-memory last; else
+      // Managed (Agorax-style): URL only if owned; else in-memory last; else
       // localStorage last that appears in this agent's list.
       const cached = store.sessionsByAgentId.get(id) ?? []
       const knownIds = new Set(cached.map((session) => session.sessionId))

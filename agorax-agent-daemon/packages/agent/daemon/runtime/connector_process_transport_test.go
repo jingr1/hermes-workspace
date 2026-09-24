@@ -12,15 +12,15 @@ import (
 )
 
 func TestConnectorProcessFixture(_ *testing.T) {
-	if os.Getenv("TUTTI_CONNECTOR_PROCESS_FIXTURE") != "1" {
+	if os.Getenv("AGORAX_CONNECTOR_PROCESS_FIXTURE") != "1" {
 		return
 	}
-	if count := os.Getenv("TUTTI_CONNECTOR_OUTPUT_BYTES"); count != "" {
+	if count := os.Getenv("AGORAX_CONNECTOR_OUTPUT_BYTES"); count != "" {
 		fmt.Print(strings.Repeat("x", 1024))
 		return
 	}
 	fmt.Printf("allowed=%s leaked=%s", os.Getenv("ALLOWED_VALUE"), os.Getenv("SECRET_SHOULD_NOT_LEAK"))
-	if fd := os.Getenv("TUTTI_CONNECTOR_FD_CREDENTIAL"); fd != "" {
+	if fd := os.Getenv("AGORAX_CONNECTOR_FD_CREDENTIAL"); fd != "" {
 		var descriptor int
 		_, _ = fmt.Sscanf(fd, "%d", &descriptor)
 		secret, _ := io.ReadAll(os.NewFile(uintptr(descriptor), "credential"))
@@ -68,7 +68,7 @@ func TestConnectorProcessTransportRejectsReservedOrMalformedEnvironmentKeys(t *t
 	path, identity := copyCurrentExecutableWithIdentity(t)
 	transport := newConnectorProcessTransport(1024, 1024)
 	for _, environment := range [][]string{
-		{"TUTTI_CONNECTOR_FD_CREDENTIAL=3"},
+		{"AGORAX_CONNECTOR_FD_CREDENTIAL=3"},
 		{" BAD=value"},
 		{"BAD-NAME=value"},
 		{"9BAD=value"},
@@ -101,11 +101,11 @@ func TestConnectorProcessTransportUsesExplicitEnvironmentAndSensitiveFD(t *testi
 		Command:            []string{path, "-test.run=TestConnectorProcessFixture"},
 		ExecutableIdentity: identity,
 		Env: []string{
-			"TUTTI_CONNECTOR_PROCESS_FIXTURE=1",
+			"AGORAX_CONNECTOR_PROCESS_FIXTURE=1",
 			"ALLOWED_VALUE=visible",
 		},
 		SensitiveInheritedFiles: []SensitiveInheritedFile{{
-			File: credential, DescriptorEnvKey: "TUTTI_CONNECTOR_FD_CREDENTIAL", Purpose: "test credential",
+			File: credential, DescriptorEnvKey: "AGORAX_CONNECTOR_FD_CREDENTIAL", Purpose: "test credential",
 		}},
 	})
 	if err != nil {
@@ -135,8 +135,8 @@ func TestConnectorProcessTransportEnforcesOutputLimit(t *testing.T) {
 		Command:            []string{path, "-test.run=TestConnectorProcessFixture"},
 		ExecutableIdentity: identity,
 		Env: []string{
-			"TUTTI_CONNECTOR_PROCESS_FIXTURE=1",
-			"TUTTI_CONNECTOR_OUTPUT_BYTES=1024",
+			"AGORAX_CONNECTOR_PROCESS_FIXTURE=1",
+			"AGORAX_CONNECTOR_OUTPUT_BYTES=1024",
 		},
 	})
 	if err != nil {
@@ -181,7 +181,7 @@ func TestLocalProcessTransportRejectsSensitiveInheritedFiles(t *testing.T) {
 	_, err := NewLocalProcessTransport().Start(context.Background(), ProcessSpec{
 		Command: []string{"ignored"},
 		SensitiveInheritedFiles: []SensitiveInheritedFile{{
-			File: os.Stdin, DescriptorEnvKey: "TUTTI_CONNECTOR_FD_SECRET", Purpose: "secret",
+			File: os.Stdin, DescriptorEnvKey: "AGORAX_CONNECTOR_FD_SECRET", Purpose: "secret",
 		}},
 	})
 	if err == nil || !strings.Contains(err.Error(), "connector process transport") {

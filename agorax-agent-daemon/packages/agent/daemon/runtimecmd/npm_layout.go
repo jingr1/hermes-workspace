@@ -26,8 +26,8 @@ func ResolveNPMGlobalLayout(installBinDir string) NPMGlobalLayout {
 	return NPMGlobalLayout{PrefixDir: prefixDir, BinDir: installBinDir}
 }
 
-// UserManagedNPMExecutableDirs returns Tutti's current user-level npm launcher
-// directory followed by any backward-compatible directory that older Tutti
+// UserManagedNPMExecutableDirs returns Agorax's current user-level npm launcher
+// directory followed by any backward-compatible directory that older Agorax
 // releases used. Callers use this list for discovery only; fresh installs still
 // target the first entry.
 func UserManagedNPMExecutableDirs(home string) []string {
@@ -35,7 +35,7 @@ func UserManagedNPMExecutableDirs(home string) []string {
 	dirs := []string{ResolveNPMGlobalLayout(installBinDir).BinDir}
 	if runtime.GOOS == "windows" {
 		// Older Windows releases passed %USERPROFILE%\.local as npm's prefix,
-		// so npm placed codex.cmd/tutti-agent.cmd directly in that directory.
+		// so npm placed codex.cmd/agorax-agent.cmd directly in that directory.
 		dirs = append(dirs, filepath.Join(home, ".local"))
 	}
 	return dirs

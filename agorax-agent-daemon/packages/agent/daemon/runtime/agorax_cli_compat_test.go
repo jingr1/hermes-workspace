@@ -32,11 +32,11 @@ func testRemotePromptImageMaterializer(t *testing.T) (string, providerPromptImag
 	}
 }
 
-func testActiveTuttiModeSnapshot() *TuttiModeTurnSnapshot {
-	return &TuttiModeTurnSnapshot{
+func testActiveAgoraxModeSnapshot() *AgoraxModeTurnSnapshot {
+	return &AgoraxModeTurnSnapshot{
 		ActivationID: "activation-1", RevisionID: "revision-7", Revision: 7,
-		State: TuttiModeStateActive, Source: "slash_command",
-		PreferenceVersion: TuttiModePreferenceVersionEffectSpeed,
+		State: AgoraxModeStateActive, Source: "slash_command",
+		PreferenceVersion: AgoraxModePreferenceVersionEffectSpeed,
 		Effect: 80, Speed: 70, OrchestrationIntensity: 80,
 	}
 }

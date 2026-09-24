@@ -152,11 +152,11 @@ func (a *CodexAppServerAdapter) GuideActiveTurnWithProviderDispatch(
 	activeTurnID := a.sessionActiveTurnID(session.AgentSessionID)
 	session.ProviderSessionID = appSession.threadID
 	explicitDisplayPrompt, visibleText := explicitAndVisiblePromptText(content, displayPrompt)
-	mentionRoutingApplied, mentionRoutingSkills := tuttiMentionRoutingSkills(visibleText)
+	mentionRoutingApplied, mentionRoutingSkills := agoraxMentionRoutingSkills(visibleText)
 	if activeTurnID != "" {
 		providerContent := content
 		if mentionRoutingApplied {
-			providerContent = appendTuttiMentionRoutingContent(providerContent, mentionRoutingSkills)
+			providerContent = appendAgoraxMentionRoutingContent(providerContent, mentionRoutingSkills)
 		}
 		var err error
 		providerContent, err = materializeProviderPromptImagesAtBoundary(ctx, providerContent, a.promptImageMaterializer)
@@ -377,7 +377,7 @@ func (a *CodexAppServerAdapter) execBlocking(
 	session.Settings = &effectiveSettings
 	session.ProviderSessionID = appSession.threadID
 	explicitDisplayPrompt, visibleText := explicitAndVisiblePromptText(content, displayPrompt)
-	mentionRoutingApplied, mentionRoutingSkills := tuttiMentionRoutingSkills(visibleText)
+	mentionRoutingApplied, mentionRoutingSkills := agoraxMentionRoutingSkills(visibleText)
 
 	if activeTurnID := a.sessionActiveTurnID(session.AgentSessionID); activeTurnID != "" {
 		if continuation != nil {
@@ -395,7 +395,7 @@ func (a *CodexAppServerAdapter) execBlocking(
 		}
 		providerContent := content
 		if mentionRoutingApplied {
-			providerContent = appendTuttiMentionRoutingContent(providerContent, mentionRoutingSkills)
+			providerContent = appendAgoraxMentionRoutingContent(providerContent, mentionRoutingSkills)
 		}
 		var err error
 		providerContent, err = materializeProviderPromptImagesAtBoundary(ctx, providerContent, a.promptImageMaterializer)
@@ -580,7 +580,7 @@ func (a *CodexAppServerAdapter) execBlocking(
 
 	providerContent := content
 	if mentionRoutingApplied {
-		providerContent = appendTuttiMentionRoutingContent(providerContent, mentionRoutingSkills)
+		providerContent = appendAgoraxMentionRoutingContent(providerContent, mentionRoutingSkills)
 	}
 	var err error
 	providerContent, err = materializeProviderPromptImagesAtBoundary(ctx, providerContent, a.promptImageMaterializer)
@@ -595,21 +595,21 @@ func (a *CodexAppServerAdapter) execBlocking(
 
 	trace := newCodexAppServerTurnTrace(session, turnID, execMetadata)
 	appTurn.diagnostics.Start(trace)
-	tuttiModeHostContext := renderTuttiModeHostContext(
-		tuttiModeTurnSnapshotFromContext(ctx),
+	agoraxModeHostContext := renderAgoraxModeHostContext(
+		agoraxModeTurnSnapshotFromContext(ctx),
 	)
 	a.mu.Lock()
 	if session.IsSideConversation() {
-		if strings.TrimSpace(tuttiModeHostContext) == "" {
-			tuttiModeHostContext = appSession.tuttiModeHostContext
+		if strings.TrimSpace(agoraxModeHostContext) == "" {
+			agoraxModeHostContext = appSession.agoraxModeHostContext
 		}
 	} else {
-		appSession.tuttiModeHostContext = tuttiModeHostContext
+		appSession.agoraxModeHostContext = agoraxModeHostContext
 	}
 	a.mu.Unlock()
 	if session.IsSideConversation() {
-		tuttiModeHostContext = strings.TrimSpace(
-			tuttiModeHostContext + "\n\n" + codexSideDeveloperInstructions,
+		agoraxModeHostContext = strings.TrimSpace(
+			agoraxModeHostContext + "\n\n" + codexSideDeveloperInstructions,
 		)
 	}
 	turnParams := appServerTurnStartParams(
@@ -619,12 +619,12 @@ func (a *CodexAppServerAdapter) execBlocking(
 		appSession.planModeMask,
 		appSession.defaultModeMask,
 		execState.defaultModel,
-		tuttiModeHostContext,
+		agoraxModeHostContext,
 		a.config.commandNetworkAccess,
 	)
 	if clientUserMessageID := metadataString(execMetadata, "clientSubmitId"); clientUserMessageID != "" {
 		// clientSubmitId is an opaque, caller-stable recovery token. The
-		// canonical Turn id stays Tutti-owned and is never used as Codex client
+		// canonical Turn id stays Agorax-owned and is never used as Codex client
 		// identity.
 		turnParams["clientUserMessageId"] = clientUserMessageID
 	}

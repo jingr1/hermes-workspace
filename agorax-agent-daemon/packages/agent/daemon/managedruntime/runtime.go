@@ -25,8 +25,8 @@ const agoraxAppRuntimeCacheRootEnv = "AGORAX_APP_RUNTIME_CACHE_ROOT"
 const agoraxAppRuntimeCatalogEnv = "AGORAX_APP_RUNTIME_CATALOG"
 // appRuntimeCatalogSchemaVersion is accepted only when an operator explicitly
 // points AGORAX_APP_RUNTIME_CATALOG at a catalog file/URL. Agorax does not
-// ship a default remote catalog and must not fall back to Tutti CDN.
-const appRuntimeCatalogSchemaVersion = "tutti.app.runtimes.v2"
+// ship a default remote catalog and must not fall back to Agorax CDN.
+const appRuntimeCatalogSchemaVersion = "agorax.app.runtimes.v2"
 const appRuntimeBaselineProfile = "baseline"
 const appRuntimeNodeStaticProfile = "connector-node-static"
 const appRuntimeRTKSaverProfile = "rtk-saver"

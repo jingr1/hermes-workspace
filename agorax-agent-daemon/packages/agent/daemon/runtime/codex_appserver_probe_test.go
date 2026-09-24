@@ -228,7 +228,7 @@ func TestProbeCodexAppServerReapsLocalHelperProcess(t *testing.T) {
 	pidPath := filepath.Join(t.TempDir(), "probe-helper.pid")
 	result := ProbeCodexAppServer(context.Background(), CodexAppServerProbeInput{
 		Command:          []string{os.Args[0], "-test.run=^TestProbeCodexAppServerHelperProcess$", "--"},
-		Env:              []string{"TUTTI_CODEX_PROBE_HELPER=1", "TUTTI_CODEX_PROBE_PID_PATH=" + pidPath},
+		Env:              []string{"AGORAX_CODEX_PROBE_HELPER=1", "AGORAX_CODEX_PROBE_PID_PATH=" + pidPath},
 		HandshakeTimeout: 100 * time.Millisecond,
 		ShutdownTimeout:  100 * time.Millisecond,
 	})
@@ -244,10 +244,10 @@ func TestProbeCodexAppServerReapsLocalHelperProcess(t *testing.T) {
 }
 
 func TestProbeCodexAppServerHelperProcess(_ *testing.T) {
-	if os.Getenv("TUTTI_CODEX_PROBE_HELPER") != "1" {
+	if os.Getenv("AGORAX_CODEX_PROBE_HELPER") != "1" {
 		return
 	}
-	if pidPath := os.Getenv("TUTTI_CODEX_PROBE_PID_PATH"); pidPath != "" {
+	if pidPath := os.Getenv("AGORAX_CODEX_PROBE_PID_PATH"); pidPath != "" {
 		if err := os.WriteFile(pidPath, []byte(fmt.Sprint(os.Getpid())), 0o600); err != nil {
 			os.Exit(2)
 		}

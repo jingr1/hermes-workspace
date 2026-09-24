@@ -5,7 +5,7 @@ package sessionreplay
 type SemanticCassetteArtifact struct {
 	Manifest        CassetteManifest
 	InitialStateRaw []byte
-	InitialState    *TuttiReplayState
-	ExpectedState   TuttiReplayState
+	InitialState    *AgoraxReplayState
+	ExpectedState   AgoraxReplayState
 	CheckpointPlan  CheckpointPlan
 }

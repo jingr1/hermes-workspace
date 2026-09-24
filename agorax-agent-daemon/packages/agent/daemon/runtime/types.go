@@ -212,7 +212,7 @@ type ExecInput struct {
 	ClientSubmitID                  string
 	CanonicalSubmitOccurredAtUnixMS int64
 	CapabilityRefs                  []CapabilityReference
-	TuttiModeSnapshot               *TuttiModeTurnSnapshot
+	AgoraxModeSnapshot               *AgoraxModeTurnSnapshot
 	Content                         []PromptContentBlock
 	DisplayPrompt                   string
 	InitialTitle                    string
@@ -255,15 +255,15 @@ type SubmitProvenanceInput struct {
 type CapabilityReference = activityshared.CapabilityReference
 
 const (
-	TuttiModeStateActive   = "active"
-	TuttiModeStateInactive = "inactive"
+	AgoraxModeStateActive   = "active"
+	AgoraxModeStateInactive = "inactive"
 )
 
-// TuttiModeTurnSnapshot is the immutable runtime projection of the durable
-// TuttiModeActivation revision selected for one canonical turn. It carries
+// AgoraxModeTurnSnapshot is the immutable runtime projection of the durable
+// AgoraxModeActivation revision selected for one canonical turn. It carries
 // facts only; provider-facing instruction text is rendered inside this
 // package so callers cannot smuggle arbitrary prompt content through it.
-type TuttiModeTurnSnapshot struct {
+type AgoraxModeTurnSnapshot struct {
 	ActivationID      string
 	RevisionID        string
 	Revision          int64
@@ -277,11 +277,11 @@ type TuttiModeTurnSnapshot struct {
 	// OrchestrationIntensity is the legacy single-axis alias of Effect.
 	//
 	// Deprecated: use Effect and Speed with PreferenceVersion set to
-	// TuttiModePreferenceVersionEffectSpeed.
+	// AgoraxModePreferenceVersionEffectSpeed.
 	OrchestrationIntensity int
 }
 
-const TuttiModePreferenceVersionEffectSpeed = 1
+const AgoraxModePreferenceVersionEffectSpeed = 1
 
 type CancelInput struct {
 	RoomID             string

@@ -17,7 +17,7 @@ const (
 	stableSystemSkillsSchemaVersion = 1
 	stableSystemSkillsMaxFiles      = 4096
 	stableSystemSkillsMaxBytes      = 32 << 20
-	systemSkillsMarkerFile          = ".tutti-agent-system-skills.marker"
+	systemSkillsMarkerFile          = ".agorax-agent-system-skills.marker"
 )
 
 type stableSystemSkillFile struct {
@@ -39,18 +39,18 @@ func (*CodexAppServerAdapter) stabilizeSystemSkillPaths(
 	if strings.TrimSpace(storeRoot) == "" {
 		return nil
 	}
-	home, found := lastEnvironmentValue(session.Env, tuttiAgentHomeEnv)
+	home, found := lastEnvironmentValue(session.Env, agoraxAgentHomeEnv)
 	if !found {
-		return errors.New("stabilize tutti-agent system skills: TUTTI_AGENT_HOME is missing")
+		return errors.New("stabilize agorax-agent system skills: AGORAX_AGENT_HOME is missing")
 	}
 	home = filepath.Clean(strings.TrimSpace(home))
 	if home == "." || !filepath.IsAbs(home) {
-		return errors.New("stabilize tutti-agent system skills: TUTTI_AGENT_HOME must be absolute")
+		return errors.New("stabilize agorax-agent system skills: AGORAX_AGENT_HOME must be absolute")
 	}
 	trace.Log("skills.system_paths.stabilize.begin", nil)
-	target, digest, err := stabilizeTuttiAgentSystemSkills(home, storeRoot)
+	target, digest, err := stabilizeAgoraxAgentSystemSkills(home, storeRoot)
 	if err != nil {
-		return fmt.Errorf("stabilize tutti-agent system skills: %w", err)
+		return fmt.Errorf("stabilize agorax-agent system skills: %w", err)
 	}
 	trace.Log("skills.system_paths.stabilize.succeeded", map[string]any{
 		"fingerprint": digest[:12],
@@ -59,11 +59,11 @@ func (*CodexAppServerAdapter) stabilizeSystemSkillPaths(
 	return nil
 }
 
-func stabilizeTuttiAgentSystemSkills(home string, storeRoot string) (string, string, error) {
+func stabilizeAgoraxAgentSystemSkills(home string, storeRoot string) (string, string, error) {
 	home = filepath.Clean(strings.TrimSpace(home))
 	storeRoot = filepath.Clean(strings.TrimSpace(storeRoot))
 	if home == "." || !filepath.IsAbs(home) {
-		return "", "", errors.New("tutti-agent home must be absolute")
+		return "", "", errors.New("agorax-agent home must be absolute")
 	}
 	if storeRoot == "." || !filepath.IsAbs(storeRoot) {
 		return "", "", errors.New("stable system skill store must be absolute")
@@ -161,7 +161,7 @@ func snapshotStableSystemSkills(root string) (stableSystemSkillsSnapshot, error)
 		return files[left].relativePath < files[right].relativePath
 	})
 	digest := sha256.New()
-	_, _ = digest.Write([]byte("tutti-agent-system-skills-v1\x00"))
+	_, _ = digest.Write([]byte("agorax-agent-system-skills-v1\x00"))
 	for _, directory := range directories {
 		writeStableSystemSkillDigestPart(digest, 'd', directory, nil)
 	}
@@ -287,7 +287,7 @@ func replaceSystemSkillRootWithSymlink(systemRoot string, target string) error {
 }
 
 // replaceSystemSkillRootWithDirectoryCopy is the privilege-free fallback used
-// on Windows when a non-elevated Tutti daemon cannot create a directory
+// on Windows when a non-elevated Agorax daemon cannot create a directory
 // symlink. The target has already been validated against the content digest by
 // the caller, so copying it into the session home preserves the same trusted
 // bundle without requiring SeCreateSymbolicLinkPrivilege.

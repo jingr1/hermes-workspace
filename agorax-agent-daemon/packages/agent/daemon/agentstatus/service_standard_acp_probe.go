@@ -17,7 +17,7 @@ import (
 // calls in agent logs, distinct from the real session client name (which
 // lives in the runtime/session layer this detection package does not depend
 // on).
-const standardACPHandshakeClientName = "tutti-agent-status-probe"
+const standardACPHandshakeClientName = "agorax-agent-status-probe"
 
 const standardACPHandshakeProtocolVersion = 1
 

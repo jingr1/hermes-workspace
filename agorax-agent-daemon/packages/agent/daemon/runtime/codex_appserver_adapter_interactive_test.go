@@ -140,7 +140,7 @@ func TestCodexAppServerAdapterServerRequestResolvedFailsPendingApprovalWithoutCl
 	waitForCondition(t, func() bool {
 		return adapter.InteractiveDisposition(session, "turn-local-1", "approval-1") == InteractiveDispositionSuperseded
 	})
-	// The provider resolved this request without ever telling tutti the
+	// The provider resolved this request without ever telling agorax the
 	// decision, so we must not claim the underlying call succeeded (that
 	// previously rendered a phantom "completed" file-output card even
 	// though nothing was actually written). It should surface as failed.

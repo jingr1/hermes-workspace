@@ -100,7 +100,7 @@ func TestEditRetryCompletionRequiresReceiptAndAcceptedProvenance(t *testing.T) {
 	if _, _, err := store.RecordTurnSubmission(ctx, TurnSubmission{
 		WorkspaceID: "ws-1", AgentSessionID: "session-1", TurnID: payload.ReplacementTurnID,
 		ContentJSON: `[{"type":"text","text":"edited prompt"}]`, DisplayPrompt: "edited prompt",
-		CapabilityRefsJSON: `[]`, TuttiModeSnapshotJSON: `null`,
+		CapabilityRefsJSON: `[]`, AgoraxModeSnapshotJSON: `null`,
 		ClientSubmitID: payload.ClientSubmitID, CreatedAtUnixMS: 30, UpdatedAtUnixMS: 30,
 	}); err != nil {
 		t.Fatal(err)
@@ -131,7 +131,7 @@ func TestEditRetryReplacementRedispatchConsumesProofAtomically(t *testing.T) {
 	if _, _, err := store.RecordTurnSubmission(ctx, TurnSubmission{
 		WorkspaceID: "ws-1", AgentSessionID: "session-1", TurnID: payload.ReplacementTurnID,
 		ContentJSON: `[{"type":"text","text":"edited prompt"}]`, DisplayPrompt: "edited prompt",
-		CapabilityRefsJSON: `[]`, TuttiModeSnapshotJSON: `null`,
+		CapabilityRefsJSON: `[]`, AgoraxModeSnapshotJSON: `null`,
 		ClientSubmitID: payload.ClientSubmitID, CreatedAtUnixMS: 30, UpdatedAtUnixMS: 30,
 	}); err != nil {
 		t.Fatal(err)
@@ -175,7 +175,7 @@ func TestEditRetryReplacementRedispatchConsumesProofAtomically(t *testing.T) {
 	if _, _, err := store.RecordTurnSubmission(ctx, TurnSubmission{
 		WorkspaceID: "ws-1", AgentSessionID: "session-1", TurnID: payload.ReplacementTurnID,
 		ContentJSON: `[{"type":"text","text":"edited prompt"}]`, DisplayPrompt: "edited prompt",
-		CapabilityRefsJSON: `[]`, TuttiModeSnapshotJSON: `null`,
+		CapabilityRefsJSON: `[]`, AgoraxModeSnapshotJSON: `null`,
 		ClientSubmitID: payload.ClientSubmitID, CreatedAtUnixMS: 37, UpdatedAtUnixMS: 37,
 	}); err != nil {
 		t.Fatal(err)
@@ -433,7 +433,7 @@ WHERE workspace_id = 'ws-1' AND agent_session_id = 'session-1' AND turn_id = ?
 	if _, _, err := store.RecordTurnSubmission(ctx, TurnSubmission{
 		WorkspaceID: "ws-1", AgentSessionID: "session-1", TurnID: turnID,
 		ContentJSON: `[{"type":"text","text":"original"}]`, DisplayPrompt: "original",
-		CapabilityRefsJSON: `[]`, TuttiModeSnapshotJSON: `null`,
+		CapabilityRefsJSON: `[]`, AgoraxModeSnapshotJSON: `null`,
 		ClientSubmitID: clientSubmitID, CreatedAtUnixMS: occurredAt + 1, UpdatedAtUnixMS: occurredAt + 1,
 	}); err != nil {
 		t.Fatal(err)

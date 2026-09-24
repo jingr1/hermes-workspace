@@ -292,7 +292,7 @@ func (s *Store) GetSubmitClaim(ctx context.Context, workspaceID, agentSessionID,
 }
 
 // FindSubmitClaimByCanonicalTurn resolves the opaque provider recovery token
-// owned by Tutti. More than one claim for a canonical Turn is ambiguous and
+// owned by Agorax. More than one claim for a canonical Turn is ambiguous and
 // fails closed instead of selecting by creation order.
 func (s *Store) FindSubmitClaimByCanonicalTurn(
 	ctx context.Context,

@@ -27,7 +27,7 @@ export const Route = createFileRoute('/api/agents/$agentId/engine/sessions')({
             declaration.runtime,
             agentId,
           )
-          // Tutti-style: only surface sessions owned by this agent's target.
+          // Agorax-style: only surface sessions owned by this agent's target.
           const sessions = (await client.listSessions()).filter(
             (session) => session.agentTargetId === targetId,
           )

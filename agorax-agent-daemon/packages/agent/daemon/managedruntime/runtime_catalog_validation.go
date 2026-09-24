@@ -116,13 +116,7 @@ func safeAppRuntimeComponentName(value string) string {
 }
 
 func envValue(env []string, key string) string {
-	if value := envValueExact(env, key); value != "" {
-		return value
-	}
-	if legacy := legacyManagedRuntimeEnvAlias(key); legacy != "" {
-		return envValueExact(env, legacy)
-	}
-	return ""
+	return envValueExact(env, key)
 }
 
 func envValueExact(env []string, key string) string {
@@ -133,27 +127,6 @@ func envValueExact(env []string, key string) string {
 		}
 	}
 	return ""
-}
-
-func legacyManagedRuntimeEnvAlias(key string) string {
-	switch key {
-	case "AGORAX_APP_RUNTIME_ROOT":
-		return "TUTTI_APP_RUNTIME_ROOT"
-	case "AGORAX_APP_RUNTIME_CACHE_ROOT":
-		return "TUTTI_APP_RUNTIME_CACHE_ROOT"
-	case "AGORAX_APP_RUNTIME_CATALOG":
-		return "TUTTI_APP_RUNTIME_CATALOG"
-	case "AGORAX_APP_PYTHON":
-		return "TUTTI_APP_PYTHON"
-	case "AGORAX_APP_NODE":
-		return "TUTTI_APP_NODE"
-	case "AGORAX_APP_NPM":
-		return "TUTTI_APP_NPM"
-	case "AGORAX_APP_RTK":
-		return "TUTTI_APP_RTK"
-	default:
-		return ""
-	}
 }
 
 func mergeAppPathDirs(dirs []string) []string {

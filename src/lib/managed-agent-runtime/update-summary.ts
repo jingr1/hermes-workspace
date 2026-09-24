@@ -1,5 +1,5 @@
 /**
- * Tutti-parity update row presentation for the Runtimes table: current → latest,
+ * Agorax-parity update row presentation for the Runtimes table: current → latest,
  * check-failed, and up-to-date summaries under the agent name.
  */
 
@@ -23,7 +23,7 @@ export function resolveAgentProviderUpdateRowPresentation(
     null
   const updateAvailable = entry?.updateAvailable === true
   // Discovery ran (lastCheckedAt) but failed with a reason — same contract as
-  // Tutti's workspaceAgentsSettingsUpdateModel.
+  // Agorax's workspaceAgentsSettingsUpdateModel.
   const checkFailed = Boolean(
     entry?.update?.capability === 'supported' &&
       entry.update.lastCheckedAt &&

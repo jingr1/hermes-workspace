@@ -66,7 +66,7 @@ func TestEditRetryDisabledRefusesNewOperations(t *testing.T) {
 // back, replacement never landed — the exact state from the incident), proves
 // that recovering it with the feature ENABLED is fatal to the boot pass, and
 // proves that with the feature DISABLED recovery instead quarantines it and
-// returns nil so tuttid can start.
+// returns nil so agoraxd can start.
 func TestEditRetryDisabledQuarantinesStuckOperationDuringRecovery(t *testing.T) {
 	enabled, store, runtime := newHostEditRetryFixture(t)
 	ref := agenthost.SessionRef{WorkspaceID: "workspace-1", AgentSessionID: "session-1"}

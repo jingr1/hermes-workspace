@@ -181,7 +181,7 @@ func deterministicSessionForkCanonicalID(
 	sourceIdentity string,
 ) string {
 	sum := sha256.Sum256([]byte(strings.Join([]string{
-		"tutti-session-fork-canonical-id-v1",
+		"agorax-session-fork-canonical-id-v1",
 		strings.TrimSpace(operation.WorkspaceID),
 		strings.TrimSpace(operation.OperationID),
 		strings.TrimSpace(operation.SourceAgentSessionID),

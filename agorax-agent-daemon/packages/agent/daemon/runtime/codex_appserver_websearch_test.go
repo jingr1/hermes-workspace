@@ -13,7 +13,7 @@ func TestAppServerWebSearchReadsActionQuery(t *testing.T) {
 		"type":   "webSearch",
 		"status": "completed",
 		"query":  "",
-		"action": map[string]any{"type": "search", "query": "tutti release notes"},
+		"action": map[string]any{"type": "search", "query": "agorax release notes"},
 	}
 
 	update, ok := appServerItemToolCallUpdate(item, true)
@@ -22,12 +22,12 @@ func TestAppServerWebSearchReadsActionQuery(t *testing.T) {
 	}
 
 	rawInput, _ := update["rawInput"].(map[string]any)
-	if got := asString(rawInput["query"]); got != "tutti release notes" {
-		t.Fatalf("rawInput.query = %q, want %q", got, "tutti release notes")
+	if got := asString(rawInput["query"]); got != "agorax release notes" {
+		t.Fatalf("rawInput.query = %q, want %q", got, "agorax release notes")
 	}
 	action, _ := rawInput["action"].(map[string]any)
-	if got := asString(action["query"]); got != "tutti release notes" {
-		t.Fatalf("action.query = %q, want %q", got, "tutti release notes")
+	if got := asString(action["query"]); got != "agorax release notes" {
+		t.Fatalf("action.query = %q, want %q", got, "agorax release notes")
 	}
 }
 
@@ -67,8 +67,8 @@ func TestAcpToolCallEventCompletedCarriesWebSearchInput(t *testing.T) {
 		"kind":          "fetch",
 		"status":        "completed",
 		"rawInput": map[string]any{
-			"query":  "tutti release notes",
-			"action": map[string]any{"type": "search", "query": "tutti release notes"},
+			"query":  "agorax release notes",
+			"action": map[string]any{"type": "search", "query": "agorax release notes"},
 		},
 	}
 
@@ -81,8 +81,8 @@ func TestAcpToolCallEventCompletedCarriesWebSearchInput(t *testing.T) {
 		t.Fatalf("event.Type = %q, want EventCallCompleted", event.Type)
 	}
 	input, _ := event.Payload.Metadata["input"].(map[string]any)
-	if got := asString(input["query"]); got != "tutti release notes" {
-		t.Fatalf("completed event input.query = %q, want %q (raw=%#v)", got, "tutti release notes", event.Payload.Metadata["input"])
+	if got := asString(input["query"]); got != "agorax release notes" {
+		t.Fatalf("completed event input.query = %q, want %q (raw=%#v)", got, "agorax release notes", event.Payload.Metadata["input"])
 	}
 }
 

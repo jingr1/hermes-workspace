@@ -45,7 +45,7 @@ func prepareProcessExecutable(path string, expected *ExecutableIdentity) (prepar
 	if err != nil {
 		return preparedProcessExecutable{}, err
 	}
-	privateDir, err := os.MkdirTemp(tempRoot, ".tutti-verified-exec-")
+	privateDir, err := os.MkdirTemp(tempRoot, ".agorax-verified-exec-")
 	if err != nil {
 		return preparedProcessExecutable{}, err
 	}

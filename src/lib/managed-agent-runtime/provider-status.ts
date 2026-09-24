@@ -52,7 +52,7 @@ export interface AgentProviderUpdateDto {
   currentVersion?: string | null
   /** Registry latest when discovery succeeded; null when not checked / failed. */
   latestVersion?: string | null
-  /** ISO timestamp of the last update-metadata probe (Tutti parity). */
+  /** ISO timestamp of the last update-metadata probe (Agorax parity). */
   lastCheckedAt?: string | null
   /** Non-fatal discovery / compare reason (e.g. registry_unreachable). */
   reasonCode?: string | null

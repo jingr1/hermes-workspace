@@ -2,7 +2,7 @@ package agentruntime
 
 import "strings"
 
-const initialTitleEstablishedRuntimeContextKey = "tuttiInitialTitleEstablished"
+const initialTitleEstablishedRuntimeContextKey = "agoraxInitialTitleEstablished"
 
 func initialTitleEstablishedFromRuntimeContext(
 	runtimeContext map[string]any,

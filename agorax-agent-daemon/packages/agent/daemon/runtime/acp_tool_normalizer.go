@@ -662,7 +662,7 @@ func acpApplyDiffContent(body map[string]any, value any) {
 }
 
 func acpToolCallDiagnosticEnabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("TUTTI_ACP_TOOL_DEBUG"))) {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("AGORAX_ACP_TOOL_DEBUG"))) {
 	case "1", "true", "yes", "on":
 		return true
 	default:

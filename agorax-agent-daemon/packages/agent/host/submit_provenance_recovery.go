@@ -78,7 +78,7 @@ func (h *Host) persistRuntimeSubmitOutcome(
 	displayPrompt string,
 	capabilityRefs []CapabilityReference,
 	metadata map[string]any,
-	tuttiModeSnapshot *TuttiModeTurnSnapshot,
+	agoraxModeSnapshot *AgoraxModeTurnSnapshot,
 ) error {
 	return h.persistSubmitAfterRuntimeOutcome(
 		ctx,
@@ -93,7 +93,7 @@ func (h *Host) persistRuntimeSubmitOutcome(
 		false,
 		capabilityRefs,
 		metadata,
-		tuttiModeSnapshot,
+		agoraxModeSnapshot,
 	)
 }
 
@@ -114,7 +114,7 @@ func (h *Host) persistSubmitAfterRuntimeOutcome(
 	guidance bool,
 	capabilityRefs []CapabilityReference,
 	metadata map[string]any,
-	tuttiModeSnapshot *TuttiModeTurnSnapshot,
+	agoraxModeSnapshot *AgoraxModeTurnSnapshot,
 ) error {
 	if h == nil || strings.TrimSpace(turnID) == "" {
 		return nil
@@ -151,6 +151,6 @@ func (h *Host) persistSubmitAfterRuntimeOutcome(
 		displayPrompt,
 		capabilityRefs,
 		metadata,
-		tuttiModeSnapshot,
+		agoraxModeSnapshot,
 	)
 }

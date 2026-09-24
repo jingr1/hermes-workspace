@@ -32,7 +32,7 @@ func (a *standardACPAdapter) Exec(
 	}
 	session.ProviderSessionID = acpSession.providerSessionID
 	explicitDisplayPrompt, visibleText := explicitAndVisiblePromptText(content, displayPrompt)
-	mentionRoutingApplied, mentionRoutingSkills := tuttiMentionRoutingSkills(visibleText)
+	mentionRoutingApplied, mentionRoutingSkills := agoraxMentionRoutingSkills(visibleText)
 	a.rememberSessionTurn(session.AgentSessionID, turnID)
 	normalizer := newACPTurnNormalizer()
 	var events []activityshared.Event
@@ -90,7 +90,7 @@ func (a *standardACPAdapter) Exec(
 	}
 	acpPromptContent := promptContentForACP(providerContent)
 	if mentionRoutingApplied {
-		acpPromptContent = appendTuttiMentionRoutingPrompt(acpPromptContent, mentionRoutingSkills)
+		acpPromptContent = appendAgoraxMentionRoutingPrompt(acpPromptContent, mentionRoutingSkills)
 	}
 	initialPromptContext := a.pendingInitialPromptContext(acpSession)
 	if initialPromptContext != "" {
@@ -100,12 +100,12 @@ func (a *standardACPAdapter) Exec(
 		})
 	}
 	// ACP v1 has no developer/system or synthetic-message channel. Keep the
-	// canonical Tutti-owned context in the provider-only prompt payload; the
+	// canonical Agorax-owned context in the provider-only prompt payload; the
 	// activity event above is still projected exclusively from the original
 	// user content.
-	acpPromptContent = appendTuttiModeHostContextPrompt(
+	acpPromptContent = appendAgoraxModeHostContextPrompt(
 		acpPromptContent,
-		tuttiModeTurnSnapshotFromContext(ctx),
+		agoraxModeTurnSnapshotFromContext(ctx),
 	)
 	slog.Info("agent session ACP exec started",
 		"event", "agent_session.acp.exec.start",

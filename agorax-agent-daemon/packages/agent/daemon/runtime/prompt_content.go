@@ -307,13 +307,13 @@ func prependConnectorRoutingUpdate(content []PromptContentBlock, update *string)
 	var instruction string
 	if index := strings.TrimSpace(*update); index == "" {
 		instruction = fmt.Sprintf(
-			"Connector routing update: no Tutti connectors are currently available. This supersedes the connector alias index in earlier instructions. Confirm availability with `%s connector available --json` before invoking any connector.",
-			tuttiCLICommandName(),
+			"Connector routing update: no Agorax connectors are currently available. This supersedes the connector alias index in earlier instructions. Confirm availability with `%s connector available --json` before invoking any connector.",
+			agoraxCLICommandName(),
 		)
 	} else {
 		instruction = fmt.Sprintf(
 			"Connector routing update: aliases `%s`. This supersedes the connector alias index in earlier instructions. On an alias or `连接器`/`connector`, run `%s connector available --json` to discover native interfaces; connectors absent from this index are no longer available.",
-			index, tuttiCLICommandName(),
+			index, agoraxCLICommandName(),
 		)
 	}
 	return append([]PromptContentBlock{{Type: "text", Text: instruction}}, content...)

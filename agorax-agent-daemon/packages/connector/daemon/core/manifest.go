@@ -17,7 +17,7 @@ const (
 	ImplementationKindBuiltin                = "builtin"
 	ImplementationKindManagedStdio           = "managed_stdio"
 	ImplementationKindRemoteStreamableHTTP   = "remote_streamable_http"
-	CredentialBrokerProtocolV1               = "tutti.connector.credentials.v1"
+	CredentialBrokerProtocolV1               = "agorax.connector.credentials.v1"
 	CLIArtifactLaunchKindNative              = "artifact_native"
 	CredentialBrokerPresentationEmbeddedPage = "embedded_page"
 	CredentialBrokerPresentationQRCode       = "qr_code"

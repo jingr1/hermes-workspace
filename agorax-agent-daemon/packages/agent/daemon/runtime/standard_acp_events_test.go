@@ -342,11 +342,11 @@ func TestStandardACPUpdateDoesNotProjectInternalMentionRoutingTitle(t *testing.T
 	events := standardACPUpdateEvents(standardACPConfig{provider: hermesExtensionTestProvider}, session, "turn-1", json.RawMessage(`{
 		"update": {
 			"sessionUpdate": "session_info_update",
-			"title": "`+tuttiMentionRoutingReminder+`"
+			"title": "`+agoraxMentionRoutingReminder+`"
 		}
 	}`), newACPTurnNormalizer())
 	for _, event := range events {
-		if event.Payload.Title == tuttiMentionRoutingReminder {
+		if event.Payload.Title == agoraxMentionRoutingReminder {
 			t.Fatalf("events = %#v, want internal mention routing title excluded from title updates", events)
 		}
 	}

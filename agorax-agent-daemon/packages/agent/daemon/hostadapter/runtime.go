@@ -1,6 +1,6 @@
 // Package hostadapter adapts the daemon runtime contract to Agent Host.
 //
-// Both sides of this boundary are owned by Tutti. Product services should
+// Both sides of this boundary are owned by Agorax. Product services should
 // provide only the concrete runtime backend and current-user identity instead
 // of maintaining their own lifecycle and error mappings.
 package hostadapter
@@ -786,7 +786,7 @@ func runtimeExecInput(input host.RuntimeExecInput) agentruntime.ExecInput {
 		TurnID: input.TurnID, ClientSubmitID: input.ClientSubmitID,
 		CanonicalSubmitOccurredAtUnixMS: input.CanonicalSubmitOccurredAtUnixMS,
 		CapabilityRefs:                  runtimeCapabilityReferences(input.CapabilityRefs),
-		TuttiModeSnapshot:               runtimeTuttiModeSnapshot(input.TuttiModeSnapshot),
+		AgoraxModeSnapshot:               runtimeAgoraxModeSnapshot(input.AgoraxModeSnapshot),
 		Content:                         runtimePromptContent(input.Content),
 		DisplayPrompt:                   input.DisplayPrompt, InitialTitle: input.InitialTitle, InitialTitleBase: input.InitialTitleBase,
 		Metadata: cloneMap(input.Metadata), Guidance: input.Guidance,

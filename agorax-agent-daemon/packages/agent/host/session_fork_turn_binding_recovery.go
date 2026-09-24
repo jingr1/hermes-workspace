@@ -124,7 +124,7 @@ func (h *Host) legacyTurnTextProof(
 	}
 	if !found || strings.TrimSpace(submission.ClientSubmitID) != "" ||
 		nonEmptyJSON(submission.CapabilityRefsJSON) ||
-		nonEmptyJSON(submission.TuttiModeSnapshotJSON) {
+		nonEmptyJSON(submission.AgoraxModeSnapshotJSON) {
 		return "", "", storesqlite.ErrSessionForkTurnState
 	}
 	var content []PromptContentBlock

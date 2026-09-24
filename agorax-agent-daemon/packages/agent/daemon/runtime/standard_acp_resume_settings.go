@@ -2,7 +2,7 @@ package agentruntime
 
 import "strings"
 
-// standardACPResumeModeMatchesPersistedSelection reports whether the mode Tutti
+// standardACPResumeModeMatchesPersistedSelection reports whether the mode Agorax
 // is about to request is the same selection that was active when this provider
 // session was last attached. session/resume restores provider-owned state, so
 // reasserting an unchanged selection is both unnecessary and unsafe for agents

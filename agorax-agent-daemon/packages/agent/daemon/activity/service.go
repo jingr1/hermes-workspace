@@ -65,7 +65,7 @@ type Option func(*Store)
 // every sync-state transition, and entries are deleted when a session is
 // hidden. Without this option sync states live in memory only.
 //
-// Store keys are the scope identifier passed to TrackRoom: tutti side =
+// Store keys are the scope identifier passed to TrackRoom: agorax side =
 // workspace ID, external daemons (tsh) = control-plane room ID; workspace ≡
 // room, one-to-one, no implicit translation.
 func WithSyncStateStore(store SyncStateStore) Option {
@@ -82,7 +82,7 @@ func WithSyncStateStore(store SyncStateStore) Option {
 // are deleted when a session is hidden. Without this option cursors live in
 // memory only.
 //
-// Store keys are the scope identifier passed to TrackRoom: tutti side =
+// Store keys are the scope identifier passed to TrackRoom: agorax side =
 // workspace ID, external daemons (tsh) = control-plane room ID; workspace ≡
 // room, one-to-one, no implicit translation.
 func WithMessageCursorStore(store MessageCursorStore) Option {

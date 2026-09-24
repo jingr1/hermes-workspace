@@ -14,7 +14,7 @@ import (
 // runtime-generated identifiers with stable structural names. Historical
 // restore still receives the original identifiers; only final-state
 // verification treats alpha-equivalent graphs as the same semantic state.
-func normalizeReplayStateForComparison(state TuttiReplayState) TuttiReplayState {
+func normalizeReplayStateForComparison(state AgoraxReplayState) AgoraxReplayState {
 	raw, _ := json.Marshal(state)
 	var value map[string]any
 	_ = json.Unmarshal(raw, &value)
@@ -34,7 +34,7 @@ func normalizeReplayStateForComparison(state TuttiReplayState) TuttiReplayState 
 	canonicalizeTurnFileChanges(value)
 
 	normalized, _ := json.Marshal(value)
-	var result TuttiReplayState
+	var result AgoraxReplayState
 	_ = json.Unmarshal(normalized, &result)
 	return result
 }
@@ -286,9 +286,9 @@ func registerReplayIDs(replacements map[string]string, value map[string]any) {
 			turn, _ := turnItem.(map[string]any)
 			registerReplayID(replacements, turn["id"], fmt.Sprintf("session:%d/turn:%d", sessionIndex, turnIndex))
 			// Claude goal clear/fork paths can remint rootProviderTurnId across
-			// record→replay even when the Tutti turn shape is equivalent. Treat
+			// record→replay even when the Agorax turn shape is equivalent. Treat
 			// it like other runtime IDs for final-state compare. If it already
-			// equals the Tutti turn id, keep the turn mapping (first wins).
+			// equals the Agorax turn id, keep the turn mapping (first wins).
 			registerReplayID(
 				replacements,
 				turn["rootProviderTurnId"],
@@ -341,8 +341,8 @@ func registerReplayIDs(replacements map[string]string, value map[string]any) {
 			}
 		}
 	}
-	tuttiMode, _ := value["tuttiMode"].(map[string]any)
-	registerReplayArrayIDs(replacements, tuttiMode["activations"], "activation")
+	agoraxMode, _ := value["agoraxMode"].(map[string]any)
+	registerReplayArrayIDs(replacements, agoraxMode["activations"], "activation")
 	registerReplayArrayIDs(replacements, value["workflows"], "workflow")
 	registerReplayArrayIDs(replacements, value["issues"], "issue")
 	if issues, ok := value["issues"].([]any); ok {

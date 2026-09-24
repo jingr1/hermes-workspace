@@ -75,18 +75,18 @@ INSERT INTO agent_targets (
 	}
 }
 
-// createLegacyTuttidDatabase replays the schema a fully migrated tuttid
-// database had before the store was extracted: shared tuttid ledger, host
+// createLegacyAgoraxdDatabase replays the schema a fully migrated agoraxd
+// database had before the store was extracted: shared agoraxd ledger, host
 // workspaces table, agent tables with the workspaces foreign key, and
 // applied records for every agent migration.
-func createLegacyTuttidDatabase(t *testing.T, db *sql.DB) {
+func createLegacyAgoraxdDatabase(t *testing.T, db *sql.DB) {
 	t.Helper()
 	if _, err := db.Exec(`
-CREATE TABLE tuttid_schema_migrations (
+CREATE TABLE agoraxd_schema_migrations (
   id TEXT PRIMARY KEY,
   applied_at_unix_ms INTEGER NOT NULL
 );
-INSERT INTO tuttid_schema_migrations (id, applied_at_unix_ms) VALUES
+INSERT INTO agoraxd_schema_migrations (id, applied_at_unix_ms) VALUES
   ('workspaces_v1', 11),
   ('workspaces_v2', 12),
   ('workspace_agent_activity_v1', 21),
@@ -185,15 +185,15 @@ CREATE TABLE agent_targets (
 INSERT INTO agent_targets (id, provider, launch_ref_json, name, icon_key, enabled, source, sort_order, created_at_ms, updated_at_ms)
 VALUES ('local:codex', 'codex', '{"type":"local_cli","provider":"codex"}', 'Codex', 'codex', 1, 'system', 10, 1, 1);
 `); err != nil {
-		t.Fatalf("create legacy tuttid database: %v", err)
+		t.Fatalf("create legacy agoraxd database: %v", err)
 	}
 }
 
-func TestStoreMigrateClaimsLegacyTuttidMigrationsWithoutReplay(t *testing.T) {
+func TestStoreMigrateClaimsLegacyAgoraxdMigrationsWithoutReplay(t *testing.T) {
 	t.Parallel()
 
 	db := openTestDB(t)
-	createLegacyTuttidDatabase(t, db)
+	createLegacyAgoraxdDatabase(t, db)
 	store := New(db, testOptions(&staticProjectPaths{}))
 	ctx := context.Background()
 
@@ -262,7 +262,7 @@ SELECT applied_at_unix_ms FROM agent_store_schema_migrations WHERE id = ?
 		t.Fatalf("workspaces_v1 claimed = %v error = %v, want host record left out", got, err)
 	}
 	var legacyCount int
-	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM tuttid_schema_migrations`).Scan(&legacyCount); err != nil {
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM agoraxd_schema_migrations`).Scan(&legacyCount); err != nil {
 		t.Fatalf("count legacy ledger: %v", err)
 	}
 	if legacyCount != 9 {
@@ -342,7 +342,7 @@ WHERE workspace_id = 'ws-legacy' AND agent_session_id = 'session-untargeted'
 
 func TestSessionMetadataMigrationRollsBackDDLAndBackfillAtomically(t *testing.T) {
 	db := openTestDB(t)
-	createLegacyTuttidDatabase(t, db)
+	createLegacyAgoraxdDatabase(t, db)
 	store := New(db, testOptions(&staticProjectPaths{}))
 	ctx := context.Background()
 	if _, err := db.Exec(`
@@ -377,7 +377,7 @@ BEGIN SELECT RAISE(ABORT, 'injected metadata backfill failure'); END;
 
 func TestSessionMetadataDropMigrationRollsBackAllColumnsAtomically(t *testing.T) {
 	db := openTestDB(t)
-	createLegacyTuttidDatabase(t, db)
+	createLegacyAgoraxdDatabase(t, db)
 	store := New(db, testOptions(&staticProjectPaths{}))
 	ctx := context.Background()
 	if _, err := db.Exec(`CREATE TABLE agent_store_schema_migrations (id TEXT PRIMARY KEY, applied_at_unix_ms INTEGER NOT NULL)`); err != nil {
@@ -420,7 +420,7 @@ func TestStoreMigrateBackfillsCursorTargetsOnClaimedLegacyDatabase(t *testing.T)
 	t.Parallel()
 
 	db := openTestDB(t)
-	createLegacyTuttidDatabase(t, db)
+	createLegacyAgoraxdDatabase(t, db)
 	if _, err := db.Exec(`
 INSERT INTO workspace_agent_sessions (
   workspace_id, agent_session_id, origin, agent_target_id, provider, title, status,
@@ -474,11 +474,11 @@ func TestStoreMigrateUpgradesPartiallyMigratedLegacyDatabase(t *testing.T) {
 	// A database at agent activity v3: no agent_target_id column, no
 	// agent_targets table, no rail columns.
 	if _, err := db.Exec(`
-CREATE TABLE tuttid_schema_migrations (
+CREATE TABLE agoraxd_schema_migrations (
   id TEXT PRIMARY KEY,
   applied_at_unix_ms INTEGER NOT NULL
 );
-INSERT INTO tuttid_schema_migrations (id, applied_at_unix_ms) VALUES
+INSERT INTO agoraxd_schema_migrations (id, applied_at_unix_ms) VALUES
   ('workspace_agent_activity_v1', 21),
   ('workspace_agent_activity_v2', 22),
   ('workspace_agent_activity_v3', 23);
@@ -619,11 +619,11 @@ func TestStoreMigrateBackfillsRailSectionsFromInjectedProjects(t *testing.T) {
 
 	// Legacy database at v5: rail migration not applied yet.
 	if _, err := db.Exec(`
-CREATE TABLE tuttid_schema_migrations (
+CREATE TABLE agoraxd_schema_migrations (
   id TEXT PRIMARY KEY,
   applied_at_unix_ms INTEGER NOT NULL
 );
-INSERT INTO tuttid_schema_migrations (id, applied_at_unix_ms) VALUES
+INSERT INTO agoraxd_schema_migrations (id, applied_at_unix_ms) VALUES
   ('workspace_agent_activity_v1', 21),
   ('workspace_agent_activity_v2', 22),
   ('workspace_agent_activity_v3', 23),

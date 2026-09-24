@@ -159,14 +159,14 @@ func TestResolverResolveAllNamesKeepsDirectoryOrderBeforeLauncherVariant(t *test
 	}
 }
 
-func TestResolverFindsTuttiBinFallback(t *testing.T) {
+func TestResolverFindsAgoraxBinFallback(t *testing.T) {
 	home := t.TempDir()
-	tuttiBinDir := filepath.Join(home, ".tutti", "bin")
-	if err := os.MkdirAll(tuttiBinDir, 0o755); err != nil {
-		t.Fatalf("mkdir tutti bin dir: %v", err)
+	agoraxBinDir := filepath.Join(home, ".agorax", "bin")
+	if err := os.MkdirAll(agoraxBinDir, 0o755); err != nil {
+		t.Fatalf("mkdir agorax bin dir: %v", err)
 	}
-	tuttiPath := filepath.Join(tuttiBinDir, "tutti")
-	writeExecutable(t, tuttiPath)
+	agoraxPath := filepath.Join(agoraxBinDir, "agorax")
+	writeExecutable(t, agoraxPath)
 
 	resolver := Resolver{
 		Environ: func() []string {
@@ -181,11 +181,11 @@ func TestResolverFindsTuttiBinFallback(t *testing.T) {
 	}
 
 	env := resolver.Env(nil)
-	if got := resolver.Resolve("tutti", env); got != tuttiPath {
-		t.Fatalf("Resolve() = %q, want %q", got, tuttiPath)
+	if got := resolver.Resolve("agorax", env); got != agoraxPath {
+		t.Fatalf("Resolve() = %q, want %q", got, agoraxPath)
 	}
-	if got := resolver.ResolveBinary([]string{"tutti"}, nil); got != tuttiPath {
-		t.Fatalf("ResolveBinary() = %q, want %q", got, tuttiPath)
+	if got := resolver.ResolveBinary([]string{"agorax"}, nil); got != agoraxPath {
+		t.Fatalf("ResolveBinary() = %q, want %q", got, agoraxPath)
 	}
 }
 

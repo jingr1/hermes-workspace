@@ -27,7 +27,7 @@ func codexSideInstructions(
 	source Session,
 	planModeMask map[string]any,
 	defaultModeMask map[string]any,
-	tuttiModeHostContext string,
+	agoraxModeHostContext string,
 ) string {
 	modeMask := defaultModeMask
 	if source.SettingsValue().PlanMode {
@@ -35,7 +35,7 @@ func codexSideInstructions(
 	}
 	base, _ := appServerCollaborationModeDeveloperInstructions(modeMask).(string)
 	base = strings.TrimSpace(base)
-	if hostContext := strings.TrimSpace(tuttiModeHostContext); hostContext != "" {
+	if hostContext := strings.TrimSpace(agoraxModeHostContext); hostContext != "" {
 		if base == "" {
 			base = hostContext
 		} else {
@@ -105,7 +105,7 @@ type codexSideClientState struct {
 	planModeMask         map[string]any
 	defaultModeMask      map[string]any
 	defaultModel         string
-	tuttiModeHostContext string
+	agoraxModeHostContext string
 	routerFallback       Session
 	dedicated            bool
 }
@@ -128,7 +128,7 @@ func (a *CodexAppServerAdapter) sideClient(
 			planModeMask:         clonePayload(sourceAppSession.planModeMask),
 			defaultModeMask:      clonePayload(sourceAppSession.defaultModeMask),
 			defaultModel:         sourceAppSession.defaultModel,
-			tuttiModeHostContext: sourceAppSession.tuttiModeHostContext,
+			agoraxModeHostContext: sourceAppSession.agoraxModeHostContext,
 			routerFallback:       source,
 		}
 		a.mu.Unlock()
@@ -276,7 +276,7 @@ func (a *CodexAppServerAdapter) OpenSide(
 			source,
 			clientState.planModeMask,
 			clientState.defaultModeMask,
-			clientState.tuttiModeHostContext,
+			clientState.agoraxModeHostContext,
 		),
 	}
 	raw, err := trace.TypedCall(
@@ -380,7 +380,7 @@ func (a *CodexAppServerAdapter) OpenSide(
 		planModeMask:           clientState.planModeMask,
 		defaultModeMask:        clientState.defaultModeMask,
 		defaultModel:           clientState.defaultModel,
-		tuttiModeHostContext:   clientState.tuttiModeHostContext,
+		agoraxModeHostContext:   clientState.agoraxModeHostContext,
 		authState:              "authenticated",
 		acpLiveState:           liveState,
 		pendingRequests:        make(map[string]*pendingInteractiveRequest),

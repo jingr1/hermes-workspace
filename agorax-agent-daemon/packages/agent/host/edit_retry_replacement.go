@@ -215,7 +215,7 @@ func (h *Host) dispatchEditRetryReplacement(
 		Content:        hydrated, DisplayPrompt: input.DisplayPrompt,
 		Metadata:           map[string]any{"clientSubmitId": payload.ClientSubmitID},
 		HistoryReplacement: true, RequireProviderAcceptance: true,
-		TuttiModeSnapshot: input.TuttiModeSnapshot,
+		AgoraxModeSnapshot: input.AgoraxModeSnapshot,
 	})
 	if strings.TrimSpace(execResult.TurnID) != "" &&
 		strings.TrimSpace(execResult.TurnID) != payload.ReplacementTurnID {
@@ -368,7 +368,7 @@ func (h *Host) recordEditRetryReplacementSubmission(
 		ctx,
 		SessionRef{WorkspaceID: operation.WorkspaceID, AgentSessionID: operation.AgentSessionID},
 		payload.ReplacementTurnID, payload.ClientSubmitID, input.Content,
-		input.DisplayPrompt, input.CapabilityRefs, input.Metadata, input.TuttiModeSnapshot,
+		input.DisplayPrompt, input.CapabilityRefs, input.Metadata, input.AgoraxModeSnapshot,
 	); err != nil {
 		return err
 	}

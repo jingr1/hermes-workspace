@@ -41,7 +41,7 @@ type ArtifactTreeIdentity struct {
 
 // SensitiveInheritedFile describes one host-owned secret-bearing descriptor.
 // DescriptorEnvKey is metadata, not a secret, and must use the reserved
-// TUTTI_CONNECTOR_FD_ prefix. Ownership stays with the caller; transports dup
+// AGORAX_CONNECTOR_FD_ prefix. Ownership stays with the caller; transports dup
 // the descriptor for the child and never close File.
 type SensitiveInheritedFile struct {
 	File             *os.File
@@ -191,7 +191,7 @@ type CloseQuiesceAdapter interface {
 }
 
 // ConnectorCapabilityAdapter reports whether this exact provider runtime can
-// accept Tutti's session-scoped Connector binding. Implementations must return
+// accept Agorax's session-scoped Connector binding. Implementations must return
 // false unless support is explicit; a missing implementation is unsupported.
 type ConnectorCapabilityAdapter interface {
 	ConnectorCapabilities(context.Context, Session) (ConnectorCapabilities, error)
@@ -255,7 +255,7 @@ type TargetedCancelAdapter interface {
 
 // TargetedCancelResult separates provider-confirmed cancellation from the
 // normalized UI events produced while issuing the command. A missing target
-// is not confirmation: services/tuttid will settle an unconfirmed child turn
+// is not confirmation: services/agoraxd will settle an unconfirmed child turn
 // as interrupted after this bounded provider call returns.
 type TargetedCancelResult struct {
 	Events           []activityshared.Event

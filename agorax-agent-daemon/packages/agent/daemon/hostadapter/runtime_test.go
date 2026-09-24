@@ -505,10 +505,10 @@ func TestRuntimeControllerPreservesTypedExecIdentity(t *testing.T) {
 		WorkspaceID: "workspace-1", AgentSessionID: "session-1", TurnID: "turn-1", ClientSubmitID: "submit-1",
 		CanonicalSubmitOccurredAtUnixMS: 1_234,
 		CapabilityRefs:                  []host.CapabilityReference{{Capability: "browser-use", Source: "composer"}},
-		TuttiModeSnapshot: &host.TuttiModeTurnSnapshot{
+		AgoraxModeSnapshot: &host.AgoraxModeTurnSnapshot{
 			ActivationID: "activation-1", RevisionID: "revision-1", Revision: 2,
 			State: "active", Source: "workspace",
-			PreferenceVersion: host.TuttiModePreferenceVersionEffectSpeed,
+			PreferenceVersion: host.AgoraxModePreferenceVersionEffectSpeed,
 			Effect:            75, Speed: 60, OrchestrationIntensity: 75,
 		},
 	}
@@ -521,16 +521,16 @@ func TestRuntimeControllerPreservesTypedExecIdentity(t *testing.T) {
 	if len(projected.CapabilityRefs) != 1 || projected.CapabilityRefs[0].Capability != "browser-use" || projected.CapabilityRefs[0].Source != "composer" {
 		t.Fatalf("projected capability refs = %#v", projected.CapabilityRefs)
 	}
-	if projected.TuttiModeSnapshot == nil {
-		t.Fatal("projected Tutti Mode snapshot is nil")
+	if projected.AgoraxModeSnapshot == nil {
+		t.Fatal("projected Agorax Mode snapshot is nil")
 	}
-	legacyOrchestrationIntensity := projected.TuttiModeSnapshot.OrchestrationIntensity //nolint:staticcheck // Compatibility assertion covers the deprecated alias.
-	if projected.TuttiModeSnapshot.ActivationID != "activation-1" ||
-		projected.TuttiModeSnapshot.RevisionID != "revision-1" || projected.TuttiModeSnapshot.Revision != 2 ||
-		projected.TuttiModeSnapshot.State != "active" || projected.TuttiModeSnapshot.Source != "workspace" ||
-		projected.TuttiModeSnapshot.PreferenceVersion != agentruntime.TuttiModePreferenceVersionEffectSpeed ||
-		projected.TuttiModeSnapshot.Effect != 75 || projected.TuttiModeSnapshot.Speed != 60 ||
+	legacyOrchestrationIntensity := projected.AgoraxModeSnapshot.OrchestrationIntensity //nolint:staticcheck // Compatibility assertion covers the deprecated alias.
+	if projected.AgoraxModeSnapshot.ActivationID != "activation-1" ||
+		projected.AgoraxModeSnapshot.RevisionID != "revision-1" || projected.AgoraxModeSnapshot.Revision != 2 ||
+		projected.AgoraxModeSnapshot.State != "active" || projected.AgoraxModeSnapshot.Source != "workspace" ||
+		projected.AgoraxModeSnapshot.PreferenceVersion != agentruntime.AgoraxModePreferenceVersionEffectSpeed ||
+		projected.AgoraxModeSnapshot.Effect != 75 || projected.AgoraxModeSnapshot.Speed != 60 ||
 		legacyOrchestrationIntensity != 75 {
-		t.Fatalf("projected Tutti Mode snapshot = %#v", projected.TuttiModeSnapshot)
+		t.Fatalf("projected Agorax Mode snapshot = %#v", projected.AgoraxModeSnapshot)
 	}
 }

@@ -411,7 +411,7 @@ func runResumePersistedSession(ctx context.Context, driver Driver) error {
 	}); err != nil {
 		return fmt.Errorf("resume runtime: %w", err)
 	}
-	if cwd, found := environmentValue(metrics.LastResumeEnv, "TUTTI_AGENT_CWD"); !found || cwd != "/workspace" {
+	if cwd, found := environmentValue(metrics.LastResumeEnv, "AGORAX_AGENT_CWD"); !found || cwd != "/workspace" {
 		return fmt.Errorf("resume runtime cwd env=%q found=%v, env=%#v", cwd, found, metrics.LastResumeEnv)
 	}
 	return nil

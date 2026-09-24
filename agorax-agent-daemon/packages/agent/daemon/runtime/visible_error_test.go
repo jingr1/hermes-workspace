@@ -173,7 +173,7 @@ func TestVisibleFailureCodeDoesNotTreatPatchContextLoginTextAsAuth(t *testing.T)
 	// codex auth. The process exited cleanly (code 0) with that apply_patch error
 	// only as incidental tail output, so it classifies as an interrupted session —
 	// the one thing it must NOT be is auth_required.
-	detail := `acp process exited with code 0: process exited: ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/wwcome/work/tutti-os/tutti/services/tuttid/service/agentstatus/service_test.go:
+	detail := `acp process exited with code 0: process exited: ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /Users/wwcome/work/agorax-os/agorax/services/agoraxd/service/agentstatus/service_test.go:
 func TestServiceLoginRunsProviderLoginCommand(t *testing.T) {
 	service := testService(func(name string) (string, error) {`
 	if got := visibleFailureCode(detail); got == "auth_required" {
@@ -248,7 +248,7 @@ func TestVisibleFailureCodeClassifiesGoSignalExitAsInterrupted(t *testing.T) {
 	// (localProcessConnection in process_transport.go) reports a
 	// signal-terminated exit via Go's exec.ExitError.ExitCode(), which
 	// returns -1 — not the 128+N convention codex's own app-server uses for
-	// the same event. Seen in the field: tuttid's graceful-shutdown path
+	// the same event. Seen in the field: agoraxd's graceful-shutdown path
 	// (CloseAllLiveSessions) sends SIGTERM to a live claude-code sidecar
 	// mid-turn, and the resulting "exited with code -1" must read as a calm,
 	// retryable interruption rather than "Claude Code request failed".
@@ -281,11 +281,11 @@ func TestVisibleFailureCodeClassifiesUsageLimitAsQuota(t *testing.T) {
 
 func TestVisibleFailureCodeClassifiesInsufficientCredits(t *testing.T) {
 	for _, detail := range []string{
-		`unexpected status 402 Payment Required: pre-deduct credits failed, url: https://llm-api.tutti.sh/v1/responses`,
+		`unexpected status 402 Payment Required: pre-deduct credits failed, url: https://llm-api.agorax.sh/v1/responses`,
 		`unexpected status 402 Payment Required: {"error":{"message":"insufficient credits","type":"billing_error","code":"insufficient_credits"}}`,
 		`Kimi API request failed: 402 Payment Required: OAuth credentials rejected`,
 		`Provider request failed because the account balance is insufficient`,
-		`You've hit your usage limit. Insufficient credits. View Tutti plans at https://tutti.sh/profile/plan, or try again later.`,
+		`You've hit your usage limit. Insufficient credits. View Agorax plans at https://agorax.sh/profile/plan, or try again later.`,
 	} {
 		if got := visibleFailureCode(detail); got != "insufficient_credits" {
 			t.Fatalf("visibleFailureCode(%q) = %q, want insufficient_credits", detail, got)

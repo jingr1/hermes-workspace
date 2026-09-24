@@ -147,8 +147,8 @@ func TestCursorAskUserQuestionMCPPermissionDecisionIsNarrow(t *testing.T) {
 	t.Parallel()
 
 	for _, matching := range []json.RawMessage{
-		json.RawMessage(`{"toolCall":{"title":"tutti-interaction: AskUserQuestion","kind":"other"}}`),
-		json.RawMessage(`{"toolCall":{"title":"tutti-interaction-AskUserQuestion: AskUserQuestion","kind":"other"}}`),
+		json.RawMessage(`{"toolCall":{"title":"agorax-interaction: AskUserQuestion","kind":"other"}}`),
+		json.RawMessage(`{"toolCall":{"title":"agorax-interaction-AskUserQuestion: AskUserQuestion","kind":"other"}}`),
 	} {
 		if got := cursorACPQuestionMCPPermissionDecision(matching); got != "approved" {
 			t.Fatalf("matching decision for %s = %q, want approved", matching, got)
@@ -156,8 +156,8 @@ func TestCursorAskUserQuestionMCPPermissionDecisionIsNarrow(t *testing.T) {
 	}
 	for _, raw := range []json.RawMessage{
 		json.RawMessage(`{"toolCall":{"title":"other: AskUserQuestion","kind":"other"}}`),
-		json.RawMessage(`{"toolCall":{"title":"tutti-interaction: AskUserQuestion","kind":"execute"}}`),
-		json.RawMessage(`{"toolCall":{"title":"tutti-interaction: Shell","kind":"other"}}`),
+		json.RawMessage(`{"toolCall":{"title":"agorax-interaction: AskUserQuestion","kind":"execute"}}`),
+		json.RawMessage(`{"toolCall":{"title":"agorax-interaction: Shell","kind":"other"}}`),
 		json.RawMessage(`{}`),
 	} {
 		if got := cursorACPQuestionMCPPermissionDecision(raw); got != "" {

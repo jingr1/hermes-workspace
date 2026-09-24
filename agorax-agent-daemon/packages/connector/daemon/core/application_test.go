@@ -556,7 +556,7 @@ func TestCrossMachineReceiptsUseOpaqueReferences(t *testing.T) {
 		t.Fatal(err)
 	}
 	install := releaseCLIInstallation(release)
-	installed := CLIInstallationReceipt{SchemaVersion: "tutti.connector.cli-installation.v1", OperationID: operation.OperationID,
+	installed := CLIInstallationReceipt{SchemaVersion: "agorax.connector.cli-installation.v1", OperationID: operation.OperationID,
 		ConnectorKey: "lark", ReleaseDigest: release.ReleaseDigest, RuntimeProfile: "connector-node-static",
 		RuntimeABI: "node24-linux-arm64", NodeVersion: "24.18.0", NodeSHA256: strings.Repeat("1", 64),
 		Package: install.Package, PackageVersion: install.Version, PackageIntegrity: install.Integrity,
@@ -2751,7 +2751,7 @@ func (host *memoryInstallRuntime) Remove(context.Context, RemoveArtifactRequest)
 func (host *memoryInstallRuntime) InstallCLI(_ context.Context, request InstallCLIRequest) (CLIInstallationReceipt, error) {
 	host.cliInstalls++
 	install := releaseCLIInstallation(request.Release)
-	return CLIInstallationReceipt{SchemaVersion: "tutti.connector.cli-installation.v1", OperationID: request.OperationID,
+	return CLIInstallationReceipt{SchemaVersion: "agorax.connector.cli-installation.v1", OperationID: request.OperationID,
 		ConnectorKey: request.Release.ConnectorKey, ReleaseDigest: request.Release.ReleaseDigest,
 		RuntimeProfile: "connector-node-static", RuntimeABI: request.Release.Manifest.Implementation.ManagedStdio.Runtime.ABI,
 		NodeVersion: "22.22.3", NodeSHA256: "1111111111111111111111111111111111111111111111111111111111111111",

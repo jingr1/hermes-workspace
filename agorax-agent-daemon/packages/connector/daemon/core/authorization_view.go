@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	AuthorizationViewProtocolV1       = "tutti.connector.authorization.view.v1"
+	AuthorizationViewProtocolV1       = "agorax.connector.authorization.view.v1"
 	AuthorizationViewTypeExternalLink = "external_link"
 	AuthorizationViewTypeDeviceCode   = "device_code"
 	AuthorizationViewTypeQRCode       = "qr_code"

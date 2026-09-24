@@ -298,13 +298,13 @@ store := agentsessionstore.New(
 
 ## Legacy Defaults
 
-The legacy runtime constructors still default to `TUTTI_WORKSPACE_ID`,
-`tsh-desktop` ACP client metadata, and `agent:main:tsh-` OpenClaw session keys
-for compatibility. New host integrations must use `agentdaemon.NewRuntime` with
-explicit `HostMetadata`; the root facade does not apply legacy host identity
-defaults. `ProcessTransport` is also required when using the built-in provider
-adapters; hosts that pass custom `Adapters` own that transport setup themselves.
+`LegacyHostMetadata` defaults to `AGORAX_WORKSPACE_ID`, `agorax-desktop` /
+`Agorax` ACP client metadata, and `agent:main:agorax-` OpenClaw session keys.
+New host integrations should still pass explicit `HostMetadata` via
+`agentdaemon.NewRuntime`; the root facade does not invent host identity when
+callers omit it. `ProcessTransport` is also required when using the built-in
+provider adapters; hosts that pass custom `Adapters` own that transport setup
+themselves.
 
-State directory defaults still follow the historical `TUTTI_STATE_DIR` /
-`.agorax` behavior. State-dir injection is intentionally left for a later
-host-boundary pass.
+State directory defaults follow `AGORAX_STATE_DIR` / `AGORAX_ENV` and land
+under `~/.agorax` (or `~/.agorax-dev` when `AGORAX_ENV` is development).

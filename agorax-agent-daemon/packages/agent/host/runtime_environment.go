@@ -10,11 +10,11 @@ import (
 
 const (
 	// AgentCWDEnvironmentVariable carries the exact logical working directory
-	// of the running Agent session to nested Tutti CLI processes.
-	AgentCWDEnvironmentVariable = "TUTTI_AGENT_CWD"
+	// of the running Agent session to nested Agorax CLI processes.
+	AgentCWDEnvironmentVariable = "AGORAX_AGENT_CWD"
 	// AgentRailPlacementEnvironmentVariable carries the Host-normalized,
 	// immutable rail placement of the running Agent session as JSON.
-	AgentRailPlacementEnvironmentVariable = "TUTTI_AGENT_RAIL_PLACEMENT"
+	AgentRailPlacementEnvironmentVariable = "AGORAX_AGENT_RAIL_PLACEMENT"
 )
 
 // withAgentRailPlacementEnvironment returns a copy of env with the canonical

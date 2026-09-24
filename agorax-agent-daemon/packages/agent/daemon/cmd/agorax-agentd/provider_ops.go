@@ -387,7 +387,7 @@ func (o *providerOps) detectProvider(ctx context.Context, descriptor providerreg
 			entry.LatestVersion = stringPointer(latest)
 			entry.Update.LatestVersion = stringPointer(latest)
 		} else {
-			// Discovery ran but returned nothing — surface Tutti-parity
+			// Discovery ran but returned nothing — surface Agorax-parity
 			// check-failed so the Runtimes summary can distinguish "up to date"
 			// from "could not check".
 			entry.Update.ReasonCode = "registry_unreachable"
@@ -994,7 +994,7 @@ func tailLines(output string, n int) string {
 // directories npm leaves behind when a global install is interrupted, so the
 // next attempt does not fail with ENOTEMPTY. Only the target package's
 // staging dirs are removed; the global prefix may hold unrelated packages.
-// Ported from Tutti's managed npm installer.
+// Ported from Agorax's managed npm installer.
 func cleanupNPMStagingDirs(prefixDir string, packageName string) {
 	packageDir := managedNPMGlobalPackageDir(prefixDir, packageName)
 	if packageDir == "" {

@@ -5,12 +5,12 @@ import (
 	host "agorax.local/agent-daemon/packages/agent/host"
 )
 
-func runtimeTuttiModeSnapshot(input *host.TuttiModeTurnSnapshot) *agentruntime.TuttiModeTurnSnapshot {
+func runtimeAgoraxModeSnapshot(input *host.AgoraxModeTurnSnapshot) *agentruntime.AgoraxModeTurnSnapshot {
 	if input == nil {
 		return nil
 	}
 	legacyOrchestrationIntensity := input.OrchestrationIntensity //nolint:staticcheck // Compatibility bridge preserves version-zero snapshots.
-	return &agentruntime.TuttiModeTurnSnapshot{
+	return &agentruntime.AgoraxModeTurnSnapshot{
 		ActivationID: input.ActivationID, RevisionID: input.RevisionID, Revision: input.Revision,
 		State: input.State, Source: input.Source,
 		PreferenceVersion:      input.PreferenceVersion,

@@ -183,7 +183,7 @@ func TestCassetteManifestPolicyRejectsTamperedAllowlist(t *testing.T) {
 		t.Fatal(err)
 	}
 	manifest.Files = append(manifest.Files, CassetteFile{
-		Path: "tuttid.db", Role: "database", SizeBytes: 1, SHA256: cassetteDigest("db"),
+		Path: "agoraxd.db", Role: "database", SizeBytes: 1, SHA256: cassetteDigest("db"),
 	})
 	manifest.TotalBytes++
 	if err := ValidateCassetteManifestPolicy(manifest, BlobManifest{

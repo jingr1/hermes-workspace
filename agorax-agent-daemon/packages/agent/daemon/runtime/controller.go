@@ -153,7 +153,7 @@ type sessionAvailabilityWaiter struct {
 type activeTurn struct {
 	turnID                string
 	cancel                context.CancelFunc
-	tuttiModeSnapshot     *TuttiModeTurnSnapshot
+	agoraxModeSnapshot     *AgoraxModeTurnSnapshot
 	openCallIDs           map[string]struct{}
 	pendingTerminalEvents []activityshared.Event
 }
