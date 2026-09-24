@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { motion } from 'motion/react'
 import { seedAgentPresets } from './agent-presets'
 import {
@@ -60,9 +61,13 @@ export function OperationsScreen() {
   useEffect(() => {
     seedAgentPresets()
   }, [])
+  const navigate = useNavigate()
+  const { agent: agentFromSearch } = useSearch({ from: '/agents' })
   const [newAgentOpen, setNewAgentOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [settingsAgentId, setSettingsAgentId] = useState<string | null>(null)
+  const [settingsAgentId, setSettingsAgentId] = useState<string | null>(
+    agentFromSearch ?? null,
+  )
   const [view, setView] = useState<'overview' | 'outputs'>('overview')
   const [filter, setFilter] = useState<TeamOverviewFilter>('all')
   const {
@@ -113,8 +118,19 @@ export function OperationsScreen() {
     agents.find((agent) => agent.id === settingsAgentId) ?? null
 
   useEffect(() => {
+    if (agentFromSearch) setSettingsAgentId(agentFromSearch)
+  }, [agentFromSearch])
+
+  useEffect(() => {
     if (settingsAgentId) enableUsagePolling()
   }, [settingsAgentId, enableUsagePolling])
+
+  function closeAgentDetail() {
+    setSettingsAgentId(null)
+    if (agentFromSearch) {
+      void navigate({ to: '/agents', search: {} })
+    }
+  }
 
   return (
     <main
@@ -337,13 +353,16 @@ export function OperationsScreen() {
       <OperationsAgentDetail
         open={Boolean(settingsAgent)}
         agent={settingsAgent}
-        onClose={() => setSettingsAgentId(null)}
+        onClose={closeAgentDetail}
         onSave={saveAgent}
         onDelete={async (agentId) => {
           await deleteAgent(agentId)
           setSettingsAgentId((current) =>
             current === agentId ? null : current,
           )
+          if (agentFromSearch === agentId) {
+            void navigate({ to: '/agents', search: {} })
+          }
         }}
         onActivate={activateAgent}
         isActivating={isActivatingAgent}

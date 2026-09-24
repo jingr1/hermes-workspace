@@ -21,12 +21,47 @@ const SWARM_SOUL_BEGIN = '<!-- SWARM_ROLE_EXTENSION -->'
 const SWARM_SOUL_END = '<!-- /SWARM_ROLE_EXTENSION -->'
 const swarm = yaml.parse(fs.readFileSync(path.join(WS, 'agents.yaml'), 'utf8'))
 
+function isHermesRuntime(worker) {
+  const runtime = String(worker?.runtime ?? 'hermes').trim().toLowerCase()
+  return runtime === '' || runtime === 'hermes'
+}
+
+/** True when ~/.local/bin/<name> is an Agorax Hermes worker shim (not a real CLI). */
+function looksLikeHermesWorkerWrapper(filePath) {
+  try {
+    const st = fs.statSync(filePath)
+    if (!st.isFile() || st.size > 8192) return false
+    const text = fs.readFileSync(filePath, 'utf8')
+    return (
+      text.includes('HERMES_HOME=') &&
+      (text.includes('HERMES_BIN=') || text.includes('hermes-agent/venv/bin/hermes')) &&
+      /exec\s+"?\$HERMES_BIN"?\s+-p\s+/.test(text)
+    )
+  } catch {
+    return false
+  }
+}
+
 function installWorkerWrappers(workers) {
   fs.mkdirSync(LOCAL_BIN, { recursive: true })
   const installed = []
+  const removed = []
   for (const w of workers) {
     const name = (w.wrapper || w.id || '').trim()
     if (!name) continue
+    const target = path.join(LOCAL_BIN, name)
+
+    // Managed runtimes (opencode / cursor / claude-code / …) must NOT get a
+    // Hermes shim named after their real CLI — that shadows `opencode auth login`
+    // etc. and surfaces "Profile 'opencode' does not exist".
+    if (!isHermesRuntime(w)) {
+      if (looksLikeHermesWorkerWrapper(target)) {
+        fs.unlinkSync(target)
+        removed.push(name)
+      }
+      continue
+    }
+
     const profile = w.id
     const profileHomeExpr =
       profile === 'default'
@@ -47,11 +82,10 @@ if [ "\$#" -gt 0 ]; then
 fi
 exec "\$HERMES_BIN" chat --tui
 `
-    const target = path.join(LOCAL_BIN, name)
     fs.writeFileSync(target, script, { mode: 0o755 })
     installed.push(name)
   }
-  return installed
+  return { installed, removed }
 }
 
 function mergeToolsets(existing, swarmTools) {
@@ -327,9 +361,15 @@ results.push(
   `global: ${globalSynced} swarm skills → ~/.hermes/skills/swarm/ (for /slash commands)`,
 )
 
-const wrappers = installWorkerWrappers(swarm.agents)
+const { installed: wrappers, removed: removedWrappers } =
+  installWorkerWrappers(swarm.agents)
 results.push(
   `wrappers: ${wrappers.length} → ~/.local/bin/ (${wrappers.join(', ')})`,
 )
+if (removedWrappers.length > 0) {
+  results.push(
+    `removed managed Hermes shims (CLI name collision): ${removedWrappers.join(', ')}`,
+  )
+}
 
 console.log(results.join('\n'))

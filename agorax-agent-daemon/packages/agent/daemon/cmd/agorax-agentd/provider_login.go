@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -48,26 +49,45 @@ func loginDescriptorDTO(status providerregistry.StatusDescriptor, binary string)
 	}, true
 }
 
-func (o *providerOps) acquireLogin(providerID string) bool {
+func (o *providerOps) acquireLogin(providerID string) (epoch uint64, ok bool) {
+	key := normalizeProviderID(providerID)
 	o.loginMu.Lock()
 	defer o.loginMu.Unlock()
-	if o.loggingIn[providerID] {
-		return false
+	if o.loggingIn[key] {
+		return 0, false
 	}
-	o.loggingIn[providerID] = true
-	return true
+	o.loginEpoch++
+	epoch = o.loginEpoch
+	o.loggingIn[key] = true
+	return epoch, true
 }
 
-func (o *providerOps) releaseLogin(providerID string) {
+func (o *providerOps) releaseLogin(providerID string, epoch uint64) {
+	key := normalizeProviderID(providerID)
 	o.loginMu.Lock()
 	defer o.loginMu.Unlock()
-	delete(o.loggingIn, providerID)
+	if epoch != 0 && o.loginEpoch != epoch {
+		// A newer login or ForceRefresh cancelled this watch.
+		return
+	}
+	delete(o.loggingIn, key)
 }
 
 func (o *providerOps) isLoginInProgress(providerID string) bool {
+	key := normalizeProviderID(providerID)
 	o.loginMu.Lock()
 	defer o.loginMu.Unlock()
-	return o.loggingIn[providerID]
+	return o.loggingIn[key]
+}
+
+// clearLoginProgress cancels every in-flight login watch. Called from
+// ForceRefresh (Settings → 重新检测) so a closed web terminal cannot leave
+// loginInProgress=true and hide the Login remediation.
+func (o *providerOps) clearLoginProgress() {
+	o.loginMu.Lock()
+	defer o.loginMu.Unlock()
+	o.loginEpoch++
+	o.loggingIn = map[string]bool{}
 }
 
 // startProviderLogin launches the provider's interactive login CLI, or returns
@@ -99,7 +119,8 @@ func (o *providerOps) startProviderLogin(ctx context.Context, providerID string,
 		return result, http.StatusOK, nil
 	}
 
-	if !o.acquireLogin(providerID) {
+	epoch, acquired := o.acquireLogin(providerID)
+	if !acquired {
 		result.Status = "in_progress"
 		return result, http.StatusConflict, fmt.Errorf("a login for %q is already in progress", providerID)
 	}
@@ -111,13 +132,13 @@ func (o *providerOps) startProviderLogin(ctx context.Context, providerID string,
 		result.Mode = "command"
 		result.Command = direct
 		result.DisplayCommand = strings.Join(direct, " ")
-		go o.watchProviderLogin(providerID, descriptor)
+		go o.watchProviderLogin(providerID, descriptor, epoch)
 		return result, http.StatusOK, nil
 	}
 
 	mode, command, err := o.launchInteractiveLogin(binary, descriptor.Status.LoginArgs)
 	if err != nil {
-		o.releaseLogin(providerID)
+		o.releaseLogin(providerID, epoch)
 		return result, http.StatusInternalServerError, err
 	}
 	result.Status = "started"
@@ -125,13 +146,19 @@ func (o *providerOps) startProviderLogin(ctx context.Context, providerID string,
 	result.Command = command
 	result.DisplayCommand = strings.Join(command, " ")
 
-	go o.watchProviderLogin(providerID, descriptor)
+	go o.watchProviderLogin(providerID, descriptor, epoch)
 	return result, http.StatusOK, nil
 }
 
 func (o *providerOps) probeAuthQuick(ctx context.Context, descriptor providerregistry.ProviderDescriptor, binary string) providerstatus.AuthStatus {
 	status := descriptor.Status
 	if len(status.AuthStatusCommand) == 0 {
+		if auth, ok := o.probeAuthFromMarkers(status); ok {
+			return auth
+		}
+		if len(status.AuthMarkerPaths) > 0 {
+			return providerstatus.AuthRequired
+		}
 		return providerstatus.AuthUnknown
 	}
 	timeout := time.Duration(status.AuthStatusCommandTimeoutSeconds) * time.Second
@@ -149,20 +176,76 @@ func (o *providerOps) probeAuthQuick(ctx context.Context, descriptor providerreg
 	return auth.Status
 }
 
-func (o *providerOps) watchProviderLogin(providerID string, descriptor providerregistry.ProviderDescriptor) {
-	defer o.releaseLogin(providerID)
-	deadline := o.now().Add(providerLoginWatchTimeout)
-	for o.now().Before(deadline) {
-		time.Sleep(providerLoginPollInterval)
-		binary := o.resolveBinary(descriptor.Status.BinaryNames)
-		if binary == "" {
+// probeAuthFromMarkers returns authenticated when any declared credential
+// marker file exists (file_exists parser). Used by host-only stubs such as
+// kimi-code that have no AuthStatusCommand yet.
+func (o *providerOps) probeAuthFromMarkers(status providerregistry.StatusDescriptor) (providerstatus.AuthStatus, bool) {
+	if len(status.AuthMarkerPaths) == 0 {
+		return "", false
+	}
+	if status.AuthMarkerParserKind != "" &&
+		status.AuthMarkerParserKind != providerregistry.AuthMarkerParserKindFileExists {
+		return "", false
+	}
+	home, err := o.homeDir()
+	if err != nil || strings.TrimSpace(home) == "" {
+		return "", false
+	}
+	for _, marker := range status.AuthMarkerPaths {
+		marker = strings.TrimSpace(marker)
+		if marker == "" {
 			continue
 		}
-		auth := o.probeAuthQuick(context.Background(), descriptor, binary)
-		if auth == providerstatus.AuthAuthenticated || auth == providerstatus.AuthConfigured {
+		path := expandUserHomePath(marker, home)
+		info, statErr := os.Stat(path)
+		if statErr != nil || info.IsDir() {
+			continue
+		}
+		return providerstatus.AuthAuthenticated, true
+	}
+	return "", false
+}
+
+func expandUserHomePath(path string, home string) string {
+	path = strings.TrimSpace(path)
+	if path == "~" {
+		return home
+	}
+	if strings.HasPrefix(path, "~/") {
+		return filepath.Join(home, path[2:])
+	}
+	return path
+}
+
+func (o *providerOps) watchProviderLogin(providerID string, descriptor providerregistry.ProviderDescriptor, epoch uint64) {
+	defer o.releaseLogin(providerID, epoch)
+	deadline := o.now().Add(providerLoginWatchTimeout)
+	// Probe immediately: web-terminal logins often finish (and write auth
+	// markers) before the first 5s sleep would have fired; status polls can
+	// already report authenticated while loginInProgress is still held.
+	for {
+		if !o.loginEpochMatches(providerID, epoch) {
 			return
 		}
+		binary := o.resolveBinary(descriptor.Status.BinaryNames)
+		if binary != "" {
+			auth := o.probeAuthQuick(context.Background(), descriptor, binary)
+			if auth == providerstatus.AuthAuthenticated || auth == providerstatus.AuthConfigured {
+				return
+			}
+		}
+		if !o.now().Before(deadline) {
+			return
+		}
+		time.Sleep(providerLoginPollInterval)
 	}
+}
+
+func (o *providerOps) loginEpochMatches(providerID string, epoch uint64) bool {
+	key := normalizeProviderID(providerID)
+	o.loginMu.Lock()
+	defer o.loginMu.Unlock()
+	return o.loggingIn[key] && o.loginEpoch == epoch
 }
 
 // launchInteractiveLogin prefers a terminal emulator so TTY-based login CLIs

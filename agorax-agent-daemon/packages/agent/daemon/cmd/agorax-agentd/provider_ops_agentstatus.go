@@ -62,9 +62,21 @@ func (o *providerOps) handleProviderStatus(response http.ResponseWriter, request
 		}
 		listProviders = append(listProviders, id)
 	}
+	// Interactive「重新检测」passes refresh=1 so we bypass the 30m readiness
+	// cache and re-resolve CLIs (avoids ghost "installed" after a shim/binary
+	// was removed).
+	forceRefresh := queryFlagTrue(request.URL.Query().Get("refresh")) ||
+		queryFlagTrue(request.URL.Query().Get("forceRefresh"))
+	if forceRefresh {
+		// Drop stale loginInProgress so「重新检测」after a finished terminal
+		// can surface Login again when auth is still required.
+		o.clearLoginProgress()
+	}
 	snapshot, err := o.agentStatus().List(request.Context(), agentstatus.ListInput{
 		Providers:      listProviders,
 		IncludeUpdates: true,
+		ForceRefresh:   forceRefresh,
+		RefreshUpdates: forceRefresh,
 	})
 	if err != nil {
 		writeJSON(response, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -109,6 +121,19 @@ func (o *providerOps) handleProviderInstall(response http.ResponseWriter, reques
 		writeJSON(response, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
+
+	// kimi-code is a host-only stub (not in agentstatus DefaultRegistry yet).
+	// Drive install through the descriptor-owned official_script path instead.
+	if normalizeProviderID(providerID) == "kimi-code" {
+		result, status, err := o.installProvider(request.Context(), providerID, body.Version)
+		if err != nil {
+			writeJSON(response, status, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(response, status, result)
+		return
+	}
+
 	_ = body.Version // Agorax RunAction install follows descriptor version policy.
 
 	result, err := o.agentStatus().RunAction(request.Context(), agentstatus.RunActionInput{
@@ -245,7 +270,8 @@ func isAgoraxManagedInstallProvider(providerID string) bool {
 	case providerregistry.CodexProviderID,
 		providerregistry.ClaudeCodeProviderID,
 		providerregistry.CursorProviderID,
-		providerregistry.OpenCodeProviderID:
+		providerregistry.OpenCodeProviderID,
+		"kimi-code":
 		return true
 	default:
 		return false
@@ -258,6 +284,15 @@ func stringPointerOrNil(value string) *string {
 		return nil
 	}
 	return &value
+}
+
+func queryFlagTrue(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 func firstNonEmpty(values ...string) string {

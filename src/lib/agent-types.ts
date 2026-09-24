@@ -36,6 +36,9 @@ export interface Agent {
   execution: 'local' | 'ssh' | 'unknown'
   currentTaskId?: string
   currentMissionId?: string
+  /** Registry declaration fields from agents.yaml. */
+  role?: string
+  specialty?: string
   /** Display-only config; secrets are stored server-side only. */
   runtimeConfig: {
     profile?: string

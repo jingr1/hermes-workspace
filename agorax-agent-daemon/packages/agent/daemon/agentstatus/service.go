@@ -522,7 +522,7 @@ func (s Service) cachedStatusForSpec(ctx context.Context, spec ProviderSpec, for
 	}
 	if !forceRefresh {
 		if cached, cachedAt, credentialFingerprint, ok := cache.get(spec.Provider, s.now(), s.providerStatusCacheTTL()); ok &&
-			s.cachedProviderStatusStillValid(spec, cachedAt, credentialFingerprint) {
+			s.cachedProviderStatusStillValid(spec, cached, cachedAt, credentialFingerprint) {
 			return cached
 		}
 	}
@@ -530,7 +530,7 @@ func (s Service) cachedStatusForSpec(ctx context.Context, spec ProviderSpec, for
 	value, _, _ := cache.group.Do(spec.Provider, func() (any, error) {
 		if !forceRefresh {
 			if cached, cachedAt, credentialFingerprint, ok := cache.get(spec.Provider, s.now(), s.providerStatusCacheTTL()); ok &&
-				s.cachedProviderStatusStillValid(spec, cachedAt, credentialFingerprint) {
+				s.cachedProviderStatusStillValid(spec, cached, cachedAt, credentialFingerprint) {
 				return cached, nil
 			}
 		}
@@ -567,13 +567,26 @@ func (s Service) providerStatusCacheTTL() time.Duration {
 	return defaultProviderStatusCacheTTL
 }
 
-func (s Service) cachedProviderStatusStillValid(spec ProviderSpec, cachedAt time.Time, credentialFingerprint string) bool {
+func (s Service) cachedProviderStatusStillValid(
+	spec ProviderSpec,
+	cached ProviderStatus,
+	cachedAt time.Time,
+	credentialFingerprint string,
+) bool {
 	if spec.RemoteAuthProbe.Kind != "" && s.now().Sub(cachedAt) >= s.remoteAuthProbeTTL() {
 		return false
 	}
 	_, evidenceAt, hasEvidence := s.RunOutcomes.AuthEvidence(spec.Provider)
 	if hasEvidence && evidenceAt.After(cachedAt) {
 		return false
+	}
+	// Drop cache when a previously-resolved CLI vanished (Hermes shim removed,
+	// uninstall, PATH change). Avoids 30m of ghost "installed" rows.
+	if cached.CLI.Installed {
+		path := strings.TrimSpace(cached.CLI.BinaryPath)
+		if path == "" || !s.executableFile(path) {
+			return false
+		}
 	}
 	return credentialFingerprint == s.providerCredentialFingerprint(spec)
 }

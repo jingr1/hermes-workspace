@@ -38,16 +38,24 @@ func (s Service) resolveAuthFromMarkersWithValidity(spec ProviderSpec) (AuthInfo
 
 	paths, complete := s.resolvedAuthMarkerPaths(spec)
 	invalidMarker := false
+	foundAny := false
 	for _, path := range paths {
 		if !s.fileExists(path) {
 			continue
 		}
+		foundAny = true
 		if auth, ok := s.authFromMarkerFile(spec, path); ok {
 			return auth, true
 		}
 		invalidMarker = true
 	}
 	if invalidMarker || !complete {
+		return AuthInfo{Status: AuthUnknown}, false
+	}
+	// OpenCode v2+ stores credentials in opencode.db (and reports them via
+	// `opencode auth list`) instead of auth.json. Missing auth.json is therefore
+	// not definitive — defer to the auth status command.
+	if !foundAny && authMarkerParserKind(spec) == providerregistry.AuthMarkerParserKindOpenCode {
 		return AuthInfo{Status: AuthUnknown}, false
 	}
 	return AuthInfo{Status: AuthRequired}, true

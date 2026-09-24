@@ -90,7 +90,14 @@ func (o *providerOps) installOfficialScript(
 		}
 		command = officialScriptArgv(scriptShell, scriptPath)
 		result.Command = []string{scriptShell, scriptURL}
-		commandOutput, runErr = o.runArgvInstallCommand(installCtx, command)
+		env := o.environ()
+		if pinned, err := o.officialScriptPinnedVersion(installCtx, install, requestedVersion); err != nil {
+			return result, http.StatusBadGateway, err
+		} else if pinned != "" {
+			env = setProviderInstallEnv(env, "VERSION", pinned)
+			result.Command = append(result.Command, "--version", pinned)
+		}
+		commandOutput, runErr = o.runArgvInstallCommandWithEnv(installCtx, command, env)
 	}
 
 	if runErr != nil {
@@ -123,11 +130,19 @@ func (o *providerOps) installOfficialScript(
 }
 
 func (o *providerOps) runArgvInstallCommand(ctx context.Context, command []string) (string, error) {
+	return o.runArgvInstallCommandWithEnv(ctx, command, o.environ())
+}
+
+func (o *providerOps) runArgvInstallCommandWithEnv(ctx context.Context, command []string, env []string) (string, error) {
 	if len(command) == 0 {
 		return "", errors.New("empty install command")
 	}
 	cmd := newProviderExecCommand(ctx, command[0], command[1:]...)
-	cmd.Env = o.environ()
+	if env != nil {
+		cmd.Env = env
+	} else {
+		cmd.Env = o.environ()
+	}
 	output, err := cmd.CombinedOutput()
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return string(output), fmt.Errorf("timed out after %s", providerInstallTimeout)
@@ -136,6 +151,55 @@ func (o *providerOps) runArgvInstallCommand(ctx context.Context, command []strin
 		return string(output), err
 	}
 	return string(output), nil
+}
+
+// officialScriptPinnedVersion resolves VERSION for official installers that
+// declare an npm PackageName. OpenCode's install.sh otherwise hits
+// api.github.com for latest and fails under unauthenticated rate limits.
+func (o *providerOps) officialScriptPinnedVersion(
+	ctx context.Context,
+	install providerregistry.InstallerDescriptor,
+	requestedVersion string,
+) (string, error) {
+	requestedVersion = strings.TrimSpace(requestedVersion)
+	if requestedVersion != "" && requestedVersion != "latest" {
+		return strings.TrimPrefix(requestedVersion, "v"), nil
+	}
+	packageName := strings.TrimSpace(install.PackageName)
+	if packageName == "" {
+		return "", nil
+	}
+	if existing := strings.TrimSpace(envValueLast(o.environ(), "VERSION")); existing != "" {
+		return strings.TrimPrefix(existing, "v"), nil
+	}
+	version := strings.TrimSpace(o.latestVersion(ctx, packageName))
+	if version == "" {
+		return "", fmt.Errorf(
+			"failed to resolve %s install version via npm (avoids GitHub API rate limits)",
+			packageName,
+		)
+	}
+	return strings.TrimPrefix(version, "v"), nil
+}
+
+func setProviderInstallEnv(env []string, key string, value string) []string {
+	prefix := key + "="
+	result := make([]string, 0, len(env)+1)
+	set := false
+	for _, entry := range env {
+		if strings.HasPrefix(entry, prefix) {
+			if !set {
+				result = append(result, prefix+value)
+				set = true
+			}
+			continue
+		}
+		result = append(result, entry)
+	}
+	if !set {
+		result = append(result, prefix+value)
+	}
+	return result
 }
 
 func (o *providerOps) downloadInstallScript(ctx context.Context, sourceURL, destinationPath string) error {

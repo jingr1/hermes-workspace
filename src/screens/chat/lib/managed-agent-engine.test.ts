@@ -273,7 +273,10 @@ describe('Managed Agent Engine adapter', () => {
   it('uses daemon catalog identities for managed targets', () => {
     expect(managedAgentTargetId('codex-impl')).toBe('local:codex')
     expect(managedAgentTargetId('claude-code')).toBe('local:claude-code')
+    expect(managedAgentTargetId('kimi-impl')).toBe('extension:kimi-code')
     expect(managedAgentTargetId('kimi')).toBe('extension:kimi-code')
+    expect(managedAgentTargetId('cursor-impl')).toBe('local:cursor')
+    expect(managedAgentTargetId('opencode-impl')).toBe('local:opencode')
   })
 
   it('prefers overlay sessionMessages over the canonical engine lane', () => {

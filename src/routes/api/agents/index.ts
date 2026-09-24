@@ -56,6 +56,8 @@ function buildAgentPayload(
     execution: decl.execution,
     currentTaskId: snapshot?.taskId ?? undefined,
     currentMissionId: snapshot?.missionId ?? undefined,
+    role: decl.role,
+    specialty: decl.specialty,
     runtimeConfig: {
       profile: decl.profile,
       command: decl.command,

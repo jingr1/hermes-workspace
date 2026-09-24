@@ -12,7 +12,7 @@ import {
   VolumeHighIcon,
   CoinsDollarIcon,
 } from '@hugeicons/core-free-icons'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useCallback, useEffect, useState } from 'react'
 import type * as React from 'react'
 import type { LoaderStyle } from '@/hooks/use-chat-settings'
@@ -47,7 +47,6 @@ import { Input } from '@/components/ui/input'
 import { LogoLoader } from '@/components/logo-loader'
 import { BrailleSpinner } from '@/components/ui/braille-spinner'
 import { ThreeDotsSpinner } from '@/components/ui/three-dots-spinner'
-import { AgentRegistryManager } from '@/components/settings/agent-registry-manager'
 import { AgentRuntimesSection } from '@/components/settings/agent-runtimes-section'
 // useWorkspaceStore removed — hamburger eliminated on mobile
 
@@ -61,6 +60,10 @@ export const Route = createFileRoute('/settings/')({
     search: Record<string, unknown>,
   ): { section?: SettingsNavId; provider?: string } => {
     const raw = typeof search.section === 'string' ? search.section : undefined
+    // Legacy bookmark: Settings → Agents moved to /agents
+    if (raw === 'agents') {
+      throw redirect({ to: '/agents' })
+    }
     const provider =
       typeof search.provider === 'string' ? search.provider : undefined
     if (raw && (VALID_SECTION_IDS as ReadonlyArray<string>).includes(raw)) {
@@ -354,7 +357,7 @@ function SettingsRoute() {
   }, [])
 
   const { section, provider: highlightProvider } = Route.useSearch()
-  const activeSection: SettingsSectionId = section ?? 'claude'
+  const activeSection: SettingsSectionId = section ?? 'runtimes'
 
   return (
     <div className="min-h-screen bg-surface text-primary-900">
@@ -506,16 +509,6 @@ function SettingsRoute() {
           )}
 
           {activeSection === 'profile' && <ProfileSection />}
-
-          {activeSection === 'agents' && (
-            <SettingsSection
-              title="Agents"
-              description="Create, edit, and remove Hermes or managed runtime agents."
-              icon={UserIcon}
-            >
-              <AgentRegistryManager />
-            </SettingsSection>
-          )}
 
           {activeSection === 'runtimes' && (
             <SettingsSection

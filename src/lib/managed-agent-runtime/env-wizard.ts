@@ -221,16 +221,19 @@ export function deriveEnvWizardViewModel(input: {
 
   let loginStatus: EnvSetupStepStatus
   let loginProblem: EnvStageProblem | undefined
+  // Auth success wins over a stale loginInProgress lock: the web terminal may
+  // already have finished while the daemon watcher has not released yet.
+  const awaitingLogin = loginPending && !authOk
   if (isHermes) {
     // Hermes readiness is gateway probe; no CLI login stage.
     loginStatus = entry.registered ? 'ok' : installed ? 'error' : 'pending'
     if (loginStatus === 'error') loginProblem = 'detect-failed'
   } else if (!installed) {
     loginStatus = 'pending'
-  } else if (loginPending) {
-    loginStatus = 'running'
   } else if (authOk) {
     loginStatus = 'ok'
+  } else if (awaitingLogin) {
+    loginStatus = 'running'
   } else if (authRequired) {
     loginStatus = 'error'
     loginProblem = 'login-missing'
@@ -246,7 +249,7 @@ export function deriveEnvWizardViewModel(input: {
 
   const readyStatus: EnvSetupStepStatus = ready
     ? 'ok'
-    : installPending || loginPending || redetecting
+    : installPending || awaitingLogin || redetecting
       ? 'pending'
       : 'pending'
 
@@ -271,8 +274,8 @@ export function deriveEnvWizardViewModel(input: {
       id: 'login',
       label: isHermes ? '网关' : STAGE_LABELS.login,
       status: loginStatus,
-      detail: loginPending
-        ? '等待授权完成…'
+      detail: awaitingLogin
+        ? '等待授权完成…（终端已结束可点重新检测）'
         : loginDetail(entry, isHermes),
       problem: loginProblem,
     },
@@ -316,11 +319,11 @@ export function deriveEnvWizardViewModel(input: {
     !isHermes &&
     Boolean(entry.login?.supported) &&
     installed &&
-    !loginPending
+    !awaitingLogin
 
   return {
     ready,
-    busy: installPending || loginPending || redetecting,
+    busy: installPending || awaitingLogin || redetecting,
     stages,
     blockingStageId,
     manualCommand: entry.install?.displayCommand?.trim() || null,

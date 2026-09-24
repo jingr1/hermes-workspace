@@ -490,10 +490,16 @@ func (s Service) runOfficialScriptInstaller(ctx context.Context, provider string
 			Stderr:   err.Error(),
 		}, nil
 	}
+	env := s.commandResolver().Env(nil)
+	if pinned, err := s.officialScriptPinnedVersion(ctx, spec); err != nil {
+		return InstallCommandResult{ExitCode: 1, Stderr: err.Error()}, nil
+	} else if pinned != "" {
+		env = setInstallerEnvValue(env, "VERSION", pinned)
+	}
 	command, args, env := officialScriptInvocation(
 		spec.ScriptShell,
 		scriptPath,
-		s.commandResolver().Env(nil),
+		env,
 	)
 	return s.installCommand(ctx, InstallCommandInput{
 		Command:  command,
@@ -501,6 +507,28 @@ func (s Service) runOfficialScriptInstaller(ctx context.Context, provider string
 		Env:      env,
 		OnStdout: activeActionStdoutAppender(ctx, provider),
 	})
+}
+
+// officialScriptPinnedVersion resolves an install VERSION for official scripts
+// that declare an npm PackageName (e.g. OpenCode). Returning "" leaves the
+// script's own latest discovery in place (Claude/Cursor do not set PackageName).
+func (s Service) officialScriptPinnedVersion(ctx context.Context, spec InstallerSpec) (string, error) {
+	packageName := strings.TrimSpace(spec.PackageName)
+	if packageName == "" {
+		return "", nil
+	}
+	if existing := strings.TrimSpace(installerEnvValue(s.commandResolver().Env(nil), "VERSION")); existing != "" {
+		return existing, nil
+	}
+	version, err := s.latestNPMVersion(ctx, packageName)
+	if err != nil {
+		return "", fmt.Errorf(
+			"failed to resolve %s install version via npm (avoids GitHub API rate limits): %w",
+			packageName,
+			err,
+		)
+	}
+	return strings.TrimSpace(version), nil
 }
 
 func (s Service) runManagedClaudeCodeInstaller(ctx context.Context) (InstallCommandResult, error) {

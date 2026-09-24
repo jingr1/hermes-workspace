@@ -258,6 +258,7 @@ func installerSpecFromProviderDescriptor(descriptor providerregistry.InstallerDe
 			FailureReasonMarkers:     failureReasonMarkers,
 			ScriptURL:                descriptor.ScriptURL,
 			ScriptShell:              descriptor.ScriptShell,
+			PackageName:              descriptor.PackageName,
 			WindowsFallback:          descriptor.WindowsFallback,
 			WindowsPowerShellCommand: descriptor.WindowsPowerShellCommand,
 			ManagedNPM:               windowsFallbackNPM,

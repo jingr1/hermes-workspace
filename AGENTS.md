@@ -80,6 +80,9 @@ orchestrator → researcher → architect → (developer | writer) → architect
 | `gpuserver`                 | `hermes`           | `execution: ssh`；capabilities：gpu / cuda / benchmark / training；mention：`gpu` |
 | `cc-impl`                   | `claude-code`      | 展示名 Claude Code；`command: claude`，`args: ['-p']`；mention：`claude`          |
 | `codex-impl`                | `codex`            | `command: codex`；mention：`codex`（adapter 可能尚未完整落地）                    |
+| `cursor-impl`               | `cursor`           | 展示名 Cursor；`command: cursor-agent`；mention：`cursor`                         |
+| `opencode-impl`             | `opencode`         | 展示名 OpenCode；`command: opencode`；mention：`opencode`                         |
+| `kimi-impl`                 | `kimi`             | 展示名 kimi；`command: kimi`                                                      |
 | `ds-harness`                | `deepseek-harness` | `command: deepseek-harness`；mention：`deepseek`（adapter 可能尚未完整落地）      |
 
 加载规则（见 `src/server/agent-runtime/agents-config.ts`）：

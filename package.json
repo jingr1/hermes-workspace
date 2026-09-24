@@ -12,7 +12,7 @@
     "dev:clean": "rm -rf node_modules/.vite && PORT=6734 vite dev",
     "build": "vite build",
     "start:all": "export PATH=\"$HOME/.local/bin:$HOME/.local/go1.24.5/bin:$HOME/go/bin:/usr/local/go/bin:$PATH\" && concurrently \"pgrep -f '[h]ermes gateway' >/dev/null 2>&1 && echo 'hermes gateway already running — skipping' || hermes gateway run\" \"AGORAX_MANAGED_AGENT_URL=http://127.0.0.1:8788 AGORAX_WORKSPACE_ID=default PORT=6734 pnpm dev\" \"pnpm dev:managed-agent\"",
-    "dev:managed-agent": "mkdir -p .agorax && cd agorax-agent-daemon && export PATH=\"$HOME/.local/go1.24.5/bin:$HOME/go/bin:/usr/local/go/bin:$PATH\" && if [ -f ../.env ]; then set -a; while IFS= read -r line || [ -n \"$line\" ]; do case \"$line\" in ''|'#'*) continue;; *=*) ;; *) continue;; esac; key=${line%%=*}; val=${line#*=}; case \"$key\" in *[!A-Za-z0-9_]*) continue;; esac; val=${val%%#*}; val=$(printf '%s' \"$val\" | tr -d '\\r'); eval \"$key='$val'\"; done < ../.env; set +a; fi && AGORAX_MANAGED_AGENT_PORT=8788 AGORAX_AGENT_DB_PATH=../.agorax/agent.db go run ./packages/agent/daemon/cmd/agorax-agentd",
+    "dev:managed-agent": "bash scripts/start-managed-agent-host.sh",
     "start": "node server-entry.js",
     "start:dev": "PORT=6734 vite dev",
     "release:build": "pnpm --dir ../agorax-release build",

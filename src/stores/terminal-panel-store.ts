@@ -19,6 +19,12 @@ export type TerminalTab = {
 type CreateTabOptions = {
   title?: string
   command?: Array<string>
+  /**
+   * Open the chat bottom panel. Default true for in-chat "+".
+   * Provider login navigates to `/terminal` fullscreen — pass false so the
+   * panel instance cannot race the fullscreen workspace for pendingCommand.
+   */
+  openPanel?: boolean
 }
 
 type TerminalPanelState = {
@@ -78,11 +84,12 @@ export const useTerminalPanelStore = create<TerminalPanelState>()(
         if (options?.command?.length) {
           tab.pendingCommand = options.command.map(String)
         }
+        const openPanel = options?.openPanel !== false
         set((state) => ({
           tabs: [...state.tabs, tab],
           activeTabId: tab.id,
           terminalCounter: nextCounter,
-          isPanelOpen: true,
+          isPanelOpen: openPanel ? true : state.isPanelOpen,
         }))
         return tab.id
       },

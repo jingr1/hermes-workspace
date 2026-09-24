@@ -362,7 +362,7 @@ Managed Agent Chat requires `AGORAX_MANAGED_AGENT_URL=http://127.0.0.1:8788` and
 `AGORAX_WORKSPACE_ID=default` in `.env`; both local defaults are included in
 `.env.example`.
 
-> **Tip:** `pnpm start:all` starts the gateway, Managed Agent daemon, and workspace with these local defaults.
+> **Tip:** `pnpm start:all` starts the gateway, Managed Agent daemon, and workspace with these local defaults. `dev:managed-agent` is idempotent: if `:8788` already answers `/health`, it skips instead of failing with `bind: address already in use`.
 
 ### Windows (PowerShell + WSL) one-command startup
 

@@ -1,12 +1,89 @@
 import type {
+  AgentProviderId,
+  AgentProviderInstallDto,
   AgentProviderStatusDto,
   AgentProviderStatusListDto,
 } from '@/lib/managed-agent-runtime/provider-status'
+import { AGENT_PROVIDER_IDS } from '@/lib/managed-agent-runtime/provider-status'
+import { MANAGED_AGENT_TARGET_IDS } from '@/lib/managed-agent-runtime/agent-targets'
 import {
   readAgentUpdateStatus,
   type UpdateCheckOptions,
 } from '../update-system'
 import { probeHermesProfileGateway } from './hermes-gateway-probe'
+
+/** Reason code / error when status is projected without a live daemon. */
+export const MANAGED_AGENT_DAEMON_UNREACHABLE =
+  'managed_agent_daemon_unreachable'
+
+const OFFLINE_INSTALL: Record<AgentProviderId, AgentProviderInstallDto> = {
+  'claude-code': {
+    kind: 'official_script',
+    displayCommand: 'curl -fsSL https://claude.ai/install.sh | bash',
+    packageName: '',
+    binaryName: 'claude',
+    managedNpm: false,
+  },
+  codex: {
+    kind: 'codex_cli_latest',
+    displayCommand: 'npm install -g @openai/codex --include=optional',
+    packageName: '@openai/codex',
+    binaryName: 'codex',
+    managedNpm: true,
+  },
+  cursor: {
+    kind: 'official_script',
+    displayCommand: 'curl https://cursor.com/install -fsS | bash',
+    packageName: '',
+    binaryName: 'cursor-agent',
+    managedNpm: false,
+  },
+  opencode: {
+    kind: 'official_script',
+    displayCommand: 'curl -fsSL https://opencode.ai/v2/install | bash',
+    packageName: '@opencode/cli',
+    binaryName: 'opencode',
+    managedNpm: false,
+  },
+  'kimi-code': {
+    kind: 'official_script',
+    displayCommand:
+      'curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash',
+    packageName: '',
+    binaryName: 'kimi',
+    managedNpm: false,
+  },
+}
+
+function offlineTargetId(provider: AgentProviderId): string {
+  switch (provider) {
+    case 'kimi-code':
+      return MANAGED_AGENT_TARGET_IDS.kimi
+    default:
+      return MANAGED_AGENT_TARGET_IDS[provider]
+  }
+}
+
+/** Stable catalog rows when Agorax daemon cannot be reached. */
+export function offlineManagedProviderStubs(): AgentProviderStatusDto[] {
+  return AGENT_PROVIDER_IDS.map((provider) => ({
+    provider,
+    targetId: offlineTargetId(provider),
+    registered: false,
+    installed: false,
+    binaryPath: null,
+    version: null,
+    latestVersion: null,
+    updateAvailable: false,
+    auth: { status: 'unknown' },
+    install: OFFLINE_INSTALL[provider],
+    update: {
+      capability: 'unsupported',
+      unsupportedReason: MANAGED_AGENT_DAEMON_UNREACHABLE,
+    },
+    error: MANAGED_AGENT_DAEMON_UNREACHABLE,
+  }))
+}
 
 /**
  * Project Hermes Agent update-system status into the same provider-status row
@@ -112,8 +189,13 @@ export function deepseekProviderStatusStub(): AgentProviderStatusDto {
 
 /**
  * Merge daemon managed-provider status with Hermes (+ honest deepseek stub).
- * When the daemon is unreachable, still return Hermes/deepseek so Runtimes is
- * not empty — callers that require daemon-only data should check separately.
+ * When the daemon is unreachable, still return the full managed catalog as
+ * offline stubs (not omitted) so Runtimes stays complete; install/enable stay
+ * blocked until the daemon is back.
+ *
+ * When the daemon omits `install` for a known provider (older binary / host-only
+ * stub), fill the catalog installer so the Runtimes dialog keeps its Install
+ * button instead of silently dropping it.
  */
 export async function aggregateAgentRuntimeStatus(
   daemonStatus: AgentProviderStatusListDto | null,
@@ -121,13 +203,21 @@ export async function aggregateAgentRuntimeStatus(
 ): Promise<AgentProviderStatusListDto> {
   const hermes = await hermesProviderStatusRow(options)
   const deepseek = deepseekProviderStatusStub()
-  const providers = [
-    hermes,
-    ...(daemonStatus?.providers ?? []),
-    deepseek,
-  ]
+  const managed = (
+    daemonStatus?.providers ?? offlineManagedProviderStubs()
+  ).map(withCatalogInstallFallback)
+  const providers = [hermes, ...managed, deepseek]
   return {
     capturedAt: daemonStatus?.capturedAt ?? new Date().toISOString(),
     providers,
   }
+}
+
+function withCatalogInstallFallback(
+  entry: AgentProviderStatusDto,
+): AgentProviderStatusDto {
+  if (entry.install) return entry
+  const catalog = OFFLINE_INSTALL[entry.provider as AgentProviderId]
+  if (!catalog) return entry
+  return { ...entry, install: catalog }
 }

@@ -42,6 +42,10 @@ export type AgentChatFrameHandle = {
 
 export type AgentChatFrameProps = {
   brand: AgentChatBrand
+  /** Agent display name for the new-session empty state. */
+  agentName: string
+  /** Runtime / provider for empty-state avatar. */
+  agentRuntime?: string | null
   activeTitle: string
   isMobile?: boolean
   compact?: boolean
@@ -123,6 +127,8 @@ export const AgentChatFrame = forwardRef<
 >(function AgentChatFrame(
   {
     brand,
+    agentName,
+    agentRuntime,
     activeTitle,
     isMobile = false,
     compact = false,
@@ -241,7 +247,9 @@ export const AgentChatFrame = forwardRef<
               <ChatContainerRoot className="flex-1">
                 <ChatContainerContent className="flex h-full flex-col px-4 py-4">
                   <ChatEmptyState
-                    brand={brand}
+                    name={agentName}
+                    runtime={agentRuntime}
+                    suggestions={brand.suggestions}
                     compact={compact || isMobile}
                     onSuggestionClick={onSuggestionClick}
                   />

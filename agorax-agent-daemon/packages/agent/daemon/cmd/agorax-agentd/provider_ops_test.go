@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,8 @@ import (
 
 	"agorax.local/agent-daemon/packages/agent/daemon/managednpm"
 	"agorax.local/agent-daemon/packages/agent/daemon/providerregistry"
+	storesqlite "agorax.local/agent-daemon/packages/agent/store-sqlite"
+	_ "modernc.org/sqlite"
 )
 
 // These tests exercise the real receiving boundary: provider detection runs
@@ -105,6 +108,7 @@ func fakeProviderOps(t *testing.T, binDir string, homeDir string, envExtra []str
 		now:          time.Now,
 		latestCached: map[string]latestVersionEntry{},
 		installing:   map[string]bool{},
+		loggingIn:    map[string]bool{},
 	}
 	ops.resolver.Environ = ops.environ
 	ops.resolver.HomeDir = ops.homeDir
@@ -176,12 +180,23 @@ func TestProviderStatusAggregatesDetectedRuntimes(t *testing.T) {
 		t.Fatalf("codex updateAvailable = %v", codex["updateAvailable"])
 	}
 
-	// kimi-code has no descriptor: detected by its bare binary name and
-	// registered under the ACP extension key. Host may already have `kimi` on
-	// PATH; only registration is asserted here.
+	// kimi-code is a host-only stub (ACP extension); install uses the official
+	// script. Host may already have `kimi` on PATH; registration + install DTO
+	// are asserted here.
 	kimi := byID["kimi-code"]
 	if kimi == nil || kimi["registered"] != true {
 		t.Fatalf("kimi-code = %v", kimi)
+	}
+	kimiInstall, ok := kimi["install"].(map[string]any)
+	if !ok || kimiInstall["kind"] != "official_script" || kimiInstall["binaryName"] != "kimi" {
+		t.Fatalf("kimi-code install = %v", kimi["install"])
+	}
+	kimiLogin, ok := kimi["login"].(map[string]any)
+	if !ok || kimiLogin["supported"] != true {
+		t.Fatalf("kimi-code login = %v, want supported daemon login", kimi["login"])
+	}
+	if !strings.Contains(fmt.Sprint(kimiLogin["displayCommand"]), "login") {
+		t.Fatalf("kimi-code login displayCommand = %v", kimiLogin["displayCommand"])
 	}
 
 	if byID["cursor"] == nil || byID["opencode"] == nil {
@@ -192,8 +207,35 @@ func TestProviderStatusAggregatesDetectedRuntimes(t *testing.T) {
 		t.Fatalf("cursor install = %v", byID["cursor"]["install"])
 	}
 	opencodeInstall, ok := byID["opencode"]["install"].(map[string]any)
-	if !ok || opencodeInstall["kind"] != "official_script" || opencodeInstall["packageName"] != "opencode-ai" {
+	if !ok || opencodeInstall["kind"] != "official_script" || opencodeInstall["packageName"] != "@opencode/cli" {
 		t.Fatalf("opencode install = %v", byID["opencode"]["install"])
+	}
+}
+
+func TestForceRefreshClearsLoginInProgress(t *testing.T) {
+	ops := fakeProviderOps(t, t.TempDir(), t.TempDir(), nil)
+	ops.registeredProviders = func() map[string]bool { return map[string]bool{} }
+	if _, ok := ops.acquireLogin("kimi-code"); !ok {
+		t.Fatal("acquireLogin failed")
+	}
+	if !ops.isLoginInProgress("kimi-code") {
+		t.Fatal("expected loginInProgress after acquire")
+	}
+
+	server, _ := newTestServerWithOps(t, ops)
+	status, body := getJSON(t, server.URL+"/v1/provider-status?refresh=1")
+	if status != http.StatusOK {
+		t.Fatalf("status = %d body = %v", status, body)
+	}
+	if ops.isLoginInProgress("kimi-code") {
+		t.Fatal("ForceRefresh should clear loginInProgress so Login can be retried")
+	}
+	providers, _ := body["providers"].([]any)
+	for _, raw := range providers {
+		entry := raw.(map[string]any)
+		if entry["provider"] == "kimi-code" && entry["loginInProgress"] == true {
+			t.Fatalf("kimi-code still loginInProgress after refresh: %v", entry)
+		}
 	}
 }
 
@@ -211,13 +253,51 @@ func TestKimiCodeEnablePreferenceWithoutAdapter(t *testing.T) {
 	if ops.isRegistered(descriptor) {
 		t.Fatal("kimi-code should start unregistered without adapter/preference")
 	}
-	ops.setUserEnabledPreference("kimi-code", true)
+	if err := ops.setUserEnabledPreference("kimi-code", true); err != nil {
+		t.Fatalf("enable: %v", err)
+	}
 	if !ops.isRegistered(descriptor) {
 		t.Fatal("kimi-code enable preference should flip registered=true")
 	}
-	ops.setUserEnabledPreference("kimi-code", false)
+	if err := ops.setUserEnabledPreference("kimi-code", false); err != nil {
+		t.Fatalf("disable: %v", err)
+	}
 	if ops.isRegistered(descriptor) {
 		t.Fatal("kimi-code disable preference should flip registered=false")
+	}
+}
+
+func TestEnabledPreferencePersistsAcrossHydrate(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "agent.db")
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	store := storesqlite.New(db, storesqlite.Options{})
+	if err := store.Migrate(t.Context()); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	ops := fakeProviderOps(t, t.TempDir(), t.TempDir(), nil)
+	ops.attachTargetStore(store)
+	if err := ops.setUserEnabledPreference("opencode", false); err != nil {
+		t.Fatalf("persist disable: %v", err)
+	}
+	if err := ops.setUserEnabledPreference("kimi-code", true); err != nil {
+		t.Fatalf("persist enable: %v", err)
+	}
+
+	reloaded := fakeProviderOps(t, t.TempDir(), t.TempDir(), nil)
+	reloaded.attachTargetStore(store)
+	if err := reloaded.hydrateEnabledFromStore(t.Context()); err != nil {
+		t.Fatalf("hydrate: %v", err)
+	}
+	if enabled, ok := reloaded.userEnabledPreference("opencode"); !ok || enabled {
+		t.Fatalf("opencode pref = (%v, %v), want disabled", enabled, ok)
+	}
+	if enabled, ok := reloaded.userEnabledPreference("kimi-code"); !ok || !enabled {
+		t.Fatalf("kimi-code pref = (%v, %v), want enabled", enabled, ok)
 	}
 }
 
@@ -510,9 +590,20 @@ func TestProviderInstallRejectsConcurrentAndUnsupported(t *testing.T) {
 		t.Fatalf("status after release = %#v, want installInProgress=false", entry)
 	}
 
-	// kimi-code has no installer descriptor at all.
-	if _, status, err := ops.installProvider(context.Background(), "kimi-code", ""); status != http.StatusUnprocessableEntity || err == nil {
-		t.Fatalf("kimi-code install = (%d, %v)", status, err)
+	kimiInstall, ok := installDescriptorDTO(findProviderTargetOrFatal(t, "kimi-code").Status)
+	if !ok || kimiInstall.Kind != "official_script" || kimiInstall.BinaryName != "kimi" {
+		t.Fatalf("kimi-code install dto = %#v ok=%v", kimiInstall, ok)
+	}
+	if !installable(findProviderTargetOrFatal(t, "kimi-code").Status.Install) {
+		t.Fatal("kimi-code should be installable via official_script")
+	}
+	kimiStatus := findProviderTargetOrFatal(t, "kimi-code").Status
+	if len(kimiStatus.LoginArgs) == 0 || kimiStatus.LoginArgs[0] != "login" {
+		t.Fatalf("kimi-code LoginArgs = %#v, want [login]", kimiStatus.LoginArgs)
+	}
+	kimiLoginDTO, ok := loginDescriptorDTO(kimiStatus, "/tmp/kimi")
+	if !ok || !kimiLoginDTO.Supported || kimiLoginDTO.DisplayCommand != "/tmp/kimi login" {
+		t.Fatalf("kimi-code login dto = %#v ok=%v", kimiLoginDTO, ok)
 	}
 	cursorInstall, ok := installDescriptorDTO(findProviderTargetOrFatal(t, "cursor").Status)
 	if !ok || cursorInstall.Kind != "official_script" || cursorInstall.ManagedNPM || cursorInstall.BinaryName != "cursor-agent" {

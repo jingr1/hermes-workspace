@@ -32,9 +32,12 @@ export function TerminalPanel() {
 
   const handleMaximize = useCallback(
     function handleMaximize() {
-      navigate({ to: '/terminal' })
+      // Close the panel host first so we do not run two TerminalWorkspace
+      // instances (panel + fullscreen) against the same tab store.
+      setPanelOpen(false)
+      void navigate({ to: '/terminal' })
     },
-    [navigate],
+    [navigate, setPanelOpen],
   )
 
   const handleClose = useCallback(

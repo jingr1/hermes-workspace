@@ -195,6 +195,10 @@ type ChatScreenProps = {
   hermesChrome?: boolean
   /** Registry agent id for platform skill composer `/` listing. */
   skillsAgentId?: string
+  /** Display name for the new-session empty state. */
+  agentName?: string
+  /** Runtime / provider for the new-session empty-state avatar. */
+  agentRuntime?: string | null
 }
 
 type PortableHistoryMessage = {
@@ -538,6 +542,8 @@ export function ChatScreen({
   sessionController,
   hermesChrome = true,
   skillsAgentId,
+  agentName,
+  agentRuntime,
 }: ChatScreenProps) {
   const navigate = useNavigate()
   const pathname = useRouterState({
@@ -4024,6 +4030,8 @@ export function ChatScreen({
           <AgentChatFrame
             ref={agentChatFrameRef}
             brand={HERMES_CHAT_BRAND}
+            agentName={agentName?.trim() || 'Hermes'}
+            agentRuntime={agentRuntime ?? 'hermes'}
             activeTitle={sessionVerified ? activeTitle : '\u00a0'}
             isMobile={isMobile}
             compact={compact}
@@ -4203,7 +4211,9 @@ export function ChatScreen({
                 empty={historyEmpty}
                 emptyState={
                   <ChatEmptyState
-                    brand={HERMES_CHAT_BRAND}
+                    name={agentName?.trim() || 'Hermes'}
+                    runtime={agentRuntime ?? 'hermes'}
+                    suggestions={HERMES_CHAT_BRAND.suggestions}
                     compact={compact}
                     onSuggestionClick={(prompt) => {
                       composerHandleRef.current?.setValue(prompt + ' ')

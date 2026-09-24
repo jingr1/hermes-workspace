@@ -108,21 +108,38 @@ func parseClaudeAuthStatusOutput(output []byte) (AuthInfo, bool) {
 
 var openCodeCredentialCountPattern = regexp.MustCompile(`([0-9]+)\s+credentials?\b`)
 
+// openCodeStoredCredentialStatuses are trailing column values from
+// `opencode auth list` (v2 tabular output), e.g.
+//
+//	GitHub Copilot  GitHub Copilot 2            stored
+var openCodeStoredCredentialStatuses = map[string]struct{}{
+	"stored": {},
+	"active": {},
+	"ready":  {},
+	"ok":     {},
+}
+
 func parseOpenCodeAuthStatusOutput(output []byte) (AuthInfo, bool) {
-	normalized := strings.ToLower(string(bytes.TrimSpace(output)))
-	if normalized == "" {
-		return AuthInfo{}, false
+	trimmed := bytes.TrimSpace(output)
+	if len(trimmed) == 0 {
+		// OpenCode v2 prints nothing when no credentials are stored.
+		return AuthInfo{Status: AuthRequired}, true
 	}
+	normalized := strings.ToLower(string(trimmed))
 	if match := openCodeCredentialCountPattern.FindStringSubmatch(normalized); len(match) == 2 {
 		if strings.TrimLeft(match[1], "0") == "" {
 			return AuthInfo{Status: AuthRequired}, true
 		}
 		return AuthInfo{Status: AuthAuthenticated}, true
 	}
+	if label, ok := openCodeAuthListStoredLabel(string(trimmed)); ok {
+		return AuthInfo{Status: AuthAuthenticated, AccountLabel: label}, true
+	}
 	if strings.Contains(normalized, "not logged in") ||
 		strings.Contains(normalized, "not authenticated") ||
 		strings.Contains(normalized, "no authenticated") ||
 		strings.Contains(normalized, "no providers") ||
+		strings.Contains(normalized, "no credentials") ||
 		strings.Contains(normalized, "unauthenticated") {
 		return AuthInfo{Status: AuthRequired}, true
 	}
@@ -131,6 +148,24 @@ func parseOpenCodeAuthStatusOutput(output []byte) (AuthInfo, bool) {
 		return AuthInfo{Status: AuthAuthenticated}, true
 	}
 	return AuthInfo{}, false
+}
+
+// openCodeAuthListStoredLabel reports whether auth list shows at least one
+// stored credential row and returns a short account label from the first hit.
+func openCodeAuthListStoredLabel(output string) (string, bool) {
+	for _, line := range strings.Split(output, "\n") {
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) < 2 {
+			continue
+		}
+		status := strings.ToLower(fields[len(fields)-1])
+		if _, ok := openCodeStoredCredentialStatuses[status]; !ok {
+			continue
+		}
+		label := strings.TrimSpace(strings.Join(fields[:len(fields)-1], " "))
+		return label, true
+	}
+	return "", false
 }
 
 func parseCursorAuthStatusOutput(output []byte) (AuthInfo, bool) {

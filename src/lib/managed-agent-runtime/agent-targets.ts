@@ -43,10 +43,13 @@ export function managedAgentBackendForAgentId(
     case 'codex-impl':
     case 'codex':
       return 'codex'
+    case 'cursor-impl':
     case 'cursor':
       return 'cursor'
+    case 'opencode-impl':
     case 'opencode':
       return 'opencode'
+    case 'kimi-impl':
     case 'kimi':
       return 'kimi'
     default:

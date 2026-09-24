@@ -101,6 +101,8 @@ function HermesChatShell({
       isNewChat={isNewChat}
       hermesChrome
       skillsAgentId={agentId}
+      agentName={agent.name}
+      agentRuntime={agent.runtime}
       onSessionResolved={(payload) => {
         void payload
       }}

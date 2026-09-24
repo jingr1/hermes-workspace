@@ -315,10 +315,34 @@ export function AgentRuntimeEnvDialog({
                           (viewModel.busy &&
                             remediation.actionId !== 'login' &&
                             remediation.actionId !== 'redetect') ||
-                          (remediation.actionId === 'login' && isLoggingIn)
+                          (remediation.actionId === 'login' && isLoggingIn) ||
+                          (remediation.actionId === 'install' &&
+                            !viewModel.canInstall) ||
+                          (remediation.actionId === 'update' &&
+                            !viewModel.canUpgrade)
+                        }
+                        title={
+                          remediation.actionId === 'install' &&
+                          !viewModel.canInstall
+                            ? '当前运行时不支持一键安装，请使用下方手动命令'
+                            : undefined
                         }
                         className="h-7 gap-1 px-2.5 text-[11px]"
-                        onClick={() => runAction(remediation.actionId, stage)}
+                        onClick={() => {
+                          if (
+                            remediation.actionId === 'install' &&
+                            !viewModel.canInstall
+                          ) {
+                            return
+                          }
+                          if (
+                            remediation.actionId === 'update' &&
+                            !viewModel.canUpgrade
+                          ) {
+                            return
+                          }
+                          runAction(remediation.actionId, stage)
+                        }}
                       >
                         {remediation.actionId === 'login' && isLoggingIn
                           ? '登录中…'

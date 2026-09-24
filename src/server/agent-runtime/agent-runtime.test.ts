@@ -260,18 +260,18 @@ agents:
       rawYaml: `
 version: 1
 agents:
-  - id: cursor
+  - id: cursor-impl
     runtime: cursor
     command: cursor-agent
-  - id: kimi
+  - id: kimi-impl
     runtime: kimi
     command: kimi
 `,
     })
 
-    expect(router.getAdapter('cursor')?.kind).toBe('cursor')
-    expect(router.getAdapter('kimi')?.kind).toBe('kimi')
-    await expect(router.getAdapter('cursor')!.probe()).resolves.toEqual({
+    expect(router.getAdapter('cursor-impl')?.kind).toBe('cursor')
+    expect(router.getAdapter('kimi-impl')?.kind).toBe('kimi')
+    await expect(router.getAdapter('cursor-impl')!.probe()).resolves.toEqual({
       available: false,
       detail: 'Agorax Managed Agent transport is not configured',
     })
@@ -282,14 +282,14 @@ agents:
       rawYaml: `
 version: 1
 agents:
-  - id: opencode
+  - id: opencode-impl
     runtime: opencode
     command: opencode
 `,
     })
 
-    expect(router.getAdapter('opencode')?.kind).toBe('opencode')
-    await expect(router.getAdapter('opencode')!.probe()).resolves.toEqual({
+    expect(router.getAdapter('opencode-impl')?.kind).toBe('opencode')
+    await expect(router.getAdapter('opencode-impl')!.probe()).resolves.toEqual({
       available: false,
       detail: 'Agorax Managed Agent transport is not configured',
     })
@@ -307,14 +307,14 @@ agents:
       rawYaml: `
 version: 1
 agents:
-  - id: cursor
+  - id: cursor-impl
     runtime: cursor
     command: cursor-agent
 `,
     })
 
-    expect(router.getAdapter('cursor')?.kind).toBe('cursor')
-    await expect(router.getAdapter('cursor')!.probe()).resolves.toEqual({
+    expect(router.getAdapter('cursor-impl')?.kind).toBe('cursor')
+    await expect(router.getAdapter('cursor-impl')!.probe()).resolves.toEqual({
       available: true,
     })
     expect(transport.probe).toHaveBeenCalledWith('cursor')

@@ -19,6 +19,7 @@ import (
 	"agorax.local/agent-daemon/packages/agent/daemon/providerregistry"
 	"agorax.local/agent-daemon/packages/agent/daemon/providerstatus"
 	"agorax.local/agent-daemon/packages/agent/daemon/runtimecmd"
+	storesqlite "agorax.local/agent-daemon/packages/agent/store-sqlite"
 )
 
 // This file is the thin HTTP adapter over provider runtime detection and
@@ -75,15 +76,33 @@ func knownProviderTargets() []providerregistry.ProviderDescriptor {
 		}
 		targets = append(targets, descriptor)
 	}
-	// Kimi Code ships as an ACP extension without a providerregistry
-	// descriptor; report it as a bare CLI detection (no installer, no auth
-	// parser).
+	// Kimi Code ships as an ACP extension without a full providerregistry
+	// descriptor yet. Status still uses bare CLI detection; install is driven
+	// by the official script (npm requires Node ≥22.19, which hosts may lack).
 	targets = append(targets, providerregistry.ProviderDescriptor{
 		Identity: providerregistry.IdentityDescriptor{ID: "kimi-code"},
 		Target:   providerregistry.TargetDescriptor{ID: kimiCodeTargetID},
 		Status: providerregistry.StatusDescriptor{
-			Kind:        providerregistry.StatusKindGenericCLI,
-			BinaryNames: []string{"kimi"},
+			Kind:                 providerregistry.StatusKindGenericCLI,
+			BinaryNames:          []string{"kimi"},
+			AuthMarkerParserKind: providerregistry.AuthMarkerParserKindFileExists,
+			// Device-code login writes OAuth tokens here; thin status has no
+			// AuthStatusCommand yet, so marker presence drives auth readiness.
+			AuthMarkerPaths: []string{"~/.kimi-code/credentials/kimi-code.json"},
+			LoginArgs:       []string{"login"},
+			Install: providerregistry.InstallerDescriptor{
+				Kind:                     providerregistry.InstallerKindOfficialScript,
+				DisplayCommand:           "curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash",
+				BinaryName:               "kimi",
+				ScriptURL:                "https://code.kimi.com/kimi-code/install.sh",
+				ScriptShell:              "bash",
+				WindowsFallback:          providerregistry.InstallerWindowsFallbackPowerShell,
+				WindowsPowerShellCommand: "irm https://code.kimi.com/kimi-code/install.ps1 | iex",
+			},
+			Update: providerregistry.UpdateDescriptor{
+				Capability:        providerregistry.UpdateCapabilityUnsupported,
+				UnsupportedReason: providerregistry.UpdateUnsupportedReasonOfficialScript,
+			},
 		},
 	})
 	return targets
@@ -189,8 +208,12 @@ type providerOps struct {
 	installMu  sync.Mutex
 	installing map[string]bool
 
-	loginMu   sync.Mutex
-	loggingIn map[string]bool
+	loginMu    sync.Mutex
+	loggingIn  map[string]bool
+	// loginEpoch is bumped when an interactive「重新检测」cancels in-flight
+	// login watches so a finished terminal session cannot keep loginInProgress
+	// stuck and block a fresh Login click.
+	loginEpoch uint64
 
 	// userEnabled records Runtimes Switch preferences by identity id. Needed
 	// for providers (notably kimi-code) that appear in status without a
@@ -198,6 +221,19 @@ type providerOps struct {
 	// Switch would otherwise ignore enable POSTs.
 	userEnabledMu sync.Mutex
 	userEnabled   map[string]bool
+
+	// targetStore persists enable preferences across daemon restarts
+	// (agent_targets.enabled). Nil in unit tests that only exercise memory.
+	targetStore agentTargetEnableStore
+}
+
+// agentTargetEnableStore is the persistence surface for Runtimes enable
+// preferences. *storesqlite.Store satisfies it.
+type agentTargetEnableStore interface {
+	ListAgentTargets(ctx context.Context) ([]storesqlite.Target, error)
+	GetAgentTarget(ctx context.Context, id string) (storesqlite.Target, error)
+	PutAgentTarget(ctx context.Context, target storesqlite.Target) (storesqlite.Target, error)
+	SetAgentTargetEnabled(ctx context.Context, id string, enabled bool) error
 }
 
 func defaultProviderOps(registeredProviders func() map[string]bool) *providerOps {
@@ -332,6 +368,12 @@ func (o *providerOps) detectProvider(ctx context.Context, descriptor providerreg
 				entry.Auth.AuthMethod = stringPointer(auth.AuthMethod)
 			}
 		}
+	} else if auth, ok := o.probeAuthFromMarkers(status); ok {
+		entry.Auth = providerAuthDTO{Status: string(auth)}
+	} else if len(status.AuthMarkerPaths) > 0 {
+		// Marker declared but absent — treat as login required so the wizard
+		// offers daemon login instead of leaving auth as unknown forever.
+		entry.Auth = providerAuthDTO{Status: string(providerstatus.AuthRequired)}
 	}
 
 	if entry.Version != nil {
@@ -384,18 +426,23 @@ func (o *providerOps) isRegistered(descriptor providerregistry.ProviderDescripto
 	return adapterRegistered
 }
 
-// setUserEnabledPreference stores the Runtimes enable Switch for identity id.
-func (o *providerOps) setUserEnabledPreference(providerID string, enabled bool) {
+// setUserEnabledPreference stores the Runtimes enable Switch for identity id
+// in memory and, when a target store is attached, durably on agent_targets.
+func (o *providerOps) setUserEnabledPreference(providerID string, enabled bool) error {
 	key := normalizeProviderID(providerID)
 	if key == "" {
-		return
+		return fmt.Errorf("provider id is required")
 	}
 	o.userEnabledMu.Lock()
-	defer o.userEnabledMu.Unlock()
 	if o.userEnabled == nil {
 		o.userEnabled = map[string]bool{}
 	}
 	o.userEnabled[key] = enabled
+	o.userEnabledMu.Unlock()
+	if o.targetStore == nil {
+		return nil
+	}
+	return o.persistEnabledPreference(key, enabled)
 }
 
 func (o *providerOps) userEnabledPreference(providerID string) (enabled bool, ok bool) {
@@ -407,6 +454,112 @@ func (o *providerOps) userEnabledPreference(providerID string) (enabled bool, ok
 	defer o.userEnabledMu.Unlock()
 	enabled, ok = o.userEnabled[key]
 	return enabled, ok
+}
+
+func (o *providerOps) attachTargetStore(store agentTargetEnableStore) {
+	o.targetStore = store
+}
+
+// hydrateEnabledFromStore loads durable enable preferences into memory so a
+// daemon restart keeps Runtimes Switch state. Missing rows leave the preference
+// unset (adapter presence alone decides registered).
+func (o *providerOps) hydrateEnabledFromStore(ctx context.Context) error {
+	if o == nil || o.targetStore == nil {
+		return nil
+	}
+	targets, err := o.targetStore.ListAgentTargets(ctx)
+	if err != nil {
+		return err
+	}
+	byTargetID := map[string]bool{}
+	byProvider := map[string]bool{}
+	for _, target := range targets {
+		byTargetID[normalizeProviderID(target.ID)] = target.Enabled
+		if provider := normalizeProviderID(target.Provider); provider != "" {
+			byProvider[provider] = target.Enabled
+		}
+	}
+	o.userEnabledMu.Lock()
+	defer o.userEnabledMu.Unlock()
+	if o.userEnabled == nil {
+		o.userEnabled = map[string]bool{}
+	}
+	for _, descriptor := range knownProviderTargets() {
+		identity := normalizeProviderID(descriptor.Identity.ID)
+		if identity == "" {
+			continue
+		}
+		if enabled, ok := byProvider[identity]; ok {
+			o.userEnabled[identity] = enabled
+			continue
+		}
+		targetID := normalizeProviderID(descriptor.Target.ID)
+		if targetID == "" {
+			continue
+		}
+		if enabled, ok := byTargetID[targetID]; ok {
+			o.userEnabled[identity] = enabled
+		}
+	}
+	return nil
+}
+
+func (o *providerOps) persistEnabledPreference(identity string, enabled bool) error {
+	descriptor, ok := findProviderTarget(identity)
+	if !ok {
+		return fmt.Errorf("unknown provider %q", identity)
+	}
+	targetID := strings.TrimSpace(descriptor.Target.ID)
+	if targetID == "" {
+		targetID = descriptor.Identity.ID
+	}
+	ctx := context.Background()
+	err := o.targetStore.SetAgentTargetEnabled(ctx, targetID, enabled)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, storesqlite.ErrAgentTargetNotFound) {
+		return err
+	}
+	name := strings.TrimSpace(descriptor.Identity.DisplayName)
+	if name == "" {
+		name = descriptor.Identity.ID
+	}
+	_, err = o.targetStore.PutAgentTarget(ctx, storesqlite.Target{
+		ID:            targetID,
+		Provider:      descriptor.Identity.ID,
+		LaunchRefJSON: `{"type":"local_cli","provider":"` + descriptor.Identity.ID + `"}`,
+		Name:          name,
+		IconKey:       descriptor.Identity.ID,
+		Enabled:       enabled,
+		Source:        "user",
+		SortOrder:     100,
+	})
+	return err
+}
+
+// applyEnabledPreferencesToRuntime pushes hydrated preferences onto the
+// controller so disabled providers stay out of RegisteredProviders after restart.
+func (o *providerOps) applyEnabledPreferencesToRuntime(setEnabled func(provider string, enabled bool)) {
+	if o == nil || setEnabled == nil {
+		return
+	}
+	o.userEnabledMu.Lock()
+	prefs := make(map[string]bool, len(o.userEnabled))
+	for key, enabled := range o.userEnabled {
+		prefs[key] = enabled
+	}
+	o.userEnabledMu.Unlock()
+	for _, descriptor := range knownProviderTargets() {
+		identity := normalizeProviderID(descriptor.Identity.ID)
+		enabled, ok := prefs[identity]
+		if !ok {
+			continue
+		}
+		for _, key := range providerEnableAliases(descriptor) {
+			setEnabled(key, enabled)
+		}
+	}
 }
 
 // providerEnableAliases are Controller.SetProviderEnabled keys that must move

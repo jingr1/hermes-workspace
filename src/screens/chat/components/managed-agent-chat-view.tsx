@@ -7,7 +7,7 @@ import { AgentChatFrame } from './agent-chat-frame'
 import { AgentChatMessagePane } from './agent-chat-message-pane'
 import { ManagedAgentInteractionPanel } from './managed-agent-interaction-panel'
 import { ChatEmptyState } from './chat-empty-state'
-import { CLAUDE_CODE_CHAT_BRAND, CODEX_CHAT_BRAND } from '../agent-chat-brands'
+import { chatBrandForRuntime } from '../agent-chat-brands'
 import { createClaudeCodeSlashRuntime } from '../slash-commands/claude-code'
 import { useExternalAgentSessions } from '../hooks/use-external-agent-sessions'
 import { useManagedAgentChat } from '../hooks/use-managed-agent-chat'
@@ -48,8 +48,7 @@ function readStoredThinking(sessionId: string | null): ThinkingLevel {
 }
 
 function getBrand(agent: AgentWithStatus) {
-  if (agent.runtime === 'codex') return CODEX_CHAT_BRAND
-  return CLAUDE_CODE_CHAT_BRAND
+  return chatBrandForRuntime(agent.runtime)
 }
 
 function getModelsEndpoint(agentId: string, runtime: string): string | undefined {
@@ -176,17 +175,30 @@ export function ManagedAgentChatView({
   )
 
   const composerBrand = useMemo(() => {
+    const displayName = agent.name.trim() || agent.agentId
     if (agent.runtime === 'codex') {
       return {
-        label: agent.name || brand.label,
-        hint: `Codex · ${agent.name || brand.label} · ~/.codex/config.toml`,
+        label: displayName,
+        hint: `Codex · ${displayName} · ~/.codex/config.toml`,
+      }
+    }
+    if (agent.runtime === 'cursor') {
+      return {
+        label: displayName,
+        hint: `Cursor · ${displayName}`,
+      }
+    }
+    if (agent.runtime === 'opencode') {
+      return {
+        label: displayName,
+        hint: `OpenCode · ${displayName}`,
       }
     }
     return {
-      label: agent.name || brand.label,
-      hint: `Claude Code · ${agent.name || brand.label} · ~/.claude/settings.json`,
+      label: displayName,
+      hint: `Claude Code · ${displayName} · ~/.claude/settings.json`,
     }
-  }, [agent, brand])
+  }, [agent])
 
   // Capability display comes from the engine session snapshot (canonical),
   // never fabricated: null means the runtime has not reported capabilities.
@@ -252,7 +264,7 @@ export function ManagedAgentChatView({
               : agent.runtime === 'opencode'
                 ? '/agent-avatars/opencode-rounded.png'
                 : '/agent-avatars/claude-rounded.png',
-        alt: brand.label,
+        alt: agent.name,
       }}
     >
       <ChatScreen
@@ -265,6 +277,8 @@ export function ManagedAgentChatView({
         renderMain={
           <AgentChatFrame
             brand={brand}
+            agentName={agent.name}
+            agentRuntime={agent.runtime}
             activeTitle={chat.activeTitle}
             isMobile={isMobile}
             defaultFileExplorerCollapsed={false}
@@ -321,7 +335,9 @@ export function ManagedAgentChatView({
               sessionKey={chat.activeSessionId}
               emptyState={
                 <ChatEmptyState
-                  brand={brand}
+                  name={agent.name}
+                  runtime={agent.runtime}
+                  suggestions={brand.suggestions}
                   compact={isMobile}
                   onSuggestionClick={(prompt) =>
                     void chat.submit(prompt, [], { effort: thinkingLevel })

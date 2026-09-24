@@ -25,6 +25,12 @@ type InstallerSpec struct {
 	ShellCommand             string
 	ScriptURL                string
 	ScriptShell              string
+	// PackageName, when set on an official_script installer, is the npm
+	// package used to pin VERSION before running the script. OpenCode uses
+	// @opencode/cli so the pin matches published platform tarballs; the
+	// script's own latest discovery hits opencode.ai/update (often 403) or
+	// api.github.com (rate-limited), both of which fail unauthenticated.
+	PackageName              string
 	WindowsFallback          providerregistry.InstallerWindowsFallback
 	WindowsPowerShellCommand string
 	ReleaseBinary            *ReleaseBinaryInstallerSpec

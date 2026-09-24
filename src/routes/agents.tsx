@@ -4,6 +4,12 @@ import { OperationsScreen } from '@/screens/agents/operations-screen'
 
 export const Route = createFileRoute('/agents')({
   ssr: false,
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { agent?: string } => {
+    const agent = typeof search.agent === 'string' ? search.agent : undefined
+    return agent ? { agent } : {}
+  },
   component: function AgentsRoute() {
     usePageTitle('Agents')
     return <OperationsScreen />

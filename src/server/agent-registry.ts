@@ -98,7 +98,7 @@ function normalizeInput(input: Record<string, unknown>): SwarmRosterUpsert {
 }
 
 export function listAgentDeclarations() {
-  // Settings manages declarations, not every profile discovered on disk.
+  // Agents UI (/agents) manages declarations, not every profile discovered on disk.
   // Orphan profiles are surfaced separately for an explicit import/claim flow.
   const workers = readSwarmRoster([]).workers
   return workers.some((worker) => worker.id === 'default')
@@ -115,7 +115,7 @@ export function createAgentDeclaration(input: Record<string, unknown>) {
     const profile = next.profile ?? next.id
     if (!isLiveNamedProfile(profile)) {
       throw new Error(
-        `Hermes profile "${profile}" does not exist. Create it first via POST /api/profiles/create (Agents/Settings New Agent Hermes profile step).`,
+        `Hermes profile "${profile}" does not exist. Create it first via POST /api/profiles/create (Agents → New Agent Hermes profile step).`,
       )
     }
   }

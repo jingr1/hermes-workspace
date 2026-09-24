@@ -80,6 +80,60 @@ describe('deriveEnvWizardViewModel', () => {
     expect(vm.blockingStageId).toBeNull()
   })
 
+  it('clears waiting-for-login when auth is already ok (stale loginInProgress)', () => {
+    const vm = deriveEnvWizardViewModel({
+      entry: entry({
+        installed: true,
+        registered: true,
+        version: '1.0.0',
+        binaryPath: '/usr/bin/claude',
+        auth: { status: 'authenticated', accountLabel: 'me@example.com' },
+        loginInProgress: true,
+        login: {
+          supported: true,
+          displayCommand: 'claude auth login',
+          command: ['claude', 'auth', 'login'],
+        },
+      }),
+      isLoading: false,
+      installPending: false,
+      loginPending: true,
+    })
+    expect(vm.stages.find((s) => s.id === 'login')?.status).toBe('ok')
+    expect(vm.stages.find((s) => s.id === 'login')?.detail).not.toBe(
+      '等待授权完成…',
+    )
+    expect(vm.busy).toBe(false)
+    expect(vm.ready).toBe(true)
+    expect(vm.blockingStageId).toBeNull()
+  })
+
+  it('keeps waiting-for-login while auth is still required', () => {
+    const vm = deriveEnvWizardViewModel({
+      entry: entry({
+        installed: true,
+        version: '1.0.0',
+        binaryPath: '/usr/bin/claude',
+        auth: { status: 'required' },
+        loginInProgress: true,
+        login: {
+          supported: true,
+          displayCommand: 'claude auth login',
+          command: ['claude', 'auth', 'login'],
+        },
+      }),
+      isLoading: false,
+      installPending: false,
+      loginPending: true,
+    })
+    expect(vm.stages.find((s) => s.id === 'login')?.status).toBe('running')
+    expect(vm.stages.find((s) => s.id === 'login')?.detail).toBe(
+      '等待授权完成…（终端已结束可点重新检测）',
+    )
+    expect(vm.busy).toBe(true)
+    expect(vm.blockingStageId).toBe('login')
+  })
+
   it('surfaces update remediation when updateAvailable', () => {
     const vm = deriveEnvWizardViewModel({
       entry: entry({

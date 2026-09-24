@@ -67,6 +67,7 @@ count.txt
 todos.json
 releases/
 .agorax/
+agorax-agent.db
 
 # Wrangler (Cloudflare Workers)
 .wrangler

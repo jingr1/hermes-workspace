@@ -219,6 +219,107 @@ func TestResolverFindsOpenCodeBinFallback(t *testing.T) {
 	}
 }
 
+func TestResolverFindsKimiCodeBinFallback(t *testing.T) {
+	home := t.TempDir()
+	kimiBinDir := filepath.Join(home, ".kimi-code", "bin")
+	if err := os.MkdirAll(kimiBinDir, 0o755); err != nil {
+		t.Fatalf("mkdir kimi-code bin dir: %v", err)
+	}
+	kimiPath := filepath.Join(kimiBinDir, "kimi")
+	writeExecutable(t, kimiPath)
+
+	resolver := Resolver{
+		Environ: func() []string {
+			return []string{"PATH=/usr/bin:/bin"}
+		},
+		HomeDir: func() (string, error) {
+			return home, nil
+		},
+		LookPath: func(string) (string, error) {
+			return "", os.ErrNotExist
+		},
+	}
+
+	env := resolver.Env(nil)
+	if got := resolver.Resolve("kimi", env); got != kimiPath {
+		t.Fatalf("Resolve() = %q, want %q", got, kimiPath)
+	}
+	if got := resolver.ResolveBinary([]string{"kimi"}, nil); got != kimiPath {
+		t.Fatalf("ResolveBinary() = %q, want %q", got, kimiPath)
+	}
+}
+
+func TestResolverSkipsHermesWorkerShimNamedOpenCode(t *testing.T) {
+	home := t.TempDir()
+	localBin := filepath.Join(home, ".local", "bin")
+	opencodeBinDir := filepath.Join(home, ".opencode", "bin")
+	if err := os.MkdirAll(localBin, 0o755); err != nil {
+		t.Fatalf("mkdir local bin: %v", err)
+	}
+	if err := os.MkdirAll(opencodeBinDir, 0o755); err != nil {
+		t.Fatalf("mkdir opencode bin: %v", err)
+	}
+
+	shim := filepath.Join(localBin, "opencode")
+	shimBody := "#!/usr/bin/env bash\n" +
+		"export HERMES_HOME=\"${HERMES_HOME:-$HOME/.hermes/profiles/opencode}\"\n" +
+		"HERMES_BIN=\"${HERMES_CLI_BIN:-$HOME/.hermes/hermes-agent/venv/bin/hermes}\"\n" +
+		"exec \"$HERMES_BIN\" -p opencode \"$@\"\n"
+	if err := os.WriteFile(shim, []byte(shimBody), 0o755); err != nil {
+		t.Fatalf("write hermes shim: %v", err)
+	}
+	realCLI := filepath.Join(opencodeBinDir, "opencode")
+	writeExecutable(t, realCLI)
+
+	resolver := Resolver{
+		Environ: func() []string {
+			return []string{"PATH=" + localBin}
+		},
+		HomeDir: func() (string, error) {
+			return home, nil
+		},
+		LookPath: func(string) (string, error) {
+			return shim, nil
+		},
+	}
+
+	if got := resolver.ResolveBinary([]string{"opencode"}, nil); got != realCLI {
+		t.Fatalf("ResolveBinary() = %q, want real OpenCode CLI %q (skip hermes shim)", got, realCLI)
+	}
+}
+
+func TestResolverRejectsLoneHermesWorkerShim(t *testing.T) {
+	home := t.TempDir()
+	localBin := filepath.Join(home, ".local", "bin")
+	if err := os.MkdirAll(localBin, 0o755); err != nil {
+		t.Fatalf("mkdir local bin: %v", err)
+	}
+	shim := filepath.Join(localBin, "opencode")
+	shimBody := "#!/usr/bin/env bash\n" +
+		"export HERMES_HOME=\"${HERMES_HOME:-$HOME/.hermes/profiles/opencode}\"\n" +
+		"HERMES_BIN=\"${HERMES_CLI_BIN:-$HOME/.hermes/hermes-agent/venv/bin/hermes}\"\n" +
+		"exec \"$HERMES_BIN\" -p opencode \"$@\"\n"
+	if err := os.WriteFile(shim, []byte(shimBody), 0o755); err != nil {
+		t.Fatalf("write hermes shim: %v", err)
+	}
+
+	resolver := Resolver{
+		Environ: func() []string {
+			return []string{"PATH=" + localBin}
+		},
+		HomeDir: func() (string, error) {
+			return home, nil
+		},
+		LookPath: func(string) (string, error) {
+			return shim, nil
+		},
+	}
+
+	if got := resolver.ResolveBinary([]string{"opencode"}, nil); got != "" {
+		t.Fatalf("ResolveBinary() = %q, want empty when only a Hermes shim exists", got)
+	}
+}
+
 func TestResolverFindsFnmNodeBin(t *testing.T) {
 	home := t.TempDir()
 	fnmDir := filepath.Join(home, "custom-fnm")

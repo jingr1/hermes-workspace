@@ -103,6 +103,12 @@ func (r Resolver) ResolveAllNames(commandNames []string, env []string) []string 
 				if !r.isExecutableFile(candidate) {
 					continue
 				}
+				if isHermesWorkerWrapper(candidate) {
+					// Agorax sync used to write Hermes shims named after managed
+					// CLIs (e.g. ~/.local/bin/opencode). Skip them so provider
+					// resolve finds the real OpenCode/Cursor binary instead.
+					continue
+				}
 				key := executablePathKey(candidate)
 				if _, ok := seen[key]; ok {
 					continue
@@ -123,10 +129,10 @@ func (r Resolver) ResolveBinary(binaryNames []string, overrides []string) string
 			continue
 		}
 		path := r.Resolve(binaryName, env)
-		if path != binaryName {
+		if path != binaryName && !isHermesWorkerWrapper(path) {
 			return path
 		}
-		if path := r.lookPath(binaryName); path != "" {
+		if path := r.lookPath(binaryName); path != "" && !isHermesWorkerWrapper(path) {
 			return path
 		}
 	}
@@ -196,6 +202,10 @@ func (r Resolver) fallbackExecutableDirs() []string {
 		homeDirs = []string{
 			filepath.Join(home, ".tutti", "bin"),
 			filepath.Join(home, ".opencode", "bin"),
+			// Official kimi-code installer defaults to $HOME/.kimi-code/bin and
+			// only mutates shell rc files — the daemon process never re-reads
+			// those, so resolve must know the install dir directly.
+			filepath.Join(home, ".kimi-code", "bin"),
 		}
 		homeDirs = append(homeDirs, UserManagedNPMExecutableDirs(home)...)
 		homeDirs = append(homeDirs,
@@ -337,7 +347,37 @@ func pathDirKey(dir string) string {
 }
 
 func executablePathKey(path string) string {
-	return pathDirKey(path)
+	if runtime.GOOS == "windows" {
+		return strings.ToLower(filepath.Clean(path))
+	}
+	return filepath.Clean(path)
+}
+
+// isHermesWorkerWrapper reports whether path is an Agorax-generated Hermes
+// worker shim (scripts/sync-swarm-profiles.mjs). Those shims must not be
+// treated as managed provider CLIs when they share a name (opencode, cursor).
+func isHermesWorkerWrapper(path string) bool {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return false
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.IsDir() || info.Size() == 0 || info.Size() > 8192 {
+		return false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	text := string(data)
+	if !strings.Contains(text, "HERMES_HOME=") {
+		return false
+	}
+	if !strings.Contains(text, "HERMES_BIN=") && !strings.Contains(text, "hermes-agent/venv/bin/hermes") {
+		return false
+	}
+	return strings.Contains(text, " -p ") &&
+		(strings.Contains(text, `exec "$HERMES_BIN"`) || strings.Contains(text, "exec $HERMES_BIN"))
 }
 
 func pathEnvKey(env []string) string {

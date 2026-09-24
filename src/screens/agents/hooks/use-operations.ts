@@ -38,6 +38,8 @@ export type GatewayConfigAgent = {
   systemPrompt?: string
   skillCount?: number
   mcpCount?: number
+  role?: string
+  specialty?: string
   command?: string
   args?: Array<string>
 }
@@ -318,6 +320,8 @@ function normalizeAgentList(input: unknown): GatewayConfigAgent[] {
       skillCount:
         typeof row.skillCount === 'number' ? row.skillCount : undefined,
       mcpCount: typeof row.mcpCount === 'number' ? row.mcpCount : undefined,
+      role: readString(row.role) || undefined,
+      specialty: readString(row.specialty) || undefined,
       command: readString(row.command) || undefined,
       args: Array.isArray(row.args)
         ? row.args.filter((v): v is string => typeof v === 'string')
@@ -352,6 +356,8 @@ async function fetchOperationsConfig(): Promise<
       agentId: string
       name?: string
       runtime?: string
+      role?: string
+      specialty?: string
       runtimeConfig?: {
         profile?: string
         command?: string
@@ -391,6 +397,8 @@ async function fetchOperationsConfig(): Promise<
       systemPrompt: '',
       skillCount: 0,
       mcpCount: 0,
+      role: a.role,
+      specialty: a.specialty,
       command: a.runtimeConfig?.command,
       args: a.runtimeConfig?.args,
     }))
@@ -1197,6 +1205,10 @@ export function useOperations() {
       emoji: string
       systemPrompt: string
       description?: string
+      role?: string
+      specialty?: string
+      command?: string
+      args?: string
     }) => {
       const agent = (
         normalizeAgentList(
@@ -1218,6 +1230,36 @@ export function useOperations() {
         if (input.name.trim()) patch.display_name = input.name.trim()
         if (Object.keys(patch).length > 0) {
           await updateClaudeProfile(input.agentId, patch)
+        }
+      }
+      // Registry fields (role / specialty / command / args / display name) live in
+      // agents.yaml via /api/agent-registry. default is system-managed.
+      if (input.agentId !== 'default') {
+        const registryPatch: Record<string, unknown> = {
+          name: input.name.trim() || input.agentId,
+          role: input.role?.trim() || 'Worker',
+          specialty: input.specialty?.trim() || '',
+        }
+        if (!isHermes) {
+          registryPatch.command = input.command?.trim() || undefined
+          registryPatch.args = input.args?.trim() || ''
+        }
+        const response = await fetch('/api/agent-registry', {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            agentId: input.agentId,
+            patch: registryPatch,
+          }),
+        })
+        const payload = (await response.json().catch(() => ({}))) as {
+          ok?: boolean
+          error?: string
+        }
+        if (!response.ok || payload.ok === false) {
+          throw new Error(
+            payload.error || `Failed to update registry (${response.status})`,
+          )
         }
       }
       const currentMeta = loadAgentMeta(input.agentId)

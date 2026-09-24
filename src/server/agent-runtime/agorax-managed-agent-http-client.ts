@@ -157,8 +157,13 @@ export class AgoraxManagedAgentHttpClient {
   }
 
   /** GET /v1/provider-status — the daemon's provider runtime aggregate. */
-  async getProviderStatus(): Promise<AgentProviderStatusListDto> {
-    return this.requestJson<AgentProviderStatusListDto>('/v1/provider-status', {
+  async getProviderStatus(options?: {
+    refresh?: boolean
+  }): Promise<AgentProviderStatusListDto> {
+    const path = options?.refresh
+      ? '/v1/provider-status?refresh=1'
+      : '/v1/provider-status'
+    return this.requestJson<AgentProviderStatusListDto>(path, {
       method: 'GET',
     })
   }

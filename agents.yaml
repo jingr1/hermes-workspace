@@ -468,7 +468,7 @@ agents:
     execution: local
     dispatchable: true
     enabled: true
-  - id: kimi
+  - id: kimi-impl
     name: kimi
     role: Worker
     specialty: ""
@@ -491,7 +491,7 @@ agents:
     execution: local
     dispatchable: true
     enabled: true
-  - id: cursor
+  - id: cursor-impl
     name: Cursor
     role: Worker
     specialty: ""
@@ -516,7 +516,7 @@ agents:
     displayName: Cursor
     dispatchable: true
     enabled: true
-  - id: opencode
+  - id: opencode-impl
     name: OpenCode
     role: Worker
     specialty: ""

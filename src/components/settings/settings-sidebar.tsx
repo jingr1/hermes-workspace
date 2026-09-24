@@ -4,7 +4,6 @@ import { cn } from '@/lib/utils'
 export type SettingsNavId =
   | 'connection'
   | 'profile'
-  | 'agents'
   | 'runtimes'
   | 'claude'
   | 'claude-code'
@@ -22,10 +21,9 @@ export type SettingsNavId =
 type NavItem = { id: SettingsNavId; label: string }
 
 export const SETTINGS_NAV_ITEMS: Array<NavItem> = [
+  { id: 'runtimes', label: 'Runtimes' },
   { id: 'connection', label: 'Connection' },
   { id: 'profile', label: 'Profile' },
-  { id: 'agents', label: 'Agents' },
-  { id: 'runtimes', label: 'Runtimes' },
   { id: 'claude', label: 'Model & Provider' },
   { id: 'claude-code', label: 'Claude Code' },
   { id: 'codex', label: 'Codex' },

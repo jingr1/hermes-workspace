@@ -50,6 +50,7 @@ import { SystemMetricsFooter } from '@/components/system-metrics-footer'
 import { CommandPalette } from '@/components/command-palette'
 import { useSettings } from '@/hooks/use-settings'
 import { TerminalWorkspaceLazy } from '@/lib/terminal-workspace-lazy'
+import { useTerminalPanelStore } from '@/stores/terminal-panel-store'
 // ActivityTicker moved to dashboard-only (too noisy for global header)
 
 export const DESKTOP_SIDEBAR_EXPANDED_WIDTH_PX = 200
@@ -226,6 +227,9 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
     function mountFullscreenTerminalOnFirstVisit() {
       if (isOnTerminalRoute) {
         setTerminalMounted(true)
+        // Fullscreen terminal and chat bottom panel must not both host a
+        // TerminalWorkspace — they share tab/session state and race PTY attach.
+        useTerminalPanelStore.getState().setPanelOpen(false)
       }
     },
     [isOnTerminalRoute],

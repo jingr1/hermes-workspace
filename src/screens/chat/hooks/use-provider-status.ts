@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { toast } from '@/components/ui/toast'
 import { sanitizeHttpErrorText } from '@/lib/http-error'
@@ -12,6 +12,28 @@ import type {
 import { useTerminalPanelStore } from '@/stores/terminal-panel-store'
 
 export { AGENT_PROVIDER_STATUS_QUERY_KEY }
+
+/**
+ * Quote one argv token for `bash -lc`. Single-quote form so spaces/meta stay literal.
+ */
+function shellQuote(arg: string): string {
+  return `'${arg.replace(/'/g, `'\\''`)}'`
+}
+
+/**
+ * Run a oneshot login CLI inside a login shell that stays open afterwards.
+ * Without this, the PTY exits immediately (many auth CLIs only open a browser),
+ * the client auto-reconnects a fresh shell, and clearTerminalBuffer wipes the
+ * login output — UI looks like Terminal "flashed then vanished".
+ */
+export function wrapLoginKeepaliveCommand(argv: Array<string>): Array<string> {
+  const quoted = argv.map(shellQuote).join(' ')
+  return [
+    'bash',
+    '-lc',
+    `${quoted}; ec=$?; echo; printf '\\n[login finished — exit %s; shell stays open]\\n' "$ec"; exec bash -l`,
+  ]
+}
 
 async function readErrorMessage(
   response: Response,
@@ -30,8 +52,13 @@ async function readErrorMessage(
   return sanitizeHttpErrorText(text, fallback)
 }
 
-async function fetchProviderStatus(): Promise<AgentProviderStatusListDto> {
-  const response = await fetch('/api/agent-runtime/status')
+async function fetchProviderStatus(options?: {
+  refresh?: boolean
+}): Promise<AgentProviderStatusListDto> {
+  const url = options?.refresh
+    ? '/api/agent-runtime/status?refresh=1'
+    : '/api/agent-runtime/status'
+  const response = await fetch(url)
   if (!response.ok) {
     throw new Error(
       await readErrorMessage(
@@ -114,6 +141,29 @@ async function loginProvider(input: {
   return (await response.json()) as AgentProviderLoginResultDto
 }
 
+async function restartManagedAgentDaemon(): Promise<{
+  ok: boolean
+  healthy: boolean
+  detail?: string
+}> {
+  const response = await fetch('/api/agent-runtime/daemon/restart', {
+    method: 'POST',
+  })
+  if (!response.ok) {
+    throw new Error(
+      await readErrorMessage(
+        response,
+        `Failed to restart Managed Agent daemon (${response.status})`,
+      ),
+    )
+  }
+  return (await response.json()) as {
+    ok: boolean
+    healthy: boolean
+    detail?: string
+  }
+}
+
 type UseAgentProviderStatusOptions = {
   /** Disable periodic polling when the user turns off auto-check. */
   refetchInterval?: number | false
@@ -146,6 +196,35 @@ export function useAgentProviderStatus(
       // No daily git-fetch poll here — install/login progress only.
       // Product updates: UpdateCenterNotifier + Runtimes「检查更新」.
       return false
+    },
+  })
+}
+
+/**
+ * Full re-detect: bypasses daemon readiness cache + react-query staleTime so
+ * Runtimes「重新检测」re-resolves CLIs (install/auth/version) from disk.
+ */
+export async function redetectAgentProviderStatus(
+  queryClient: QueryClient,
+): Promise<AgentProviderStatusListDto> {
+  const data = await fetchProviderStatus({ refresh: true })
+  queryClient.setQueryData(AGENT_PROVIDER_STATUS_QUERY_KEY, data)
+  return data
+}
+
+/** Force-restart the local Agorax managed-agent daemon and refresh status. */
+export function useRestartManagedAgentDaemon() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: restartManagedAgentDaemon,
+    onSuccess: async () => {
+      toast('Agorax daemon 已重启')
+      await redetectAgentProviderStatus(queryClient)
+    },
+    onError: (error) => {
+      toast(
+        error instanceof Error ? error.message : 'Agorax daemon 重启失败',
+      )
     },
   })
 }
@@ -227,9 +306,15 @@ export function useLoginAgentProvider() {
           ? result.command
           : null
       if (argv) {
-        useTerminalPanelStore.getState().createTab('~', {
+        const store = useTerminalPanelStore.getState()
+        // Fullscreen `/terminal` owns the login PTY. Do not open the chat
+        // bottom panel — that mounts a second TerminalWorkspace which races
+        // for pendingCommand, then clears the buffer on oneshot exit.
+        store.setPanelOpen(false)
+        store.createTab('~', {
           title: `${input.provider} 登录`,
-          command: argv,
+          command: wrapLoginKeepaliveCommand(argv),
+          openPanel: false,
         })
         void navigate({ to: '/terminal' })
         toast(`已在 Agorax 终端打开 ${input.provider} 登录，请在终端内完成授权`, {

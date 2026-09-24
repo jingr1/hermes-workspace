@@ -224,11 +224,19 @@ function IdentityTab({
   description,
   systemPrompt,
   runtime,
+  role,
+  specialty,
+  command,
+  args,
   isActiveProfile,
   onName,
   onEmoji,
   onDescription,
   onSystemPrompt,
+  onRole,
+  onSpecialty,
+  onCommand,
+  onArgs,
   onActivate,
   isActivating,
   onRename,
@@ -240,11 +248,19 @@ function IdentityTab({
   description: string
   systemPrompt: string
   runtime: string
+  role: string
+  specialty: string
+  command: string
+  args: string
   isActiveProfile: boolean
   onName: (v: string) => void
   onEmoji: (v: string) => void
   onDescription: (v: string) => void
   onSystemPrompt: (v: string) => void
+  onRole: (v: string) => void
+  onSpecialty: (v: string) => void
+  onCommand: (v: string) => void
+  onArgs: (v: string) => void
   onActivate: () => void
   isActivating: boolean
   onRename: (newName: string) => void
@@ -253,6 +269,7 @@ function IdentityTab({
   const [renameOpen, setRenameOpen] = useState(false)
   const [renameValue, setRenameValue] = useState(agentId)
   const isHermes = runtime === 'hermes'
+  const isDefault = agentId === 'default'
 
   useEffect(() => {
     setRenameValue(agentId)
@@ -276,7 +293,7 @@ function IdentityTab({
               variant="secondary"
               className="border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
               onClick={onActivate}
-              disabled={isActivating || agentId === 'default'}
+              disabled={isActivating || isDefault}
             >
               {isActivating ? 'Activating…' : 'Activate profile'}
             </Button>
@@ -288,7 +305,7 @@ function IdentityTab({
             variant="secondary"
             className="border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
             onClick={() => setRenameOpen((v) => !v)}
-            disabled={isRenaming || agentId === 'default'}
+            disabled={isRenaming || isDefault}
           >
             Rename profile
           </Button>
@@ -322,7 +339,8 @@ function IdentityTab({
           <input
             value={name}
             onChange={(event) => onName(event.target.value)}
-            className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)]"
+            disabled={isDefault}
+            className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)] disabled:opacity-60"
           />
         </label>
         <label className="space-y-2">
@@ -336,6 +354,61 @@ function IdentityTab({
           />
         </label>
       </div>
+
+      {!isDefault ? (
+        <div className="grid gap-4 md:grid-cols-2">
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-[var(--theme-text)]">
+              Role
+            </span>
+            <input
+              value={role}
+              onChange={(event) => onRole(event.target.value)}
+              placeholder="Worker"
+              className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+            />
+          </label>
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-[var(--theme-text)]">
+              Specialty
+            </span>
+            <input
+              value={specialty}
+              onChange={(event) => onSpecialty(event.target.value)}
+              placeholder="Code review"
+              className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+            />
+          </label>
+        </div>
+      ) : null}
+
+      {!isHermes ? (
+        <div className="grid gap-4 md:grid-cols-2">
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-[var(--theme-text)]">
+              Command
+            </span>
+            <input
+              value={command}
+              onChange={(event) => onCommand(event.target.value)}
+              placeholder={agentRuntimeLabel(runtime)}
+              className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+            />
+          </label>
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-[var(--theme-text)]">
+              Arguments
+            </span>
+            <input
+              value={args}
+              onChange={(event) => onArgs(event.target.value)}
+              placeholder="Optional"
+              className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+            />
+          </label>
+        </div>
+      ) : null}
+
       <label className="block space-y-2">
         <span className="text-sm font-medium text-[var(--theme-text)]">
           Description
@@ -1189,6 +1262,10 @@ export function OperationsAgentDetail({
     emoji: string
     systemPrompt: string
     description?: string
+    role?: string
+    specialty?: string
+    command?: string
+    args?: string
   }) => Promise<unknown>
   onDelete: (agentId: string) => Promise<unknown>
   onActivate: (agentId: string) => Promise<unknown>
@@ -1227,6 +1304,10 @@ export function OperationsAgentDetail({
   const [model, setModel] = useState('')
   const [systemPrompt, setSystemPrompt] = useState('')
   const [description, setDescription] = useState('')
+  const [role, setRole] = useState('Worker')
+  const [specialty, setSpecialty] = useState('')
+  const [command, setCommand] = useState('')
+  const [args, setArgs] = useState('')
 
   // Reset form fields + active tab ONLY when the agent ID changes or panel opens.
   // We intentionally depend on agent?.id (a string) rather than the agent object
@@ -1240,6 +1321,10 @@ export function OperationsAgentDetail({
     setModel(agent.model || '')
     setSystemPrompt(agent.meta.systemPrompt)
     setDescription(agent.meta.description || agent.description || '')
+    setRole(agent.role || 'Worker')
+    setSpecialty(agent.specialty || '')
+    setCommand(agent.command || '')
+    setArgs(agent.args?.join(' ') || '')
     setActiveTab('identity')
   }, [agent?.id, open])
 
@@ -1278,6 +1363,10 @@ export function OperationsAgentDetail({
       emoji,
       systemPrompt,
       description,
+      role,
+      specialty,
+      command,
+      args,
     })
   }
 
@@ -1354,11 +1443,19 @@ export function OperationsAgentDetail({
               description={description}
               systemPrompt={systemPrompt}
               runtime={agent.runtime || 'hermes'}
+              role={role}
+              specialty={specialty}
+              command={command}
+              args={args}
               isActiveProfile={agent.isActiveProfile}
               onName={setName}
               onEmoji={setEmoji}
               onDescription={setDescription}
               onSystemPrompt={setSystemPrompt}
+              onRole={setRole}
+              onSpecialty={setSpecialty}
+              onCommand={setCommand}
+              onArgs={setArgs}
               onActivate={() => void onActivate(agent.id)}
               isActivating={isActivating}
               onRename={(newName) =>

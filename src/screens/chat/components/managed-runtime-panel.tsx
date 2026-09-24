@@ -39,8 +39,8 @@ export function ManagedRuntimePanel({
       <Button
         onClick={() =>
           void navigate({
-            to: '/settings/agents/$agentId',
-            params: { agentId: agent.agentId },
+            to: '/agents',
+            search: { agent: agent.agentId },
           })
         }
       >

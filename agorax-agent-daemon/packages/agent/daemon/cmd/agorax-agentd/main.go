@@ -129,6 +129,13 @@ func routes(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.DB, stor
 		}
 		return registered
 	})
+	ops.attachTargetStore(store)
+	if err := ops.hydrateEnabledFromStore(context.Background()); err != nil {
+		fmt.Fprintf(os.Stderr, "agorax-agentd: load provider enable preferences: %v\n", err)
+	}
+	if runtime != nil && runtime.Controller() != nil {
+		ops.applyEnabledPreferencesToRuntime(runtime.Controller().SetProviderEnabled)
+	}
 	return routesWithOps(runtime, host, db, store, hub, ops)
 }
 
@@ -188,7 +195,10 @@ func routesWithOps(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.D
 			writeJSON(response, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
-		ops.setUserEnabledPreference(descriptor.Identity.ID, body.Enabled)
+		if err := ops.setUserEnabledPreference(descriptor.Identity.ID, body.Enabled); err != nil {
+			writeJSON(response, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
 		if runtime != nil && runtime.Controller() != nil {
 			for _, key := range providerEnableAliases(descriptor) {
 				runtime.Controller().SetProviderEnabled(key, body.Enabled)

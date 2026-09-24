@@ -241,6 +241,7 @@ import { Route as ApiAgentsAgentIdMcpRouteImport } from './routes/api/agents/$ag
 import { Route as ApiAgentsAgentIdLocalSkillsRouteImport } from './routes/api/agents/$agentId/local-skills'
 import { Route as ApiAgentsAgentIdChatRouteImport } from './routes/api/agents/$agentId/chat'
 import { Route as ApiAgentsAgentIdCapabilitiesRouteImport } from './routes/api/agents/$agentId/capabilities'
+import { Route as ApiAgentRuntimeDaemonRestartRouteImport } from './routes/api/agent-runtime/daemon.restart'
 import { Route as ApiRunsSessionKeyRunIdAbandonRouteImport } from './routes/api/runs/$sessionKey.$runId.abandon'
 import { Route as ApiRoomsRoomIdParticipantsParticipantIdRouteImport } from './routes/api/rooms/$roomId/participants/$participantId'
 import { Route as ApiAgentsAgentIdSkillsComposerRouteImport } from './routes/api/agents/$agentId/skills/composer'
@@ -1452,6 +1453,12 @@ const ApiAgentsAgentIdCapabilitiesRoute =
     path: '/api/agents/$agentId/capabilities',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiAgentRuntimeDaemonRestartRoute =
+  ApiAgentRuntimeDaemonRestartRouteImport.update({
+    id: '/api/agent-runtime/daemon/restart',
+    path: '/api/agent-runtime/daemon/restart',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiRunsSessionKeyRunIdAbandonRoute =
   ApiRunsSessionKeyRunIdAbandonRouteImport.update({
     id: '/api/runs/$sessionKey/$runId/abandon',
@@ -1822,6 +1829,7 @@ export interface FileRoutesByFullPath {
   '/api/agents/': typeof ApiAgentsIndexRoute
   '/api/missions/': typeof ApiMissionsIndexRoute
   '/api/tasks/': typeof ApiTasksIndexRoute
+  '/api/agent-runtime/daemon/restart': typeof ApiAgentRuntimeDaemonRestartRoute
   '/api/agents/$agentId/capabilities': typeof ApiAgentsAgentIdCapabilitiesRoute
   '/api/agents/$agentId/chat': typeof ApiAgentsAgentIdChatRoute
   '/api/agents/$agentId/local-skills': typeof ApiAgentsAgentIdLocalSkillsRoute
@@ -2079,6 +2087,7 @@ export interface FileRoutesByTo {
   '/api/agents': typeof ApiAgentsIndexRoute
   '/api/missions': typeof ApiMissionsIndexRoute
   '/api/tasks': typeof ApiTasksIndexRoute
+  '/api/agent-runtime/daemon/restart': typeof ApiAgentRuntimeDaemonRestartRoute
   '/api/agents/$agentId/capabilities': typeof ApiAgentsAgentIdCapabilitiesRoute
   '/api/agents/$agentId/chat': typeof ApiAgentsAgentIdChatRoute
   '/api/agents/$agentId/local-skills': typeof ApiAgentsAgentIdLocalSkillsRoute
@@ -2340,6 +2349,7 @@ export interface FileRoutesById {
   '/api/agents/': typeof ApiAgentsIndexRoute
   '/api/missions/': typeof ApiMissionsIndexRoute
   '/api/tasks/': typeof ApiTasksIndexRoute
+  '/api/agent-runtime/daemon/restart': typeof ApiAgentRuntimeDaemonRestartRoute
   '/api/agents/$agentId/capabilities': typeof ApiAgentsAgentIdCapabilitiesRoute
   '/api/agents/$agentId/chat': typeof ApiAgentsAgentIdChatRoute
   '/api/agents/$agentId/local-skills': typeof ApiAgentsAgentIdLocalSkillsRoute
@@ -2602,6 +2612,7 @@ export interface FileRouteTypes {
     | '/api/agents/'
     | '/api/missions/'
     | '/api/tasks/'
+    | '/api/agent-runtime/daemon/restart'
     | '/api/agents/$agentId/capabilities'
     | '/api/agents/$agentId/chat'
     | '/api/agents/$agentId/local-skills'
@@ -2859,6 +2870,7 @@ export interface FileRouteTypes {
     | '/api/agents'
     | '/api/missions'
     | '/api/tasks'
+    | '/api/agent-runtime/daemon/restart'
     | '/api/agents/$agentId/capabilities'
     | '/api/agents/$agentId/chat'
     | '/api/agents/$agentId/local-skills'
@@ -3119,6 +3131,7 @@ export interface FileRouteTypes {
     | '/api/agents/'
     | '/api/missions/'
     | '/api/tasks/'
+    | '/api/agent-runtime/daemon/restart'
     | '/api/agents/$agentId/capabilities'
     | '/api/agents/$agentId/chat'
     | '/api/agents/$agentId/local-skills'
@@ -3341,6 +3354,7 @@ export interface RootRouteChildren {
   ApiAgentsIndexRoute: typeof ApiAgentsIndexRoute
   ApiMissionsIndexRoute: typeof ApiMissionsIndexRoute
   ApiTasksIndexRoute: typeof ApiTasksIndexRoute
+  ApiAgentRuntimeDaemonRestartRoute: typeof ApiAgentRuntimeDaemonRestartRoute
   ApiAgentsAgentIdCapabilitiesRoute: typeof ApiAgentsAgentIdCapabilitiesRoute
   ApiAgentsAgentIdChatRoute: typeof ApiAgentsAgentIdChatRoute
   ApiAgentsAgentIdLocalSkillsRoute: typeof ApiAgentsAgentIdLocalSkillsRoute
@@ -4988,6 +5002,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentsAgentIdCapabilitiesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/agent-runtime/daemon/restart': {
+      id: '/api/agent-runtime/daemon/restart'
+      path: '/api/agent-runtime/daemon/restart'
+      fullPath: '/api/agent-runtime/daemon/restart'
+      preLoaderRoute: typeof ApiAgentRuntimeDaemonRestartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/runs/$sessionKey/$runId/abandon': {
       id: '/api/runs/$sessionKey/$runId/abandon'
       path: '/api/runs/$sessionKey/$runId/abandon'
@@ -5795,6 +5816,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentsIndexRoute: ApiAgentsIndexRoute,
   ApiMissionsIndexRoute: ApiMissionsIndexRoute,
   ApiTasksIndexRoute: ApiTasksIndexRoute,
+  ApiAgentRuntimeDaemonRestartRoute: ApiAgentRuntimeDaemonRestartRoute,
   ApiAgentsAgentIdCapabilitiesRoute: ApiAgentsAgentIdCapabilitiesRoute,
   ApiAgentsAgentIdChatRoute: ApiAgentsAgentIdChatRoute,
   ApiAgentsAgentIdLocalSkillsRoute: ApiAgentsAgentIdLocalSkillsRoute,

@@ -2,18 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { HugeiconsIcon } from '@hugeicons/react'
-import {
-  ArrowUp01Icon,
-  Download01Icon,
-  RefreshIcon,
-  Settings02Icon,
-} from '@hugeicons/core-free-icons'
+import { RefreshIcon, Settings02Icon } from '@hugeicons/core-free-icons'
 import { AgentIdentityAvatar } from '@/components/avatars'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import {
-  canDaemonInstallProvider,
   providerStatusBadge,
   type AgentProviderId,
   type AgentProviderStatusDto,
@@ -23,9 +17,11 @@ import {
   resolveAgentProviderUpdateRowPresentation,
 } from '@/lib/managed-agent-runtime/update-summary'
 import {
+  redetectAgentProviderStatus,
   useAgentProviderStatus,
   useInstallAgentProvider,
   useLoginAgentProvider,
+  useRestartManagedAgentDaemon,
   useSetAgentProviderEnabled,
 } from '@/screens/chat/hooks/use-provider-status'
 import { refreshProductUpdateStatus } from '@/lib/managed-agent-runtime/product-update-check'
@@ -35,8 +31,6 @@ import {
 } from '@/lib/managed-agent-runtime/update-check-preference'
 import { useQueryClient } from '@tanstack/react-query'
 import { AgentRuntimeEnvDialog } from './agent-runtime-env-dialog'
-import { writeTextToClipboard } from '@/lib/clipboard'
-import { toast } from '@/components/ui/toast'
 
 const PROVIDER_LABELS: Record<string, string> = {
   hermes: 'Hermes Agent',
@@ -64,10 +58,20 @@ function runtimeDisplayRank(providerId: string): number {
   return index >= 0 ? index : RUNTIME_DISPLAY_ORDER.length
 }
 
+function isManagedDaemonOffline(entry: AgentProviderStatusDto): boolean {
+  return (
+    entry.error === 'managed_agent_daemon_unreachable' ||
+    entry.update.unsupportedReason === 'managed_agent_daemon_unreachable'
+  )
+}
+
 function readinessStatus(entry: AgentProviderStatusDto): {
   label: string
   dotClass: string
 } {
+  if (isManagedDaemonOffline(entry)) {
+    return { label: '服务不可用', dotClass: 'bg-amber-500' }
+  }
   if (!entry.installed) {
     return { label: '未安装', dotClass: 'bg-primary-400 dark:bg-primary-500' }
   }
@@ -85,40 +89,10 @@ function readinessStatus(entry: AgentProviderStatusDto): {
   }
 }
 
-function CopyCommandButton({ command }: { command: string }) {
-  const [copied, setCopied] = useState(false)
-  return (
-    <Button
-      type="button"
-      size="sm"
-      variant="outline"
-      onClick={async () => {
-        const value = command.trim()
-        if (!value) {
-          toast('没有可复制的命令', { type: 'warning' })
-          return
-        }
-        try {
-          await writeTextToClipboard(value)
-          setCopied(true)
-          toast('已复制到剪贴板', { type: 'success', duration: 2000 })
-          setTimeout(() => setCopied(false), 1500)
-        } catch {
-          toast('复制失败，请手动选择命令', { type: 'error' })
-        }
-      }}
-      className="h-7 px-2.5 text-[11px]"
-    >
-      {copied ? '已复制' : '复制命令'}
-    </Button>
-  )
-}
-
 function RuntimeRow({
   entry,
   highlighted,
   isInstalling,
-  onInstall,
   onSetEnabled,
   onOpenEnvironment,
   togglingProvider,
@@ -127,7 +101,6 @@ function RuntimeRow({
   highlighted: boolean
   isInstalling: boolean
   togglingProvider: string | null
-  onInstall: (provider: string, version?: string) => void
   onSetEnabled: (provider: string, enabled: boolean) => void
   onOpenEnvironment: (provider: string) => void
 }) {
@@ -138,25 +111,8 @@ function RuntimeRow({
   const { label: statusLabel, dotClass } = readinessStatus(entry)
   const isHermes = providerId === 'hermes'
   const isStub = providerId === 'deepseek-harness'
-  const canInstall =
-    !isStub &&
-    !isInstalling &&
-    badge === 'not-installed' &&
-    canDaemonInstallProvider(entry.install)
-  const canUpgrade =
-    !isStub &&
-    !isInstalling &&
-    badge === 'update-available' &&
-    entry.update.capability === 'supported'
-  const showInstallingButton =
-    isInstalling &&
-    !isStub &&
-    Boolean(
-      canDaemonInstallProvider(entry.install) ||
-        entry.update.capability === 'supported',
-    )
+  const daemonOffline = isManagedDaemonOffline(entry)
   const installingIsUpgrade = entry.installed || badge === 'update-available'
-  const manualCommand = entry.install?.displayCommand
   const isToggling = togglingProvider === providerId
   const showEnableToggle = !isHermes && !isStub && entry.installed
   const canOpenEnvironment = !isStub
@@ -197,7 +153,9 @@ function RuntimeRow({
             <p className="truncate text-xs text-[var(--theme-muted)]">
               {isInstalling
                 ? '安装进行中…'
-                : updateSummary
+                : daemonOffline
+                  ? 'Agorax daemon 未连接'
+                  : updateSummary
                   ? updateSummary
                   : entry.installed
                     ? (entry.version ?? 'Installed')
@@ -207,7 +165,7 @@ function RuntimeRow({
         </div>
       </td>
 
-      {/* Readiness — display only; configure/install live in Actions */}
+      {/* Readiness — display only; install/upgrade live in Configure dialog */}
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
           <span
@@ -249,74 +207,43 @@ function RuntimeRow({
         )}
       </td>
 
-      {/* Actions — install/upgrade/copy + open env wizard */}
+      {/* Actions — open env wizard (install/upgrade live inside the dialog) */}
       <td className="px-4 py-3 text-right">
-        <div className="flex items-center justify-end gap-2">
-          {showInstallingButton ? (
-            <Button
-              size="sm"
-              disabled
-              className="h-7 gap-1 rounded-lg bg-accent-600 px-2.5 text-[11px] text-white opacity-80"
-            >
+        {canOpenEnvironment ? (
+          <Button
+            type="button"
+            size="sm"
+            variant={isInstalling ? 'default' : 'outline'}
+            className={cn(
+              'h-7 gap-1 px-2.5 text-[11px]',
+              isInstalling &&
+                'rounded-lg bg-accent-600 text-white opacity-90 hover:bg-accent-700',
+            )}
+            onClick={() => onOpenEnvironment(providerId)}
+          >
+            {isInstalling ? (
               <HugeiconsIcon
                 icon={RefreshIcon}
                 size={12}
                 strokeWidth={1.5}
                 className="animate-spin"
               />
-              {installingIsUpgrade ? '升级中…' : '安装中…'}
-            </Button>
-          ) : canInstall ? (
-            <Button
-              size="sm"
-              onClick={() => onInstall(providerId)}
-              className="h-7 gap-1 rounded-lg bg-accent-600 px-2.5 text-[11px] text-white hover:bg-accent-700"
-            >
+            ) : (
               <HugeiconsIcon
-                icon={Download01Icon}
+                icon={Settings02Icon}
                 size={12}
                 strokeWidth={1.5}
               />
-              安装
-            </Button>
-          ) : canUpgrade ? (
-            <Button
-              size="sm"
-              onClick={() => onInstall(providerId, 'latest')}
-              className="h-7 gap-1 rounded-lg bg-accent-600 px-2.5 text-[11px] text-white hover:bg-accent-700"
-            >
-              <HugeiconsIcon
-                icon={ArrowUp01Icon}
-                size={12}
-                strokeWidth={1.5}
-              />
-              升级
-            </Button>
-          ) : badge === 'not-installed' && manualCommand ? (
-            <CopyCommandButton command={manualCommand} />
-          ) : badge === 'not-installed' ? (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled
-              className="h-7 px-2.5 text-[11px]"
-            >
-              暂不支持
-            </Button>
-          ) : null}
-          {canOpenEnvironment ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-7 gap-1 px-2.5 text-[11px]"
-              onClick={() => onOpenEnvironment(providerId)}
-            >
-              <HugeiconsIcon icon={Settings02Icon} size={12} strokeWidth={1.5} />
-              配置
-            </Button>
-          ) : null}
-        </div>
+            )}
+            {isInstalling
+              ? installingIsUpgrade
+                ? '升级中…'
+                : '安装中…'
+              : '配置'}
+          </Button>
+        ) : (
+          <span className="text-xs text-[var(--theme-muted)]">—</span>
+        )}
       </td>
     </tr>
   )
@@ -346,6 +273,18 @@ export function AgentRuntimesSection({
   const installMutation = useInstallAgentProvider()
   const loginMutation = useLoginAgentProvider()
   const enableMutation = useSetAgentProviderEnabled()
+  const restartDaemonMutation = useRestartManagedAgentDaemon()
+
+  const daemonOffline = useMemo(
+    () =>
+      (statusQuery.data?.providers ?? []).some(
+        (entry) =>
+          entry.provider !== 'hermes' &&
+          entry.provider !== 'deepseek-harness' &&
+          isManagedDaemonOffline(entry),
+      ) || Boolean(statusQuery.error),
+    [statusQuery.data?.providers, statusQuery.error],
+  )
 
   useEffect(() => {
     setInstallingIds((prev) => {
@@ -411,8 +350,10 @@ export function AgentRuntimesSection({
     loginMutation.mutate({ provider: provider as AgentProviderId })
   }
 
-  const { refetch: refetchStatus } = statusQuery
-  const handleRedetect = useCallback(() => refetchStatus(), [refetchStatus])
+  const handleRedetect = useCallback(
+    () => redetectAgentProviderStatus(queryClient),
+    [queryClient],
+  )
 
   const handleSetEnabled = (provider: string, enabled: boolean) => {
     if (provider === 'hermes' || provider === 'deepseek-harness') return
@@ -421,6 +362,35 @@ export function AgentRuntimesSection({
 
   return (
     <div className="space-y-4">
+      {daemonOffline ? (
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-[var(--theme-text)]">
+              Agorax daemon 未连接
+            </p>
+            <p className="text-xs text-[var(--theme-muted)]">
+              Managed Agent 服务（:8788）不可用时无法安装/登录。可一键重启本地
+              daemon。
+            </p>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            className="h-8 shrink-0 gap-1.5 text-xs"
+            disabled={restartDaemonMutation.isPending}
+            onClick={() => restartDaemonMutation.mutate()}
+          >
+            <HugeiconsIcon
+              icon={RefreshIcon}
+              size={14}
+              strokeWidth={1.5}
+              className={cn(restartDaemonMutation.isPending && 'animate-spin')}
+            />
+            {restartDaemonMutation.isPending ? '重启中…' : '重启 daemon'}
+          </Button>
+        </div>
+      ) : null}
+
       <div className="flex items-center justify-between gap-4 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-4 py-3 shadow-sm">
         <div className="flex items-center gap-3">
           <Switch
@@ -436,7 +406,7 @@ export function AgentRuntimesSection({
               自动检查更新
             </p>
             <p className="text-xs text-[var(--theme-muted)]">
-              与顶部更新检查共用同一通道，约每天一次；点「检查更新」立即拉取
+              每天一次自动检查更新；点「检查更新」立即检查更新。
             </p>
           </div>
         </div>
@@ -498,9 +468,12 @@ export function AgentRuntimesSection({
                     variant="outline"
                     size="sm"
                     className="mt-3"
-                    onClick={() => statusQuery.refetch()}
+                    disabled={restartDaemonMutation.isPending}
+                    onClick={() => restartDaemonMutation.mutate()}
                   >
-                    重试
+                    {restartDaemonMutation.isPending
+                      ? '重启中…'
+                      : '重启 daemon'}
                   </Button>
                 </td>
               </tr>
@@ -530,7 +503,6 @@ export function AgentRuntimesSection({
                       ? enableMutation.variables.provider
                       : null
                   }
-                  onInstall={handleInstall}
                   onSetEnabled={handleSetEnabled}
                   onOpenEnvironment={setEnvProvider}
                 />
@@ -556,6 +528,8 @@ export function AgentRuntimesSection({
         }
         isLoggingIn={
           envProvider != null &&
+          envEntry?.auth.status !== 'authenticated' &&
+          envEntry?.auth.status !== 'configured' &&
           (Boolean(envEntry?.loginInProgress) ||
             (loginMutation.isPending &&
               loginMutation.variables?.provider === envProvider))

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 )
 
@@ -141,6 +142,36 @@ ON CONFLICT(id) DO UPDATE SET
 		return Target{}, fmt.Errorf("put agent target: %w", err)
 	}
 	return s.GetAgentTarget(ctx, normalized.ID)
+}
+
+// SetAgentTargetEnabled updates only the user-controlled enabled flag for an
+// existing target. Returns ErrAgentTargetNotFound when the row is missing so
+// callers can upsert a preference row on first toggle.
+func (s *Store) SetAgentTargetEnabled(ctx context.Context, id string, enabled bool) error {
+	if s == nil || s.db == nil {
+		return errors.New("workspace database is not initialized")
+	}
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return fmt.Errorf("agent target id is required")
+	}
+	now := unixMs(time.Now().UTC())
+	result, err := s.db.ExecContext(ctx, `
+UPDATE agent_targets
+SET enabled = ?, updated_at_ms = ?
+WHERE id = ?
+`, enabled, now, id)
+	if err != nil {
+		return fmt.Errorf("set agent target enabled: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("set agent target enabled rows: %w", err)
+	}
+	if affected == 0 {
+		return ErrAgentTargetNotFound
+	}
+	return nil
 }
 
 func (s *Store) DeleteAgentTarget(ctx context.Context, id string) error {

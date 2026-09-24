@@ -39,6 +39,15 @@ func TestParseAuthStatusOutput(t *testing.T) {
 			output: "└  2 credentials", wantStatus: AuthAuthenticated, wantParsed: true,
 		},
 		{
+			name: "opencode v2 stored rows", parserKind: providerregistry.AuthOutputParserKindOpenCode,
+			output: "GitHub Copilot  GitHub Copilot 2            stored\nGitHub Copilot  GitHub Copilot              stored\n",
+			wantStatus: AuthAuthenticated, wantLabel: "GitHub Copilot GitHub Copilot 2", wantParsed: true,
+		},
+		{
+			name: "opencode v2 empty list", parserKind: providerregistry.AuthOutputParserKindOpenCode,
+			output: "", wantStatus: AuthRequired, wantParsed: true,
+		},
+		{
 			name: "opencode signed out", parserKind: providerregistry.AuthOutputParserKindOpenCode,
 			output: "No providers are authenticated", wantStatus: AuthRequired, wantParsed: true,
 		},

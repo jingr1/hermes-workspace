@@ -61,10 +61,14 @@ func openCodeDescriptor() ProviderDescriptor {
 			},
 			Install: InstallerDescriptor{
 				Kind:            InstallerKindOfficialScript,
-				DisplayCommand:  "curl -fsSL https://opencode.ai/install | bash",
-				PackageName:     "opencode-ai",
+				DisplayCommand:  "curl -fsSL https://opencode.ai/v2/install | bash",
+				// Pin VERSION from @opencode/cli (current scope). The legacy
+				// opencode-ai meta package can publish ahead of platform
+				// tarballs (@opencode-ai/cli-linux-x64), which makes
+				// install.sh fail with "Version X is not available for …".
+				PackageName:     "@opencode/cli",
 				BinaryName:      "opencode",
-				ScriptURL:       "https://opencode.ai/install",
+				ScriptURL:       "https://opencode.ai/v2/install",
 				ScriptShell:     "bash",
 				WindowsFallback: InstallerWindowsFallbackManagedNPM,
 			},
