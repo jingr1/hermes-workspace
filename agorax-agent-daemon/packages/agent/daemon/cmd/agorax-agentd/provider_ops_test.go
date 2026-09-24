@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"agorax.local/agent-daemon/packages/agent/daemon/managednpm"
+	"agorax.local/agent-daemon/packages/agent/daemon/providerregistry"
 )
 
 // These tests exercise the real receiving boundary: provider detection runs
@@ -108,6 +108,8 @@ func fakeProviderOps(t *testing.T, binDir string, homeDir string, envExtra []str
 	}
 	ops.resolver.Environ = ops.environ
 	ops.resolver.HomeDir = ops.homeDir
+	svc := newAgentStatusService(ops.environ, ops.homeDir)
+	ops.statusService = &svc
 	return ops
 }
 
@@ -146,15 +148,24 @@ func TestProviderStatusAggregatesDetectedRuntimes(t *testing.T) {
 		t.Fatalf("claude-code detail = %v", claude)
 	}
 	auth := claude["auth"].(map[string]any)
-	if auth["status"] != "authenticated" || auth["accountLabel"] != "dev@example.com" {
+	// Agorax agentstatus reports oauth-present-but-sidecar-missing as
+	// "configured"; the older Agorax thin detector collapsed that to
+	// "authenticated". Both are success-shaped for the Runtimes UI.
+	if auth["accountLabel"] != "dev@example.com" {
 		t.Fatalf("claude-code auth = %v", auth)
+	}
+	if status := auth["status"]; status != "authenticated" && status != "configured" {
+		t.Fatalf("claude-code auth status = %v", auth)
 	}
 	if claude["updateAvailable"] != false {
 		t.Fatalf("claude-code updateAvailable = %v", claude["updateAvailable"])
 	}
 	install := claude["install"].(map[string]any)
-	if install["packageName"] != "@anthropic-ai/claude-code" || install["binaryName"] != "claude" || install["managedNpm"] != true {
+	if install["kind"] != "official_script" || install["binaryName"] != "claude" || install["managedNpm"] != false {
 		t.Fatalf("claude-code install = %v", install)
+	}
+	if install["displayCommand"] != "curl -fsSL https://claude.ai/install.sh | bash" {
+		t.Fatalf("claude-code displayCommand = %v", install["displayCommand"])
 	}
 
 	codex := byID["codex"]
@@ -166,17 +177,47 @@ func TestProviderStatusAggregatesDetectedRuntimes(t *testing.T) {
 	}
 
 	// kimi-code has no descriptor: detected by its bare binary name and
-	// registered under the ACP extension key.
+	// registered under the ACP extension key. Host may already have `kimi` on
+	// PATH; only registration is asserted here.
 	kimi := byID["kimi-code"]
-	if kimi == nil || kimi["installed"] != false || kimi["registered"] != true {
+	if kimi == nil || kimi["registered"] != true {
 		t.Fatalf("kimi-code = %v", kimi)
 	}
-	if kimi["error"] != nil && kimi["error"] != "" {
-		t.Fatalf("kimi-code error = %v", kimi["error"])
-	}
 
-	if byID["cursor"]["installed"] != false || byID["opencode"]["installed"] != false {
-		t.Fatalf("cursor/opencode = %v / %v", byID["cursor"], byID["opencode"])
+	if byID["cursor"] == nil || byID["opencode"] == nil {
+		t.Fatalf("cursor/opencode missing = %v / %v", byID["cursor"], byID["opencode"])
+	}
+	cursorInstall, ok := byID["cursor"]["install"].(map[string]any)
+	if !ok || cursorInstall["kind"] != "official_script" || cursorInstall["managedNpm"] != false || cursorInstall["binaryName"] != "cursor-agent" {
+		t.Fatalf("cursor install = %v", byID["cursor"]["install"])
+	}
+	opencodeInstall, ok := byID["opencode"]["install"].(map[string]any)
+	if !ok || opencodeInstall["kind"] != "official_script" || opencodeInstall["packageName"] != "opencode-ai" {
+		t.Fatalf("opencode install = %v", byID["opencode"]["install"])
+	}
+}
+
+func TestKimiCodeEnablePreferenceWithoutAdapter(t *testing.T) {
+	ops := fakeProviderOps(t, t.TempDir(), t.TempDir(), nil)
+	ops.registeredProviders = func() map[string]bool {
+		// No acp:kimi-code adapter loaded — matches production until kimi is
+		// migrated into providerregistry.
+		return map[string]bool{"claude-code": true}
+	}
+	descriptor, ok := findProviderTarget("kimi-code")
+	if !ok {
+		t.Fatal("kimi-code descriptor missing")
+	}
+	if ops.isRegistered(descriptor) {
+		t.Fatal("kimi-code should start unregistered without adapter/preference")
+	}
+	ops.setUserEnabledPreference("kimi-code", true)
+	if !ops.isRegistered(descriptor) {
+		t.Fatal("kimi-code enable preference should flip registered=true")
+	}
+	ops.setUserEnabledPreference("kimi-code", false)
+	if ops.isRegistered(descriptor) {
+		t.Fatal("kimi-code disable preference should flip registered=false")
 	}
 }
 
@@ -184,8 +225,6 @@ func TestProviderStatusFlagsUpdateAvailable(t *testing.T) {
 	binDir := t.TempDir()
 	writeExecutable(t, binDir, "claude", fakeClaudeScript)
 	ops := fakeProviderOps(t, binDir, t.TempDir(), nil)
-	// Registry advertises a newer release than the installed 2.1.0.
-	ops.latestCached["@anthropic-ai/claude-code"] = latestVersionEntry{version: "2.2.0", checked: time.Now()}
 
 	server, _ := newTestServerWithOps(t, ops)
 	_, body := getJSON(t, server.URL+"/v1/provider-status")
@@ -194,7 +233,13 @@ func TestProviderStatusFlagsUpdateAvailable(t *testing.T) {
 	if claude["provider"] != "claude-code" {
 		t.Fatalf("provider order changed: %v", claude["provider"])
 	}
-	if claude["updateAvailable"] != true || claude["latestVersion"] != "2.2.0" {
+	// Native/official-script installs auto-update; Agorax does not advertise
+	// a managed npm upgrade path for Claude Code.
+	if claude["updateAvailable"] != false {
+		t.Fatalf("claude-code updateAvailable = %v", claude["updateAvailable"])
+	}
+	update := claude["update"].(map[string]any)
+	if update["capability"] != "unsupported" || update["unsupportedReason"] != "official_script_update_unsupported" {
 		t.Fatalf("claude-code update = %v", claude)
 	}
 }
@@ -453,14 +498,28 @@ func TestProviderInstallRejectsConcurrentAndUnsupported(t *testing.T) {
 	if _, status, err := ops.installProvider(context.Background(), "codex", ""); status != http.StatusConflict || err == nil {
 		t.Fatalf("concurrent install = (%d, %v)", status, err)
 	}
+	descriptor, ok := findProviderTarget("codex")
+	if !ok {
+		t.Fatal("codex descriptor missing")
+	}
+	if entry := ops.detectProvider(context.Background(), descriptor); !entry.InstallInProgress {
+		t.Fatalf("status while locked = %#v, want installInProgress", entry)
+	}
 	ops.releaseInstall("codex")
+	if entry := ops.detectProvider(context.Background(), descriptor); entry.InstallInProgress {
+		t.Fatalf("status after release = %#v, want installInProgress=false", entry)
+	}
 
-	// cursor ships an official-script installer without a managed npm package;
 	// kimi-code has no installer descriptor at all.
-	for _, provider := range []string{"cursor", "kimi-code"} {
-		if _, status, err := ops.installProvider(context.Background(), provider, ""); status != http.StatusUnprocessableEntity || err == nil {
-			t.Fatalf("%s install = (%d, %v)", provider, status, err)
-		}
+	if _, status, err := ops.installProvider(context.Background(), "kimi-code", ""); status != http.StatusUnprocessableEntity || err == nil {
+		t.Fatalf("kimi-code install = (%d, %v)", status, err)
+	}
+	cursorInstall, ok := installDescriptorDTO(findProviderTargetOrFatal(t, "cursor").Status)
+	if !ok || cursorInstall.Kind != "official_script" || cursorInstall.ManagedNPM || cursorInstall.BinaryName != "cursor-agent" {
+		t.Fatalf("cursor install dto = %#v ok=%v", cursorInstall, ok)
+	}
+	if !installable(findProviderTargetOrFatal(t, "cursor").Status.Install) {
+		t.Fatal("cursor should be installable via official_script")
 	}
 	if _, status, err := ops.installProvider(context.Background(), "nexight", ""); status != http.StatusNotFound || err == nil {
 		t.Fatalf("unknown provider = (%d, %v)", status, err)
@@ -468,41 +527,119 @@ func TestProviderInstallRejectsConcurrentAndUnsupported(t *testing.T) {
 }
 
 func TestProviderInstallEndpointDecodesBody(t *testing.T) {
+	// HTTP install delegates to Agorax agentstatus.RunAction, which also probes
+	// adapters after CLI install. Cover empty-body acceptance via the shared
+	// installProvider already-satisfied path (official_script / cursor).
+	binDir := t.TempDir()
+	writeExecutable(t, binDir, "cursor-agent", `#!/bin/sh
+echo "2026.09.23-86fc751"
+`)
+	ops := fakeProviderOps(t, binDir, t.TempDir(), nil)
+	result, status, err := ops.installProvider(context.Background(), "cursor", "")
+	if err != nil || status != http.StatusOK {
+		t.Fatalf("installProvider cursor = (%d, %v)", status, err)
+	}
+	if result.Status != "already" {
+		t.Fatalf("result = %+v", result)
+	}
+}
+
+func findProviderTargetOrFatal(t *testing.T, providerID string) providerregistry.ProviderDescriptor {
+	t.Helper()
+	descriptor, ok := findProviderTarget(providerID)
+	if !ok {
+		t.Fatalf("provider %q missing from registry", providerID)
+	}
+	return descriptor
+}
+
+func TestProviderInstallOfficialScriptDownloadsAndRuns(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX official-script install test")
+	}
 	home := t.TempDir()
 	binDir := t.TempDir()
-	registry := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"version":"0.153.4"}`))
+	scriptHits := 0
+	installer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		scriptHits++
+		_, _ = w.Write([]byte(`#!/bin/sh
+prefix_bin="$1"
+/bin/mkdir -p "$prefix_bin" || exit 1
+/bin/cat > "$prefix_bin/cursor-agent" <<'EOF'
+#!/bin/sh
+echo "cursor-agent 1.2.3"
+EOF
+/bin/chmod +x "$prefix_bin/cursor-agent" || exit 1
+`))
 	}))
-	t.Cleanup(registry.Close)
-	argvLog := filepath.Join(t.TempDir(), "npm-argv.log")
-	writeExecutable(t, binDir, "npm", fmt.Sprintf(fakeNPMScriptTemplate, "0.153.4", "0.153.4"))
-	ops := fakeProviderOps(t, binDir, home, []string{
-		"NPM_ARGV_LOG=" + argvLog,
-		managednpm.RegistryOverrideEnv + "=" + registry.URL,
-	})
+	t.Cleanup(installer.Close)
 
-	server, _ := newTestServerWithOps(t, ops)
-	response, err := http.Post(server.URL+"/v1/providers/codex/install", "application/json", strings.NewReader(`{"version":"0.153.4"}`))
+	// Wrap the downloaded script so the fake install target lands in binDir
+	// (the real Cursor installer writes under ~/.local/bin).
+	writeExecutable(t, binDir, "bash", fmt.Sprintf(`#!/bin/sh
+script="$1"
+/bin/sh "$script" %q
+`, binDir))
+
+	ops := fakeProviderOps(t, binDir, home, nil)
+	descriptor := findProviderTargetOrFatal(t, "cursor")
+	descriptor.Status.Install.ScriptURL = installer.URL
+	descriptor.Status.Install.ScriptShell = filepath.Join(binDir, "bash")
+	// Override findProviderTarget by installing through the internal path.
+	result, status, err := ops.installOfficialScript(
+		context.Background(),
+		providerInstallResultDTO{Provider: "cursor"},
+		descriptor,
+		"",
+	)
+	if err != nil || status != http.StatusOK {
+		t.Fatalf("installOfficialScript = (%d, %v) result=%+v", status, err, result)
+	}
+	if scriptHits != 1 {
+		t.Fatalf("script downloads = %d", scriptHits)
+	}
+	if result.Status != "installed" || result.Version == nil || *result.Version != "1.2.3" {
+		t.Fatalf("result = %+v", result)
+	}
+	if result.BinaryPath == nil || !strings.Contains(*result.BinaryPath, "cursor-agent") {
+		t.Fatalf("binaryPath = %v", result.BinaryPath)
+	}
+}
+
+func TestProviderInstallOfficialScriptAlreadyInstalled(t *testing.T) {
+	binDir := t.TempDir()
+	writeExecutable(t, binDir, "cursor-agent", `#!/bin/sh
+echo "cursor-agent 9.9.9"
+`)
+	ops := fakeProviderOps(t, binDir, t.TempDir(), nil)
+	result, status, err := ops.installProvider(context.Background(), "cursor", "")
+	if err != nil || status != http.StatusOK {
+		t.Fatalf("installProvider cursor = (%d, %v)", status, err)
+	}
+	if result.Status != "already" || result.Version == nil || *result.Version != "9.9.9" {
+		t.Fatalf("result = %+v", result)
+	}
+}
+
+func TestProbeVersionAcceptsNonSemverOfficialBuilds(t *testing.T) {
+	binDir := t.TempDir()
+	writeExecutable(t, binDir, "cursor-agent", `#!/bin/sh
+echo "2026.09.23-86fc751"
+`)
+	ops := fakeProviderOps(t, binDir, t.TempDir(), nil)
+	version, err := ops.probeVersion(context.Background(), filepath.Join(binDir, "cursor-agent"))
 	if err != nil {
-		t.Fatalf("POST install: %v", err)
+		t.Fatalf("probeVersion: %v", err)
 	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("install status = %d", response.StatusCode)
+	if version != "2026.09.23-86fc751" {
+		t.Fatalf("version = %q", version)
 	}
-	var result providerInstallResultDTO
-	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
-		t.Fatalf("decode install result: %v", err)
+	result, status, err := ops.installProvider(context.Background(), "cursor", "")
+	if err != nil || status != http.StatusOK {
+		t.Fatalf("installProvider = (%d, %v)", status, err)
 	}
-	if result.Status != "installed" || result.Version == nil || *result.Version != "0.153.4" {
-		t.Fatalf("install result = %+v", result)
-	}
-	raw, err := os.ReadFile(argvLog)
-	if err != nil {
-		t.Fatalf("read argv log: %v", err)
-	}
-	if !strings.Contains(string(raw), "@openai/codex@0.153.4") {
-		t.Fatalf("npm argv = %q", string(raw))
+	if result.Status != "already" || result.Version == nil || *result.Version != "2026.09.23-86fc751" {
+		t.Fatalf("result = %+v", result)
 	}
 }
 

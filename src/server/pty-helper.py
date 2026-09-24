@@ -52,8 +52,8 @@ def main():
             os.close(slave_fd)
 
         os.chdir(cwd)
-        os.environ['TERM'] = 'xterm-256color'
-        os.environ['COLORTERM'] = 'truecolor'
+        os.environ.setdefault('TERM', 'screen-256color')
+        os.environ.setdefault('COLORTERM', 'truecolor')
         os.execvp(command[0], command)
     else:
         # Parent: bridge stdin <-> master_fd <-> stdout

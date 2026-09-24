@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   Add01Icon,
@@ -35,6 +36,11 @@ type ContextMenuState = {
   y: number
 }
 
+type RenameState = {
+  tabId: string
+  value: string
+}
+
 type TerminalWorkspaceProps = {
   mode: 'panel' | 'fullscreen'
   panelVisible?: boolean
@@ -46,11 +52,29 @@ type TerminalWorkspaceProps = {
 
 type TerminalSessionResponse = {
   sessionId?: string
+  reattach?: boolean
 }
 
 // See terminal-panel.tsx — ~/.hermes is not guaranteed to exist in the workspace image.
 const DEFAULT_TERMINAL_CWD = '~'
 const TERMINAL_BG = '#0d0d0d'
+/** Floor for PTY size — fit() on a hidden/zero-width pane otherwise yields
+ *  tiny cols and bash wraps `user@host` onto many lines that look like spam. */
+const MIN_PTY_COLS = 60
+const MIN_PTY_ROWS = 16
+
+function ptySizeFor(terminal: Terminal): { cols: number; rows: number } {
+  return {
+    cols: Math.max(terminal.cols || 0, MIN_PTY_COLS),
+    rows: Math.max(terminal.rows || 0, MIN_PTY_ROWS),
+  }
+}
+
+function clearTerminalBuffer(terminal: Terminal) {
+  // reset() wipes scrollback; clear() alone can leave wrapped prompt junk.
+  terminal.reset()
+  terminal.write('\x1b[2J\x1b[3J\x1b[H')
+}
 
 function toDebugAnalysis(value: unknown): DebugAnalysis | null {
   if (!value || typeof value !== 'object') return null
@@ -116,13 +140,19 @@ export function TerminalWorkspace({
     (state) => state.setTabSessionId,
   )
   const setTabStatus = useTerminalPanelStore((state) => state.setTabStatus)
+  const clearTabPendingCommand = useTerminalPanelStore(
+    (state) => state.clearTabPendingCommand,
+  )
 
   const [termHeight, setTermHeight] = useState<number | null>(null)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  const [renameState, setRenameState] = useState<RenameState | null>(null)
   const [debugAnalysis, setDebugAnalysis] = useState<DebugAnalysis | null>(null)
   const [debugLoading, setDebugLoading] = useState(false)
   const [showDebugPanel, setShowDebugPanel] = useState(false)
 
+  const contextMenuRef = useRef<HTMLDivElement | null>(null)
+  const renameInputRef = useRef<HTMLInputElement | null>(null)
   const containerMapRef = useRef(new Map<string, HTMLDivElement>())
   const terminalMapRef = useRef(new Map<string, Terminal>())
   const fitMapRef = useRef(new Map<string, FitAddon>())
@@ -166,13 +196,14 @@ export function TerminalWorkspace({
       .getState()
       .tabs.find((t) => t.id === tabId)
     if (!currentTab?.sessionId) return
+    const { cols, rows } = ptySizeFor(terminal)
     await fetch('/api/terminal-resize', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         sessionId: currentTab.sessionId,
-        cols: terminal.cols,
-        rows: terminal.rows,
+        cols,
+        rows,
       }),
     }).catch(function ignore() {
       return undefined
@@ -322,14 +353,31 @@ export function TerminalWorkspace({
       connectedRef.current.add(tab.id)
       setTabStatus(tab.id, 'active')
 
+      const pendingCommand =
+        tab.pendingCommand && tab.pendingCommand.length > 0
+          ? tab.pendingCommand
+          : undefined
+      if (pendingCommand) {
+        clearTabPendingCommand(tab.id)
+      }
+
+      const { cols, rows } = ptySizeFor(terminal)
+      // Apply size to the local emulator before spawn so wrap matches PTY.
+      try {
+        terminal.resize(cols, rows)
+      } catch {
+        /* ignore */
+      }
+
       const response = await fetch('/api/terminal-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           cwd: DEFAULT_TERMINAL_CWD,
-          // Let the server pick the shell from $SHELL
-          cols: terminal.cols,
-          rows: terminal.rows,
+          // One-shot provider login (or similar) replaces the default shell.
+          command: pendingCommand,
+          cols,
+          rows,
           // If this tab already has a sessionId, ask the server to reattach
           // to that PTY rather than spawning a fresh one. Lets us survive
           // transient SSE disconnects (network blip, browser suspension,
@@ -351,6 +399,7 @@ export function TerminalWorkspace({
       readerMapRef.current.set(tab.id, reader)
       const decoder = new TextDecoder()
       let buffer = ''
+      let processExited = false
 
       // Throttled terminal writes — yields to input events between flushes
       let writeBuf = ''
@@ -365,11 +414,27 @@ export function TerminalWorkspace({
           terminal.write(chunk)
         }
       }
+      // Hold incomplete OSC across SSE chunks so we never paint a bare
+      // "user@host:" title fragment when a sequence is split mid-flight.
+      let ansiCarry = ''
       function queueWrite(data: string) {
-        writeBuf += data
-        // If buffer is huge (TUI redraw flood), keep only the tail
+        const combined = ansiCarry + data
+        const stripped = combined.replace(
+          /\x1b\][0-2];[^\x07\x1b]*(?:\x07|\x1b\\)/g,
+          '',
+        )
+        const openOsc = stripped.match(/\x1b\][0-2];[^\x07\x1b]*$/)
+        if (openOsc) {
+          ansiCarry = openOsc[0]
+          writeBuf += stripped.slice(0, -openOsc[0].length)
+        } else {
+          ansiCarry = ''
+          writeBuf += stripped
+        }
         if (writeBuf.length > MAX_BUF) {
-          writeBuf = writeBuf.slice(-MAX_BUF)
+          clearTimeout(flushTimer as unknown as ReturnType<typeof setTimeout>)
+          flushWrites()
+          return
         }
         if (!flushTimer) flushTimer = setTimeout(flushWrites, FLUSH_MS)
       }
@@ -414,9 +479,24 @@ export function TerminalWorkspace({
           if (eventName === 'session' && eventData) {
             const payload = JSON.parse(eventData) as TerminalSessionResponse
             if (payload.sessionId) {
+              // Fresh PTY (not a live reattach) — wipe scrollback so reopen /
+              // login-exit / HMR does not stack another wrapped user@host line.
+              if (payload.reattach !== true) {
+                clearTimeout(
+                  flushTimer as unknown as ReturnType<typeof setTimeout>,
+                )
+                flushTimer = null
+                writeBuf = ''
+                ansiCarry = ''
+                clearTerminalBuffer(terminal)
+              }
               setTabSessionId(tab.id, payload.sessionId)
-              const nextTitle = tab.cwd === '~' ? tab.title : tab.cwd
-              renameTab(tab.id, nextTitle)
+              // Do NOT rename on session connect when cwd is "~" — that used
+              // to overwrite user renames (and right-click Rename looked broken).
+              // Only mirror a real workspace path into the tab title.
+              if (tab.cwd !== '~' && tab.cwd.trim()) {
+                renameTab(tab.id, tab.cwd)
+              }
             }
             continue
           }
@@ -430,6 +510,10 @@ export function TerminalWorkspace({
           }
 
           if (eventName === 'exit' && eventData) {
+            processExited = true
+            // Drop the dead id so we don't "reattach" to a gone PTY and so the
+            // follow-up connect starts a clean shell (login CLIs exit this way).
+            setTabSessionId(tab.id, null)
             const payload = JSON.parse(eventData) as {
               exitCode?: number
               signal?: number
@@ -455,28 +539,31 @@ export function TerminalWorkspace({
         .tabs.find((item) => item.id === tab.id)
 
       // SSE stream ended. Two reasons it could end:
-      // 1) The shell process exited (PTY closed) — server emits 'close'
-      //    and we should fully tear down on the client too.
-      // 2) The SSE stream itself dropped (network blip, browser tab
-      //    suspension, HMR reload) but the PTY is still alive on the
-      //    server (we changed terminal-stream to keep PTYs alive across
-      //    SSE disconnects — see #298). In that case, try to reattach.
-      //
-      // We don't reliably know which reason from inside the read loop, so
-      // attempt a single quick reattach with the existing sessionId. If the
-      // server says the session is gone, we fall through to a clean idle.
+      // 1) The shell/login process exited (PTY closed) — start one fresh shell.
+      // 2) The SSE stream itself dropped but the PTY is still alive — reattach.
       const previousSessionId = latestTab?.sessionId ?? null
       connectedRef.current.delete(tab.id)
       setTabStatus(tab.id, 'idle')
 
-      if (previousSessionId) {
-        // Don't call /api/terminal-close — we *want* the PTY to live so
-        // we can reattach to it. The server will reap the session via
-        // its own DETACH_TTL_MS if no client comes back.
+      if (processExited) {
+        // Login CLI (or other oneshot) finished. Open a normal interactive
+        // shell once; do not loop reattach against the dead session id.
+        setTimeout(() => {
+          const refreshed = useTerminalPanelStore
+            .getState()
+            .tabs.find((item) => item.id === tab.id)
+          if (
+            refreshed &&
+            !refreshed.sessionId &&
+            !connectedRef.current.has(tab.id)
+          ) {
+            void connectTab(refreshed)
+          }
+        }, 200)
+        return
+      }
 
-        // Wait a beat for the server to register the markDetached, then
-        // try to reconnect. The connectTab path will send sessionId in
-        // the body, so the server reattaches to the same PTY.
+      if (previousSessionId) {
         const stillSameTab =
           useTerminalPanelStore
             .getState()
@@ -484,8 +571,6 @@ export function TerminalWorkspace({
           previousSessionId
         if (stillSameTab) {
           terminal.writeln('\r\n\x1b[2m[reconnecting...]\x1b[0m')
-          // Schedule a reconnect on the next tick to break out of this
-          // closure cleanly. connectTab guards against double-connecting.
           setTimeout(() => {
             const refreshed = useTerminalPanelStore
               .getState()
@@ -500,7 +585,7 @@ export function TerminalWorkspace({
 
       setTabSessionId(tab.id, null)
     },
-    [renameTab, setTabSessionId, setTabStatus],
+    [clearTabPendingCommand, renameTab, setTabSessionId, setTabStatus],
   )
 
   const ensureTerminalForTab = useCallback(
@@ -549,10 +634,15 @@ export function TerminalWorkspace({
 
       terminalMapRef.current.set(tab.id, terminal)
       fitMapRef.current.set(tab.id, fitAddon)
-      void resizeSession(tab.id, terminal)
-      void connectTab(tab)
+      // Defer PTY spawn until the pane is visible — fit() on a hidden
+      // absolute layer can report tiny cols and bash wraps prompts into
+      // stacks of "user@host" lines.
+      if (panelVisible) {
+        void resizeSession(tab.id, terminal)
+        void connectTab(tab)
+      }
     },
-    [connectTab, resizeSession, sendInput],
+    [connectTab, panelVisible, resizeSession, sendInput],
   )
 
   const handleCreateTab = useCallback(
@@ -571,9 +661,29 @@ export function TerminalWorkspace({
   )
 
   useEffect(
-    function closeContextMenuOnClick() {
+    function focusRenameInput() {
+      if (!renameState) return
+      const input = renameInputRef.current
+      if (!input) return
+      input.focus()
+      input.select()
+    },
+    [renameState],
+  )
+
+  useEffect(
+    function closeContextMenuOnOutsidePointer() {
       if (!contextMenu) return
-      function handlePointerDown() {
+      // Use capture so we see the event before React/xterm handlers. Only
+      // dismiss when the target is outside the portaled menu.
+      function handlePointerDown(event: PointerEvent) {
+        const target = event.target
+        if (
+          target instanceof Node &&
+          contextMenuRef.current?.contains(target)
+        ) {
+          return
+        }
         setContextMenu(null)
       }
       function handleEscape(event: KeyboardEvent) {
@@ -581,10 +691,10 @@ export function TerminalWorkspace({
           setContextMenu(null)
         }
       }
-      window.addEventListener('pointerdown', handlePointerDown)
+      window.addEventListener('pointerdown', handlePointerDown, true)
       window.addEventListener('keydown', handleEscape)
       return function cleanup() {
-        window.removeEventListener('pointerdown', handlePointerDown)
+        window.removeEventListener('pointerdown', handlePointerDown, true)
         window.removeEventListener('keydown', handleEscape)
       }
     },
@@ -628,12 +738,23 @@ export function TerminalWorkspace({
         const snapshot = useTerminalPanelStore.getState().tabs
         for (const tab of snapshot) {
           const term = terminalMapRef.current.get(tab.id)
-          if (term) void resizeSession(tab.id, term)
+          if (!term) continue
+          const { cols, rows } = ptySizeFor(term)
+          try {
+            term.resize(cols, rows)
+          } catch {
+            /* ignore */
+          }
+          void resizeSession(tab.id, term)
+          // Connect tabs that were created while the pane was hidden.
+          if (!connectedRef.current.has(tab.id)) {
+            void connectTab(tab)
+          }
         }
         focusActiveTerminal()
       }, 100)
     },
-    [focusActiveTerminal, panelVisible, resizeSession],
+    [connectTab, focusActiveTerminal, panelVisible, resizeSession],
   )
 
   useEffect(
@@ -712,15 +833,30 @@ export function TerminalWorkspace({
           {tabs.map(function renderTab(tab) {
             // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime safety
             const isActive = tab.id === activeTab?.id
+            const isRenaming = renameState?.tabId === tab.id
             return (
-              <button
+              <div
                 key={tab.id}
-                type="button"
+                role="tab"
+                tabIndex={0}
+                aria-selected={isActive}
+                aria-label={tab.title}
                 onClick={function onClick() {
+                  if (isRenaming) return
                   setActiveTab(tab.id)
                   window.setTimeout(function focusCurrent() {
                     terminalMapRef.current.get(tab.id)?.focus()
                   }, 0)
+                }}
+                onKeyDown={function onTabKey(event) {
+                  if (isRenaming) return
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    setActiveTab(tab.id)
+                    window.setTimeout(function focusCurrent() {
+                      terminalMapRef.current.get(tab.id)?.focus()
+                    }, 0)
+                  }
                 }}
                 onContextMenu={function onContextMenu(event) {
                   event.preventDefault()
@@ -731,7 +867,7 @@ export function TerminalWorkspace({
                   })
                 }}
                 className={cn(
-                  'group relative flex h-8 max-w-[220px] items-center gap-2 px-3 text-xs text-primary-700 transition-colors',
+                  'group relative flex h-8 max-w-[220px] cursor-pointer items-center gap-2 px-3 text-xs text-primary-700 transition-colors',
                   isActive
                     ? 'bg-primary-50 text-primary-900'
                     : 'hover:bg-primary-200/70',
@@ -751,10 +887,51 @@ export function TerminalWorkspace({
                   strokeWidth={1.5}
                   className="shrink-0"
                 />
-                <span className="truncate text-left tabular-nums">
-                  {tab.title}
-                </span>
-                {tabs.length > 1 ? (
+                {isRenaming ? (
+                  <input
+                    ref={renameInputRef}
+                    value={renameState.value}
+                    onChange={function onRenameChange(event) {
+                      setRenameState({
+                        tabId: tab.id,
+                        value: event.target.value,
+                      })
+                    }}
+                    onClick={function stopTabSwitch(event) {
+                      event.stopPropagation()
+                    }}
+                    onPointerDown={function stopTabSwitch(event) {
+                      event.stopPropagation()
+                    }}
+                    onBlur={function commitRename(event) {
+                      const next = event.currentTarget.value.trim()
+                      setRenameState(null)
+                      if (next) renameTab(tab.id, next)
+                    }}
+                    onKeyDown={function onRenameKey(event) {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        const next = event.currentTarget.value.trim()
+                        setRenameState(null)
+                        if (next) renameTab(tab.id, next)
+                        return
+                      }
+                      if (event.key === 'Escape') {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        setRenameState(null)
+                      }
+                    }}
+                    className="min-w-0 flex-1 rounded border border-primary-400 bg-primary-50 px-1 py-0.5 text-xs text-primary-900 outline-none"
+                    aria-label="Rename terminal tab"
+                  />
+                ) : (
+                  <span className="truncate text-left tabular-nums">
+                    {tab.title}
+                  </span>
+                )}
+                {tabs.length > 1 && !isRenaming ? (
                   <span
                     role="button"
                     tabIndex={0}
@@ -765,6 +942,7 @@ export function TerminalWorkspace({
                     onKeyDown={function onCloseByKeyboard(event) {
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault()
+                        event.stopPropagation()
                         handleCloseTab(tab)
                       }
                     }}
@@ -783,7 +961,7 @@ export function TerminalWorkspace({
                     isActive ? 'opacity-100' : 'opacity-0',
                   )}
                 />
-              </button>
+              </div>
             )
           })}
         </div>
@@ -895,45 +1073,62 @@ export function TerminalWorkspace({
         />
       ) : null}
 
-      {contextMenu ? (
-        <div
-          className="fixed z-50 min-w-36 rounded-md border border-primary-300 bg-primary-100 p-1 shadow-lg"
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-          onClick={function stop(event) {
-            event.stopPropagation()
-          }}
-        >
-          <button
-            type="button"
-            className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs text-primary-900 hover:bg-primary-200"
-            onClick={function renameTabFromMenu() {
-              const menuTab = tabs.find((tab) => tab.id === contextMenu.tabId)
-              setContextMenu(null)
-              if (!menuTab) return
-              const nextName = window.prompt(
-                'Rename terminal tab',
-                menuTab.title,
-              )
-              if (!nextName) return
-              renameTab(menuTab.id, nextName)
-            }}
-          >
-            Rename
-          </button>
-          <button
-            type="button"
-            className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs text-primary-900 hover:bg-primary-200"
-            onClick={function closeTabFromMenu() {
-              const menuTab = tabs.find((tab) => tab.id === contextMenu.tabId)
-              setContextMenu(null)
-              if (!menuTab) return
-              handleCloseTab(menuTab)
-            }}
-          >
-            Close
-          </button>
-        </div>
-      ) : null}
+      {contextMenu
+        ? createPortal(
+            <div
+              ref={contextMenuRef}
+              role="menu"
+              className="fixed z-[200] min-w-36 rounded-md border border-primary-300 bg-primary-100 p-1 shadow-lg"
+              style={{ top: contextMenu.y, left: contextMenu.x }}
+              onContextMenu={function preventNative(event) {
+                event.preventDefault()
+              }}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs text-primary-900 hover:bg-primary-200"
+                onPointerDown={function renameTabFromMenu(event) {
+                  // Run on pointerdown (not click) so the action beats any
+                  // outside-dismiss race and works when click is swallowed.
+                  event.preventDefault()
+                  event.stopPropagation()
+                  const menuTab = tabs.find(
+                    (tab) => tab.id === contextMenu.tabId,
+                  )
+                  setContextMenu(null)
+                  if (!menuTab) return
+                  // Inline rename — window.prompt is blocked in embedded
+                  // browsers and some Electron shells.
+                  setRenameState({
+                    tabId: menuTab.id,
+                    value: menuTab.title,
+                  })
+                }}
+              >
+                Rename
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs text-primary-900 hover:bg-primary-200"
+                onPointerDown={function closeTabFromMenu(event) {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  const menuTab = tabs.find(
+                    (tab) => tab.id === contextMenu.tabId,
+                  )
+                  setContextMenu(null)
+                  if (!menuTab) return
+                  handleCloseTab(menuTab)
+                }}
+              >
+                Close
+              </button>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   )
 }

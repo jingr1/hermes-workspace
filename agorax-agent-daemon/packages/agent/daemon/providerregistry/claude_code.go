@@ -58,21 +58,19 @@ func claudeCodeDescriptor() ProviderDescriptor {
 				"ANTHROPIC_API_BASE_URL",
 			},
 			CredentialEnvVars: []string{"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"},
-			// Agorax installs Claude Code through the managed npm package (the
-			// daemon's install endpoint drives `npm install -g`), unlike Tutti's
-			// host-level official-script installer.
+			// Native install is Anthropic's recommended path (npm is deprecated).
 			Install: InstallerDescriptor{
-				Kind:           InstallerKindManagedNPM,
-				DisplayCommand: "npm install -g @anthropic-ai/claude-code",
-				PackageName:    "@anthropic-ai/claude-code",
-				BinaryName:     "claude",
+				Kind:                     InstallerKindOfficialScript,
+				DisplayCommand:           "curl -fsSL https://claude.ai/install.sh | bash",
+				BinaryName:               "claude",
+				ScriptURL:                "https://claude.ai/install.sh",
+				ScriptShell:              "bash",
+				WindowsFallback:          InstallerWindowsFallbackPowerShell,
+				WindowsPowerShellCommand: `irm https://claude.ai/install.ps1 | iex`,
 			},
 			Update: UpdateDescriptor{
-				Capability:  UpdateCapabilitySupported,
-				Source:      UpdateSourceNPM,
-				Strategy:    UpdateStrategyManagedNPM,
-				PackageName: "@anthropic-ai/claude-code",
-				BinaryName:  "claude",
+				Capability:        UpdateCapabilityUnsupported,
+				UnsupportedReason: UpdateUnsupportedReasonOfficialScript,
 			},
 			LoginArgs: []string{"auth", "login"},
 			AuthWatch: AuthWatchDescriptor{

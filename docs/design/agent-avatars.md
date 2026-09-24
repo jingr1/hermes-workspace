@@ -34,6 +34,6 @@ const presentation = projectAgentIdentityAvatar({
 | cursor | cursor-rounded.png |
 | opencode | opencode-rounded.png |
 | openclaw | openclaw-rounded.png |
-| kimi | kimi-rounded.png |
+| kimi / kimi-code | kimi-rounded.png |
 | deepseek-harness | deepseek-rounded.png |
 | agorax / fallback（未知） | agorax-rounded.png |

@@ -50,6 +50,7 @@ const RUNTIME_ALIASES: Record<string, AgentAvatarProviderKey> = {
   opencode: 'opencode',
   openclaw: 'openclaw',
   kimi: 'kimi',
+  'kimi-code': 'kimi',
   'deepseek-harness': 'deepseek-harness',
   deepseek: 'deepseek-harness',
   'ds-harness': 'deepseek-harness',

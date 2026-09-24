@@ -1,25 +1,42 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   ArrowUp01Icon,
   Download01Icon,
   RefreshIcon,
+  Settings02Icon,
 } from '@hugeicons/core-free-icons'
+import { AgentIdentityAvatar } from '@/components/avatars'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import {
+  canDaemonInstallProvider,
   providerStatusBadge,
   type AgentProviderId,
   type AgentProviderStatusDto,
 } from '@/lib/managed-agent-runtime/provider-status'
 import {
+  formatAgentProviderUpdateSummary,
+  resolveAgentProviderUpdateRowPresentation,
+} from '@/lib/managed-agent-runtime/update-summary'
+import {
   useAgentProviderStatus,
   useInstallAgentProvider,
+  useLoginAgentProvider,
   useSetAgentProviderEnabled,
 } from '@/screens/chat/hooks/use-provider-status'
+import { refreshProductUpdateStatus } from '@/lib/managed-agent-runtime/product-update-check'
+import {
+  readProductUpdateAutoCheckEnabled,
+  writeProductUpdateAutoCheckEnabled,
+} from '@/lib/managed-agent-runtime/update-check-preference'
+import { useQueryClient } from '@tanstack/react-query'
+import { AgentRuntimeEnvDialog } from './agent-runtime-env-dialog'
+import { writeTextToClipboard } from '@/lib/clipboard'
+import { toast } from '@/components/ui/toast'
 
 const PROVIDER_LABELS: Record<string, string> = {
   hermes: 'Hermes Agent',
@@ -31,14 +48,20 @@ const PROVIDER_LABELS: Record<string, string> = {
   'deepseek-harness': 'DeepSeek',
 }
 
-const PROVIDER_COLORS: Record<string, string> = {
-  hermes: 'bg-teal-600',
-  'claude-code': 'bg-orange-500',
-  codex: 'bg-blue-500',
-  cursor: 'bg-neutral-500',
-  opencode: 'bg-indigo-500',
-  'kimi-code': 'bg-emerald-500',
-  'deepseek-harness': 'bg-slate-400',
+/** Stable table order — never reorder by install/update badge. */
+const RUNTIME_DISPLAY_ORDER: ReadonlyArray<string> = [
+  'hermes',
+  'claude-code',
+  'codex',
+  'cursor',
+  'opencode',
+  'kimi-code',
+  'deepseek-harness',
+]
+
+function runtimeDisplayRank(providerId: string): number {
+  const index = RUNTIME_DISPLAY_ORDER.indexOf(providerId)
+  return index >= 0 ? index : RUNTIME_DISPLAY_ORDER.length
 }
 
 function readinessStatus(entry: AgentProviderStatusDto): {
@@ -62,11 +85,6 @@ function readinessStatus(entry: AgentProviderStatusDto): {
   }
 }
 
-function providerInitials(providerId: string): string {
-  const label = PROVIDER_LABELS[providerId] ?? providerId
-  return label.slice(0, 2).toUpperCase()
-}
-
 function CopyCommandButton({ command }: { command: string }) {
   const [copied, setCopied] = useState(false)
   return (
@@ -75,12 +93,18 @@ function CopyCommandButton({ command }: { command: string }) {
       size="sm"
       variant="outline"
       onClick={async () => {
+        const value = command.trim()
+        if (!value) {
+          toast('没有可复制的命令', { type: 'warning' })
+          return
+        }
         try {
-          await navigator.clipboard.writeText(command)
+          await writeTextToClipboard(value)
           setCopied(true)
+          toast('已复制到剪贴板', { type: 'success', duration: 2000 })
           setTimeout(() => setCopied(false), 1500)
         } catch {
-          // Ignore clipboard errors.
+          toast('复制失败，请手动选择命令', { type: 'error' })
         }
       }}
       className="h-7 px-2.5 text-[11px]"
@@ -93,17 +117,19 @@ function CopyCommandButton({ command }: { command: string }) {
 function RuntimeRow({
   entry,
   highlighted,
-  installingProvider,
+  isInstalling,
   onInstall,
   onSetEnabled,
+  onOpenEnvironment,
   togglingProvider,
 }: {
   entry: AgentProviderStatusDto
   highlighted: boolean
-  installingProvider: string | null
+  isInstalling: boolean
   togglingProvider: string | null
   onInstall: (provider: string, version?: string) => void
   onSetEnabled: (provider: string, enabled: boolean) => void
+  onOpenEnvironment: (provider: string) => void
 }) {
   const rowRef = useRef<HTMLTableRowElement>(null)
   const providerId = entry.provider
@@ -113,16 +139,30 @@ function RuntimeRow({
   const isHermes = providerId === 'hermes'
   const isStub = providerId === 'deepseek-harness'
   const canInstall =
-    !isStub && badge === 'not-installed' && entry.install?.managedNpm
+    !isStub &&
+    !isInstalling &&
+    badge === 'not-installed' &&
+    canDaemonInstallProvider(entry.install)
   const canUpgrade =
     !isStub &&
+    !isInstalling &&
     badge === 'update-available' &&
     entry.update.capability === 'supported'
+  const showInstallingButton =
+    isInstalling &&
+    !isStub &&
+    Boolean(
+      canDaemonInstallProvider(entry.install) ||
+        entry.update.capability === 'supported',
+    )
+  const installingIsUpgrade = entry.installed || badge === 'update-available'
   const manualCommand = entry.install?.displayCommand
-  const isInstalling = installingProvider === providerId
   const isToggling = togglingProvider === providerId
-  // Hermes readiness is gateway probe; enable toggle is not meaningful.
   const showEnableToggle = !isHermes && !isStub && entry.installed
+  const canOpenEnvironment = !isStub
+  const updateSummary = formatAgentProviderUpdateSummary(
+    resolveAgentProviderUpdateRowPresentation(entry),
+  )
 
   useEffect(() => {
     if (highlighted && rowRef.current) {
@@ -144,39 +184,48 @@ function RuntimeRow({
       {/* Agent */}
       <td className="px-4 py-3">
         <div className="flex min-w-0 items-center gap-3">
-          <div
-            className={cn(
-              'flex size-9 shrink-0 items-center justify-center rounded-lg text-xs font-bold text-white',
-              PROVIDER_COLORS[providerId] ?? 'bg-primary-500',
-            )}
-          >
-            {providerInitials(providerId)}
-          </div>
+          <AgentIdentityAvatar
+            name={label}
+            runtime={providerId}
+            showInitials={false}
+            size={36}
+          />
           <div className="min-w-0">
             <p className="truncate text-sm font-medium text-[var(--theme-text)]">
               {label}
             </p>
             <p className="truncate text-xs text-[var(--theme-muted)]">
-              {entry.installed
-                ? (entry.version ?? 'Installed')
-                : (entry.install?.displayCommand ?? 'Not installed')}
+              {isInstalling
+                ? '安装进行中…'
+                : updateSummary
+                  ? updateSummary
+                  : entry.installed
+                    ? (entry.version ?? 'Installed')
+                    : (entry.install?.displayCommand ?? 'Not installed')}
             </p>
           </div>
         </div>
       </td>
 
-      {/* Readiness */}
+      {/* Readiness — display only; configure/install live in Actions */}
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
-          <span className={cn('size-2 shrink-0 rounded-full', dotClass)} />
-          <span className="whitespace-nowrap text-sm text-[var(--theme-text)]">
-            {statusLabel}
+          <span
+            className={cn(
+              'size-2 shrink-0 rounded-full',
+              isInstalling ? 'animate-pulse bg-blue-500' : dotClass,
+            )}
+          />
+          <span className="truncate text-sm text-[var(--theme-text)]">
+            {isInstalling ? '安装中' : statusLabel}
           </span>
-          {entry.updateAvailable && entry.update.capability === 'supported' && (
-            <span className="whitespace-nowrap text-xs text-amber-500">
-              · 有更新
-            </span>
-          )}
+          {!isInstalling &&
+            entry.updateAvailable &&
+            entry.update.capability === 'supported' && (
+              <span className="whitespace-nowrap text-xs text-amber-500">
+                · 有更新
+              </span>
+            )}
         </div>
       </td>
 
@@ -185,65 +234,63 @@ function RuntimeRow({
         {showEnableToggle ? (
           <Switch
             checked={entry.registered}
-            disabled={isToggling}
+            disabled={isToggling || isInstalling}
             onCheckedChange={(checked) => onSetEnabled(providerId, checked)}
             aria-label={`${label} enabled`}
           />
+        ) : isHermes ? (
+          <Switch
+            checked
+            disabled
+            aria-label={`${label} always enabled`}
+          />
         ) : (
-          <span className="text-xs text-[var(--theme-muted)]">
-            {isHermes ? (entry.registered ? '就绪' : '未探测') : '—'}
-          </span>
+          <span className="text-xs text-[var(--theme-muted)]">—</span>
         )}
       </td>
 
-      {/* Actions */}
+      {/* Actions — install/upgrade/copy + open env wizard */}
       <td className="px-4 py-3 text-right">
         <div className="flex items-center justify-end gap-2">
-          {canInstall ? (
+          {showInstallingButton ? (
             <Button
               size="sm"
-              disabled={isInstalling}
+              disabled
+              className="h-7 gap-1 rounded-lg bg-accent-600 px-2.5 text-[11px] text-white opacity-80"
+            >
+              <HugeiconsIcon
+                icon={RefreshIcon}
+                size={12}
+                strokeWidth={1.5}
+                className="animate-spin"
+              />
+              {installingIsUpgrade ? '升级中…' : '安装中…'}
+            </Button>
+          ) : canInstall ? (
+            <Button
+              size="sm"
               onClick={() => onInstall(providerId)}
               className="h-7 gap-1 rounded-lg bg-accent-600 px-2.5 text-[11px] text-white hover:bg-accent-700"
             >
-              {isInstalling ? (
-                <HugeiconsIcon
-                  icon={RefreshIcon}
-                  size={12}
-                  strokeWidth={1.5}
-                  className="animate-spin"
-                />
-              ) : (
-                <HugeiconsIcon
-                  icon={Download01Icon}
-                  size={12}
-                  strokeWidth={1.5}
-                />
-              )}
-              {isInstalling ? '安装中…' : '安装'}
+              <HugeiconsIcon
+                icon={Download01Icon}
+                size={12}
+                strokeWidth={1.5}
+              />
+              安装
             </Button>
           ) : canUpgrade ? (
             <Button
               size="sm"
-              disabled={isInstalling}
               onClick={() => onInstall(providerId, 'latest')}
               className="h-7 gap-1 rounded-lg bg-accent-600 px-2.5 text-[11px] text-white hover:bg-accent-700"
             >
-              {isInstalling ? (
-                <HugeiconsIcon
-                  icon={RefreshIcon}
-                  size={12}
-                  strokeWidth={1.5}
-                  className="animate-spin"
-                />
-              ) : (
-                <HugeiconsIcon
-                  icon={ArrowUp01Icon}
-                  size={12}
-                  strokeWidth={1.5}
-                />
-              )}
-              {isInstalling ? '升级中…' : '升级'}
+              <HugeiconsIcon
+                icon={ArrowUp01Icon}
+                size={12}
+                strokeWidth={1.5}
+              />
+              升级
             </Button>
           ) : badge === 'not-installed' && manualCommand ? (
             <CopyCommandButton command={manualCommand} />
@@ -256,16 +303,19 @@ function RuntimeRow({
             >
               暂不支持
             </Button>
-          ) : (
+          ) : null}
+          {canOpenEnvironment ? (
             <Button
+              type="button"
               size="sm"
               variant="outline"
-              disabled
-              className="h-7 px-2.5 text-[11px]"
+              className="h-7 gap-1 px-2.5 text-[11px]"
+              onClick={() => onOpenEnvironment(providerId)}
             >
-              {statusLabel}
+              <HugeiconsIcon icon={Settings02Icon} size={12} strokeWidth={1.5} />
+              配置
             </Button>
-          )}
+          ) : null}
         </div>
       </td>
     </tr>
@@ -279,36 +329,90 @@ export type AgentRuntimesSectionProps = {
 export function AgentRuntimesSection({
   highlightProvider,
 }: AgentRuntimesSectionProps) {
-  const [autoCheck, setAutoCheck] = useState(true)
-  const statusQuery = useAgentProviderStatus({
-    refetchInterval: autoCheck ? undefined : false,
-  })
+  const [autoCheck, setAutoCheck] = useState(() =>
+    readProductUpdateAutoCheckEnabled(),
+  )
+  // Only spin on an explicit click — install invalidateQueries used to flip
+  // isFetching and make「检查更新」look like it was checking again.
+  const [manualRefreshing, setManualRefreshing] = useState(false)
+  const [installingIds, setInstallingIds] = useState<Set<string>>(
+    () => new Set(),
+  )
+  const [envProvider, setEnvProvider] = useState<string | null>(null)
+  const queryClient = useQueryClient()
+  // Provider status is local/daemon only — no git fetch. Product update checks
+  // share UpdateCenterNotifier's `/api/update/status` path.
+  const statusQuery = useAgentProviderStatus()
   const installMutation = useInstallAgentProvider()
+  const loginMutation = useLoginAgentProvider()
   const enableMutation = useSetAgentProviderEnabled()
+
+  useEffect(() => {
+    setInstallingIds((prev) => {
+      let changed = false
+      const next = new Set(prev)
+      for (const entry of statusQuery.data?.providers ?? []) {
+        if (entry.installInProgress) {
+          if (!next.has(entry.provider)) {
+            next.add(entry.provider)
+            changed = true
+          }
+          continue
+        }
+        const mutationBusy =
+          installMutation.isPending &&
+          installMutation.variables?.provider === entry.provider
+        if (mutationBusy) continue
+        // Keep sticky row until mutation settles *and* daemon cleared the lock.
+        // Clearing in onSuccess/onError raced the status refetch and hid「升级中」.
+        if (next.delete(entry.provider)) changed = true
+      }
+      return changed ? next : prev
+    })
+  }, [
+    statusQuery.data,
+    installMutation.isPending,
+    installMutation.variables?.provider,
+  ])
 
   const sorted = useMemo(() => {
     const list = statusQuery.data?.providers ?? []
     return [...list].sort((a, b) => {
-      const rank = (entry: AgentProviderStatusDto) => {
-        const badge = providerStatusBadge(entry)
-        if (badge === 'update-available') return 0
-        if (badge === 'not-installed') return 1
-        if (badge === 'unknown') return 2
-        return 3
-      }
-      const diff = rank(a) - rank(b)
+      const diff =
+        runtimeDisplayRank(a.provider) - runtimeDisplayRank(b.provider)
       if (diff !== 0) return diff
       return (a.provider as string).localeCompare(b.provider as string)
     })
   }, [statusQuery.data?.providers])
 
+  const envEntry =
+    sorted.find((entry) => entry.provider === envProvider) ?? null
+
   const handleInstall = (provider: string, version?: string) => {
+    if (installingIds.has(provider)) return
+    if (
+      statusQuery.data?.providers.some(
+        (entry) => entry.provider === provider && entry.installInProgress,
+      )
+    ) {
+      return
+    }
+    setInstallingIds((prev) => new Set(prev).add(provider))
     installMutation.mutate(
       version
         ? { provider: provider as AgentProviderId, version }
         : { provider: provider as AgentProviderId },
+      // Sticky「升级中」is cleared only by the status sync effect above once
+      // the mutation settles and installInProgress is false — not here.
     )
   }
+
+  const handleLogin = (provider: string) => {
+    loginMutation.mutate({ provider: provider as AgentProviderId })
+  }
+
+  const { refetch: refetchStatus } = statusQuery
+  const handleRedetect = useCallback(() => refetchStatus(), [refetchStatus])
 
   const handleSetEnabled = (provider: string, enabled: boolean) => {
     if (provider === 'hermes' || provider === 'deepseek-harness') return
@@ -317,12 +421,14 @@ export function AgentRuntimesSection({
 
   return (
     <div className="space-y-4">
-      {/* Auto-check header */}
       <div className="flex items-center justify-between gap-4 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] px-4 py-3 shadow-sm">
         <div className="flex items-center gap-3">
           <Switch
             checked={autoCheck}
-            onCheckedChange={setAutoCheck}
+            onCheckedChange={(checked) => {
+              setAutoCheck(checked)
+              writeProductUpdateAutoCheckEnabled(checked)
+            }}
             aria-label="自动检查更新"
           />
           <div>
@@ -330,35 +436,39 @@ export function AgentRuntimesSection({
               自动检查更新
             </p>
             <p className="text-xs text-[var(--theme-muted)]">
-              定期检查；只有点击安装/升级后才会执行更新
+              与顶部更新检查共用同一通道，约每天一次；点「检查更新」立即拉取
             </p>
           </div>
         </div>
         <Button
           size="sm"
           variant="outline"
-          disabled={statusQuery.isFetching}
-          onClick={() => statusQuery.refetch()}
+          disabled={manualRefreshing}
+          onClick={() => {
+            setManualRefreshing(true)
+            void refreshProductUpdateStatus(queryClient).finally(() =>
+              setManualRefreshing(false),
+            )
+          }}
           className="h-8 gap-1.5 text-xs"
         >
           <HugeiconsIcon
             icon={RefreshIcon}
             size={14}
             strokeWidth={1.5}
-            className={cn(statusQuery.isFetching && 'animate-spin')}
+            className={cn(manualRefreshing && 'animate-spin')}
           />
           检查更新
         </Button>
       </div>
 
-      {/* Table card */}
       <div className="overflow-hidden rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card)] shadow-sm">
         <table className="w-full table-fixed border-collapse">
           <colgroup>
-            <col className="w-[35%]" />
-            <col className="w-[25%]" />
-            <col className="w-[20%]" />
-            <col className="w-[20%]" />
+            <col className="w-[32%]" />
+            <col className="w-[28%]" />
+            <col className="w-[16%]" />
+            <col className="w-[24%]" />
           </colgroup>
           <thead>
             <tr className="border-b border-[var(--theme-border)] bg-[var(--theme-panel)] text-xs text-[var(--theme-muted)]">
@@ -409,10 +519,11 @@ export function AgentRuntimesSection({
                   key={entry.provider}
                   entry={entry}
                   highlighted={highlightProvider === entry.provider}
-                  installingProvider={
-                    installMutation.isPending && installMutation.variables
-                      ? installMutation.variables.provider
-                      : null
+                  isInstalling={
+                    installingIds.has(entry.provider) ||
+                    Boolean(entry.installInProgress) ||
+                    (installMutation.isPending &&
+                      installMutation.variables?.provider === entry.provider)
                   }
                   togglingProvider={
                     enableMutation.isPending && enableMutation.variables
@@ -421,12 +532,38 @@ export function AgentRuntimesSection({
                   }
                   onInstall={handleInstall}
                   onSetEnabled={handleSetEnabled}
+                  onOpenEnvironment={setEnvProvider}
                 />
               ))
             )}
           </tbody>
         </table>
       </div>
+
+      <AgentRuntimeEnvDialog
+        open={envProvider != null}
+        onOpenChange={(next) => {
+          if (!next) setEnvProvider(null)
+        }}
+        entry={envEntry}
+        isLoading={statusQuery.isPending && !envEntry}
+        isInstalling={
+          envProvider != null &&
+          (installingIds.has(envProvider) ||
+            Boolean(envEntry?.installInProgress) ||
+            (installMutation.isPending &&
+              installMutation.variables?.provider === envProvider))
+        }
+        isLoggingIn={
+          envProvider != null &&
+          (Boolean(envEntry?.loginInProgress) ||
+            (loginMutation.isPending &&
+              loginMutation.variables?.provider === envProvider))
+        }
+        onRedetect={handleRedetect}
+        onInstall={handleInstall}
+        onLogin={handleLogin}
+      />
     </div>
   )
 }

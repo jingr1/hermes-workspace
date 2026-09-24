@@ -28,13 +28,40 @@ export interface AgentProviderInstallDto {
   displayCommand: string
   packageName: string
   binaryName: string
+  /** True when the daemon install path is managed npm / codex-cli-latest. */
   managedNpm: boolean
+}
+
+/** True when POST /providers/{id}/install can drive this installer. */
+export function canDaemonInstallProvider(
+  install: AgentProviderInstallDto | null | undefined,
+): boolean {
+  if (!install) return false
+  return (
+    install.managedNpm ||
+    install.kind === 'official_script' ||
+    install.kind === 'codex_cli_latest'
+  )
 }
 
 export interface AgentProviderUpdateDto {
   capability: string
   source?: string
   unsupportedReason?: string
+  /** Mirrors installed CLI version when the daemon projects it onto update. */
+  currentVersion?: string | null
+  /** Registry latest when discovery succeeded; null when not checked / failed. */
+  latestVersion?: string | null
+  /** ISO timestamp of the last update-metadata probe (Tutti parity). */
+  lastCheckedAt?: string | null
+  /** Non-fatal discovery / compare reason (e.g. registry_unreachable). */
+  reasonCode?: string | null
+}
+
+export interface AgentProviderLoginDto {
+  supported: boolean
+  displayCommand: string
+  command?: Array<string>
 }
 
 export interface AgentProviderStatusDto {
@@ -42,6 +69,10 @@ export interface AgentProviderStatusDto {
   targetId: string
   registered: boolean
   installed: boolean
+  /** True while the daemon holds the managed npm install lock for this provider. */
+  installInProgress?: boolean
+  /** True while the daemon is watching an interactive login it launched. */
+  loginInProgress?: boolean
   binaryPath?: string | null
   version?: string | null
   minVersion?: string
@@ -50,6 +81,7 @@ export interface AgentProviderStatusDto {
   updateAvailable: boolean
   auth: AgentProviderAuthDto
   install?: AgentProviderInstallDto
+  login?: AgentProviderLoginDto
   update: AgentProviderUpdateDto
   error?: string
 }
@@ -61,11 +93,20 @@ export interface AgentProviderStatusListDto {
 
 export interface AgentProviderInstallResultDto {
   provider: string
-  status: 'installed' | 'already'
+  /** in_progress = daemon already installing; UI should stay in "安装中". */
+  status: 'installed' | 'already' | 'in_progress'
   version?: string
   binaryPath?: string
   command?: Array<string>
   registry?: string
+}
+
+export interface AgentProviderLoginResultDto {
+  provider: string
+  status: 'started' | 'already' | 'in_progress'
+  mode?: 'terminal' | 'detached' | 'command' | string
+  command?: Array<string>
+  displayCommand?: string
 }
 
 /** Badge states the agent list renders for a non-Hermes runtime row. */

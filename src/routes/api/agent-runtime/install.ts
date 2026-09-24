@@ -77,6 +77,17 @@ export const Route = createFileRoute('/api/agent-runtime/install')({
             error instanceof Error && 'status' in error
               ? Number((error as { status?: number }).status) || 502
               : 502
+          // Concurrent install is progress, not failure — UI shows 安装中.
+          if (
+            status === 409 ||
+            (error instanceof Error &&
+              /already in progress/i.test(error.message))
+          ) {
+            return json({
+              provider,
+              status: 'in_progress' as const,
+            })
+          }
           return json(
             {
               error: `Managed Agent install failed: ${

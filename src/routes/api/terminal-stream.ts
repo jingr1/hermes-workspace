@@ -90,7 +90,6 @@ export const Route = createFileRoute('/api/terminal-stream')({
             if (existing) {
               session = existing
               isReattach = true
-              session.markAttached()
             } else {
               try {
                 session = createTerminalSession({
@@ -114,6 +113,10 @@ export const Route = createFileRoute('/api/terminal-stream')({
                 return
               }
             }
+
+            // Count this SSE leg so panel + fullscreen can share one PTY
+            // without the first disconnect starting the reap timer.
+            session.markAttached()
 
             send('session', { sessionId: session.id, reattach: isReattach })
 

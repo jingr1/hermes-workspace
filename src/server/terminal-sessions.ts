@@ -54,6 +54,53 @@ const __dirname_resolved =
     : dirname(fileURLToPath(import.meta.url))
 const PTY_HELPER = resolve(__dirname_resolved, 'pty-helper.py')
 
+/**
+ * Strip IDE shell-integration leakage from the Node process env before
+ * spawning an embedded PTY.
+ *
+ * When Agorax is started from a Cursor/VS Code integrated terminal, that
+ * shell exports `PROMPT_COMMAND=__vsc_prompt_cmd_original` (or a wrapper that
+ * calls it) after sourcing `shellIntegration-bash.sh`. The function only
+ * exists in that Cursor-owned shell. Spreading `process.env` into our PTY
+ * inherits the name without defining the function → every prompt prints
+ * `__vsc_prompt_cmd_original: command not found`. A normal (non-IDE)
+ * terminal never has this export, so the bug looks Agorax-only.
+ */
+export function sanitizePtyEnv(
+  source: NodeJS.ProcessEnv | Record<string, string | undefined>,
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [key, value] of Object.entries(source)) {
+    if (value === undefined) continue
+    // Never inherit IDE prompt hooks — let bashrc rebuild a clean
+    // PROMPT_COMMAND (e.g. `history -a`).
+    if (key === 'PROMPT_COMMAND' || key === 'PROMPT_COMMAND_EXE') continue
+    if (
+      key === 'VSCODE_INJECTION' ||
+      key === 'VSCODE_SHELL_INTEGRATION' ||
+      key === 'VSCODE_SHELL_LOGIN' ||
+      key === 'VSCODE_ENV_REPLACE' ||
+      key === 'VSCODE_ENV_PREPEND' ||
+      key === 'VSCODE_ENV_APPEND' ||
+      key === 'VSCODE_PATH_PREFIX' ||
+      key === 'VSCODE_SHELL_ENV_REPORTING'
+    ) {
+      continue
+    }
+    // Cursor/VS Code process identity; not meaningful inside a browser PTY.
+    if (key.startsWith('VSCODE_') || key.startsWith('CURSOR_')) continue
+    if (
+      key === 'TERM_PROGRAM' &&
+      (value === 'vscode' || value === 'cursor')
+    ) {
+      continue
+    }
+    if (key === 'TERM_PROGRAM_VERSION') continue
+    out[key] = value
+  }
+  return out
+}
+
 export function createTerminalSession(params: {
   command?: Array<string>
   cwd?: string
@@ -86,13 +133,19 @@ export function createTerminalSession(params: {
   const rows = params.rows ?? 24
 
   const baseEnv = {
-    ...process.env,
+    ...sanitizePtyEnv(process.env),
     ...params.env,
-    TERM: 'xterm-256color',
+    // screen-256color: keeps bash *-256color PS1 colors, but skips the
+    // debian/Ubuntu `xterm*|rxvt*` OSC window-title injection that otherwise
+    // leaks as stacked "user@host:" lines in the web terminal.
+    TERM: 'screen-256color',
     COLORTERM: 'truecolor',
+    // Explicit clean hook so /etc/bash.bashrc cannot inherit a Cursor-stacked
+    // PROMPT_COMMAND; ~/.bashrc may still reset this to `history -a`.
+    PROMPT_COMMAND: 'history -a',
     COLUMNS: String(cols),
     LINES: String(rows),
-  } as Record<string, string>
+  }
   if (isTmuxAttachCommand(command)) {
     delete baseEnv.TMUX
     delete baseEnv.TMUX_PANE
@@ -173,6 +226,9 @@ export function createTerminalSession(params: {
   })
 
   let detachTimer: ReturnType<typeof setTimeout> | null = null
+  // Panel + fullscreen TerminalWorkspace can both attach to one PTY. Only
+  // start the reap timer when the last SSE listener detaches.
+  let attachCount = 0
 
   const session: TerminalSession = {
     id: sessionId,
@@ -198,6 +254,8 @@ export function createTerminalSession(params: {
     },
 
     markDetached() {
+      attachCount = Math.max(0, attachCount - 1)
+      if (attachCount > 0) return
       if (detachTimer) clearTimeout(detachTimer)
       detachTimer = setTimeout(() => {
         detachTimer = null
@@ -209,6 +267,7 @@ export function createTerminalSession(params: {
     },
 
     markAttached() {
+      attachCount += 1
       if (detachTimer) {
         clearTimeout(detachTimer)
         detachTimer = null
@@ -220,6 +279,7 @@ export function createTerminalSession(params: {
         clearTimeout(detachTimer)
         detachTimer = null
       }
+      attachCount = 0
       try {
         proc.kill('SIGTERM')
         setTimeout(() => {

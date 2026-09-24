@@ -13,7 +13,7 @@ import (
 )
 
 // agentActivityEventBridge projects the ordered precommit runtime stream into
-// the public agent.activity.updated WebSocket, mirroring tutti's
+// the public agent.activity.updated WebSocket, mirroring Tutti's upstream
 // agentRuntimeActivityEventBridge: message_delta frames keep their validated
 // live-protocol payload byte-for-byte (text, toolOutput, payloadSet and
 // payloadUnset operations), while malformed or cross-scoped deltas downgrade

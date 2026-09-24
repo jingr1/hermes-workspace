@@ -14,6 +14,65 @@ import {
   type RestartActiveSwarmWorkersResult,
 } from './swarm-tmux-restart'
 
+import { PRODUCT_UPDATE_CHECK_INTERVAL_MS } from '@/lib/managed-agent-runtime/update-check-ttl'
+
+export type UpdateCheckOptions = {
+  /**
+   * How to contact origin:
+   * - `local` (default for status reads): never `git fetch`; compare HEAD to
+   *   already-cached `origin/*` tips. Fast; used by `/api/agent-runtime/status`.
+   * - `auto`: fetch only when {@link UPDATE_CHECK_TTL_MS} has elapsed. Used by
+   *   the single daily update-check endpoint.
+   * - `force`: always fetch. Used by manual「检查更新」and apply paths.
+   */
+  fetch?: 'local' | 'auto' | 'force'
+  /** @deprecated use `fetch: 'force'` */
+  refresh?: boolean
+}
+
+/** Align with the single client-side daily update-check interval. */
+export const UPDATE_CHECK_TTL_MS = PRODUCT_UPDATE_CHECK_INTERVAL_MS
+
+/** Last successful `git fetch origin` per repo path (ms since epoch). */
+const lastOriginFetchAt = new Map<string, number>()
+
+function resolveFetchMode(
+  options?: UpdateCheckOptions,
+): 'local' | 'auto' | 'force' {
+  if (options?.fetch) return options.fetch
+  if (options?.refresh === true) return 'force'
+  return 'local'
+}
+
+/**
+ * Single chokepoint for `git fetch origin`. Status aggregation must pass
+ * `local` so opening Runtimes never blocks on the network.
+ */
+function maybeFetchOrigin(
+  repoPath: string,
+  mode: 'local' | 'auto' | 'force',
+): void {
+  if (mode === 'local') return
+  const now = Date.now()
+  const last = lastOriginFetchAt.get(repoPath) ?? 0
+  if (mode === 'auto' && now - last < UPDATE_CHECK_TTL_MS) return
+  git(['fetch', 'origin', '--quiet'], repoPath, 30_000)
+  lastOriginFetchAt.set(repoPath, Date.now())
+}
+
+/** Clear fetch TTL after a successful apply so the next auto-check rechecks. */
+export function invalidateUpdateFetchCache(repoPath?: string | null): void {
+  if (repoPath) {
+    lastOriginFetchAt.delete(repoPath)
+    return
+  }
+  lastOriginFetchAt.clear()
+}
+
+function markOriginFetched(repoPath: string): void {
+  lastOriginFetchAt.set(repoPath, Date.now())
+}
+
 type ProductId = 'workspace' | 'agent'
 type InstallKind = 'git' | 'desktop' | 'docker' | 'unknown'
 type UpdateState = 'current' | 'available' | 'blocked' | 'unsupported' | 'error'
@@ -303,6 +362,7 @@ function workspaceInstallKind(): InstallKind {
 
 export function readWorkspaceUpdateStatus(
   repoPath = process.cwd(),
+  options?: UpdateCheckOptions,
 ): ProductUpdateStatus {
   const installKind = workspaceInstallKind()
   const gitRepo = realGitRepoPath(repoPath)
@@ -372,7 +432,7 @@ export function readWorkspaceUpdateStatus(
     'hermes-workspace',
     'outsourc-e/hermes-workspace',
   ])
-  if (repoMatches) git(['fetch', 'origin', '--quiet'], gitRepo, 30_000)
+  if (repoMatches) maybeFetchOrigin(gitRepo, resolveFetchMode(options))
   const currentHead = git(['rev-parse', 'HEAD'], gitRepo)
   const branch = git(['rev-parse', '--abbrev-ref', 'HEAD'], gitRepo)
   const supportedBranch = branch === 'main' || branch === 'master'
@@ -447,7 +507,9 @@ function agentRepoPath(): string | null {
   return null
 }
 
-export function readAgentUpdateStatus(): ProductUpdateStatus {
+export function readAgentUpdateStatus(
+  options?: UpdateCheckOptions,
+): ProductUpdateStatus {
   const repoPath = agentRepoPath()
   const repoHermes = repoPath ? join(repoPath, 'venv', 'bin', 'hermes') : null
   const path =
@@ -485,7 +547,7 @@ export function readAgentUpdateStatus(): ProductUpdateStatus {
     'outsourc-e/hermes-agent',
     'NousResearch/hermes-agent',
   ])
-  if (repoMatches) git(['fetch', 'origin', '--quiet'], repoPath, 30_000)
+  if (repoMatches) maybeFetchOrigin(repoPath, resolveFetchMode(options))
   const currentHead = git(['rev-parse', 'HEAD'], repoPath)
   const branch = git(['rev-parse', '--abbrev-ref', 'HEAD'], repoPath)
   const tracking = repoMatches ? trackingBranchTip(repoPath, branch) : null
@@ -538,9 +600,17 @@ export function readAgentUpdateStatus(): ProductUpdateStatus {
   }
 }
 
-export function readUpdateStatus(): UpdateStatus {
-  const workspace = readWorkspaceUpdateStatus()
-  const agent = readAgentUpdateStatus()
+/**
+ * Product update status for the global banner + Runtimes「检查更新」.
+ * Default `fetch: 'auto'` — at most one origin contact per
+ * {@link UPDATE_CHECK_TTL_MS}. Pass `fetch: 'force'` for manual checks.
+ * Provider status aggregation must use {@link readAgentUpdateStatus} with
+ * default `local` instead of this entry point.
+ */
+export function readUpdateStatus(options?: UpdateCheckOptions): UpdateStatus {
+  const fetch = options?.fetch ?? (options?.refresh ? 'force' : 'auto')
+  const workspace = readWorkspaceUpdateStatus(process.cwd(), { fetch })
+  const agent = readAgentUpdateStatus({ fetch })
   return {
     ok: true,
     checkedAt: Date.now(),
@@ -570,6 +640,7 @@ export function applyWorkspaceUpdate(): ApplyUpdateResult {
       timeout: 60_000,
     }),
   )
+  markOriginFetched(before.repoPath)
   const remoteRef = `origin/${before.branch}`
   if (!canResetToRemote(before.repoPath, remoteRef)) {
     const status = readWorkspaceUpdateStatus()
@@ -673,6 +744,7 @@ export async function applyAgentUpdate(): Promise<ApplyUpdateResult> {
       timeout: 60_000,
     }),
   )
+  markOriginFetched(before.repoPath)
   const remoteRef = `origin/${before.branch || 'main'}`
   if (!canResetToRemote(before.repoPath, remoteRef)) {
     const status = readAgentUpdateStatus()

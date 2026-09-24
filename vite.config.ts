@@ -729,6 +729,10 @@ const config = defineConfig(({ mode, command }) => {
               path === '/api/swarm-direct-chat' ||
               path === '/api/swarm-dispatch' ||
               path === '/api/swarm-decompose' ||
+              // Managed npm / Hermes git upgrades can run for minutes with no
+              // response bytes; the default 15s idle socket kill aborts the
+              // browser mutation while the daemon/handler keeps working.
+              path === '/api/agent-runtime/install' ||
               /^\/api\/agents\/[^/]+\/chat$/.test(path)
             const timeout = isLongRunning ? 0 : 15_000
             socket.setTimeout(timeout)

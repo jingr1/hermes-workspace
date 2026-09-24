@@ -12,41 +12,27 @@ import {
 } from '@hugeicons/core-free-icons'
 import { cn } from '@/lib/utils'
 import { toast } from '@/components/ui/toast'
+import {
+  fetchProductUpdateStatus,
+  PRODUCT_UPDATE_CHECK_INTERVAL_MS,
+  PRODUCT_UPDATE_STATUS_QUERY_KEY,
+  type ProductUpdateStatusDto,
+  type ProductUpdateStatusResponse,
+} from '@/lib/managed-agent-runtime/product-update-check'
+import { AGENT_PROVIDER_STATUS_QUERY_KEY } from '@/lib/managed-agent-runtime/query-keys'
+import {
+  readProductUpdateAutoCheckEnabled,
+  PRODUCT_UPDATE_AUTO_CHECK_EVENT,
+} from '@/lib/managed-agent-runtime/update-check-preference'
 
 type ProductId = 'workspace' | 'agent'
-type ProductUpdateStatus = {
-  id: ProductId
-  label: string
-  installKind: 'git' | 'desktop' | 'docker' | 'unknown'
-  version: string
-  path: string | null
-  repoPath: string | null
-  branch: string | null
-  currentHead: string | null
-  latestHead: string | null
-  updateAvailable: boolean
-  canUpdate: boolean
-  state: 'current' | 'available' | 'blocked' | 'unsupported' | 'error'
-  reason: string | null
-  blockingFiles?: Array<string>
-  updateMode: string
-}
+type ProductUpdateStatus = ProductUpdateStatusDto
 
-type UpdateStatus = {
-  ok: true
-  checkedAt: number
-  products: Record<ProductId, ProductUpdateStatus>
-  updateAvailable: boolean
-  pendingReleaseNotes?: Array<ReleaseNoteSection>
-}
+type UpdateStatus = ProductUpdateStatusResponse
 
-type ReleaseNoteSection = {
-  product: ProductId
-  label: string
-  from: string | null
-  to: string | null
-  commits: Array<string>
-}
+type ReleaseNoteSection = NonNullable<
+  ProductUpdateStatusResponse['pendingReleaseNotes']
+>[number]
 
 type ApplyUpdateResult = {
   ok: boolean
@@ -75,7 +61,7 @@ type Notes = {
   updatedAt: number
 }
 
-const CHECK_INTERVAL_MS = 30 * 60 * 1000
+const CHECK_INTERVAL_MS = PRODUCT_UPDATE_CHECK_INTERVAL_MS
 const DISMISS_PREFIX = 'hermes-update-v2-dismissed:'
 const NOTES_KEY = 'hermes-update-v2-release-notes'
 const NOTES_SEEN_KEY = 'hermes-update-v2-release-notes-seen'
@@ -153,18 +139,32 @@ export function UpdateCenterNotifier() {
     return () => window.clearTimeout(timer)
   }, [])
 
+  const [autoCheck, setAutoCheck] = useState(() =>
+    readProductUpdateAutoCheckEnabled(),
+  )
+  useEffect(() => {
+    const onPref = () => setAutoCheck(readProductUpdateAutoCheckEnabled())
+    window.addEventListener(PRODUCT_UPDATE_AUTO_CHECK_EVENT, onPref)
+    return () => window.removeEventListener(PRODUCT_UPDATE_AUTO_CHECK_EVENT, onPref)
+  }, [])
+
   const { data } = useQuery({
-    queryKey: ['update-status-v2'],
-    queryFn: async () => {
-      const res = await fetch('/api/update/status')
-      if (!res.ok) return null
-      return res.json() as Promise<UpdateStatus>
-    },
+    queryKey: PRODUCT_UPDATE_STATUS_QUERY_KEY,
+    queryFn: () => fetchProductUpdateStatus(),
     enabled: bootDeferred,
-    refetchInterval: CHECK_INTERVAL_MS,
+    refetchInterval: autoCheck ? CHECK_INTERVAL_MS : false,
     staleTime: CHECK_INTERVAL_MS,
     retry: false,
   })
+
+  // After a product update check, refresh Runtimes Hermes badges from local
+  // origin tips — do not open a second git-fetch path.
+  useEffect(() => {
+    if (!data) return
+    void queryClient.invalidateQueries({
+      queryKey: AGENT_PROVIDER_STATUS_QUERY_KEY,
+    })
+  }, [data?.checkedAt, queryClient])
 
   useEffect(() => {
     if (!data?.pendingReleaseNotes?.length) return
@@ -173,16 +173,14 @@ export function UpdateCenterNotifier() {
   }, [data?.pendingReleaseNotes])
 
   const visibleProducts = useMemo(() => {
-    const products = data ? [data.products.workspace, data.products.agent] : []
-    return products.filter((product) => {
-      // Hermes Agent upgrades live on Settings → Runtimes; keep the global
-      // banner for Workspace product updates only (avoid repeated Agent banners).
-      if (product.id === 'agent') return false
-      if (!product.updateAvailable) return false
-      if (!product.canUpdate) return false
-      if (phases[product.id] === 'done') return false
-      return !dismissed.has(productDismissKey(product))
-    })
+    // Banner is Agorax (workspace) only. Hermes + managed CLIs upgrade in
+    // Settings → Runtimes — never surface them here.
+    const workspace = data?.products.workspace
+    if (!workspace) return []
+    if (!workspace.updateAvailable || !workspace.canUpdate) return []
+    if (phases.workspace === 'done') return []
+    if (dismissed.has(productDismissKey(workspace))) return []
+    return [workspace]
   }, [data, dismissed, phases])
 
   function dismiss(product: ProductUpdateStatus) {
@@ -192,57 +190,50 @@ export function UpdateCenterNotifier() {
   }
 
   async function update(product: ProductUpdateStatus) {
-    if (!product.canUpdate) return
-    setPhases((prev) => ({ ...prev, [product.id]: 'updating' }))
-    setErrors((prev) => ({ ...prev, [product.id]: '' }))
+    if (product.id !== 'workspace' || !product.canUpdate) return
+    setPhases((prev) => ({ ...prev, workspace: 'updating' }))
+    setErrors((prev) => ({ ...prev, workspace: '' }))
     try {
-      const res = await fetch(
-        `/api/update/${product.id === 'workspace' ? 'workspace' : 'agent'}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
-        },
-      )
+      const res = await fetch('/api/update/workspace', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
       const result = (await res.json()) as ApplyUpdateResult
       if (!res.ok || !result.ok) {
-        setPhases((prev) => ({ ...prev, [product.id]: 'error' }))
+        setPhases((prev) => ({ ...prev, workspace: 'error' }))
         setErrors((prev) => ({
           ...prev,
-          [product.id]: result.error || `${product.label} update failed`,
+          workspace: result.error || `${product.label} update failed`,
         }))
         // Refresh status so a stale "available" banner clears when the
         // backend now reports current/blocked.
-        await queryClient.invalidateQueries({ queryKey: ['update-status-v2'] })
+        await queryClient.invalidateQueries({
+          queryKey: PRODUCT_UPDATE_STATUS_QUERY_KEY,
+        })
         return
       }
-      setPhases((prev) => ({ ...prev, [product.id]: 'done' }))
+      setPhases((prev) => ({ ...prev, workspace: 'done' }))
       dismiss(product)
       const stored = result.releaseNotes?.length
         ? storeNotes(result.releaseNotes)
         : null
       if (stored) setNotes(stored)
-      await queryClient.invalidateQueries({ queryKey: ['update-status-v2'] })
-      const restartedWorkers =
-        result.workerRestart?.results
-          .filter((item) => item.started)
-          .map((item) => item.workerId) ?? []
-      if (product.id === 'agent' && restartedWorkers.length > 0) {
-        toast(
-          `${product.label} updated. Restarted swarm workers: ${restartedWorkers.join(', ')}.`,
-          { type: 'success', duration: 9000 },
-        )
-      } else {
-        toast(`${product.label} updated. Restart may be required.`, {
-          type: 'success',
-          duration: 7000,
-        })
-      }
+      await queryClient.invalidateQueries({
+        queryKey: PRODUCT_UPDATE_STATUS_QUERY_KEY,
+      })
+      await queryClient.invalidateQueries({
+        queryKey: AGENT_PROVIDER_STATUS_QUERY_KEY,
+      })
+      toast(`${product.label} updated. Restart may be required.`, {
+        type: 'success',
+        duration: 7000,
+      })
     } catch (err) {
-      setPhases((prev) => ({ ...prev, [product.id]: 'error' }))
+      setPhases((prev) => ({ ...prev, workspace: 'error' }))
       setErrors((prev) => ({
         ...prev,
-        [product.id]: err instanceof Error ? err.message : String(err),
+        workspace: err instanceof Error ? err.message : String(err),
       }))
     }
   }

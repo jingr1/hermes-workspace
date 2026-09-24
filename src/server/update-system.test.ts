@@ -39,4 +39,13 @@ describe('update-system helpers', () => {
     // Unknown divergence must not advertise an update (avoids false positives).
     expect(updateAvailableFromDivergence(null, true)).toBe(false)
   })
+
+  it('exports a 24h update-check TTL aligned with the Runtimes daily poll', async () => {
+    const { UPDATE_CHECK_TTL_MS } = await import('./update-system')
+    const { PRODUCT_UPDATE_CHECK_INTERVAL_MS } = await import(
+      '@/lib/managed-agent-runtime/update-check-ttl'
+    )
+    expect(UPDATE_CHECK_TTL_MS).toBe(PRODUCT_UPDATE_CHECK_INTERVAL_MS)
+    expect(UPDATE_CHECK_TTL_MS).toBe(24 * 60 * 60 * 1000)
+  })
 })

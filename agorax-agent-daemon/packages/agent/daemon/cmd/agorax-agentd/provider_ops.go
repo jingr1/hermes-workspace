@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"agorax.local/agent-daemon/packages/agent/daemon/agentstatus"
 	"agorax.local/agent-daemon/packages/agent/daemon/managednpm"
 	"agorax.local/agent-daemon/packages/agent/daemon/providerregistry"
 	"agorax.local/agent-daemon/packages/agent/daemon/providerstatus"
@@ -34,9 +35,13 @@ const (
 	// claude descriptor declares a 600s budget for interactive logins; a
 	// read-only status probe must finish well inside that.
 	providerAuthTimeoutMax = 10 * time.Second
-	// providerInstallTimeout bounds the whole managed npm install including
-	// large platform optional-dependency downloads.
+	// providerInstallTimeout bounds the whole managed npm / official-script
+	// install including large platform optional-dependency downloads.
 	providerInstallTimeout = 10 * time.Minute
+	// providerScriptDownloadTimeout bounds a single official installer script
+	// download attempt (retries use a fresh timeout each time).
+	providerScriptDownloadTimeout = 2 * time.Minute
+	providerScriptDownloadAttempts = 3
 	// providerRegistryProbeTimeout bounds a single registry metadata probe so
 	// status reads fail fast when the network is down.
 	providerRegistryProbeTimeout = 2 * time.Second
@@ -95,15 +100,29 @@ type providerInstallDTO struct {
 	DisplayCommand string `json:"displayCommand"`
 	PackageName    string `json:"packageName"`
 	BinaryName     string `json:"binaryName"`
-	// ManagedNPM is true when the daemon install endpoint can drive this
-	// provider's installer (managed npm argv execution).
+	// ManagedNPM is true when the daemon install path is managed npm /
+	// codex-cli-latest (argv npm install). Official-script providers still
+	// expose an install DTO with managedNpm=false; the install endpoint
+	// drives them via ScriptURL / Windows fallback instead.
 	ManagedNPM bool `json:"managedNpm"`
 }
 
 type providerUpdateDTO struct {
-	Capability        string `json:"capability"`
-	Source            string `json:"source"`
-	UnsupportedReason string `json:"unsupportedReason,omitempty"`
+	Capability        string  `json:"capability"`
+	Source            string  `json:"source"`
+	UnsupportedReason string  `json:"unsupportedReason,omitempty"`
+	CurrentVersion    *string `json:"currentVersion,omitempty"`
+	LatestVersion     *string `json:"latestVersion,omitempty"`
+	LastCheckedAt     *string `json:"lastCheckedAt,omitempty"`
+	ReasonCode        string  `json:"reasonCode,omitempty"`
+}
+
+type providerLoginDTO struct {
+	// Supported is true when the descriptor declares LoginArgs the daemon can
+	// launch interactively via POST /v1/providers/{provider}/login.
+	Supported      bool     `json:"supported"`
+	DisplayCommand string   `json:"displayCommand"`
+	Command        []string `json:"command,omitempty"`
 }
 
 type providerStatusDTO struct {
@@ -111,16 +130,24 @@ type providerStatusDTO struct {
 	TargetID   string `json:"targetId"`
 	Registered bool   `json:"registered"`
 	Installed  bool   `json:"installed"`
+	// InstallInProgress is true while a managed npm install for this provider
+	// holds the in-process lock. UI clients should show "installing" and refuse
+	// another click instead of treating concurrent POSTs as hard failures.
+	InstallInProgress bool `json:"installInProgress"`
+	// LoginInProgress is true while an interactive login process started by the
+	// daemon is still being watched for auth readiness.
+	LoginInProgress bool `json:"loginInProgress"`
 	// BinaryPath/Version/LatestVersion are null when they cannot be resolved.
-	BinaryPath         *string            `json:"binaryPath"`
-	Version            *string            `json:"version"`
-	MinVersion         string             `json:"minVersion,omitempty"`
-	RecommendedVersion string             `json:"recommendedVersion,omitempty"`
-	LatestVersion      *string            `json:"latestVersion"`
-	UpdateAvailable    bool               `json:"updateAvailable"`
-	Auth               providerAuthDTO    `json:"auth"`
+	BinaryPath         *string             `json:"binaryPath"`
+	Version            *string             `json:"version"`
+	MinVersion         string              `json:"minVersion,omitempty"`
+	RecommendedVersion string              `json:"recommendedVersion,omitempty"`
+	LatestVersion      *string             `json:"latestVersion"`
+	UpdateAvailable    bool                `json:"updateAvailable"`
+	Auth               providerAuthDTO     `json:"auth"`
 	Install            *providerInstallDTO `json:"install,omitempty"`
-	Update             providerUpdateDTO  `json:"update"`
+	Login              *providerLoginDTO   `json:"login,omitempty"`
+	Update             providerUpdateDTO   `json:"update"`
 	// Error carries non-fatal detection failures (version probe timeout, auth
 	// command failure, registry unreachable); it never fails the aggregate.
 	Error string `json:"error,omitempty"`
@@ -153,15 +180,28 @@ type providerOps struct {
 	homeDir             func() (string, error)
 	now                 func() time.Time
 
+	// statusService is Agorax agentstatus — authoritative for detect/install/update.
+	statusService *agentstatus.Service
+
 	latestMu     sync.Mutex
 	latestCached map[string]latestVersionEntry
 
 	installMu  sync.Mutex
 	installing map[string]bool
+
+	loginMu   sync.Mutex
+	loggingIn map[string]bool
+
+	// userEnabled records Runtimes Switch preferences by identity id. Needed
+	// for providers (notably kimi-code) that appear in status without a
+	// migrated runtime adapter — RegisteredProviders never lists them, so the
+	// Switch would otherwise ignore enable POSTs.
+	userEnabledMu sync.Mutex
+	userEnabled   map[string]bool
 }
 
 func defaultProviderOps(registeredProviders func() map[string]bool) *providerOps {
-	return &providerOps{
+	ops := &providerOps{
 		resolver:            runtimecmd.Resolver{},
 		registeredProviders: registeredProviders,
 		httpClient:          &http.Client{Timeout: providerRegistryProbeTimeout},
@@ -170,7 +210,14 @@ func defaultProviderOps(registeredProviders func() map[string]bool) *providerOps
 		now:                 time.Now,
 		latestCached:        map[string]latestVersionEntry{},
 		installing:          map[string]bool{},
+		loggingIn:           map[string]bool{},
+		userEnabled:         map[string]bool{},
 	}
+	svc := newAgentStatusService(ops.environ, ops.homeDir)
+	ops.statusService = &svc
+	ops.resolver.Environ = ops.environ
+	ops.resolver.HomeDir = ops.homeDir
+	return ops
 }
 
 func (o *providerOps) resolveBinary(binaryNames []string) string {
@@ -196,10 +243,31 @@ func (o *providerOps) probeVersion(ctx context.Context, binary string) (string, 
 		return "", err
 	}
 	version, ok := managednpm.ExtractVersion(string(output))
-	if !ok {
-		return "", fmt.Errorf("could not parse a stable version from %q", strings.TrimSpace(string(output)))
+	if ok {
+		return version, nil
 	}
-	return version, nil
+	// Official CLIs such as Cursor report date-hash builds (e.g.
+	// "2026.09.23-86fc751") that are not stable x.y.z. Keep a trimmed token so
+	// install verification and status still succeed when the binary is healthy.
+	if token := firstNonEmptyVersionToken(string(output)); token != "" {
+		return token, nil
+	}
+	return "", fmt.Errorf("could not parse a version from %q", strings.TrimSpace(string(output)))
+}
+
+func firstNonEmptyVersionToken(output string) string {
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		return fields[len(fields)-1]
+	}
+	return ""
 }
 
 // detectProvider aggregates one provider's runtime state. Every probe is
@@ -211,6 +279,8 @@ func (o *providerOps) detectProvider(ctx context.Context, descriptor providerreg
 		Provider:           descriptor.Identity.ID,
 		TargetID:           descriptor.Target.ID,
 		Registered:         o.isRegistered(descriptor),
+		InstallInProgress:  o.isInstallInProgress(descriptor.Identity.ID),
+		LoginInProgress:    o.isLoginInProgress(descriptor.Identity.ID),
 		MinVersion:         status.MinVersion,
 		RecommendedVersion: status.Install.RecommendedVersion,
 		Auth:               providerAuthDTO{Status: string(providerstatus.AuthUnknown)},
@@ -223,6 +293,9 @@ func (o *providerOps) detectProvider(ctx context.Context, descriptor providerreg
 	if install, ok := installDescriptorDTO(status); ok {
 		entry.Install = install
 	}
+	if login, ok := loginDescriptorDTO(status, ""); ok {
+		entry.Login = login
+	}
 
 	binary := o.resolveBinary(status.BinaryNames)
 	if binary == "" {
@@ -230,6 +303,9 @@ func (o *providerOps) detectProvider(ctx context.Context, descriptor providerreg
 	}
 	entry.Installed = true
 	entry.BinaryPath = stringPointer(binary)
+	if login, ok := loginDescriptorDTO(status, binary); ok {
+		entry.Login = login
+	}
 
 	var probeErrors []string
 	version, err := o.probeVersion(ctx, binary)
@@ -258,10 +334,21 @@ func (o *providerOps) detectProvider(ctx context.Context, descriptor providerreg
 		}
 	}
 
+	if entry.Version != nil {
+		entry.Update.CurrentVersion = entry.Version
+	}
 	if installable(descriptor.Status.Install) {
+		checkedAt := o.now().UTC().Format(time.RFC3339)
+		entry.Update.LastCheckedAt = stringPointer(checkedAt)
 		latest := o.latestVersion(ctx, descriptor.Status.Install.PackageName)
 		if latest != "" {
 			entry.LatestVersion = stringPointer(latest)
+			entry.Update.LatestVersion = stringPointer(latest)
+		} else {
+			// Discovery ran but returned nothing — surface Tutti-parity
+			// check-failed so the Runtimes summary can distinguish "up to date"
+			// from "could not check".
+			entry.Update.ReasonCode = "registry_unreachable"
 		}
 		entry.UpdateAvailable = updateAvailable(entry.Version, status.MinVersion, status.Install.RecommendedVersion, latest)
 	} else {
@@ -273,16 +360,67 @@ func (o *providerOps) detectProvider(ctx context.Context, descriptor providerreg
 }
 
 func (o *providerOps) isRegistered(descriptor providerregistry.ProviderDescriptor) bool {
-	if o.registeredProviders == nil {
-		return false
+	id := normalizeProviderID(descriptor.Identity.ID)
+	adapterRegistered := false
+	if o.registeredProviders != nil {
+		registered := o.registeredProviders()
+		if registered[descriptor.Identity.ID] || registered[descriptor.Target.ID] {
+			adapterRegistered = true
+		}
+		// The daemon catalog registers the Kimi ACP extension under its runtime
+		// provider key rather than its target id.
+		if !adapterRegistered && id == "kimi-code" && registered["acp:kimi-code"] {
+			adapterRegistered = true
+		}
 	}
-	registered := o.registeredProviders()
-	if registered[descriptor.Identity.ID] || registered[descriptor.Target.ID] {
-		return true
+	if enabled, ok := o.userEnabledPreference(id); ok {
+		if !enabled {
+			return false
+		}
+		// Enabled preference alone is enough for hosts without a migrated
+		// adapter (kimi-code today); adapter presence still unlocks others.
+		return adapterRegistered || id == "kimi-code"
 	}
-	// The daemon catalog registers the Kimi ACP extension under its runtime
-	// provider key rather than its target id.
-	return descriptor.Identity.ID == "kimi-code" && registered["acp:kimi-code"]
+	return adapterRegistered
+}
+
+// setUserEnabledPreference stores the Runtimes enable Switch for identity id.
+func (o *providerOps) setUserEnabledPreference(providerID string, enabled bool) {
+	key := normalizeProviderID(providerID)
+	if key == "" {
+		return
+	}
+	o.userEnabledMu.Lock()
+	defer o.userEnabledMu.Unlock()
+	if o.userEnabled == nil {
+		o.userEnabled = map[string]bool{}
+	}
+	o.userEnabled[key] = enabled
+}
+
+func (o *providerOps) userEnabledPreference(providerID string) (enabled bool, ok bool) {
+	key := normalizeProviderID(providerID)
+	if key == "" {
+		return false, false
+	}
+	o.userEnabledMu.Lock()
+	defer o.userEnabledMu.Unlock()
+	enabled, ok = o.userEnabled[key]
+	return enabled, ok
+}
+
+// providerEnableAliases are Controller.SetProviderEnabled keys that must move
+// together so status + agent-targets agree after a toggle.
+func providerEnableAliases(descriptor providerregistry.ProviderDescriptor) []string {
+	id := normalizeProviderID(descriptor.Identity.ID)
+	keys := []string{descriptor.Identity.ID}
+	if target := strings.TrimSpace(descriptor.Target.ID); target != "" && target != descriptor.Identity.ID {
+		keys = append(keys, target)
+	}
+	if id == "kimi-code" {
+		keys = append(keys, "acp:kimi-code")
+	}
+	return keys
 }
 
 // updateAvailable reports whether an installed provider has a newer managed
@@ -310,16 +448,29 @@ func updateAvailable(version *string, minVersion string, recommended string, lat
 }
 
 func installDescriptorDTO(status providerregistry.StatusDescriptor) (*providerInstallDTO, bool) {
-	if strings.TrimSpace(status.Install.PackageName) == "" {
+	kind := status.Install.Kind
+	switch kind {
+	case providerregistry.InstallerKindManagedNPM, providerregistry.InstallerKindCodexCLILatest:
+		if strings.TrimSpace(status.Install.PackageName) == "" {
+			return nil, false
+		}
+	case providerregistry.InstallerKindOfficialScript:
+		if strings.TrimSpace(status.Install.ScriptURL) == "" && strings.TrimSpace(status.Install.DisplayCommand) == "" {
+			return nil, false
+		}
+	default:
 		return nil, false
 	}
-	kind := status.Install.Kind
+	binaryName := strings.TrimSpace(status.Install.BinaryName)
+	if binaryName == "" && len(status.BinaryNames) > 0 {
+		binaryName = status.BinaryNames[0]
+	}
 	managed := kind == providerregistry.InstallerKindManagedNPM || kind == providerregistry.InstallerKindCodexCLILatest
 	return &providerInstallDTO{
 		Kind:           string(kind),
 		DisplayCommand: status.Install.DisplayCommand,
 		PackageName:    status.Install.PackageName,
-		BinaryName:     status.Install.BinaryName,
+		BinaryName:     binaryName,
 		ManagedNPM:     managed,
 	}, true
 }
@@ -401,10 +552,11 @@ func (p npmRegistryProber) ProbeRegistry(ctx context.Context, request managednpm
 	return managednpm.RegistryProbeResult{Reachable: reachable, Complete: reachable, Duration: time.Since(started)}
 }
 
-// installProvider runs the managed npm install for providerID and verifies
-// the binary afterwards. It returns the HTTP status to write alongside the
-// result: 200 satisfied/already, 409 concurrent install, 422 unsupported, 502
-// registry/npm resolution failure, 500 install/verification failure.
+// installProvider runs the descriptor-owned installer for providerID and
+// verifies the binary afterwards. It returns the HTTP status to write
+// alongside the result: 200 satisfied/already, 409 concurrent install, 422
+// unsupported, 502 registry/npm resolution failure, 500 install/verification
+// failure.
 func (o *providerOps) installProvider(ctx context.Context, providerID string, requestedVersion string) (providerInstallResultDTO, int, error) {
 	result := providerInstallResultDTO{Provider: providerID}
 	descriptor, ok := findProviderTarget(providerID)
@@ -418,7 +570,10 @@ func (o *providerOps) installProvider(ctx context.Context, providerID string, re
 	requestedVersion = strings.TrimSpace(requestedVersion)
 
 	if !o.acquireInstall(providerID) {
-		return result, http.StatusConflict, fmt.Errorf("an install for %q is already in progress", providerID)
+		return result, http.StatusConflict, fmt.Errorf(
+			"an install for %q is already in progress — wait for the current install to finish (up to %s), then retry",
+			providerID, providerInstallTimeout,
+		)
 	}
 	defer o.releaseInstall(providerID)
 
@@ -436,6 +591,25 @@ func (o *providerOps) installProvider(ctx context.Context, providerID string, re
 		}
 	}
 
+	switch install.Kind {
+	case providerregistry.InstallerKindManagedNPM, providerregistry.InstallerKindCodexCLILatest:
+		return o.installManagedNPM(ctx, result, descriptor, requestedVersion)
+	case providerregistry.InstallerKindOfficialScript:
+		return o.installOfficialScript(ctx, result, descriptor, requestedVersion)
+	default:
+		return result, http.StatusUnprocessableEntity, fmt.Errorf("%w for %q", errProviderInstallUnsupported, providerID)
+	}
+}
+
+// installManagedNPM assumes the install lock is already held and the
+// "already satisfied" short-circuit has been checked.
+func (o *providerOps) installManagedNPM(
+	ctx context.Context,
+	result providerInstallResultDTO,
+	descriptor providerregistry.ProviderDescriptor,
+	requestedVersion string,
+) (providerInstallResultDTO, int, error) {
+	install := descriptor.Status.Install
 	npmPath := o.resolveBinary([]string{"npm"})
 	if npmPath == "" {
 		return result, http.StatusBadGateway, errors.New("npm is not available on PATH")
@@ -517,12 +691,11 @@ func installSatisfied(installedVersion string, minVersion string, requestedVersi
 }
 
 func installable(install providerregistry.InstallerDescriptor) bool {
-	if install.PackageName == "" {
-		return false
-	}
 	switch install.Kind {
 	case providerregistry.InstallerKindManagedNPM, providerregistry.InstallerKindCodexCLILatest:
-		return true
+		return strings.TrimSpace(install.PackageName) != ""
+	case providerregistry.InstallerKindOfficialScript:
+		return strings.TrimSpace(install.ScriptURL) != "" || strings.TrimSpace(install.DisplayCommand) != ""
 	default:
 		return false
 	}
@@ -542,19 +715,28 @@ func normalizeProviderID(value string) string {
 }
 
 func (o *providerOps) acquireInstall(providerID string) bool {
+	key := normalizeProviderID(providerID)
 	o.installMu.Lock()
 	defer o.installMu.Unlock()
-	if o.installing[providerID] {
+	if o.installing[key] {
 		return false
 	}
-	o.installing[providerID] = true
+	o.installing[key] = true
 	return true
 }
 
 func (o *providerOps) releaseInstall(providerID string) {
+	key := normalizeProviderID(providerID)
 	o.installMu.Lock()
-	delete(o.installing, providerID)
+	delete(o.installing, key)
 	o.installMu.Unlock()
+}
+
+func (o *providerOps) isInstallInProgress(providerID string) bool {
+	key := normalizeProviderID(providerID)
+	o.installMu.Lock()
+	defer o.installMu.Unlock()
+	return o.installing[key]
 }
 
 // selectInstallRegistry ranks the candidate registries and returns the first
@@ -659,7 +841,7 @@ func tailLines(output string, n int) string {
 // directories npm leaves behind when a global install is interrupted, so the
 // next attempt does not fail with ENOTEMPTY. Only the target package's
 // staging dirs are removed; the global prefix may hold unrelated packages.
-// Ported from tutti's managed npm installer.
+// Ported from Tutti's managed npm installer.
 func cleanupNPMStagingDirs(prefixDir string, packageName string) {
 	packageDir := managedNPMGlobalPackageDir(prefixDir, packageName)
 	if packageDir == "" {
@@ -695,34 +877,17 @@ func managedNPMGlobalPackageDir(prefixDir string, packageName string) string {
 	return filepath.Join(append([]string{prefixDir, "lib", "node_modules"}, parts...)...)
 }
 
-func (o *providerOps) handleProviderStatus(response http.ResponseWriter, request *http.Request) {
-	targets := knownProviderTargets()
-	statuses := make([]providerStatusDTO, len(targets))
-	var wait sync.WaitGroup
-	for index := range targets {
-		wait.Add(1)
-		go func(index int) {
-			defer wait.Done()
-			statuses[index] = o.detectProvider(request.Context(), targets[index])
-		}(index)
-	}
-	wait.Wait()
-	writeJSON(response, http.StatusOK, providerStatusListDTO{
-		CapturedAt: o.now().UTC().Format(time.RFC3339),
-		Providers:  statuses,
-	})
-}
-
-func (o *providerOps) handleProviderInstall(response http.ResponseWriter, request *http.Request) {
+func (o *providerOps) handleProviderLogin(response http.ResponseWriter, request *http.Request) {
 	providerID := strings.TrimSpace(request.PathValue("provider"))
 	var body struct {
-		Version string `json:"version"`
+		PreferWebTerminal *bool `json:"preferWebTerminal"`
 	}
-	if err := json.NewDecoder(request.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
-		writeJSON(response, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
+	_ = json.NewDecoder(request.Body).Decode(&body)
+	preferWeb := true
+	if body.PreferWebTerminal != nil {
+		preferWeb = *body.PreferWebTerminal
 	}
-	result, status, err := o.installProvider(request.Context(), providerID, body.Version)
+	result, status, err := o.startProviderLogin(context.WithoutCancel(request.Context()), providerID, preferWeb)
 	if err != nil {
 		writeJSON(response, status, map[string]string{"error": err.Error()})
 		return

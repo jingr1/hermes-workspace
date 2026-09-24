@@ -380,7 +380,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
                 className="text-[13px] font-medium select-none"
                 style={{ color: 'var(--theme-accent, #B98A44)' }}
               >
-                Hermes
+                Agorax
               </span>
             </div>
             {/* Right spacer to balance */}

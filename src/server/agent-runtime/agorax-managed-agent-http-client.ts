@@ -1,6 +1,7 @@
 import type { AgentProbeResult } from './types'
 import {
   type AgentProviderInstallResultDto,
+  type AgentProviderLoginResultDto,
   type AgentProviderStatusListDto,
 } from '@/lib/managed-agent-runtime/provider-status'
 import { AgoraxManagedRunStore } from './agorax-managed-run-store'
@@ -187,6 +188,22 @@ export class AgoraxManagedAgentHttpClient {
       {
         method: 'POST',
         body: JSON.stringify({ enabled }),
+      },
+    )
+  }
+
+  /** POST /v1/providers/{provider}/login — return login argv for web PTY. */
+  async loginProvider(
+    provider: string,
+    options?: { preferWebTerminal?: boolean },
+  ): Promise<AgentProviderLoginResultDto> {
+    return this.requestJson<AgentProviderLoginResultDto>(
+      `/v1/providers/${encodeURIComponent(provider)}/login`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          preferWebTerminal: options?.preferWebTerminal ?? true,
+        }),
       },
     )
   }

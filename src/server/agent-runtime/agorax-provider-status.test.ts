@@ -25,13 +25,17 @@ const statusBody: AgentProviderStatusListDto = {
       updateAvailable: false,
       auth: { status: 'authenticated', accountLabel: 'dev@example.com' },
       install: {
-        kind: 'managed_npm',
-        displayCommand: 'npm install -g @anthropic-ai/claude-code',
-        packageName: '@anthropic-ai/claude-code',
+        kind: 'official_script',
+        displayCommand: 'curl -fsSL https://claude.ai/install.sh | bash',
+        packageName: '',
         binaryName: 'claude',
-        managedNpm: true,
+        managedNpm: false,
       },
-      update: { capability: 'supported', source: 'npm' },
+      update: {
+        capability: 'unsupported',
+        source: '',
+        unsupportedReason: 'official_script_update_unsupported',
+      },
     },
   ],
 }
@@ -63,10 +67,11 @@ describe('AgoraxManagedAgentHttpClient provider runtime surfaces', () => {
 
     expect(calls[0]?.url).toBe('http://127.0.0.1:19130/v1/provider-status')
     expect(calls[0]?.init.method).toBe('GET')
-    expect(status.providers[0]?.provider).toBe('claude-code')
-    expect(status.providers[0]?.install?.packageName).toBe(
-      '@anthropic-ai/claude-code',
+    expect(status.providers[0]?.install?.kind).toBe('official_script')
+    expect(status.providers[0]?.install?.displayCommand).toBe(
+      'curl -fsSL https://claude.ai/install.sh | bash',
     )
+    expect(status.providers[0]?.install?.managedNpm).toBe(false)
   })
 
   it('POSTs an install without a version as an empty body', async () => {

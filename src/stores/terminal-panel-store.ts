@@ -12,6 +12,13 @@ export type TerminalTab = {
   cwd: string
   sessionId: string | null
   status: TerminalTabStatus
+  /** One-shot argv passed to the next PTY spawn (e.g. provider login). */
+  pendingCommand?: Array<string> | null
+}
+
+type CreateTabOptions = {
+  title?: string
+  command?: Array<string>
 }
 
 type TerminalPanelState = {
@@ -23,13 +30,14 @@ type TerminalPanelState = {
   setPanelOpen: (isOpen: boolean) => void
   togglePanel: () => void
   setPanelHeight: (height: number) => void
-  createTab: (cwd?: string) => string
+  createTab: (cwd?: string, options?: CreateTabOptions) => string
   closeTab: (tabId: string) => void
   closeAllTabs: () => void
   setActiveTab: (tabId: string) => void
   renameTab: (tabId: string, title: string) => void
   setTabSessionId: (tabId: string, sessionId: string | null) => void
   setTabStatus: (tabId: string, status: TerminalTabStatus) => void
+  clearTabPendingCommand: (tabId: string) => void
 }
 
 function createDefaultTab(counter: number, cwd = '~'): TerminalTab {
@@ -60,10 +68,16 @@ export const useTerminalPanelStore = create<TerminalPanelState>()(
         const clamped = Math.max(MIN_PANEL_HEIGHT, Math.round(height))
         set({ panelHeight: clamped })
       },
-      createTab: function createTab(cwd = '~') {
+      createTab: function createTab(cwd = '~', options?: CreateTabOptions) {
         const { terminalCounter } = get()
         const nextCounter = terminalCounter + 1
         const tab = createDefaultTab(nextCounter, cwd)
+        if (options?.title?.trim()) {
+          tab.title = options.title.trim()
+        }
+        if (options?.command?.length) {
+          tab.pendingCommand = options.command.map(String)
+        }
         set((state) => ({
           tabs: [...state.tabs, tab],
           activeTabId: tab.id,
@@ -135,6 +149,13 @@ export const useTerminalPanelStore = create<TerminalPanelState>()(
           ),
         }))
       },
+      clearTabPendingCommand: function clearTabPendingCommand(tabId: string) {
+        set((state) => ({
+          tabs: state.tabs.map((tab) =>
+            tab.id === tabId ? { ...tab, pendingCommand: null } : tab,
+          ),
+        }))
+      },
     }),
     {
       name: 'terminal-panel-state',
@@ -142,7 +163,13 @@ export const useTerminalPanelStore = create<TerminalPanelState>()(
         return {
           isPanelOpen: state.isPanelOpen,
           panelHeight: state.panelHeight,
-          tabs: state.tabs,
+          // Drop one-shot login commands from persistence — they must not
+          // re-fire after a reload.
+          tabs: state.tabs.map((tab) => ({
+            ...tab,
+            pendingCommand: null,
+            sessionId: tab.sessionId,
+          })),
           activeTabId: state.activeTabId,
           terminalCounter: state.terminalCounter,
         }

@@ -304,7 +304,7 @@ export class ClaudeCodeAdapter implements AgentRuntimeAdapter {
     const command = await this.resolveCommand()
     if (!command) {
       throw new Error(
-        'claude executable not found; install @anthropic-ai/claude-code globally',
+        'claude executable not found; install with: curl -fsSL https://claude.ai/install.sh | bash',
       )
     }
     const runRoot = path.join(getStateDir(), 'agent-runs', input.runId)

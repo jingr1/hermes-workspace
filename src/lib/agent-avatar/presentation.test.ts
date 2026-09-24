@@ -13,6 +13,7 @@ describe('normalizeAgentAvatarProvider', () => {
     expect(normalizeAgentAvatarProvider('claude-code')).toBe('claude-code')
     expect(normalizeAgentAvatarProvider('cc-impl')).toBe('claude-code')
     expect(normalizeAgentAvatarProvider('codex-impl')).toBe('codex')
+    expect(normalizeAgentAvatarProvider('kimi-code')).toBe('kimi')
     expect(normalizeAgentAvatarProvider('agorax')).toBe('agorax')
   })
 
@@ -67,6 +68,9 @@ describe('projectAgentIdentityAvatar', () => {
 
   it('uses kimi and deepseek provider art', () => {
     expect(resolveAgentAvatarSrc('kimi')).toBe('/agent-avatars/kimi-rounded.png')
+    expect(resolveAgentAvatarSrc('kimi-code')).toBe(
+      '/agent-avatars/kimi-rounded.png',
+    )
     expect(resolveAgentAvatarSrc('deepseek-harness')).toBe(
       '/agent-avatars/deepseek-rounded.png',
     )

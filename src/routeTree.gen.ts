@@ -216,6 +216,7 @@ import { Route as ApiArtifactsArtifactIdRouteImport } from './routes/api/artifac
 import { Route as ApiAgentsStatusRouteImport } from './routes/api/agents/status'
 import { Route as ApiAgentsSnapshotRouteImport } from './routes/api/agents/snapshot'
 import { Route as ApiAgentRuntimeStatusRouteImport } from './routes/api/agent-runtime/status'
+import { Route as ApiAgentRuntimeLoginRouteImport } from './routes/api/agent-runtime/login'
 import { Route as ApiAgentRuntimeInstallRouteImport } from './routes/api/agent-runtime/install'
 import { Route as ApiAgentRuntimeEnableRouteImport } from './routes/api/agent-runtime/enable'
 import { Route as ApiMissionsMissionIdIndexRouteImport } from './routes/api/missions/$missionId/index'
@@ -1311,6 +1312,11 @@ const ApiAgentRuntimeStatusRoute = ApiAgentRuntimeStatusRouteImport.update({
   path: '/api/agent-runtime/status',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAgentRuntimeLoginRoute = ApiAgentRuntimeLoginRouteImport.update({
+  id: '/api/agent-runtime/login',
+  path: '/api/agent-runtime/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAgentRuntimeInstallRoute = ApiAgentRuntimeInstallRouteImport.update({
   id: '/api/agent-runtime/install',
   path: '/api/agent-runtime/install',
@@ -1727,6 +1733,7 @@ export interface FileRoutesByFullPath {
   '/skills/': typeof SkillsIndexRoute
   '/api/agent-runtime/enable': typeof ApiAgentRuntimeEnableRoute
   '/api/agent-runtime/install': typeof ApiAgentRuntimeInstallRoute
+  '/api/agent-runtime/login': typeof ApiAgentRuntimeLoginRoute
   '/api/agent-runtime/status': typeof ApiAgentRuntimeStatusRoute
   '/api/agents/snapshot': typeof ApiAgentsSnapshotRoute
   '/api/agents/status': typeof ApiAgentsStatusRoute
@@ -1983,6 +1990,7 @@ export interface FileRoutesByTo {
   '/skills': typeof SkillsIndexRoute
   '/api/agent-runtime/enable': typeof ApiAgentRuntimeEnableRoute
   '/api/agent-runtime/install': typeof ApiAgentRuntimeInstallRoute
+  '/api/agent-runtime/login': typeof ApiAgentRuntimeLoginRoute
   '/api/agent-runtime/status': typeof ApiAgentRuntimeStatusRoute
   '/api/agents/snapshot': typeof ApiAgentsSnapshotRoute
   '/api/agents/status': typeof ApiAgentsStatusRoute
@@ -2243,6 +2251,7 @@ export interface FileRoutesById {
   '/skills/': typeof SkillsIndexRoute
   '/api/agent-runtime/enable': typeof ApiAgentRuntimeEnableRoute
   '/api/agent-runtime/install': typeof ApiAgentRuntimeInstallRoute
+  '/api/agent-runtime/login': typeof ApiAgentRuntimeLoginRoute
   '/api/agent-runtime/status': typeof ApiAgentRuntimeStatusRoute
   '/api/agents/snapshot': typeof ApiAgentsSnapshotRoute
   '/api/agents/status': typeof ApiAgentsStatusRoute
@@ -2504,6 +2513,7 @@ export interface FileRouteTypes {
     | '/skills/'
     | '/api/agent-runtime/enable'
     | '/api/agent-runtime/install'
+    | '/api/agent-runtime/login'
     | '/api/agent-runtime/status'
     | '/api/agents/snapshot'
     | '/api/agents/status'
@@ -2760,6 +2770,7 @@ export interface FileRouteTypes {
     | '/skills'
     | '/api/agent-runtime/enable'
     | '/api/agent-runtime/install'
+    | '/api/agent-runtime/login'
     | '/api/agent-runtime/status'
     | '/api/agents/snapshot'
     | '/api/agents/status'
@@ -3019,6 +3030,7 @@ export interface FileRouteTypes {
     | '/skills/'
     | '/api/agent-runtime/enable'
     | '/api/agent-runtime/install'
+    | '/api/agent-runtime/login'
     | '/api/agent-runtime/status'
     | '/api/agents/snapshot'
     | '/api/agents/status'
@@ -3273,6 +3285,7 @@ export interface RootRouteChildren {
   ChatIndexRoute: typeof ChatIndexRoute
   ApiAgentRuntimeEnableRoute: typeof ApiAgentRuntimeEnableRoute
   ApiAgentRuntimeInstallRoute: typeof ApiAgentRuntimeInstallRoute
+  ApiAgentRuntimeLoginRoute: typeof ApiAgentRuntimeLoginRoute
   ApiAgentRuntimeStatusRoute: typeof ApiAgentRuntimeStatusRoute
   ApiAgentsSnapshotRoute: typeof ApiAgentsSnapshotRoute
   ApiAgentsStatusRoute: typeof ApiAgentsStatusRoute
@@ -4800,6 +4813,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentRuntimeStatusRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/agent-runtime/login': {
+      id: '/api/agent-runtime/login'
+      path: '/api/agent-runtime/login'
+      fullPath: '/api/agent-runtime/login'
+      preLoaderRoute: typeof ApiAgentRuntimeLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/agent-runtime/install': {
       id: '/api/agent-runtime/install'
       path: '/api/agent-runtime/install'
@@ -5718,6 +5738,7 @@ const rootRouteChildren: RootRouteChildren = {
   ChatIndexRoute: ChatIndexRoute,
   ApiAgentRuntimeEnableRoute: ApiAgentRuntimeEnableRoute,
   ApiAgentRuntimeInstallRoute: ApiAgentRuntimeInstallRoute,
+  ApiAgentRuntimeLoginRoute: ApiAgentRuntimeLoginRoute,
   ApiAgentRuntimeStatusRoute: ApiAgentRuntimeStatusRoute,
   ApiAgentsSnapshotRoute: ApiAgentsSnapshotRoute,
   ApiAgentsStatusRoute: ApiAgentsStatusRoute,

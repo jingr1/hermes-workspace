@@ -88,7 +88,7 @@ func messageUpdateEventData(messages []storesqlite.Message, acceptedCount int, l
 }
 
 // activityMessagesEventPayload projects committed canonical messages into the
-// protocol message shape (tutti activityMessagesEventPayload).
+// protocol message shape (upstream Tutti activityMessagesEventPayload).
 func activityMessagesEventPayload(messages []storesqlite.Message) []map[string]any {
 	if len(messages) == 0 {
 		return nil
@@ -148,7 +148,7 @@ func activityMessagesEventPayload(messages []storesqlite.Message) []map[string]a
 // nonterminal state was already emitted as an ordered message_delta frame.
 // Storage remains authoritative; terminal, session-level, imported, and
 // otherwise non-runtime updates still publish full canonical snapshots
-// (tutti canonicalMessagesForRealtimePublish).
+// (upstream Tutti canonicalMessagesForRealtimePublish).
 func canonicalMessagesForRealtimePublish(sessionOrigin string, messages []storesqlite.Message) []storesqlite.Message {
 	if strings.TrimSpace(sessionOrigin) != activity.WorkspaceAgentSessionOriginRuntime {
 		return messages

@@ -10,6 +10,9 @@ import type { AgentProviderStatusListDto } from '@/lib/managed-agent-runtime/pro
  * with Hermes Agent (update-system) and an honest deepseek stub. When the
  * daemon is unreachable, Hermes/deepseek rows still return so Runtimes is
  * usable; managed providers are omitted rather than faked.
+ *
+ * Hermes update tips are **local-only** here (no `git fetch`). Remote checks
+ * live solely on `GET /api/update/status`.
  */
 export const Route = createFileRoute('/api/agent-runtime/status')({
   server: {
@@ -30,7 +33,9 @@ export const Route = createFileRoute('/api/agent-runtime/status')({
             daemonStatus = null
           }
         }
-        const status = await aggregateAgentRuntimeStatus(daemonStatus)
+        const status = await aggregateAgentRuntimeStatus(daemonStatus, {
+          fetch: 'local',
+        })
         return json(status satisfies AgentProviderStatusListDto)
       },
     },

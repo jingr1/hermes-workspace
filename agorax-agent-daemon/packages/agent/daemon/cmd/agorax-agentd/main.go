@@ -151,23 +151,29 @@ func routesWithOps(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.D
 		// runtime adapter. claude-code is hosted by the daemon's Claude CLI
 		// adapter (print-mode `claude -p --output-format stream-json`, one
 		// managed process per turn), so it reports enabled here once the
-		// adapter is wired in the runtime.
-		target := func(id string, provider string) map[string]any {
-			return map[string]any{"id": id, "enabled": registered[provider]}
+		// adapter is wired in the runtime. kimi-code has no migrated adapter
+		// yet — honor the Runtimes enable preference so the Switch sticks.
+		target := func(id string, provider string, identity string) map[string]any {
+			enabled := registered[provider]
+			if pref, ok := ops.userEnabledPreference(identity); ok {
+				enabled = pref && (enabled || identity == "kimi-code")
+			}
+			return map[string]any{"id": id, "enabled": enabled}
 		}
 		writeJSON(response, http.StatusOK, map[string]any{
 			"agents": []any{
-				target("local:claude-code", "claude-code"),
-				target("local:codex", "codex"),
-				target("local:cursor", "cursor"),
-				target("local:opencode", "opencode"),
-				target("extension:kimi-code", "acp:kimi-code"),
+				target("local:claude-code", "claude-code", "claude-code"),
+				target("local:codex", "codex", "codex"),
+				target("local:cursor", "cursor", "cursor"),
+				target("local:opencode", "opencode", "opencode"),
+				target("extension:kimi-code", "acp:kimi-code", "kimi-code"),
 			},
 			"runtimeReady": runtime != nil,
 		})
 	})
 	mux.HandleFunc("GET /v1/provider-status", ops.handleProviderStatus)
 	mux.HandleFunc("POST /v1/providers/{provider}/install", ops.handleProviderInstall)
+	mux.HandleFunc("POST /v1/providers/{provider}/login", ops.handleProviderLogin)
 	mux.HandleFunc("POST /v1/providers/{provider}/enable", func(response http.ResponseWriter, request *http.Request) {
 		providerID := strings.TrimSpace(request.PathValue("provider"))
 		descriptor, ok := findProviderTarget(providerID)
@@ -182,8 +188,11 @@ func routesWithOps(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.D
 			writeJSON(response, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
+		ops.setUserEnabledPreference(descriptor.Identity.ID, body.Enabled)
 		if runtime != nil && runtime.Controller() != nil {
-			runtime.Controller().SetProviderEnabled(descriptor.Identity.ID, body.Enabled)
+			for _, key := range providerEnableAliases(descriptor) {
+				runtime.Controller().SetProviderEnabled(key, body.Enabled)
+			}
 		}
 		writeJSON(response, http.StatusOK, map[string]any{
 			"provider": descriptor.Identity.ID,
@@ -392,7 +401,7 @@ func routesWithOps(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.D
 	})
 
 	// Session management surfaces (Host APIs already owned the lifecycle;
-	// these routes are thin HTTP adapters matching Tutti's tuttid shape).
+	// these routes are thin HTTP adapters matching Agorax's agorax-agentd shape).
 	mux.HandleFunc("PATCH /v1/workspaces/{workspaceID}/agent-sessions/{agentSessionID}/title", handleUpdateTitle(host))
 	mux.HandleFunc("PUT /v1/workspaces/{workspaceID}/agent-sessions/{agentSessionID}/title", handleUpdateTitle(host))
 	mux.HandleFunc("POST /v1/workspaces/{workspaceID}/agent-sessions/{agentSessionID}/title", handleUpdateTitle(host))

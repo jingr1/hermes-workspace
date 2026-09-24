@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// Tutti agent activity contract topic and event types
+// Agorax agent activity contract topic and event types
 // (packages/events/protocol/definitions/agent/activity.updated.event.json).
 const (
 	agentActivityUpdatedTopic = "agent.activity.updated"
@@ -71,7 +71,7 @@ func (h *eventHub) broadcastLocked(payload []byte) {
 	}
 }
 
-// publishActivity emits one agent.activity.updated frame in the tutti
+// publishActivity emits one agent.activity.updated frame in the Agorax
 // envelope shape: {id, topic, version, emittedAt, scope:{workspaceId},
 // payload:{workspaceId, agentSessionId, eventType, data}}. Identity fields
 // are injected into data when absent so clients can run envelope consistency

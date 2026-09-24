@@ -2,7 +2,10 @@ import type {
   AgentProviderStatusDto,
   AgentProviderStatusListDto,
 } from '@/lib/managed-agent-runtime/provider-status'
-import { readAgentUpdateStatus } from '../update-system'
+import {
+  readAgentUpdateStatus,
+  type UpdateCheckOptions,
+} from '../update-system'
 import { probeHermesProfileGateway } from './hermes-gateway-probe'
 
 /**
@@ -11,8 +14,15 @@ import { probeHermesProfileGateway } from './hermes-gateway-probe'
  * lightweight gateway probe (default profile); install/upgrade capability is
  * driven by `readAgentUpdateStatus`.
  */
-export async function hermesProviderStatusRow(): Promise<AgentProviderStatusDto> {
-  const update = readAgentUpdateStatus()
+export async function hermesProviderStatusRow(
+  options?: UpdateCheckOptions,
+): Promise<AgentProviderStatusDto> {
+  // Provider status is a readiness snapshot — never git-fetch here. Remote
+  // tips are refreshed only by `/api/update/status` (daily / manual).
+  const update = readAgentUpdateStatus({
+    fetch: options?.fetch ?? 'local',
+    refresh: options?.refresh,
+  })
   let registered = false
   try {
     const probe = await probeHermesProfileGateway('default')
@@ -47,6 +57,19 @@ export async function hermesProviderStatusRow(): Promise<AgentProviderStatusDto>
     update: {
       capability: update.canUpdate ? 'supported' : 'unsupported',
       source: 'git',
+      currentVersion: update.version !== 'unknown' ? update.version : null,
+      latestVersion: update.latestHead
+        ? update.latestHead.slice(0, 7)
+        : null,
+      lastCheckedAt: new Date().toISOString(),
+      reasonCode:
+        update.state === 'error'
+          ? 'hermes_update_check_failed'
+          : update.canUpdate || !update.updateAvailable
+            ? null
+            : update.reason
+              ? 'hermes_update_blocked'
+              : null,
       ...(update.canUpdate
         ? {}
         : {
@@ -94,8 +117,9 @@ export function deepseekProviderStatusStub(): AgentProviderStatusDto {
  */
 export async function aggregateAgentRuntimeStatus(
   daemonStatus: AgentProviderStatusListDto | null,
+  options?: UpdateCheckOptions,
 ): Promise<AgentProviderStatusListDto> {
-  const hermes = await hermesProviderStatusRow()
+  const hermes = await hermesProviderStatusRow(options)
   const deepseek = deepseekProviderStatusStub()
   const providers = [
     hermes,

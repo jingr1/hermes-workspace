@@ -57,7 +57,7 @@ func nextEnvelope(t *testing.T, frames chan map[string]any) map[string]any {
 	}
 }
 
-func TestPublishActivityEmitsTuttiEnvelope(t *testing.T) {
+func TestPublishActivityEmitsAgoraxEnvelope(t *testing.T) {
 	hub := newEventHub()
 	frames, unsubscribe := hubFrames(hub)
 	defer unsubscribe()
