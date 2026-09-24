@@ -83,7 +83,7 @@ export function OrchestratorCard({ totalAgents }: { totalAgents: number }) {
           <Button
             size="sm"
             variant="secondary"
-            className="h-9 gap-1.5 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 text-xs font-medium text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
+            className="h-9 gap-1.5 rounded-xl border border-transparent bg-[var(--theme-input)] px-3 text-xs font-medium text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
             onClick={() => void navigate({ to: '/chat' })}
           >
             <HugeiconsIcon icon={Chatting01Icon} size={14} strokeWidth={1.9} />
@@ -103,7 +103,7 @@ export function OrchestratorCard({ totalAgents }: { totalAgents: number }) {
 
       {settingsOpen ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[color-mix(in_srgb,var(--theme-bg)_48%,transparent)] px-4 py-6 backdrop-blur-md"
+          className="overlay-scrim fixed inset-0 z-50 flex items-center justify-center bg-[color-mix(in_srgb,var(--theme-bg)_48%,transparent)] px-4 py-6"
           onClick={() => setSettingsOpen(false)}
         >
           <div
@@ -150,7 +150,7 @@ export function OrchestratorCard({ totalAgents }: { totalAgents: number }) {
                 value={draftName}
                 onChange={(event) => setDraftName(event.target.value)}
                 placeholder={DEFAULT_ORCHESTRATOR_NAME}
-                className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)]"
+                className="w-full rounded-2xl field-surface px-4 py-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)]"
               />
             </label>
 

@@ -9,6 +9,7 @@ import {
 import { fetchAgents, fetchSessionsForAgent } from '../../../lib/agent-api'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { resolveSessionForProfile } from '../../../screens/chat/last-session'
+import { pickChatAgentId } from '../../../screens/chat/pick-chat-agent'
 import {
   chatQueryKeys,
   fetchSessions,
@@ -135,13 +136,33 @@ function ChatAgentRoute() {
 
     const applyAgent = async () => {
       if (cancelled) return
-      const agent = useAgentStore
-        .getState()
-        .agents.find((entry) => entry.agentId === agentId)
+      const store = useAgentStore.getState()
+      const agent = store.agents.find((entry) => entry.agentId === agentId)
+
+      // Unknown / stale URL agent id — bounce to a real registry entry instead of
+      // painting "Select an agent to start chatting."
+      if (!agent) {
+        if (store.agents.length > 0) {
+          const fallback = pickChatAgentId(store.agents, null)
+          if (fallback && fallback !== agentId) {
+            void navigate({
+              to: '/chat/agent/$agentId',
+              params: { agentId: fallback },
+              search: {},
+              replace: true,
+            })
+            return
+          }
+        }
+        // Empty registry — do not pin an unknown activeAgentId.
+        setActiveAgentId(null, { sessionId: null })
+        setSeeded(true)
+        return
+      }
+
       if (
-        agent &&
         agent.runtime !== 'hermes' &&
-        !useAgentStore.getState().sessionsByAgentId.has(agentId)
+        !store.sessionsByAgentId.has(agentId)
       ) {
         try {
           const data = await fetchSessionsForAgent(agentId)
@@ -154,7 +175,7 @@ function ChatAgentRoute() {
       }
       const sessionId = await resolveSessionForAgent(agentId)
       if (cancelled) return
-      setActiveAgentId(agentId || null, { sessionId })
+      setActiveAgentId(agentId, { sessionId })
       // Drop a foreign ?session= that does not belong to this agent.
       if (
         search.session &&
@@ -177,7 +198,12 @@ function ChatAgentRoute() {
           useAgentStore.getState().setAgents(data.agents)
           void applyAgent()
         })
-        .catch(() => void applyAgent())
+        .catch(() => {
+          if (cancelled) return
+          // Failed fetch with empty store — show empty state, do not invent an agent.
+          setActiveAgentId(null, { sessionId: null })
+          setSeeded(true)
+        })
     } else {
       void applyAgent()
     }

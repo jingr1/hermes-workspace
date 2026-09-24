@@ -152,7 +152,7 @@ function ModelSelector({
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
-        className="inline-flex min-h-[3rem] w-full items-center justify-between gap-3 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-left text-sm text-[var(--theme-text)] shadow-[0_8px_24px_color-mix(in_srgb,var(--theme-shadow)_18%,transparent)]"
+        className="control-surface inline-flex min-h-[3rem] w-full items-center justify-between gap-3 rounded-2xl px-4 py-3 text-left text-sm text-[var(--theme-text)]"
       >
         <span className="truncate">
           {selected
@@ -183,7 +183,7 @@ function ModelSelector({
                 'flex w-full rounded-xl px-3 py-2.5 text-left text-sm',
                 !value
                   ? 'bg-[var(--theme-accent-soft)]'
-                  : 'hover:bg-[var(--theme-bg)]',
+                  : 'hover:bg-[var(--transparency-hover)]',
               )}
             >
               Default (auto)
@@ -200,7 +200,7 @@ function ModelSelector({
                   'mt-1 flex w-full rounded-xl px-3 py-2.5 text-left text-sm',
                   value === model.id
                     ? 'bg-[var(--theme-accent-soft)]'
-                    : 'hover:bg-[var(--theme-bg)]',
+                    : 'hover:bg-[var(--transparency-hover)]',
                 )}
               >
                 {model.provider} / {model.name}
@@ -291,7 +291,6 @@ function IdentityTab({
             <Button
               type="button"
               variant="secondary"
-              className="border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
               onClick={onActivate}
               disabled={isActivating || isDefault}
             >
@@ -303,7 +302,6 @@ function IdentityTab({
           <Button
             type="button"
             variant="secondary"
-            className="border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
             onClick={() => setRenameOpen((v) => !v)}
             disabled={isRenaming || isDefault}
           >
@@ -340,7 +338,7 @@ function IdentityTab({
             value={name}
             onChange={(event) => onName(event.target.value)}
             disabled={isDefault}
-            className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)] disabled:opacity-60"
+            className="w-full rounded-2xl field-surface px-4 py-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)] disabled:opacity-60"
           />
         </label>
         <label className="space-y-2">
@@ -350,7 +348,7 @@ function IdentityTab({
           <input
             value={emoji}
             onChange={(event) => onEmoji(event.target.value)}
-            className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)]"
+            className="w-full rounded-2xl field-surface px-4 py-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)]"
           />
         </label>
       </div>
@@ -365,7 +363,7 @@ function IdentityTab({
               value={role}
               onChange={(event) => onRole(event.target.value)}
               placeholder="Worker"
-              className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+              className="w-full rounded-2xl field-surface px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
             />
           </label>
           <label className="space-y-2">
@@ -376,7 +374,7 @@ function IdentityTab({
               value={specialty}
               onChange={(event) => onSpecialty(event.target.value)}
               placeholder="Code review"
-              className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+              className="w-full rounded-2xl field-surface px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
             />
           </label>
         </div>
@@ -392,7 +390,7 @@ function IdentityTab({
               value={command}
               onChange={(event) => onCommand(event.target.value)}
               placeholder={agentRuntimeLabel(runtime)}
-              className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+              className="w-full rounded-2xl field-surface px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
             />
           </label>
           <label className="space-y-2">
@@ -403,7 +401,7 @@ function IdentityTab({
               value={args}
               onChange={(event) => onArgs(event.target.value)}
               placeholder="Optional"
-              className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+              className="w-full rounded-2xl field-surface px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
             />
           </label>
         </div>
@@ -417,7 +415,7 @@ function IdentityTab({
           value={description}
           onChange={(event) => onDescription(event.target.value)}
           placeholder="One-line description of what this agent does"
-          className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+          className="w-full rounded-2xl field-surface px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
         />
       </label>
       <label className="block space-y-2">
@@ -427,7 +425,7 @@ function IdentityTab({
         <textarea
           value={systemPrompt}
           onChange={(event) => onSystemPrompt(event.target.value)}
-          className="min-h-[220px] w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)]"
+          className="min-h-[220px] w-full rounded-2xl field-surface px-4 py-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)]"
         />
       </label>
     </div>
@@ -798,7 +796,7 @@ function CapabilitiesTab({
               value={skillSearch}
               onChange={(event) => setSkillSearch(event.target.value)}
               placeholder="Search skills..."
-              className="w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+              className="w-full rounded-xl field-surface px-3 py-2 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
             />
             <div className="max-h-[280px] space-y-1.5 overflow-y-auto">
               {filteredSkills.map((skill) => (
@@ -1092,7 +1090,7 @@ function ScheduleTab({
         <Link
           to="/jobs"
           onClick={onClose}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-xs font-medium text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
+          className="inline-flex items-center gap-1.5 rounded-xl border border-transparent bg-[var(--theme-input)] px-3 py-2 text-xs font-medium text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
         >
           + Add Job
         </Link>
@@ -1372,7 +1370,7 @@ export function OperationsAgentDetail({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[color-mix(in_srgb,var(--theme-bg)_55%,transparent)] px-4 py-6 backdrop-blur-md"
+      className="overlay-scrim fixed inset-0 z-50 flex items-center justify-center bg-[color-mix(in_srgb,var(--theme-bg)_55%,transparent)] px-4 py-6"
       onClick={onClose}
     >
       <div
@@ -1505,7 +1503,7 @@ export function OperationsAgentDetail({
           <div className="flex justify-end gap-3">
             <Button
               variant="secondary"
-              className="border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
+              className="border-transparent bg-[var(--theme-input)] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
               onClick={onClose}
               disabled={isDeleting}
             >

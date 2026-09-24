@@ -596,7 +596,7 @@ export function Swarm2OrchestratorCard({
                 value={draftName}
                 onChange={(event) => setDraftName(event.target.value)}
                 placeholder={DEFAULT_NAME}
-                className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)]"
+                className="w-full rounded-2xl field-surface px-4 py-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)]"
               />
             </label>
 

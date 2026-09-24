@@ -44,7 +44,7 @@ export function WorkflowHelpModal({
       </button>
 
       {open ? (
-        <div className="fixed inset-0 z-[12000] flex items-center justify-center bg-black/45 px-4 backdrop-blur-sm">
+        <div className="overlay-scrim fixed inset-0 z-[12000] flex items-center justify-center bg-black/45 px-4">
           <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] text-[var(--theme-text)] shadow-2xl">
             <div className="flex items-start justify-between gap-4 border-b border-[var(--theme-border)] px-5 py-4">
               <div className="min-w-0">

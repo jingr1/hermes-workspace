@@ -701,7 +701,7 @@ export function ClaudeCodeSettingsPanel({
               value={resolvedModelPreview || settings?.currentModel || ''}
               readOnly
               title={resolvedModelPreview || settings?.currentModel || ''}
-              className="h-9 w-full rounded-lg border border-primary-200 bg-primary-100 px-3 font-mono text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+              className="h-9 w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-input)] px-3 font-mono text-sm text-[var(--theme-text)] outline-none"
             />
           </label>
           <label className="block space-y-1">
@@ -715,7 +715,7 @@ export function ClaudeCodeSettingsPanel({
                 'claude-code'
               }
               readOnly
-              className="h-9 w-full rounded-lg border border-primary-200 bg-primary-100 px-3 font-mono text-sm text-primary-900 outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+              className="h-9 w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-input)] px-3 font-mono text-sm text-[var(--theme-text)] outline-none"
             />
           </label>
         </div>

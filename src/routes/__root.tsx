@@ -99,8 +99,8 @@ const themeColorScript = `
     const root = document.documentElement
     const theme = root.getAttribute('data-theme') || '${DEFAULT_THEME}'
     const colors = {
-      'default': '#0D0D1A',
-      'default-light': '#FEFCF7',
+      'default': '#111216',
+      'default-light': '#f7f8fa',
       'claude-nous': '#031A1A',
       'claude-nous-light': '#F8FAF8',
       'claude-official': '#0A0E1A',
@@ -544,21 +544,21 @@ function RootDocument({ children }: { children: React.ReactNode }) {
           (function(){
             var d = document.getElementById('splash-screen');
             if (!d) return;
-            var bg = '#031A1A', txt = '#F8F1E3', muted = '#9CB2AE', accent = '#FFAC02';
+            var bg = '#111216', txt = '#f6f6f7', muted = 'rgba(255,255,255,0.5)', accent = '#5a9bff';
             try {
               var theme = localStorage.getItem('${THEME_STORAGE_KEY}') || '${DEFAULT_THEME}';
               if (theme === 'webui') theme = 'default';
               if (theme === 'webui-light') theme = 'default-light';
               if (theme === 'default') {
-                bg = '#0D0D1A';
-                txt = '#FFF8DC';
-                muted = '#C0C0C0';
-                accent = '#FFD700';
+                bg = '#111216';
+                txt = '#f6f6f7';
+                muted = 'rgba(255,255,255,0.5)';
+                accent = '#5a9bff';
               } else if (theme === 'default-light') {
-                bg = '#FEFCF7';
-                txt = '#1A1610';
-                muted = '#5C5344';
-                accent = '#B8860B';
+                bg = '#f7f8fa';
+                txt = '#29313d';
+                muted = 'rgba(60,60,60,0.5)';
+                accent = '#4182f5';
               } else if (theme === 'claude-nous') {
                 bg = '#031A1A';
                 txt = '#F8F1E3';

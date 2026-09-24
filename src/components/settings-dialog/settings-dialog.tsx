@@ -646,19 +646,19 @@ const ENTERPRISE_THEMES = THEMES.map((theme) => ({
                         }
                       : theme.id === 'default'
                         ? {
-                            bg: '#0D0D1A',
-                            panel: '#1A1A2E',
-                            border: '#2A2A45',
-                            accent: '#FFD700',
-                            text: '#FFF8DC',
+                            bg: '#111216',
+                            panel: '#1a1c22',
+                            border: '#30333b',
+                            accent: '#5a9bff',
+                            text: '#f6f6f7',
                           }
                         : theme.id === 'default-light'
                           ? {
-                              bg: '#FEFCF7',
-                              panel: '#FAF7F0',
-                              border: '#E0D8C8',
-                              accent: '#B8860B',
-                              text: '#1A1610',
+                              bg: '#f7f8fa',
+                              panel: '#f8fafc',
+                              border: '#e5e7eb',
+                              accent: '#4182f5',
+                              text: '#29313d',
                             }
                           : {
                               bg: '#F6F8FA',

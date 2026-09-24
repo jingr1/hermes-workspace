@@ -44,7 +44,7 @@ export function ManagedRuntimePanel({
           })
         }
       >
-        <HugeiconsIcon icon={Settings01Icon} size={16} strokeWidth={2} />
+        <HugeiconsIcon icon={Settings01Icon} size={16} strokeWidth={1.5} />
         Configure {agent.name}
       </Button>
     </div>

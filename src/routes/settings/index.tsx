@@ -209,18 +209,18 @@ const THEME_PREVIEWS: Record<
     text: '#0A1628',
   },
   default: {
-    bg: '#0D0D1A',
-    panel: '#1A1A2E',
-    border: '#2A2A45',
-    accent: '#FFD700',
-    text: '#FFF8DC',
+    bg: '#111216',
+    panel: '#1a1c22',
+    border: '#30333b',
+    accent: '#5a9bff',
+    text: '#f6f6f7',
   },
   'default-light': {
-    bg: '#FEFCF7',
-    panel: '#FAF7F0',
-    border: '#E0D8C8',
-    accent: '#B8860B',
-    text: '#1A1610',
+    bg: '#f7f8fa',
+    panel: '#f8fafc',
+    border: '#e5e7eb',
+    accent: '#4182f5',
+    text: '#29313d',
   },
 }
 
@@ -1334,7 +1334,7 @@ function ClaudeConfigSection({
   }
 
   const selectClassName =
-    'h-9 w-full rounded-lg border border-primary-200 bg-primary-50 px-3 text-sm text-primary-900 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary-400 md:max-w-sm'
+    'control-surface h-9 w-full rounded-lg px-3 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)]/35 md:max-w-sm'
 
   const readNumber = (value: unknown, fallback: number) => {
     if (typeof value === 'number' && Number.isFinite(value)) return value

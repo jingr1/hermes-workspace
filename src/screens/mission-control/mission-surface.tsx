@@ -10,6 +10,7 @@ import type { MissionStatus, MissionSummary } from '@/lib/mission-control-api'
 import { cn } from '@/lib/utils'
 import { fetchMissions, patchMission } from '@/lib/mission-control-api'
 import { CreateMissionButton } from './components/create-task-button'
+import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
 
 export type MissionViewMode = 'board' | 'list' | 'swimlane'
@@ -206,35 +207,32 @@ export function MissionSurface({ onSelectMission }: MissionSurfaceProps) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--theme-border)] bg-[var(--theme-card)] px-4 py-2">
-        <div className="flex gap-0.5 rounded-lg border border-[var(--theme-border)] p-0.5">
+        <div className="flex gap-0.5 rounded-lg bg-[var(--theme-input)] p-0.5">
           {(['board', 'list', 'swimlane'] as const).map((mode) => (
-            <button
+            <Button
               key={mode}
               type="button"
+              size="sm"
+              variant={viewMode === mode ? 'default' : 'ghost'}
               onClick={() => setViewMode(mode)}
-              className={cn(
-                'rounded-md px-2.5 py-1 text-[11px] font-medium capitalize',
-                viewMode === mode
-                  ? 'bg-[var(--theme-accent)] text-white'
-                  : 'text-[var(--theme-muted)] hover:bg-[var(--theme-hover)]',
-              )}
+              className="h-7 capitalize text-[11px]"
             >
               {mode}
-            </button>
+            </Button>
           ))}
         </div>
         <input
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           placeholder="Filter missions…"
-          className="min-w-[10rem] flex-1 rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1 text-xs"
+          className="min-w-[10rem] flex-1 rounded-md field-surface px-2 py-1 text-xs"
         />
         <select
           value={statusFilter}
           onChange={(e) =>
             setStatusFilter(e.target.value as MissionStatus | 'all')
           }
-          className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1 text-xs"
+          className="control-surface rounded-md px-2 py-1 text-xs"
         >
           <option value="all">All statuses</option>
           {STATUSES.map((l) => (
@@ -243,25 +241,22 @@ export function MissionSurface({ onSelectMission }: MissionSurfaceProps) {
             </option>
           ))}
         </select>
-        <button
+        <Button
           type="button"
+          size="sm"
+          variant={agentsWorkingOnly ? 'default' : 'secondary'}
           onClick={() => setAgentsWorkingOnly((v) => !v)}
-          className={cn(
-            'rounded-md border px-2 py-1 text-[11px]',
-            agentsWorkingOnly
-              ? 'border-[var(--theme-accent)] bg-[var(--theme-accent)]/10 text-[var(--theme-accent)]'
-              : 'border-[var(--theme-border)] text-[var(--theme-muted)]',
-          )}
+          className="h-7 text-[11px]"
         >
           Agents working ({workingCount})
-        </button>
+        </Button>
         {viewMode === 'swimlane' ? (
           <select
             value={swimlaneBy}
             onChange={(e) =>
               setSwimlaneBy(e.target.value as 'assignee' | 'project')
             }
-            className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1 text-xs"
+            className="control-surface rounded-md px-2 py-1 text-xs"
           >
             <option value="assignee">Swim by assignee</option>
             <option value="project">Swim by project</option>
@@ -280,7 +275,7 @@ export function MissionSurface({ onSelectMission }: MissionSurfaceProps) {
                 void batchMove(value)
                 e.target.value = ''
               }}
-              className="rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1 text-xs"
+              className="control-surface rounded-md px-2 py-1 text-xs"
             >
               <option value="" disabled>
                 Batch move…

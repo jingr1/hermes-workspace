@@ -6,6 +6,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { PlusSignIcon } from '@hugeicons/core-free-icons'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toast'
 import { fetchAgentsStatus, fetchProjects } from '@/lib/mission-control-api'
 import { SpecField } from './spec-field'
@@ -190,17 +191,15 @@ export function CreateMissionButton({
 
   return (
     <>
-      <button
+      <Button
         type="button"
+        size="sm"
         onClick={() => setOpen(true)}
-        className={cn(
-          'inline-flex items-center gap-1.5 rounded-md bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[var(--theme-accent-strong)]',
-          variant === 'inline' && 'w-full justify-center',
-        )}
+        className={cn('text-xs', variant === 'inline' && 'w-full')}
       >
         <HugeiconsIcon icon={PlusSignIcon} size={14} />
         Create Mission
-      </button>
+      </Button>
 
       {open ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -211,7 +210,7 @@ export function CreateMissionButton({
               graph. Assignee targets one agent or chat group.
             </p>
 
-            <div className="mt-3 flex gap-1 rounded-lg border border-[var(--theme-border)] p-0.5">
+            <div className="mt-3 flex gap-1 rounded-lg bg-[var(--theme-input)] p-0.5">
               {(
                 [
                   ['goal', 'Goal'],
@@ -219,19 +218,16 @@ export function CreateMissionButton({
                   ['assignee', 'Assignee'],
                 ] as const
               ).map(([m, label]) => (
-                <button
+                <Button
                   key={m}
                   type="button"
+                  size="sm"
+                  variant={mode === m ? 'default' : 'ghost'}
                   onClick={() => setMode(m)}
-                  className={cn(
-                    'flex-1 rounded-md px-2 py-1.5 text-xs font-medium',
-                    mode === m
-                      ? 'bg-[var(--theme-accent)] text-white'
-                      : 'text-[var(--theme-muted)] hover:bg-[var(--theme-hover)]',
-                  )}
+                  className="flex-1 text-xs"
                 >
                   {label}
-                </button>
+                </Button>
               ))}
             </div>
 
@@ -254,7 +250,7 @@ export function CreateMissionButton({
                     <input
                       value={title}
                       onChange={(e) => setTitle(e.target.value)}
-                      className="mt-1 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1.5 text-sm"
+                      className="mt-1 w-full rounded-md field-surface px-2 py-1.5 text-sm"
                     />
                   </label>
                   <label className="block text-xs">
@@ -279,7 +275,7 @@ export function CreateMissionButton({
                     value={criteria}
                     onChange={(e) => setCriteria(e.target.value)}
                     rows={2}
-                    className="mt-1 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1.5 text-sm"
+                    className="mt-1 w-full rounded-md field-surface px-2 py-1.5 text-sm"
                   />
                 </label>
               ) : null}
@@ -290,7 +286,7 @@ export function CreateMissionButton({
                   <select
                     value={selectedPipelineId}
                     onChange={(e) => setSelectedPipelineId(e.target.value)}
-                    className="mt-1 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1.5 text-sm"
+                    className="mt-1 w-full control-surface rounded-md px-2 py-1.5 text-sm"
                   >
                     <option value="">Select…</option>
                     {(pipelinesQuery.data ?? []).map((p) => (
@@ -304,24 +300,21 @@ export function CreateMissionButton({
 
               {mode === 'assignee' ? (
                 <div className="space-y-2">
-                  <div className="flex gap-1 rounded-lg border border-[var(--theme-border)] p-0.5">
+                  <div className="flex gap-1 rounded-lg bg-[var(--theme-input)] p-0.5">
                     {(['agent', 'chat_group'] as const).map((k) => (
-                      <button
+                      <Button
                         key={k}
                         type="button"
+                        size="sm"
+                        variant={assigneeKind === k ? 'secondary' : 'ghost'}
                         onClick={() => {
                           setAssigneeKind(k)
                           setAssigneeId('')
                         }}
-                        className={cn(
-                          'flex-1 rounded-md px-2 py-1 text-[11px] font-medium',
-                          assigneeKind === k
-                            ? 'bg-[var(--theme-hover)] text-[var(--theme-text)]'
-                            : 'text-[var(--theme-muted)]',
-                        )}
+                        className="flex-1 text-[11px]"
                       >
                         {k === 'agent' ? 'Agent' : 'Chat group'}
-                      </button>
+                      </Button>
                     ))}
                   </div>
                   <label className="block text-xs">
@@ -329,7 +322,7 @@ export function CreateMissionButton({
                     <select
                       value={assigneeId}
                       onChange={(e) => setAssigneeId(e.target.value)}
-                      className="mt-1 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1.5 text-sm"
+                      className="mt-1 w-full control-surface rounded-md px-2 py-1.5 text-sm"
                     >
                       <option value="">Select…</option>
                       {assigneeKind === 'agent'
@@ -375,7 +368,7 @@ export function CreateMissionButton({
                 <select
                   value={projectId}
                   onChange={(e) => setProjectId(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1.5 text-sm"
+                  className="mt-1 w-full control-surface rounded-md px-2 py-1.5 text-sm"
                 >
                   <option value="">None</option>
                   {(projectsQuery.data ?? []).map((p) => (
@@ -388,18 +381,21 @@ export function CreateMissionButton({
             </div>
 
             <div className="mt-4 flex justify-end gap-2">
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="sm"
                 onClick={() => setOpen(false)}
-                className="rounded-md border border-[var(--theme-border)] px-3 py-1.5 text-xs"
+                className="text-xs"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                size="sm"
                 disabled={submitDisabled}
                 onClick={() => mutation.mutate()}
-                className="rounded-md bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                className="text-xs"
               >
                 {mutation.isPending
                   ? mode === 'goal'
@@ -408,7 +404,7 @@ export function CreateMissionButton({
                   : mode === 'goal'
                     ? 'Launch'
                     : 'Create'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

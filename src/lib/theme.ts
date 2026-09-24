@@ -23,13 +23,13 @@ export const THEMES: Array<{
   {
     id: 'default',
     label: '默认',
-    description: 'Calm console — navy-black with gold accent',
+    description: '中性工作台 — 蓝黑底 + 亮蓝强调',
     icon: '◎',
   },
   {
     id: 'default-light',
     label: '默认浅色',
-    description: 'Paper cream with dark-gold accent',
+    description: '冷白底 + 钴蓝强调',
     icon: '◎',
   },
   {

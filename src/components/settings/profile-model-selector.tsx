@@ -30,7 +30,7 @@ type ProfileModelSelectorProps = {
 }
 
 const selectClassName =
-  'h-9 w-full rounded-lg border border-primary-200 bg-primary-50 px-3 text-sm text-primary-900 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary-400 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100'
+  'control-surface h-9 w-full rounded-lg px-3 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)]/35'
 
 export function ProfileModelSelector({
   profileName,
@@ -230,9 +230,7 @@ export function ProfileModelSelector({
             disabled={!isReady || profileName === activeProfileName}
             onClick={() => onProfileChange(activeProfileName)}
             className={cn(
-              'h-9 rounded-lg border px-3 text-xs font-medium transition-colors',
-              'border-primary-200 text-primary-800 hover:bg-primary-100',
-              'dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800',
+              'control-surface h-9 rounded-lg px-3 text-xs font-medium transition-colors hover:bg-[var(--theme-card2)]',
               (!isReady || profileName === activeProfileName) && 'opacity-50',
             )}
           >

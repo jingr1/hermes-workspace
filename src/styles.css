@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=EB+Garamond:opsz,wght@8..120,400..800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import '@fontsource-variable/lexend';
 @import 'tailwindcss';
 
 /* Tailwind v4 — enable dark: variant on .dark class (set by __root.tsx) */
@@ -79,6 +79,13 @@
     var(--theme-accent, #8a8f98) 25%,
     black
   );
+
+  /* Tutti desktop: control radius ~6px; cards/panels 8/12/18 */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 18px;
 }
 
 :root {
@@ -268,10 +275,36 @@
 }
 
 :root {
-  --interface-font-family:
-    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+  --font-sans-latin:
+    'Lexend Variable', Lexend, -apple-system, BlinkMacSystemFont, system-ui,
     sans-serif;
+  --font-sans-cjk:
+    'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei', 'Noto Sans CJK SC',
+    'Source Han Sans SC', -apple-system, BlinkMacSystemFont, system-ui,
+    sans-serif;
+  /* Default product UI is CJK-first (matches Tutti zh locale remapping). */
+  --interface-font-family: var(--font-sans-cjk);
+  --interface-font-mono:
+    'SF Mono', 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, 'Liberation Mono', monospace;
+  --font-weight-regular: 400;
+  --font-weight-emphasis: 500;
   --interface-density-scale: 1;
+  --overlay-blur: blur(8px);
+  --elevated-blur: blur(24px) saturate(1.08);
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --control-h-sm: 32px;
+  --control-h-md: 36px;
+  --control-h-lg: 40px;
+  --control-h-row: 44px;
+  --transparency-block: rgb(255 255 255 / 10%);
+  --transparency-hover: rgb(255 255 255 / 14%);
+  --transparency-active: rgb(255 255 255 / 16%);
+  --control-inset-highlight: inset 0 1px 0 rgb(255 255 255 / 10%);
+  --control-elevation: 0 1px 2px rgb(0 0 0 / 35%);
+  --theme-control-border: rgb(255 255 255 / 16%);
   /* Chat markdown semantics — distinct colors for strong / em / inline code */
   --md-strong: var(--color-primary-950);
   --md-em: var(--color-primary-700);
@@ -280,9 +313,11 @@
   --code-inline-border: var(--color-primary-200);
 }
 
+/* English / Latin-preferring opt-in (settings “inter” remapped to Lexend Variable) */
 [data-interface-font='inter'] {
   --interface-font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    'Lexend Variable', Lexend, 'PingFang SC', 'Microsoft YaHei UI',
+    'Microsoft YaHei', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
     'Segoe UI', sans-serif;
 }
 
@@ -292,25 +327,40 @@
 }
 
 [data-interface-font='mono'] {
-  --interface-font-family:
-    'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-    'Liberation Mono', monospace;
+  --interface-font-family: var(--interface-font-mono);
 }
 
 [data-interface-density='compact'] {
-  --interface-density-scale: 0.92;
+  --interface-density-scale: 0.96;
+}
+
+[data-interface-density='comfortable'] {
+  --interface-density-scale: 1;
 }
 
 [data-interface-density='spacious'] {
-  --interface-density-scale: 1.08;
+  --interface-density-scale: 1.06;
+}
+
+[data-theme$='-light'] {
+  --transparency-block: rgb(60 60 60 / 4%);
+  --transparency-hover: rgb(60 60 60 / 6%);
+  --transparency-active: rgb(60 60 60 / 6%);
+  --control-inset-highlight: inset 0 1px 0 rgb(255 255 255 / 80%);
+  --control-elevation: 0 1px 2px rgb(0 0 0 / 6%);
+  --theme-control-border: rgb(60 60 60 / 14%);
 }
 
 html,
 body {
   @apply m-0 font-sans;
   font-family: var(--interface-font-family);
+  /* Keep Agorax reading size; Tutti 13px felt too small here */
   font-size: calc(16px * var(--interface-density-scale));
-  letter-spacing: -0.15px;
+  font-weight: var(--font-weight-regular, 400);
+  letter-spacing: 0;
+  line-height: 1.5;
+  text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overscroll-behavior: none;
@@ -319,19 +369,18 @@ body {
 }
 
 .font-sans {
-  letter-spacing: -0.15px;
+  letter-spacing: 0;
 }
 
 .inline-code {
   background: var(--code-inline-bg);
   border: 1px solid var(--code-inline-border);
-  border-radius: 0.5rem;
-  color: var(--code-foreground, var(--color-primary-900));
-  font-family:
-    'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-    'Liberation Mono', 'Courier New', monospace;
-  font-size: 0.95em;
-  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  color: var(--code-foreground, var(--theme-accent));
+  font-family: var(--interface-font-mono);
+  font-size: 0.92em;
+  font-weight: 400;
+  padding: 0.1rem 0.35rem;
   white-space: nowrap;
 }
 
@@ -601,8 +650,7 @@ body {
 }
 
 code {
-  font-family:
-    'JetBrains Mono', Menlo, Monaco, Consolas, 'Courier New', monospace;
+  font-family: var(--interface-font-mono);
 }
 
 @keyframes shimmer {
@@ -1694,23 +1742,88 @@ code {
   font-feature-settings: 'ss01';
 }
 
-/* Editorial display heading — sparse use only (splash, hero, empty states) */
+/* Display heading — product UI stack, Tutti page-title weight */
 .editorial-display {
-  font-family: 'EB Garamond', 'Iowan Old Style', Georgia, serif;
-  font-weight: 500;
+  font-family: var(--interface-font-family);
+  font-weight: 600;
   letter-spacing: -0.01em;
-  line-height: 1.05;
+  line-height: 1.2;
+  font-size: 24px;
+}
+
+/* App canvas: accent wash over solid base (main column only) */
+.app-surface {
+  background: var(--app-surface-bg, var(--theme-bg));
+}
+
+/* Quiet fill chip — selects / secondary buttons / custom dropdown triggers */
+.control-surface {
+  background: var(--theme-input);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 6px);
+  color: var(--theme-text);
+}
+
+/* Text fields — same fill as control-surface, keep thin border */
+.field-surface {
+  background: var(--theme-input);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--radius-sm, 6px);
+  color: var(--theme-text);
+}
+
+/* Native <select> — same as buttons: fill only, drop outline borders */
+select:not([multiple]) {
+  background-color: var(--theme-input) !important;
+  border-color: transparent !important;
+  color: var(--theme-text);
+  border-radius: var(--radius-sm, 6px);
+}
+
+/* Text fields — match dropdown fill, keep thin border */
+input:not([type='checkbox']):not([type='radio']):not([type='range']):not(
+    [type='file']
+  ):not([type='hidden']):not([type='button']):not([type='submit']):not(
+    [type='reset']
+  ):not([type='image']),
+textarea {
+  background-color: var(--theme-input) !important;
+  border-color: var(--theme-border);
+  color: var(--theme-text);
+}
+
+/* Elevated floating panel — graded glass, not workbench 40px */
+.glass-elevated {
+  background: var(--theme-glass, var(--theme-card));
+  backdrop-filter: var(--elevated-blur, blur(24px) saturate(1.08));
+  -webkit-backdrop-filter: var(--elevated-blur, blur(24px) saturate(1.08));
+  border: 1px solid var(--theme-border-subtle, var(--theme-border));
+  box-shadow: var(--theme-shadow-3);
+  border-radius: var(--radius-xl, 12px);
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    opacity 150ms ease,
+    transform 150ms ease;
+}
+.glass-elevated:focus-within {
+  border-color: var(--theme-focused-border, var(--theme-accent-border));
+}
+
+.overlay-scrim {
+  backdrop-filter: var(--overlay-blur, blur(8px));
+  -webkit-backdrop-filter: var(--overlay-blur, blur(8px));
 }
 
 /* Architectural frame (thin 1px border, no shadow, square-ish) */
 .frame {
   border: 1px solid var(--theme-border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm, 8px);
   background: var(--theme-card);
 }
 .frame-panel {
   border: 1px solid var(--theme-border);
-  border-radius: 8px;
+  border-radius: var(--radius-md, 12px);
   background: var(--theme-panel);
 }
 .frame-flat {
@@ -1757,7 +1870,7 @@ code {
 /* Reserved depth class for genuinely floating UI (modals, popovers, toasts) */
 .frame-elevated {
   border: 1px solid var(--theme-border);
-  border-radius: 8px;
+  border-radius: var(--radius-md, 12px);
   background: var(--theme-card);
   box-shadow:
     0 1px 0 rgba(22, 49, 95, 0.04),
@@ -1771,27 +1884,35 @@ code {
 
 /* Square corner radius variables for component opt-in */
 :root {
-  --radius-editorial-card: 6px;
-  --radius-editorial-panel: 8px;
-  --radius-editorial-dialog: 10px;
-  --radius-editorial-input: 6px;
+  --radius-editorial-card: var(--radius-sm, 8px);
+  --radius-editorial-panel: var(--radius-md, 12px);
+  --radius-editorial-dialog: var(--radius-md, 12px);
+  --radius-editorial-input: var(--radius-sm, 8px);
 }
 
-/* Restrain border-radius on common component patterns in light themes
-   (dark themes can keep their existing softer radii for now to avoid surprise) */
-[data-theme$='-light'] .rounded-2xl {
-  border-radius: 8px !important;
+/* Lock common rounded utilities closer to Tutti desktop controls */
+.rounded-lg {
+  border-radius: var(--radius-md, 8px) !important;
 }
-[data-theme$='-light'] .rounded-3xl {
-  border-radius: 10px !important;
+.rounded-xl {
+  border-radius: var(--radius-lg, 12px) !important;
+}
+.rounded-2xl {
+  border-radius: var(--radius-2xl, 18px) !important;
+}
+.rounded-3xl {
+  border-radius: var(--radius-2xl, 18px) !important;
+}
+.rounded-md {
+  border-radius: var(--radius-sm, 6px) !important;
 }
 
-/* Fluid serif numeral for hero/empty-state metrics (optional opt-in) */
+/* Fluid numeral for hero/empty-state metrics (optional opt-in) */
 .numeral-display {
-  font-family: 'EB Garamond', Georgia, serif;
-  font-weight: 500;
+  font-family: var(--interface-font-family);
+  font-weight: 600;
   font-variant-numeric: lining-nums tabular-nums;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
 
 /* ════════════════════════════════════════════════════════════════════

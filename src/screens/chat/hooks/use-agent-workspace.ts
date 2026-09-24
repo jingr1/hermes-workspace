@@ -91,10 +91,13 @@ export function useAgentWorkspace() {
     setSessionsLoading,
   ])
 
-  // Persist last selected agent for /chat landing redirect.
+  // Persist last selected agent for /chat landing redirect — only when the id
+  // still exists in the registry (avoids poisoning localStorage with stale ids).
   useEffect(() => {
-    if (activeAgentId) writeLastAgent(activeAgentId)
-  }, [activeAgentId])
+    if (!activeAgentId) return
+    if (!agents.some((agent) => agent.agentId === activeAgentId)) return
+    writeLastAgent(activeAgentId)
+  }, [activeAgentId, agents])
 
   // Subscribe to global collab events for live status updates
   useEffect(() => {

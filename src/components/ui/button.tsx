@@ -9,7 +9,7 @@ import type * as React from 'react'
 import { cn } from '@/lib/utils'
 
 const buttonVariants = cva(
-  'relative inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-primary-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0] select-none duration-150',
+  'relative inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-normal transition-[background-color,border-color,color,box-shadow] duration-150 focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)]/35 focus-visible:ring-offset-0 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 select-none',
   {
     defaultVariants: {
       size: 'default',
@@ -17,23 +17,28 @@ const buttonVariants = cva(
     },
     variants: {
       size: {
-        default: 'h-9 px-4',
-        sm: 'h-8 px-3',
-        lg: 'h-10 px-5',
+        default: 'h-9 px-3',
+        sm: 'h-8 px-2.5',
+        lg: 'h-10 px-4',
         icon: 'size-9',
         'icon-sm': 'size-8',
-        'icon-md': 'size-10',
-        'icon-xl': 'size-11 [&_svg]:size-5',
+        'icon-md': 'size-9',
+        'icon-xl': 'size-10 [&_svg]:size-5',
       },
       variant: {
+        /* Primary CTA — filled */
         default:
-          'bg-primary-950 text-primary-50 hover:bg-primary-900 shadow-sm outline outline-primary-900/10 shadow-2xs',
+          'border border-transparent bg-[var(--theme-accent)] text-white hover:bg-[var(--theme-accent-secondary)]',
+        /* Quiet fill chip — color lift only, no outline border */
         secondary:
-          'bg-primary-50 text-primary-950 hover:bg-primary-200 outline outline-primary-900/10 shadow-2xs',
+          'border border-transparent bg-[var(--theme-input)] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]',
         outline:
-          'border-primary-200 bg-transparent text-primary-900 hover:bg-primary-50 shadow-2xs outline outline-primary-900/10',
-        ghost: 'text-primary-900 hover:bg-primary-200 hover:text-primary-950',
-        destructive: 'bg-red-600 text-primary-50 hover:bg-red-700 shadow-sm',
+          'border border-transparent bg-[var(--theme-input)] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]',
+        ghost:
+          'border border-transparent text-[var(--theme-text)] hover:bg-[var(--transparency-hover)]',
+        /* Soft danger: red ink on tinted panel */
+        destructive:
+          'border border-transparent bg-[color-mix(in_srgb,var(--theme-danger)_12%,var(--theme-input))] text-[var(--theme-danger)] hover:bg-[color-mix(in_srgb,var(--theme-danger)_18%,var(--theme-input))]',
       },
     },
   },

@@ -75,7 +75,7 @@ function ModelSelector({
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
-        className="inline-flex min-h-[3rem] w-full items-center justify-between gap-3 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-left text-sm text-[var(--theme-text)] shadow-[0_8px_24px_color-mix(in_srgb,var(--theme-shadow)_18%,transparent)]"
+        className="control-surface inline-flex min-h-[3rem] w-full items-center justify-between gap-3 rounded-2xl px-4 py-3 text-left text-sm text-[var(--theme-text)]"
       >
         <span className="truncate">
           {selected
@@ -106,7 +106,7 @@ function ModelSelector({
                 'flex w-full rounded-xl px-3 py-2.5 text-left text-sm',
                 !value
                   ? 'bg-[var(--theme-accent-soft)]'
-                  : 'hover:bg-[var(--theme-bg)]',
+                  : 'hover:bg-[var(--transparency-hover)]',
               )}
             >
               Default (auto)
@@ -123,7 +123,7 @@ function ModelSelector({
                   'mt-1 flex w-full rounded-xl px-3 py-2.5 text-left text-sm',
                   value === model.id
                     ? 'bg-[var(--theme-accent-soft)]'
-                    : 'hover:bg-[var(--theme-bg)]',
+                    : 'hover:bg-[var(--transparency-hover)]',
                 )}
               >
                 {model.provider} / {model.name}
@@ -199,7 +199,7 @@ export function OperationsSettingsModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-[var(--theme-border)] bg-[var(--theme-bg)] p-2 text-[var(--theme-muted)] hover:text-[var(--theme-text)]"
+            className="control-surface rounded-full p-2 text-[var(--theme-muted)] hover:text-[var(--theme-text)]"
           >
             <HugeiconsIcon icon={Cancel01Icon} size={18} strokeWidth={1.8} />
           </button>
@@ -256,17 +256,13 @@ export function OperationsSettingsModal({
                   activityFeedLength: Number(event.target.value) || 5,
                 }))
               }
-              className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)]"
+              className="w-full rounded-2xl field-surface px-4 py-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)]"
             />
           </label>
         </div>
 
         <div className="mt-6 flex justify-end gap-3">
-          <Button
-            variant="secondary"
-            className="border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
-            onClick={onClose}
-          >
+          <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
           <Button

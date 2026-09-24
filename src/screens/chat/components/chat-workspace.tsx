@@ -1,36 +1,51 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { ChatScreen } from '../chat-screen'
 import { useProfiles } from '../hooks/use-profiles'
 import { ChatRouteLoading } from '../chat-route-loading'
 import { ManagedAgentChatView } from './managed-agent-chat-view'
+import { pickChatAgentId } from '../pick-chat-agent'
 import { useAgentStore } from '@/stores/agent-store'
-import { useExternalAgentSessions } from '../hooks/use-external-agent-sessions'
 
 export function ChatWorkspace() {
+  const navigate = useNavigate()
   const agent = useAgentStore((state) =>
     state.agents.find((a) => a.agentId === state.activeAgentId),
   )
   const activeAgentId = useAgentStore((state) => state.activeAgentId)
   const agentsLoading = useAgentStore((state) => state.agentsLoading)
-  const agentsCount = useAgentStore((state) => state.agents.length)
+  const agents = useAgentStore((state) => state.agents)
   const sessionId = useAgentStore((state) => state.activeSessionId)
 
+  // Stale / missing activeAgentId while the registry has real entries — recover
+  // instead of painting "Select an agent to start chatting."
+  useEffect(() => {
+    if (agentsLoading || agent || agents.length === 0) return
+    const fallback = pickChatAgentId(agents, null)
+    if (!fallback || fallback === activeAgentId) return
+    void navigate({
+      to: '/chat/agent/$agentId',
+      params: { agentId: fallback },
+      replace: true,
+    })
+  }, [activeAgentId, agent, agents, agentsLoading, navigate])
+
   if (!agent) {
-    // Avoid a flash of "Select an agent" while the list is still loading or
-    // the URL agent id has not been resolved into the store yet.
-    if (agentsLoading || (activeAgentId && agentsCount === 0)) {
+    // Registry empty and settled → real empty state.
+    if (!agentsLoading && agents.length === 0) {
       return (
-        <div className="flex h-full flex-col items-center justify-center">
-          <ChatRouteLoading />
+        <div className="flex h-full items-center justify-center text-sm text-primary-500 dark:text-primary-400">
+          Select an agent to start chatting.
         </div>
       )
     }
+    // Still loading, or recovering a stale/missing selection.
     return (
-      <div className="flex h-full items-center justify-center text-sm text-primary-500 dark:text-primary-400">
-        Select an agent to start chatting.
+      <div className="flex h-full flex-col items-center justify-center">
+        <ChatRouteLoading />
       </div>
     )
   }

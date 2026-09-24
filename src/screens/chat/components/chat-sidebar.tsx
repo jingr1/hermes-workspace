@@ -166,8 +166,8 @@ function NavItem({
     'w-full h-auto min-h-11 gap-2.5 py-2 md:min-h-0',
     isCollapsed ? 'justify-center px-0' : 'justify-start px-3',
     item.active
-      ? 'bg-accent-500/10 text-accent-500 hover:bg-accent-50 dark:hover:bg-accent-900/300/15'
-      : 'text-primary-900 hover:bg-primary-200 dark:hover:bg-primary-800',
+      ? 'bg-accent-500/10 text-accent-500 hover:bg-[var(--transparency-hover)]'
+      : 'text-primary-900 hover:bg-[var(--transparency-hover)]',
   )
 
   const iconEl =
@@ -393,7 +393,7 @@ function SectionLabel({
           <HugeiconsIcon
             icon={ArrowDown01Icon}
             size={12}
-            strokeWidth={2}
+            strokeWidth={1.5}
             className={cn(
               'text-primary-500 transition-transform duration-150',
               expanded ? 'rotate-0' : '-rotate-90',
@@ -903,13 +903,13 @@ function ChatSidebarComponent({
                     <HugeiconsIcon
                       icon={ArrowRight01Icon}
                       size={18}
-                      strokeWidth={1.75}
+                      strokeWidth={1.5}
                     />
                   ) : (
                     <HugeiconsIcon
                       icon={ArrowLeft01Icon}
                       size={18}
-                      strokeWidth={1.75}
+                      strokeWidth={1.5}
                     />
                   )}
                 </Button>

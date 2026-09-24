@@ -2115,7 +2115,7 @@ export function Swarm2Screen() {
                         setNewWorkerMission(preset.mission)
                     }
                   }}
-                  className="w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-[var(--theme-text)] outline-none"
+                  className="w-full control-surface rounded-xl px-3 py-2 text-[var(--theme-text)] outline-none"
                 >
                   {ROLE_NAMES.map((r) => (
                     <option key={r} value={r}>
@@ -2135,7 +2135,7 @@ export function Swarm2Screen() {
                 <input
                   value={newWorkerId}
                   onChange={(e) => setNewWorkerId(e.target.value)}
-                  className="w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-[var(--theme-text)] outline-none"
+                  className="w-full rounded-xl field-surface px-3 py-2 text-[var(--theme-text)] outline-none"
                   placeholder="swarmN"
                 />
               </label>
@@ -2146,7 +2146,7 @@ export function Swarm2Screen() {
                 <input
                   value={newWorkerName}
                   onChange={(e) => setNewWorkerName(e.target.value)}
-                  className="w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-[var(--theme-text)] outline-none"
+                  className="w-full rounded-xl field-surface px-3 py-2 text-[var(--theme-text)] outline-none"
                   placeholder="e.g. Mirror, Builder"
                 />
               </label>
@@ -2157,7 +2157,7 @@ export function Swarm2Screen() {
                 <input
                   value={newWorkerSpecialty}
                   onChange={(e) => setNewWorkerSpecialty(e.target.value)}
-                  className="w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-[var(--theme-text)] outline-none"
+                  className="w-full rounded-xl field-surface px-3 py-2 text-[var(--theme-text)] outline-none"
                   placeholder={
                     ROLE_PRESETS.find((p) => p.role === newWorkerRole)
                       ?.specialty || 'short focus area'
@@ -2172,7 +2172,7 @@ export function Swarm2Screen() {
                   value={newWorkerMission}
                   onChange={(e) => setNewWorkerMission(e.target.value)}
                   rows={3}
-                  className="w-full resize-none rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-[var(--theme-text)] outline-none"
+                  className="w-full resize-none rounded-xl field-surface px-3 py-2 text-[var(--theme-text)] outline-none"
                   placeholder={
                     ROLE_PRESETS.find((p) => p.role === newWorkerRole)
                       ?.mission || 'standing mission for this worker'

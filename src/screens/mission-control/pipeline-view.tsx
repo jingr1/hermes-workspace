@@ -26,6 +26,7 @@ import {
 } from '@/lib/mission-detail-format'
 import { createRoomFromMission } from '@/lib/group-chat-api'
 import { toast } from '@/components/ui/toast'
+import { Button } from '@/components/ui/button'
 import { SpecField } from './components/spec-field'
 
 const MISSIONS_QUERY_KEY = ['mission-control', 'missions'] as const
@@ -219,8 +220,12 @@ function PropRow({
   )
 }
 
+function selectClassName() {
+  return 'control-surface w-full rounded-md px-2 py-1 text-xs'
+}
+
 function fieldClassName() {
-  return 'w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1 text-xs'
+  return 'field-surface w-full rounded-md px-2 py-1 text-xs'
 }
 
 export function PipelineView({
@@ -502,20 +507,23 @@ export function PipelineView({
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-            <button
+            <Button
               type="button"
+              size="sm"
               disabled={
                 startMutation.isPending ||
                 !stages.some((s) => s.state === 'queued')
               }
               onClick={() => startMutation.mutate()}
-              className="rounded-md bg-[var(--theme-accent)] px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+              className="text-xs"
             >
               {startMutation.isPending ? 'Starting…' : 'Start / Continue'}
-            </button>
+            </Button>
             {missionIdForRoom ? (
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="sm"
                 disabled={roomBusy}
                 onClick={async () => {
                   setRoomBusy(true)
@@ -532,17 +540,19 @@ export function PipelineView({
                     setRoomBusy(false)
                   }
                 }}
-                className="rounded-md border border-[var(--theme-border)] px-3 py-1.5 text-xs font-medium hover:bg-[var(--theme-hover)] disabled:opacity-50"
+                className="text-xs"
               >
                 {roomBusy
                   ? 'Opening…'
                   : roomId
                     ? 'Enter room'
                     : 'Create room'}
-              </button>
+              </Button>
             ) : null}
-            <button
+            <Button
               type="button"
+              variant="destructive"
+              size="sm"
               disabled={deleteMutation.isPending || !detailKey}
               onClick={() => {
                 if (
@@ -554,10 +564,10 @@ export function PipelineView({
                 }
                 deleteMutation.mutate()
               }}
-              className="rounded-md border border-red-400/40 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-500/10 disabled:opacity-50"
+              className="text-xs"
             >
               {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -568,16 +578,17 @@ export function PipelineView({
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--theme-muted)]">
                   Description
                 </h3>
-                <button
+                <Button
                   type="button"
+                  size="sm"
                   disabled={
                     !detailKey || !specDirty || patchMutation.isPending
                   }
                   onClick={saveDescription}
-                  className="rounded-md bg-[var(--theme-accent)] px-2.5 py-1 text-[10px] font-medium text-white disabled:opacity-40"
+                  className="h-7 text-[10px]"
                 >
                   {patchMutation.isPending ? 'Saving…' : 'Save'}
-                </button>
+                </Button>
               </div>
               <label className="block text-xs">
                 <span className="text-[var(--theme-muted)]">Spec</span>
@@ -599,7 +610,7 @@ export function PipelineView({
                   onChange={(e) => setCriteriaDraft(e.target.value)}
                   rows={2}
                   disabled={!detailKey}
-                  className="mt-1 w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1.5 text-sm disabled:opacity-50"
+                  className="mt-1 w-full rounded-md field-surface px-2 py-1.5 text-sm disabled:opacity-50"
                 />
               </label>
               {detail?.pipeline &&
@@ -649,7 +660,7 @@ export function PipelineView({
               <PropRow label="Assignee">
                 {missionView?.executionMode === 'assignee' ? (
                   <select
-                    className={fieldClassName()}
+                    className={selectClassName()}
                     disabled={patchMutation.isPending || !detailKey}
                     value={
                       missionView.assignee
@@ -701,7 +712,7 @@ export function PipelineView({
               </PropRow>
               <PropRow label="Priority">
                 <select
-                  className={fieldClassName()}
+                  className={selectClassName()}
                   disabled={patchMutation.isPending || !detailKey}
                   value={
                     missionView?.priority == null
@@ -748,7 +759,7 @@ export function PipelineView({
               </PropRow>
               <PropRow label="Project">
                 <select
-                  className={fieldClassName()}
+                  className={selectClassName()}
                   disabled={patchMutation.isPending || !detailKey}
                   value={missionView?.projectId ?? ''}
                   onChange={(e) => {

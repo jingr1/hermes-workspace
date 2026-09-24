@@ -22,10 +22,10 @@ function Input({
   ...props
 }: InputProps) {
   const inputClassName = cn(
-    'h-8.5 w-full min-w-0 rounded-[inherit] px-[calc(--spacing(3)-1px)] leading-8.5 outline-none placeholder:text-primary-600/70 sm:h-7.5 sm:leading-7.5 [transition:background-color_5000000s_ease-in-out_0s]',
+    'h-9 w-full min-w-0 rounded-[inherit] px-[calc(--spacing(3)-1px)] text-sm leading-9 outline-none placeholder:text-primary-600/70 sm:h-9 sm:leading-9 [transition:background-color_5000000s_ease-in-out_0s]',
     size === 'sm' &&
-      'h-7.5 px-[calc(--spacing(2.5)-1px)] leading-7.5 sm:h-6.5 sm:leading-6.5',
-    size === 'lg' && 'h-9.5 leading-9.5 sm:h-8.5 sm:leading-8.5',
+      'h-8 px-[calc(--spacing(2.5)-1px)] leading-8 sm:h-8 sm:leading-8',
+    size === 'lg' && 'h-10 leading-10 sm:h-10 sm:leading-10',
     props.type === 'search' &&
       '[&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none [&::-webkit-search-results-button]:appearance-none [&::-webkit-search-results-decoration]:appearance-none',
     props.type === 'file' &&
@@ -37,7 +37,7 @@ function Input({
       className={
         cn(
           !unstyled &&
-            'relative inline-flex w-full rounded-lg border border-primary-200 bg-surface bg-clip-padding text-base text-primary-900 shadow-xs/5 ring-primary-500/24 transition-shadow before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] not-has-disabled:not-has-focus-visible:not-has-aria-invalid:before:shadow-[0_1px_--theme(--color-ink/6%)] has-focus-visible:has-aria-invalid:border-destructive/64 has-focus-visible:has-aria-invalid:ring-destructive/16 has-aria-invalid:border-destructive/36 has-focus-visible:border-primary-500 has-autofill:bg-primary-100 has-disabled:opacity-64 has-[:disabled,:focus-visible,[aria-invalid]]:shadow-none has-focus-visible:ring-[3px] sm:text-sm',
+            'relative inline-flex w-full rounded-md border border-[var(--theme-border)] bg-[var(--theme-input)] bg-clip-padding text-sm text-[var(--theme-text)] shadow-xs/5 ring-[var(--theme-accent)]/24 transition-shadow before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-sm)-1px)] not-has-disabled:not-has-focus-visible:not-has-aria-invalid:before:shadow-[0_1px_--theme(--color-ink/6%)] has-focus-visible:has-aria-invalid:border-destructive/64 has-focus-visible:has-aria-invalid:ring-destructive/16 has-aria-invalid:border-destructive/36 has-focus-visible:border-[var(--theme-accent)] has-autofill:bg-[var(--theme-card2)] has-disabled:opacity-64 has-[:disabled,:focus-visible,[aria-invalid]]:shadow-none has-focus-visible:ring-[3px]',
           className,
         ) || undefined
       }

@@ -31,20 +31,23 @@ function DialogContent({ className, children, style }: DialogContentProps) {
   return (
     <Dialog.Portal>
       <Dialog.Backdrop
-        className="fixed inset-0 transition-all duration-150 data-[state=open]:opacity-100 data-[state=closed]:opacity-0"
+        className="overlay-scrim fixed inset-0 transition-all duration-150 data-[state=open]:opacity-100 data-[state=closed]:opacity-0"
         style={{ background: 'rgba(0,0,0,0.5)' }}
       />
       <Dialog.Popup
         className={cn(
           'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2',
-          'w-[min(400px,92vw)] max-h-[90vh] rounded-[10px] p-0 overflow-hidden flex flex-col',
+          'w-[min(400px,92vw)] max-h-[90vh] rounded-xl p-0 overflow-hidden flex flex-col',
           'transition-all duration-150',
           'data-[state=open]:opacity-100 data-[state=closed]:opacity-0',
-          'data-[state=open]:scale-100 data-[state=closed]:scale-95',
+          'data-[state=open]:scale-100 data-[state=closed]:scale-[0.97]',
           className,
         )}
         style={{
-          background: 'var(--theme-panel)',
+          background: 'var(--theme-glass, var(--theme-panel))',
+          backdropFilter: 'var(--elevated-blur, blur(24px) saturate(1.08))',
+          WebkitBackdropFilter:
+            'var(--elevated-blur, blur(24px) saturate(1.08))',
           border: '1px solid var(--theme-border)',
           boxShadow: 'var(--theme-shadow-3)',
           color: 'var(--theme-text)',

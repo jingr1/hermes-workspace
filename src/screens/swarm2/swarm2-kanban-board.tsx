@@ -652,7 +652,7 @@ export function Swarm2KanbanBoard({
                 <select
                   value={draftWorker}
                   onChange={(event) => setDraftWorker(event.target.value)}
-                  className="w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-sm text-[var(--theme-text)] outline-none"
+                  className="w-full control-surface rounded-xl px-3 py-2 text-sm text-[var(--theme-text)] outline-none"
                 >
                   <option value="">Unassigned</option>
                   {workers.map((worker) => (
@@ -669,7 +669,7 @@ export function Swarm2KanbanBoard({
                 <select
                   value={draftReviewer}
                   onChange={(event) => setDraftReviewer(event.target.value)}
-                  className="w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-sm text-[var(--theme-text)] outline-none"
+                  className="w-full control-surface rounded-xl px-3 py-2 text-sm text-[var(--theme-text)] outline-none"
                 >
                   <option value="">Unassigned</option>
                   {workers.map((worker) => (
@@ -688,7 +688,7 @@ export function Swarm2KanbanBoard({
                   onChange={(event) =>
                     setDraftStatus(event.target.value as KanbanLane)
                   }
-                  className="w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-sm text-[var(--theme-text)] outline-none"
+                  className="w-full control-surface rounded-xl px-3 py-2 text-sm text-[var(--theme-text)] outline-none"
                 >
                   {LANES.map((lane) => (
                     <option key={lane.id} value={lane.id}>

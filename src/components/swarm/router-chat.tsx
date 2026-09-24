@@ -668,7 +668,7 @@ export function RouterChat({
                     ? `Message ${selectedId ?? 'select a worker first'}…`
                     : "Broadcast to the room (or all workers if no room): 'Status check.'"
               }
-              className="min-h-[8rem] resize-y rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-2 text-sm text-[var(--theme-text)] placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)] focus:outline-none"
+              className="min-h-[8rem] resize-y rounded-2xl field-surface px-3 py-2 text-sm text-[var(--theme-text)] placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)] focus:outline-none"
             />
             {!embedded ? (
               <div className="flex flex-wrap items-center gap-2">
@@ -684,7 +684,7 @@ export function RouterChat({
                           : `Use the ${quick.toLowerCase()} specialist for this:`,
                       )
                     }}
-                    className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-[var(--theme-muted)] hover:bg-[var(--theme-card2)] hover:text-[var(--theme-text)]"
+                    className="rounded-lg border border-transparent bg-[var(--theme-input)] px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-[var(--theme-muted)] hover:bg-[var(--theme-card2)] hover:text-[var(--theme-text)]"
                   >
                     {quick}
                   </button>
@@ -840,7 +840,7 @@ export function RouterChat({
                             ),
                           )
                         }
-                        className="mt-1 w-full resize-none rounded-md border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1 text-[11px] text-[var(--theme-text)] focus:border-[var(--theme-accent)] focus:outline-none"
+                        className="mt-1 w-full resize-none rounded-md field-surface px-2 py-1 text-[11px] text-[var(--theme-text)] focus:border-[var(--theme-accent)] focus:outline-none"
                       />
                       {a.rationale ? (
                         <div className="mt-1 text-[10px] italic text-[var(--theme-muted-2)]">

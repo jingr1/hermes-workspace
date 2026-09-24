@@ -1,5 +1,6 @@
 'use client'
 
+import { Button } from '@/components/ui/button'
 import { MissionSurface } from './mission-surface'
 import { PipelineView } from './pipeline-view'
 import { CreateMissionButton } from './components/create-task-button'
@@ -37,13 +38,15 @@ export function MissionsLayout({
           </div>
           <div className="flex items-center gap-3">
             {showDetail ? (
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="sm"
                 onClick={() => select(null)}
-                className="rounded-md border border-[var(--theme-border)] px-3 py-1.5 text-xs font-medium text-[var(--theme-muted)] transition-colors hover:bg-[var(--theme-hover)] hover:text-[var(--theme-text)]"
+                className="text-xs"
               >
                 Back to list
-              </button>
+              </Button>
             ) : null}
             <CreateMissionButton />
           </div>

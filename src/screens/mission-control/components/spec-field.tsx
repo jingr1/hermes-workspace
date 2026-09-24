@@ -9,6 +9,7 @@ import {
   ArrowLeft01Icon,
 } from '@hugeicons/core-free-icons'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import {
   fetchFileTree,
   type FileTreeEntry,
@@ -125,14 +126,16 @@ export function SpecField({
         <span className="text-[10px] text-[var(--theme-muted)]">
           Tip: Attach path… or drop a workspace file
         </span>
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="sm"
           disabled={disabled}
           onClick={() => setPickerOpen(true)}
-          className="rounded border border-[var(--theme-border)] px-2 py-0.5 text-[10px] font-medium hover:bg-[var(--theme-hover)] disabled:opacity-50"
+          className="h-6 px-2 text-[10px]"
         >
           Attach path…
-        </button>
+        </Button>
       </div>
       <textarea
         ref={textareaRef}
@@ -157,10 +160,10 @@ export function SpecField({
         onDragLeave={() => setDragOver(false)}
         onDrop={onDrop}
         className={cn(
-          'mt-0 w-full rounded-md border bg-[var(--theme-bg)] px-2 py-1.5 text-sm',
+          'mt-0 w-full rounded-md field-surface px-2 py-1.5 text-sm',
           dragOver
             ? 'border-[var(--theme-accent)] ring-1 ring-[var(--theme-accent)]'
-            : 'border-[var(--theme-border)]',
+            : '',
         )}
       />
 
@@ -170,26 +173,29 @@ export function SpecField({
             <div className="flex items-center justify-between gap-2 border-b border-[var(--theme-border)] px-3 py-2">
               <div className="flex min-w-0 items-center gap-2">
                 {dirPath ? (
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="icon-sm"
                     onClick={() => setDirPath(parentDir)}
-                    className="rounded p-1 hover:bg-[var(--theme-hover)]"
                     aria-label="Up"
                   >
                     <HugeiconsIcon icon={ArrowLeft01Icon} size={14} />
-                  </button>
+                  </Button>
                 ) : null}
                 <h3 className="truncate text-xs font-semibold">
                   {dirPath || 'Workspace'}
                 </h3>
               </div>
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="sm"
                 onClick={() => setPickerOpen(false)}
-                className="rounded border border-[var(--theme-border)] px-2 py-0.5 text-[10px]"
+                className="h-6 px-2 text-[10px]"
               >
                 Close
-              </button>
+              </Button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-1">
               {filesQuery.isLoading ? (

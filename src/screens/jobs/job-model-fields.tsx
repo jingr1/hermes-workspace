@@ -19,7 +19,7 @@ type JobModelFieldsProps = {
 }
 
 const selectClassName =
-  'w-full rounded-xl border px-3 py-2.5 text-sm focus:outline-none focus:ring-1'
+  'control-surface w-full rounded-xl px-3 py-2.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)]/35'
 
 export function JobModelFields({
   modelPin,
@@ -138,11 +138,7 @@ export function JobModelFields({
               }}
               required
               className={selectClassName}
-              style={{
-                background: 'var(--theme-input)',
-                borderColor: 'var(--theme-border)',
-                color: 'var(--theme-text)',
-              }}
+              style={{ color: 'var(--theme-text)' }}
             >
               <option value="">Select provider</option>
               {providerOptions.map((option) => (
@@ -165,11 +161,7 @@ export function JobModelFields({
               required
               disabled={!provider}
               className={selectClassName}
-              style={{
-                background: 'var(--theme-input)',
-                borderColor: 'var(--theme-border)',
-                color: 'var(--theme-text)',
-              }}
+              style={{ color: 'var(--theme-text)' }}
             >
               <option value="">
                 {provider ? 'Select model' : 'Pick a provider first'}

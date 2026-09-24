@@ -111,7 +111,7 @@ function ModelSelector({
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
-        className="inline-flex min-h-[3rem] w-full items-center justify-between gap-3 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-left text-sm text-[var(--theme-text)] shadow-[0_8px_24px_color-mix(in_srgb,var(--theme-shadow)_18%,transparent)]"
+        className="control-surface inline-flex min-h-[3rem] w-full items-center justify-between gap-3 rounded-2xl px-4 py-3 text-left text-sm text-[var(--theme-text)]"
       >
         <span className="truncate">
           {selected
@@ -144,7 +144,7 @@ function ModelSelector({
                   'flex w-full rounded-xl px-3 py-2.5 text-left text-sm',
                   value === model.id
                     ? 'bg-[var(--theme-accent-soft)]'
-                    : 'hover:bg-[var(--theme-bg)]',
+                    : 'hover:bg-[var(--transparency-hover)]',
                 )}
               >
                 {model.provider} / {model.name}
@@ -239,7 +239,7 @@ export function OperationsNewAgentModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[color-mix(in_srgb,var(--theme-bg)_48%,transparent)] px-4 py-6 backdrop-blur-md"
+      className="overlay-scrim fixed inset-0 z-50 flex items-center justify-center bg-[color-mix(in_srgb,var(--theme-bg)_48%,transparent)] px-4 py-6"
       onClick={onClose}
     >
       <div
@@ -264,7 +264,7 @@ export function OperationsNewAgentModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-[var(--theme-border)] bg-[var(--theme-bg)] p-2 text-[var(--theme-muted)] hover:text-[var(--theme-text)]"
+            className="control-surface rounded-full p-2 text-[var(--theme-muted)] hover:text-[var(--theme-text)]"
           >
             <HugeiconsIcon icon={Cancel01Icon} size={18} strokeWidth={1.8} />
           </button>
@@ -279,7 +279,7 @@ export function OperationsNewAgentModal({
             onChange={(event) =>
               setRuntime(event.target.value as CreateAgentRuntime)
             }
-            className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)]"
+            className="w-full control-surface rounded-2xl px-4 py-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)]"
           >
             {CREATE_AGENT_RUNTIMES.map((value) => (
               <option key={value} value={value}>
@@ -298,7 +298,7 @@ export function OperationsNewAgentModal({
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="Sage"
-              className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+              className="w-full rounded-2xl field-surface px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
             />
             <p className="text-xs text-[var(--theme-muted)]">
               Agent id: <code>{agentIdPreview}</code>
@@ -314,7 +314,7 @@ export function OperationsNewAgentModal({
                 value={emoji}
                 onChange={(event) => setEmoji(event.target.value)}
                 placeholder="🐦"
-                className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+                className="w-full rounded-2xl field-surface px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
               />
             </label>
           ) : (
@@ -326,7 +326,7 @@ export function OperationsNewAgentModal({
                 value={role}
                 onChange={(event) => setRole(event.target.value)}
                 placeholder="Worker"
-                className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+                className="w-full rounded-2xl field-surface px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
               />
             </label>
           )}
@@ -352,7 +352,7 @@ export function OperationsNewAgentModal({
                       'inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-all',
                       presetId === preset.id
                         ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-soft)] text-[var(--theme-text)]'
-                        : 'border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-muted)] hover:bg-[var(--theme-card2)]',
+                        : 'border-transparent bg-[var(--theme-input)] text-[var(--theme-muted)] hover:bg-[var(--theme-card2)]',
                     )}
                   >
                     <span aria-hidden="true">{preset.emoji}</span>
@@ -387,7 +387,7 @@ export function OperationsNewAgentModal({
                 <select
                   value={cloneFrom}
                   onChange={(event) => setCloneFrom(event.target.value)}
-                  className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)]"
+                  className="w-full control-surface rounded-2xl px-4 py-3 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)]"
                 >
                   <option value="">None — start blank / from template</option>
                   {cloneOptions.map((option) => (
@@ -417,7 +417,7 @@ export function OperationsNewAgentModal({
               <input
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
-                className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+                className="w-full rounded-2xl field-surface px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
               />
             </label>
 
@@ -428,7 +428,7 @@ export function OperationsNewAgentModal({
               <textarea
                 value={systemPrompt}
                 onChange={(event) => setSystemPrompt(event.target.value)}
-                className="min-h-[140px] w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+                className="min-h-[140px] w-full rounded-2xl field-surface px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
               />
             </label>
           </>
@@ -442,7 +442,7 @@ export function OperationsNewAgentModal({
                 value={command}
                 onChange={(event) => setCommand(event.target.value)}
                 placeholder={agentRuntimeLabel(runtime)}
-                className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+                className="w-full rounded-2xl field-surface px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
               />
             </label>
             <label className="mt-4 block space-y-2">
@@ -453,7 +453,7 @@ export function OperationsNewAgentModal({
                 value={args}
                 onChange={(event) => setArgs(event.target.value)}
                 placeholder="Optional"
-                className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+                className="w-full rounded-2xl field-surface px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
               />
             </label>
             <label className="mt-4 block space-y-2">
@@ -463,18 +463,14 @@ export function OperationsNewAgentModal({
               <input
                 value={specialty}
                 onChange={(event) => setSpecialty(event.target.value)}
-                className="w-full rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
+                className="w-full rounded-2xl field-surface px-4 py-3 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus:border-[var(--theme-accent)]"
               />
             </label>
           </>
         )}
 
         <div className="mt-6 flex justify-end gap-3">
-          <Button
-            variant="secondary"
-            className="border border-[var(--theme-border)] bg-[var(--theme-bg)] text-[var(--theme-text)] hover:bg-[var(--theme-card2)]"
-            onClick={onClose}
-          >
+          <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
           <Button

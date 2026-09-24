@@ -277,10 +277,10 @@ export function HumanGatePanel({
               placeholder={options.customPlaceholder}
               rows={4}
               className={cn(
-                'w-full resize-y rounded-2xl border bg-[var(--theme-bg)] p-3 text-sm leading-relaxed text-[var(--theme-text)] outline-none transition-colors placeholder:text-[var(--theme-muted)]',
+                'w-full resize-y rounded-2xl field-surface p-3 text-sm leading-relaxed text-[var(--theme-text)] outline-none transition-colors placeholder:text-[var(--theme-muted)]',
                 !explicitChoice && humanNote.trim()
                   ? 'border-[var(--theme-accent)] ring-1 ring-[var(--theme-accent)]/30'
-                  : 'border-[var(--theme-border)] focus:border-[var(--theme-accent)]',
+                  : 'focus:border-[var(--theme-accent)]',
               )}
             />
             <p className="text-[11px] text-[var(--theme-muted)]">

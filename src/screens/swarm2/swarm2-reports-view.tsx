@@ -1012,7 +1012,7 @@ export function Swarm2ReportsView({
         <select
           value={workerFilter}
           onChange={(event) => setWorkerFilter(event.target.value)}
-          className="rounded-full border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-1.5 text-xs text-[var(--theme-muted)] outline-none"
+          className="control-surface rounded-full px-3 py-1.5 text-xs text-[var(--theme-muted)] outline-none"
         >
           <option value="all">All workers</option>
           {workers.map((worker) => (
@@ -1024,7 +1024,7 @@ export function Swarm2ReportsView({
         <select
           value={missionFilter}
           onChange={(event) => setMissionFilter(event.target.value)}
-          className="max-w-xs rounded-full border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-1.5 text-xs text-[var(--theme-muted)] outline-none"
+          className="max-w-xs control-surface rounded-full px-3 py-1.5 text-xs text-[var(--theme-muted)] outline-none"
         >
           <option value="all">All missions</option>
           {missionOptions.map((mission) => (

@@ -15,12 +15,10 @@ function SelectTrigger({ className, children, ...props }: SelectTriggerProps) {
   return (
     <Select.Trigger
       className={cn(
-        'flex h-9 w-full items-center justify-between rounded-md border px-3 py-2 text-sm',
+        'control-surface flex h-9 w-full items-center justify-between rounded-md px-3 py-2 text-sm transition-[background-color] duration-150 hover:bg-[var(--theme-card2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)]/35',
         className,
       )}
       style={{
-        background: 'var(--theme-input)',
-        borderColor: 'var(--theme-border)',
         color: 'var(--theme-text)',
       }}
       {...props}
@@ -48,14 +46,13 @@ function SelectContent({ className, children }: SelectContentProps) {
       <Select.Positioner>
         <Select.Popup
           className={cn(
-            'z-50 max-h-[min(24rem,60vh)] min-w-[var(--select-trigger-width)] overflow-auto rounded-md border p-1 text-sm shadow-lg',
+            'z-50 max-h-[min(24rem,60vh)] min-w-[var(--select-trigger-width)] overflow-auto rounded-md border border-transparent p-1 text-sm shadow-lg',
             className,
           )}
           style={{
-            background: 'var(--theme-card)',
-            borderColor: 'var(--theme-border)',
+            background: 'var(--theme-card2, var(--theme-card))',
             color: 'var(--theme-text)',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+            boxShadow: 'var(--theme-shadow-3)',
           }}
         >
           {children}
@@ -71,7 +68,7 @@ function SelectItem({ className, children, ...props }: SelectItemProps) {
   return (
     <Select.Item
       className={cn(
-        'flex w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm select-none outline-none',
+        'flex w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm select-none outline-none data-[highlighted]:bg-[var(--transparency-hover)] data-[selected]:bg-[var(--theme-accent-subtle)]',
         className,
       )}
       style={{

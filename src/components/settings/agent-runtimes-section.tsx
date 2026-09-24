@@ -156,10 +156,10 @@ function RuntimeRow({
                 : daemonOffline
                   ? 'Agorax daemon 未连接'
                   : updateSummary
-                  ? updateSummary
-                  : entry.installed
-                    ? (entry.version ?? 'Installed')
-                    : (entry.install?.displayCommand ?? 'Not installed')}
+                    ? updateSummary
+                    : entry.installed
+                      ? (entry.version ?? 'Installed')
+                      : (entry.install?.displayCommand ?? 'Not installed')}
             </p>
           </div>
         </div>
@@ -197,11 +197,7 @@ function RuntimeRow({
             aria-label={`${label} enabled`}
           />
         ) : isHermes ? (
-          <Switch
-            checked
-            disabled
-            aria-label={`${label} always enabled`}
-          />
+          <Switch checked disabled aria-label={`${label} always enabled`} />
         ) : (
           <span className="text-xs text-[var(--theme-muted)]">—</span>
         )}
@@ -214,11 +210,7 @@ function RuntimeRow({
             type="button"
             size="sm"
             variant={isInstalling ? 'default' : 'outline'}
-            className={cn(
-              'h-7 gap-1 px-2.5 text-[11px]',
-              isInstalling &&
-                'rounded-lg bg-accent-600 text-white opacity-90 hover:bg-accent-700',
-            )}
+            className={cn('gap-1.5', isInstalling && 'opacity-90')}
             onClick={() => onOpenEnvironment(providerId)}
           >
             {isInstalling ? (
@@ -420,7 +412,7 @@ export function AgentRuntimesSection({
               setManualRefreshing(false),
             )
           }}
-          className="h-8 gap-1.5 text-xs"
+          className="gap-1.5"
         >
           <HugeiconsIcon
             icon={RefreshIcon}

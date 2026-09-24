@@ -27,9 +27,9 @@ export function ChatEmptyState({
 }: ChatEmptyStateProps) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, ease: 'easeOut' }}
+      initial={{ opacity: 0, y: 8, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.15, ease: 'easeOut' }}
       className="flex h-full flex-col items-center justify-center px-4 py-8"
     >
       <div className="flex max-w-xl flex-col items-center text-center">
@@ -43,7 +43,7 @@ export function ChatEmptyState({
         </div>
 
         <h2
-          className="editorial-display text-3xl"
+          className="text-[24px] font-semibold tracking-tight"
           style={{ color: 'var(--theme-text)' }}
         >
           {name}
