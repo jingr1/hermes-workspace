@@ -1,8 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
 import {
   WorkspaceFolderPicker,
   preloadWorkspaceFolders,
@@ -25,10 +23,7 @@ async function fetchWorkspaceEntries(): Promise<Array<WorkspaceEntry>> {
       path?: string
     }
     const list = Array.isArray(data.workspaces) ? data.workspaces : []
-    if (
-      data.path &&
-      !list.some((w) => w.path === data.path)
-    ) {
+    if (data.path && !list.some((w) => w.path === data.path)) {
       return [
         { name: shortPathLabel(data.path), path: data.path },
         ...list,
@@ -44,22 +39,24 @@ type RoomWorkspaceFieldProps = {
   value: string
   onChange: (path: string) => void
   className?: string
-  /** Compact: hide folder browser until toggled. */
+  /**
+   * @deprecated Kept for call-site compatibility; picker always shows the
+   * chat-style path input + folder tree.
+   */
   compact?: boolean
 }
 
 /**
- * Sticky room workspace picker — catalog from /api/workspace + optional folder browse.
+ * Room workspace picker — same layout as chat Workspace dialog:
+ * Recent chips + shared WorkspaceFolderPicker (path input + home-rooted tree).
  * Empty value is allowed (no room cwd).
  */
 export function RoomWorkspaceField({
   value,
   onChange,
   className,
-  compact = false,
 }: RoomWorkspaceFieldProps) {
   const [entries, setEntries] = useState<Array<WorkspaceEntry>>([])
-  const [showBrowser, setShowBrowser] = useState(!compact && !value)
 
   useEffect(() => {
     void fetchWorkspaceEntries().then(setEntries)
@@ -67,61 +64,48 @@ export function RoomWorkspaceField({
   }, [])
 
   return (
-    <div className={cn('space-y-2', className)}>
-      <label className="text-xs opacity-70">Workspace (optional)</label>
+    <div className={cn('space-y-3', className)}>
       {entries.length > 0 ? (
-        <select
-          className="w-full h-9 rounded-md border bg-transparent px-2 text-sm"
-          style={{ borderColor: 'var(--theme-border)' }}
-          value={
-            entries.some((e) => e.path === value) ? value : value ? '__custom__' : ''
-          }
-          onChange={(e) => {
-            const next = e.target.value
-            if (next === '__custom__') {
-              setShowBrowser(true)
-              return
-            }
-            onChange(next)
-            setShowBrowser(false)
-          }}
-        >
-          <option value="">None — agents use their default cwd</option>
-          {entries.map((entry) => (
-            <option key={entry.path} value={entry.path}>
-              {entry.name || shortPathLabel(entry.path)}
-            </option>
-          ))}
-          <option value="__custom__">Browse…</option>
-        </select>
-      ) : null}
-      <Input
-        placeholder="/absolute/path/to/project"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onFocus={() => setShowBrowser(true)}
-      />
-      {(showBrowser || !entries.length) && (
-        <div
-          className="rounded-md border p-2 max-h-48 overflow-auto"
-          style={{ borderColor: 'var(--theme-border)' }}
-        >
-          <WorkspaceFolderPicker value={value} onChange={onChange} />
+        <div>
+          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)]">
+            Recent
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              onClick={() => onChange('')}
+              className={cn(
+                'rounded-full border px-2.5 py-1 text-xs transition-colors',
+                !value
+                  ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-soft)] text-[var(--theme-text)]'
+                  : 'border-[var(--theme-border)] text-[var(--theme-muted)] hover:border-[var(--theme-accent)] hover:text-[var(--theme-text)]',
+              )}
+            >
+              None
+            </button>
+            {entries.map((workspace) => {
+              const selected = workspace.path === value
+              return (
+                <button
+                  key={workspace.path}
+                  type="button"
+                  title={workspace.path}
+                  onClick={() => onChange(workspace.path)}
+                  className={cn(
+                    'max-w-[10rem] truncate rounded-full border px-2.5 py-1 text-xs transition-colors',
+                    selected
+                      ? 'border-[var(--theme-accent)] bg-[var(--theme-accent-soft)] text-[var(--theme-text)]'
+                      : 'border-[var(--theme-border)] text-[var(--theme-muted)] hover:border-[var(--theme-accent)] hover:text-[var(--theme-text)]',
+                  )}
+                >
+                  {workspace.name || shortPathLabel(workspace.path)}
+                </button>
+              )
+            })}
+          </div>
         </div>
-      )}
-      {value ? (
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={() => {
-            onChange('')
-            setShowBrowser(false)
-          }}
-        >
-          Clear workspace
-        </Button>
       ) : null}
+      <WorkspaceFolderPicker value={value} onChange={onChange} />
     </div>
   )
 }

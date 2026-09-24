@@ -462,22 +462,21 @@ export function RoomsScreen() {
         open={workspaceDialogOpen}
         onOpenChange={setWorkspaceDialogOpen}
       >
-        <DialogContent className="max-w-md">
-          <DialogTitle>Room workspace</DialogTitle>
-          <DialogDescription>
-            Sticky path for this room. Managed agents spawn here; Hermes is
-            reminded via the turn prompt.
-          </DialogDescription>
-          <div className="mt-4 space-y-3">
+        <DialogContent className="w-[min(520px,92vw)]">
+          <div className="p-4">
+            <DialogTitle className="mb-1">Room workspace</DialogTitle>
+            <DialogDescription className="mb-3">
+              Enter a project path or pick a folder. Managed agents spawn here;
+              Hermes is reminded via the turn prompt.
+            </DialogDescription>
             <RoomWorkspaceField
               value={workspaceDraft}
               onChange={setWorkspaceDraft}
-              compact
             />
             {workspaceError ? (
-              <div className="text-xs text-red-400">{workspaceError}</div>
+              <div className="mt-3 text-xs text-red-400">{workspaceError}</div>
             ) : null}
-            <div className="flex justify-end gap-2">
+            <div className="mt-4 flex justify-end gap-2">
               <DialogClose type="button" className="inline-flex">
                 <Button variant="ghost" disabled={workspaceSaving}>
                   Cancel

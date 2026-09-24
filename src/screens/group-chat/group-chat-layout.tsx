@@ -22,6 +22,9 @@ import {
   MoreVerticalCircle01Icon,
   Delete01Icon,
   Edit02Icon,
+  PauseIcon,
+  PlayIcon,
+  Add01Icon,
 } from '@hugeicons/core-free-icons'
 import {
   createRoom,
@@ -145,11 +148,7 @@ export function GroupChatLayout() {
   return (
     <div className="flex h-full" style={{ color: 'var(--theme-text)' }}>
       <aside
-        className="w-64 flex flex-col border-r"
-        style={{
-          borderColor: 'var(--theme-border)',
-          background: 'var(--theme-card)',
-        }}
+        className="theme-sidebar theme-border w-64 flex flex-col border-r"
       >
         <div
           className={cn(ROOM_HEADER_CLASS, 'px-3')}
@@ -167,35 +166,38 @@ export function GroupChatLayout() {
             }}
           >
             <DialogTrigger type="button" className="inline-flex">
-              <Button size="sm" variant="ghost">
-                + New
+              <Button size="sm" variant="secondary">
+                <HugeiconsIcon icon={Add01Icon} size={14} strokeWidth={1.8} />
+                New
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogTitle>New Room</DialogTitle>
-              <DialogDescription>
-                Start a multi-agent room. Optionally bind a sticky workspace.
-              </DialogDescription>
-              <div className="flex flex-col gap-3 mt-4">
-                <Input
-                  placeholder="Room title"
-                  value={createTitle}
-                  onChange={(e) => setCreateTitle(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleCreateRoom()}
-                />
-                <RoomWorkspaceField
-                  value={createWorkspacePath}
-                  onChange={setCreateWorkspacePath}
-                  compact
-                />
-                {createError ? (
-                  <div className="text-xs text-red-400">{createError}</div>
-                ) : null}
-                <div className="flex justify-end gap-2">
-                  <DialogClose type="button" className="inline-flex">
-                    <Button variant="ghost">Cancel</Button>
-                  </DialogClose>
-                  <Button onClick={handleCreateRoom}>Create</Button>
+            <DialogContent className="w-[min(520px,92vw)]">
+              <div className="p-4">
+                <DialogTitle className="mb-1">New Room</DialogTitle>
+                <DialogDescription className="mb-3">
+                  Start a multi-agent room. Optionally bind a sticky workspace —
+                  enter a project path or pick a folder.
+                </DialogDescription>
+                <div className="flex flex-col gap-3">
+                  <Input
+                    placeholder="Room title"
+                    value={createTitle}
+                    onChange={(e) => setCreateTitle(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleCreateRoom()}
+                  />
+                  <RoomWorkspaceField
+                    value={createWorkspacePath}
+                    onChange={setCreateWorkspacePath}
+                  />
+                  {createError ? (
+                    <div className="text-xs text-red-400">{createError}</div>
+                  ) : null}
+                  <div className="flex justify-end gap-2">
+                    <DialogClose type="button" className="inline-flex">
+                      <Button variant="ghost">Cancel</Button>
+                    </DialogClose>
+                    <Button onClick={handleCreateRoom}>Create</Button>
+                  </div>
                 </div>
               </div>
             </DialogContent>
@@ -277,6 +279,11 @@ export function GroupChatLayout() {
                           )
                         }}
                       >
+                        <HugeiconsIcon
+                          icon={PlayIcon}
+                          size={16}
+                          strokeWidth={1.5}
+                        />
                         Resume room
                       </MenuItem>
                     ) : room.state === 'active' ? (
@@ -287,6 +294,11 @@ export function GroupChatLayout() {
                           )
                         }}
                       >
+                        <HugeiconsIcon
+                          icon={PauseIcon}
+                          size={16}
+                          strokeWidth={1.5}
+                        />
                         Pause room
                       </MenuItem>
                     ) : null}

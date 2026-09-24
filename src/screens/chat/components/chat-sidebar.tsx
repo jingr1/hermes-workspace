@@ -49,6 +49,10 @@ import {
 import { StatusDot } from '@/components/status-indicator'
 import { applyTheme, useSettingsStore } from '@/hooks/use-settings'
 
+/** Tutti-adjacent nav chrome: slightly heavier stroke than Hugeicons default. */
+const NAV_ICON_STROKE = 2
+const NAV_ICON_SIZE = 20
+
 type WorkspaceStats = Record<string, unknown>
 
 function ThemeToggleMini() {
@@ -104,7 +108,7 @@ function ThemeToggleMini() {
       <HugeiconsIcon
         icon={isDark ? Sun02Icon : Moon02Icon}
         size={16}
-        strokeWidth={1.5}
+        strokeWidth={NAV_ICON_STROKE}
       />
     </button>
   )
@@ -163,11 +167,11 @@ function NavItem({
 }) {
   const cls = cn(
     buttonVariants({ variant: 'ghost', size: 'sm' }),
-    'w-full h-auto min-h-11 gap-2.5 py-2 md:min-h-0',
+    'w-full h-auto min-h-11 gap-2.5 rounded-lg py-2 md:min-h-0',
     isCollapsed ? 'justify-center px-0' : 'justify-start px-3',
     item.active
-      ? 'bg-accent-500/10 text-accent-500 hover:bg-[var(--transparency-hover)]'
-      : 'text-primary-900 hover:bg-[var(--transparency-hover)]',
+      ? 'bg-[var(--theme-input)] text-[var(--theme-accent)] hover:bg-[var(--theme-card2)]'
+      : 'text-[var(--theme-muted)] hover:bg-[var(--transparency-hover)] hover:text-[var(--theme-text)]',
   )
 
   const iconEl =
@@ -175,8 +179,8 @@ function NavItem({
       <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
         <HugeiconsIcon
           icon={item.icon as any}
-          size={20}
-          strokeWidth={1.5}
+          size={NAV_ICON_SIZE}
+          strokeWidth={NAV_ICON_STROKE}
           className="size-5 shrink-0"
         />
         <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-red-500" />
@@ -184,8 +188,8 @@ function NavItem({
     ) : (
       <HugeiconsIcon
         icon={item.icon as any}
-        size={20}
-        strokeWidth={1.5}
+        size={NAV_ICON_SIZE}
+        strokeWidth={NAV_ICON_STROKE}
         className="size-5 shrink-0"
       />
     )
@@ -362,7 +366,7 @@ function SectionLabel({
   if (isCollapsed) return null
 
   const labelContent = (
-    <span className="text-[10px] font-semibold uppercase tracking-wider text-primary-500 dark:text-neutral-400 select-none">
+    <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)] select-none">
       {label}
     </span>
   )
@@ -377,7 +381,7 @@ function SectionLabel({
         {navigateTo ? (
           <Link
             to={navigateTo}
-            className="text-[10px] font-semibold uppercase tracking-wider text-primary-500 dark:text-neutral-400 hover:text-primary-700 dark:hover:text-neutral-200 select-none transition-colors"
+            className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)] hover:text-[var(--theme-text)] select-none transition-colors"
           >
             {label}
           </Link>
@@ -387,15 +391,15 @@ function SectionLabel({
         <button
           type="button"
           onClick={onToggle}
-          className="ml-auto p-0.5 rounded hover:bg-primary-200 dark:hover:bg-primary-800 transition-colors"
+          className="ml-auto rounded p-0.5 transition-colors hover:bg-[var(--transparency-hover)]"
           aria-label={expanded ? `Collapse ${label}` : `Expand ${label}`}
         >
           <HugeiconsIcon
             icon={ArrowDown01Icon}
             size={12}
-            strokeWidth={1.5}
+            strokeWidth={NAV_ICON_STROKE}
             className={cn(
-              'text-primary-500 transition-transform duration-150',
+              'text-[var(--theme-muted)] transition-transform duration-150',
               expanded ? 'rotate-0' : '-rotate-90',
             )}
           />
@@ -413,7 +417,7 @@ function SectionLabel({
       {navigateTo ? (
         <Link
           to={navigateTo}
-          className="text-[10px] font-semibold uppercase tracking-wider text-primary-500 dark:text-neutral-400 hover:text-primary-700 dark:hover:text-neutral-200 select-none transition-colors"
+          className="text-[10px] font-semibold uppercase tracking-wider text-[var(--theme-muted)] hover:text-[var(--theme-text)] select-none transition-colors"
         >
           {label}
         </Link>
@@ -903,13 +907,13 @@ function ChatSidebarComponent({
                     <HugeiconsIcon
                       icon={ArrowRight01Icon}
                       size={18}
-                      strokeWidth={1.5}
+                      strokeWidth={NAV_ICON_STROKE}
                     />
                   ) : (
                     <HugeiconsIcon
                       icon={ArrowLeft01Icon}
                       size={18}
-                      strokeWidth={1.5}
+                      strokeWidth={NAV_ICON_STROKE}
                     />
                   )}
                 </Button>
@@ -1038,13 +1042,13 @@ function ChatSidebarComponent({
             <div className="flex items-center gap-0.5">
               <Link
                 to="/settings"
-                className="shrink-0 rounded-lg p-1.5 text-primary-400 hover:bg-primary-200 dark:hover:bg-neutral-800 hover:text-primary-600 dark:hover:text-neutral-300 transition-colors"
+                className="shrink-0 rounded-lg p-1.5 text-[var(--theme-muted)] transition-colors hover:bg-[var(--transparency-hover)] hover:text-[var(--theme-text)]"
                 aria-label="Settings"
               >
                 <HugeiconsIcon
                   icon={Settings01Icon}
                   size={16}
-                  strokeWidth={1.5}
+                  strokeWidth={NAV_ICON_STROKE}
                 />
               </Link>
               <ThemeToggleMini />
