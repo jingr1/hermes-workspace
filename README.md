@@ -95,20 +95,41 @@ Three paths — pick the one that matches you:
 | **🌐 One-line install**                      | Local dev on macOS/Linux                         | ~3 min |
 | **🔌 Attach to existing `hermes-agent`**     | You already run Hermes Agent                     | ~1 min |
 
+### What runs locally
+
+| Service | Port | How it starts |
+| ------- | ---- | ------------- |
+| **Agorax UI** (Workspace) | `:6734` | `pnpm dev` / `pnpm start` / `pnpm start:all` |
+| **Hermes Agent gateway** | `:8642` (+ per-profile `:8643`…) | Manual `hermes gateway run`, or **lazy-started** by the Workspace gateway pool on localhost |
+| **Managed Agent daemon** (Claude Code / Codex / Cursor / OpenCode / Kimi) | `:8788` | `pnpm dev:managed-agent` or included in `pnpm start:all` |
+| **Hermes dashboard** (optional analytics) | `:9119` | `hermes dashboard` |
+
+Prerequisite: `API_SERVER_ENABLED=true` in `~/.hermes/.env` so the gateway serves HTTP APIs.
+
 ### One-line install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/outsourc-e/hermes-workspace/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jingr1/agorax/main/install.sh | bash
 ```
 
-This installs `hermes-agent` via Nous's official installer, clones this repo, sets up `.env`, and installs dependencies. Then:
+This installs `hermes-agent` via Nous's official installer, clones into `~/agorax`, sets up `.env`, and installs dependencies. Then:
 
 ```bash
-hermes gateway run                  # terminal 1
-cd ~/hermes-workspace && pnpm dev   # terminal 2
+cd ~/agorax
+pnpm start:all    # gateway + managed-agent (:8788) + UI (:6734)
 ```
 
 Open http://localhost:6734. That's it.
+
+Split terminals if you prefer:
+
+```bash
+hermes gateway run                  # terminal 1 · :8642 (optional on localhost — pool can lazy-start)
+cd ~/agorax && pnpm dev:managed-agent   # terminal 2 · :8788 (only if you use managed agents)
+cd ~/agorax && pnpm dev                 # terminal 3 · :6734
+```
+
+Already built? Production mode is `pnpm build && pnpm start` (same `:6734`).
 
 ---
 
@@ -131,7 +152,8 @@ echo 'HERMES_API_URL=http://127.0.0.1:8642' >> .env
 # If your gateway was started with API_SERVER_KEY (auth enabled), set the same value:
 # echo 'HERMES_API_TOKEN=***' >> .env
 
-pnpm dev                            # http://localhost:6734 (override with PORT=4000 pnpm dev)
+# Local defaults for managed agents (Claude Code / Codex / …) are already in .env.example.
+pnpm start:all                      # or: pnpm dev  (+ optional pnpm dev:managed-agent)
 ```
 
 Requirements on the agent side:
@@ -141,9 +163,9 @@ Requirements on the agent side:
 - _(Optional)_ `hermes dashboard` on `http://127.0.0.1:9119` for analytics and external link features. Sessions, skills, config, and jobs are now served from the local profile directory without the dashboard.
 - If `API_SERVER_KEY` is set, the workspace must pass the same value via `HERMES_API_TOKEN` — otherwise leave both unset.
 
-Verify both services before opening the workspace:
+Verify before opening the workspace:
 
-- `curl http://127.0.0.1:8642/health` should return ok.
+- `curl http://127.0.0.1:8642/health` should return ok (or wait for the gateway pool to spawn it after UI boot).
 - _(Optional)_ `curl http://127.0.0.1:9119/api/status` should return dashboard metadata (only needed if you run the dashboard for analytics).
 - `curl http://127.0.0.1:6734/api/sessions` (after the workspace boots) should return a sessions payload or an empty list.
 
@@ -218,7 +240,9 @@ cd agorax
 pnpm install
 cp .env.example .env
 printf '\nHERMES_API_URL=http://127.0.0.1:8642\n' >> .env
-pnpm dev                   # Starts on http://localhost:6734
+pnpm start:all             # gateway + managed-agent + UI → http://localhost:6734
+# or just the UI (localhost gateway pool can lazy-start hermes):
+# pnpm dev
 ```
 
 > **Verify:** Open `http://localhost:6734` and complete the onboarding flow. First connect the backend, then verify chat works. If your gateway exposes Hermes Agent APIs, advanced features appear automatically.
@@ -320,18 +344,21 @@ You can adapt the same shape for other OpenAI-compatible local runners, but `Ato
 API_SERVER_ENABLED=true
 ```
 
-**3. Start the gateway, dashboard, and workspace:**
+**3. Start Agorax (and the gateway if needed):**
 
 ```bash
-hermes gateway run          # Starts core APIs on :8642 (required)
-hermes dashboard            # (Optional) Starts dashboard on :9119 for analytics
-HERMES_API_URL=http://127.0.0.1:8642 \
-pnpm dev
+# One-shot local stack (gateway + managed-agent + UI)
+HERMES_API_URL=http://127.0.0.1:8642 pnpm start:all
+
+# Or manual:
+hermes gateway run          # :8642 (required unless localhost pool lazy-starts it)
+hermes dashboard            # (Optional) :9119 analytics
+HERMES_API_URL=http://127.0.0.1:8642 pnpm dev
 ```
 
 For authenticated gateways, also set `HERMES_API_TOKEN` in the workspace environment to the same value as `API_SERVER_KEY`.
 
-All workspace features unlock automatically once both services are reachable — sessions persist, memory saves across chats, skills are available, and the dashboard shows real usage data.
+All workspace features unlock automatically once the gateway is reachable — sessions persist, memory saves across chats, skills are available, and the optional dashboard shows real usage data.
 
 > **Works with any OpenAI-compatible server** — Atomic Chat, Ollama, LM Studio, vLLM, llama.cpp, LocalAI, etc. Just change the `base_url` and `model` in the config above.
 
@@ -339,30 +366,43 @@ All workspace features unlock automatically once both services are reachable —
 
 ## 🤝 Pair an Agent with the Workspace
 
-Workspace is the UI. **Hermes Agent** is the brain. They talk over two HTTP services on localhost (or any reachable network).
+Workspace is the UI. **Hermes Agent** is the brain. Managed runtimes (Claude Code / Codex / …) talk through the **Managed Agent daemon**.
 
 ```
-┌───────────────┐         :8642 gateway          ┌────────────────┐
-│   Workspace    │ ─────────────────────▶ │  Hermes Agent  │
-│   :6734 (UI)   │ ◀───────────────────── │  CLI / brain   │
-└───────────────┘    (:9119 dashboard — optional)  └────────────────┘
+┌───────────────┐   :8642 gateway    ┌────────────────┐
+│   Agorax UI    │ ─────────────────▶ │  Hermes Agent  │
+│   :6734        │ ◀───────────────── │  CLI / brain   │
+└───────┬───────┘  (:9119 optional)  └────────────────┘
+        │ :8788
+        ▼
+┌───────────────────────┐
+│ Managed Agent daemon  │  Claude Code / Codex / Cursor / OpenCode / Kimi
+└───────────────────────┘
 ```
 
-### Two services, three commands
+### Recommended: one command
+
+```bash
+cd ~/agorax   # or your clone path
+pnpm start:all
+```
+
+Starts Hermes gateway (skips if already running), Managed Agent daemon on `:8788`, and the UI on `:6734`.
+
+### Or split terminals
 
 ```bash
 hermes gateway run     # terminal 1 · :8642 · chat, models, streaming, jobs, sessions, skills, config
-hermes dashboard       # (optional) terminal 2 · :9119 · analytics dashboard
-cd ~/hermes-workspace
-pnpm dev:managed-agent # terminal 3 · :8788 · Claude Code, Codex, Cursor, OpenCode, Kimi
-pnpm dev               # terminal 4 · :6734 · the UI
+hermes dashboard       # (optional) · :9119 · analytics only
+pnpm dev:managed-agent # terminal 2 · :8788 · managed runtimes
+pnpm dev               # terminal 3 · :6734 · the UI
 ```
 
-Managed Agent Chat requires `AGORAX_MANAGED_AGENT_URL=http://127.0.0.1:8788` and
-`AGORAX_WORKSPACE_ID=default` in `.env`; both local defaults are included in
-`.env.example`.
+On localhost, if you only run `pnpm dev`, the **gateway pool** can lazy-start one API gateway per active profile (`AGORAX_AUTO_START_AGENT=false` disables that). Set `HERMES_API_URL` to a remote host to keep single-gateway pairing.
 
-> **Tip:** `pnpm start:all` starts the gateway, Managed Agent daemon, and workspace with these local defaults. `dev:managed-agent` is idempotent: if `:8788` already answers `/health`, it skips instead of failing with `bind: address already in use`.
+Managed Agent Chat needs `AGORAX_MANAGED_AGENT_URL=http://127.0.0.1:8788` and
+`AGORAX_WORKSPACE_ID=default` in `.env` (both are in `.env.example`).
+`dev:managed-agent` is idempotent: if `:8788` already answers `/health`, it skips instead of failing with `bind: address already in use`.
 
 ### Windows (PowerShell + WSL) one-command startup
 
@@ -489,7 +529,7 @@ If you've already started the workspace, change either URL from **Settings → C
 
 ## 🐳 Docker Quickstart
 
-[![Open in GitHub Codespaces](https://img.shields.io/badge/GitHub%20Codespaces-Open-181717?logo=github)](https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=outsourc-e/hermes-workspace)
+[![Open in GitHub Codespaces](https://img.shields.io/badge/GitHub%20Codespaces-Open-181717?logo=github)](https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=jingr1/agorax)
 
 The Docker setup runs both the **Hermes Agent gateway** and **Agorax** together.
 
@@ -529,11 +569,11 @@ docker compose up
 This pulls two pre-built images and starts them:
 
 - **hermes-agent** → `nousresearch/hermes-agent:latest` on port **8642**
-- **hermes-workspace** → `ghcr.io/outsourc-e/hermes-workspace:latest` on port **6734**
+- **agorax** → `ghcr.io/outsourc-e/agorax:latest` on port **6734**
 
 No local build. First run takes a minute to pull; subsequent starts are instant.
 Agent state (config, sessions, skills, memory, credentials) persists in the
-legacy-named `claude-data` Docker volume, so containers can be recreated without data loss.
+`hermes-agent-data` Docker volume, so containers can be recreated without data loss.
 
 ### Step 3: Access the Workspace
 
@@ -552,7 +592,7 @@ services:
   hermes-agent:
     ports:
       - '8642:8642'
-  hermes-workspace:
+  agorax:
     ports:
       - '6734:6734'
 ```
@@ -602,7 +642,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```
 
 The base `docker-compose.yml` stays untouched — the overlay adds a `build:`
-block for the `hermes-workspace` service so the local repo is compiled
+block for the `agorax` service so the local repo is compiled
 instead of pulled. The Hermes Agent service still uses the canonical
 `nousresearch/hermes-agent:latest` image; if you need a custom agent
 build, tag it locally and override `image:` in your own
@@ -614,7 +654,7 @@ Deploying Agorax to a PaaS or home-lab stack? Pull the image
 directly from GitHub Container Registry:
 
 ```
-ghcr.io/outsourc-e/hermes-workspace:latest
+ghcr.io/outsourc-e/agorax:latest
 ```
 
 Available tags:
@@ -628,8 +668,8 @@ Available tags:
 Minimal Coolify / Easypanel config:
 
 ```yaml
-service: hermes-workspace
-image: ghcr.io/outsourc-e/hermes-workspace:latest
+service: agorax
+image: ghcr.io/outsourc-e/agorax:latest
 port: 6734
 env:
   HERMES_API_URL: http://hermes-agent:8642 # point at your gateway
@@ -908,7 +948,7 @@ The Docker setup runs both automatically — no action needed if using `docker c
 
 ## ⭐ Star History
 
-## [![Star History Chart](https://api.star-history.com/svg?repos=outsourc-e/hermes-workspace&type=date&logscale&legend=top-left)](https://www.star-history.com/#outsourc-e/hermes-workspace&type=date&logscale&legend=top-left)
+## [![Star History Chart](https://api.star-history.com/svg?repos=jingr1/agorax&type=date&logscale&legend=top-left)](https://www.star-history.com/#jingr1/agorax&type=date&logscale&legend=top-left)
 
 ## 💛 Support the Project
 
@@ -941,7 +981,7 @@ Agorax stands on the shoulders of these projects:
 | [Tutti](https://github.com/tutti-os/tutti) | https://github.com/tutti-os/tutti |
 | [Hermes WebUI](https://github.com/nesquena/hermes-webui) | https://github.com/nesquena/hermes-webui |
 | [Multica](https://github.com/multica-ai/multica) | https://github.com/multica-ai/multica |
-| [Hermes Workspace](https://github.com/outsourc-e/hermes-workspace) | https://github.com/outsourc-e/hermes-workspace |
+| [Hermes Workspace](https://github.com/outsourc-e/hermes-workspace) | https://github.com/outsourc-e/hermes-workspace（产品前身） |
 
 Thank you to their authors and communities.
 
@@ -954,5 +994,5 @@ MIT — see [LICENSE](LICENSE) for details.
 ---
 
 <div align="center">
-  <sub>Built with ⚡ by <a href="https://github.com/outsourc-e">@outsourc-e</a> and the Agorax community</sub>
+  <sub>Built with ⚡ by <a href="https://github.com/jingr1">@jingr1</a> and the Agorax community</sub>
 </div>

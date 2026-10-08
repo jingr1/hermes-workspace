@@ -9,18 +9,17 @@ import {
 import type { AgentRuntime, AgentWithStatus } from '../../../lib/agent-types'
 import type { AgentProbeResult } from '../../../server/agent-runtime/types'
 import type { AgentDeclaration } from '../../../server/agent-runtime/agents-config'
+import { toAgentStatus } from '../../../lib/agent-status'
 import {
   loadGroupChatActivity,
-  deriveUnifiedStatusForAgent,
-  toAgentStatus,
-  type UnifiedAgentStatus,
-} from '../../../lib/agent-status'
+  deriveAgentPresenceForAgent,
+} from '../../../lib/agent-status-io'
 
 function buildStatusSnapshot(
   snapshot: NonNullable<ReturnType<typeof getAgentStatusSnapshot>>,
 ): NonNullable<AgentWithStatus['statusSnapshot']> {
   return {
-    state: toAgentStatus(snapshot.state as UnifiedAgentStatus),
+    state: snapshot.state,
     currentTask: snapshot.currentTask,
     taskId: snapshot.taskId,
     missionId: snapshot.missionId,
@@ -41,7 +40,7 @@ function buildAgentPayload(
 ): AgentWithStatus {
   const snapshot =
     decl.runtime === 'hermes' ? getAgentStatusSnapshot(decl.id) : undefined
-  const unified = deriveUnifiedStatusForAgent(
+  const presence = deriveAgentPresenceForAgent(
     decl.id,
     snapshot,
     Boolean(probe.available),
@@ -52,7 +51,7 @@ function buildAgentPayload(
     agentId: decl.id,
     name: decl.name ?? decl.displayName ?? decl.mentionName ?? decl.id,
     runtime: decl.runtime as AgentRuntime,
-    status: toAgentStatus(unified),
+    status: toAgentStatus(presence.unifiedStatus),
     execution: decl.execution,
     currentTaskId: snapshot?.taskId ?? undefined,
     currentMissionId: snapshot?.missionId ?? undefined,

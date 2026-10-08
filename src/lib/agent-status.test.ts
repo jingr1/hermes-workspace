@@ -1,74 +1,162 @@
 /** @vitest-environment node */
 import { describe, expect, it } from 'vitest'
-import { ACTIVITY_STALE_MS, deriveUnifiedStatus } from './agent-status'
+import {
+  UNSTABLE_MS,
+  WORK_STALE_MS,
+  deriveAgentPresence,
+  deriveAvailability,
+  deriveWorkload,
+  foldPresenceToUnifiedStatus,
+} from './agent-status'
 
-describe('deriveUnifiedStatus', () => {
+describe('deriveAvailability', () => {
   const now = 1_000_000_000_000
 
-  it('returns needsSetup when hasModel is false', () => {
-    expect(
-      deriveUnifiedStatus({ hasModel: false, probeAvailable: true }, now),
-    ).toBe('needsSetup')
+  it('is online when probe succeeds', () => {
+    expect(deriveAvailability({ probeAvailable: true }, now)).toBe('online')
   })
 
-  it('returns offline when probe fails even if group-chat online is sticky', () => {
+  it('is unstable when probe fails but last seen within window', () => {
     expect(
-      deriveUnifiedStatus(
+      deriveAvailability(
         {
-          hasModel: true,
           probeAvailable: false,
-          groupChatOnline: true,
-          runtimeState: 'executing',
-          runtimeLastOutputAt: now - 60_000,
+          runtimeLastOutputAt: now - UNSTABLE_MS + 1_000,
+        },
+        now,
+      ),
+    ).toBe('unstable')
+  })
+
+  it('is offline when probe fails and last seen is stale/missing', () => {
+    expect(
+      deriveAvailability(
+        {
+          probeAvailable: false,
+          runtimeLastOutputAt: now - UNSTABLE_MS - 1,
         },
         now,
       ),
     ).toBe('offline')
+    expect(deriveAvailability({ probeAvailable: false }, now)).toBe('offline')
   })
+})
 
-  it('returns offline when probe fails even with needsHuman sticky runtime', () => {
+describe('deriveWorkload', () => {
+  const now = 1_000_000_000_000
+
+  it('is working only with busy state AND fresh output', () => {
     expect(
-      deriveUnifiedStatus(
+      deriveWorkload(
         {
-          hasModel: true,
-          probeAvailable: false,
-          runtimeNeedsHuman: true,
+          runtimeState: 'executing',
+          runtimeLastOutputAt: now - 1_000,
         },
         now,
       ),
-    ).toBe('offline')
-  })
+    ).toBe('working')
 
-  it('returns idle when probe succeeds and there is no recent activity', () => {
     expect(
-      deriveUnifiedStatus(
+      deriveWorkload(
         {
-          hasModel: true,
-          probeAvailable: true,
           runtimeState: 'executing',
-          runtimeLastOutputAt: now - ACTIVITY_STALE_MS - 1,
+          runtimeLastOutputAt: now - WORK_STALE_MS - 1,
         },
         now,
       ),
     ).toBe('idle')
   })
 
-  it('does not treat stale runtimeState alone as online without probe', () => {
+  it('is queued when needs human, independent of probe', () => {
     expect(
-      deriveUnifiedStatus(
+      deriveWorkload({ runtimeNeedsHuman: true, runtimeState: 'blocked' }, now),
+    ).toBe('queued')
+  })
+
+  it('ignores sticky currentTask without live busy/queue signals', () => {
+    expect(
+      deriveWorkload(
         {
-          hasModel: true,
-          runtimeState: 'executing',
-          runtimeLastOutputAt: now - ACTIVITY_STALE_MS - 1,
+          currentTask: 'old-task',
+          missionId: 'm-1',
+          runtimeState: 'idle',
         },
         now,
       ),
+    ).toBe('idle')
+  })
+})
+
+describe('deriveAgentPresence (dual axis)', () => {
+  const now = 1_000_000_000_000
+
+  it('keeps availability ⊥ workload when probe is down but work is fresh', () => {
+    const presence = deriveAgentPresence(
+      {
+        hasModel: true,
+        probeAvailable: false,
+        runtimeState: 'executing',
+        runtimeLastOutputAt: now - 30_000,
+      },
+      now,
+    )
+    expect(presence.availability).toBe('unstable')
+    expect(presence.workload).toBe('working')
+    // Fold: unstable + working → active (reachable-ish).
+    expect(presence.unifiedStatus).toBe('active')
+  })
+
+  it('returns needsSetup when hasModel is false', () => {
+    expect(
+      deriveAgentPresence({ hasModel: false, probeAvailable: true }, now)
+        .unifiedStatus,
+    ).toBe('needsSetup')
+  })
+
+  it('folds offline over sticky needsHuman when probe fails and last seen cold', () => {
+    expect(
+      deriveAgentPresence(
+        {
+          hasModel: true,
+          probeAvailable: false,
+          runtimeNeedsHuman: true,
+        },
+        now,
+      ).unifiedStatus,
     ).toBe('offline')
   })
 
-  it('returns active when recently active and probe ok', () => {
+  it('does not use group-chat online for availability', () => {
+    const presence = deriveAgentPresence(
+      {
+        hasModel: true,
+        probeAvailable: false,
+        groupChatOnline: true,
+        groupChatLastMessageAt: now,
+      },
+      now,
+    )
+    expect(presence.availability).toBe('offline')
+    expect(presence.unifiedStatus).toBe('offline')
+  })
+
+  it('is idle when probe ok and no live work', () => {
     expect(
-      deriveUnifiedStatus(
+      deriveAgentPresence(
+        {
+          hasModel: true,
+          probeAvailable: true,
+          runtimeState: 'executing',
+          runtimeLastOutputAt: now - WORK_STALE_MS - 1,
+        },
+        now,
+      ).unifiedStatus,
+    ).toBe('idle')
+  })
+
+  it('is active when working and probe ok', () => {
+    expect(
+      deriveAgentPresence(
         {
           hasModel: true,
           probeAvailable: true,
@@ -76,20 +164,35 @@ describe('deriveUnifiedStatus', () => {
           runtimeLastOutputAt: now - 1_000,
         },
         now,
-      ),
+      ).unifiedStatus,
     ).toBe('active')
   })
 
-  it('returns blocked when needsHuman and probe ok', () => {
+  it('is blocked when needsHuman and probe ok', () => {
+    const presence = deriveAgentPresence(
+      {
+        hasModel: true,
+        probeAvailable: true,
+        runtimeNeedsHuman: true,
+      },
+      now,
+    )
+    expect(presence.blocked).toBe(true)
+    expect(presence.workload).toBe('queued')
+    expect(presence.unifiedStatus).toBe('blocked')
+  })
+})
+
+describe('foldPresenceToUnifiedStatus', () => {
+  it('prefers needsSetup over everything', () => {
     expect(
-      deriveUnifiedStatus(
-        {
-          hasModel: true,
-          probeAvailable: true,
-          runtimeNeedsHuman: true,
-        },
-        now,
-      ),
-    ).toBe('blocked')
+      foldPresenceToUnifiedStatus({
+        availability: 'online',
+        workload: 'working',
+        needsSetup: true,
+        blocked: true,
+        error: true,
+      }),
+    ).toBe('needsSetup')
   })
 })

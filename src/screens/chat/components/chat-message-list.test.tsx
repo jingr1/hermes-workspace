@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildDisplayEntries,
   getTrailingToolOnlyTurnSummary,
+  streamingMessageHasVisibleContent,
 } from './chat-message-list'
 import type { ChatMessage } from '../types'
 
@@ -86,6 +87,35 @@ describe('buildDisplayEntries', () => {
       toolName: 'bash',
       details: { input: { command: 'ls' }, output: 'README.md' },
     })
+  })
+})
+
+describe('streamingMessageHasVisibleContent', () => {
+  it('treats managed thinking-only rows as visible without Hermes streaming props', () => {
+    const reasoning = {
+      id: 'r1',
+      role: 'assistant',
+      content: [{ type: 'thinking', thinking: 'User greeted me.' }],
+      timestamp: 1,
+    } as unknown as ChatMessage
+
+    expect(streamingMessageHasVisibleContent(reasoning)).toBe(true)
+    expect(
+      streamingMessageHasVisibleContent(textMessage('a1', 'assistant', '')),
+    ).toBe(false)
+    expect(
+      streamingMessageHasVisibleContent(textMessage('a1', 'assistant', ''), {
+        streamingText: '你好',
+      }),
+    ).toBe(true)
+  })
+
+  it('treats managed assistant text on the message row as visible', () => {
+    expect(
+      streamingMessageHasVisibleContent(
+        textMessage('a1', 'assistant', '你好！有什么我可以帮你的吗？'),
+      ),
+    ).toBe(true)
   })
 })
 

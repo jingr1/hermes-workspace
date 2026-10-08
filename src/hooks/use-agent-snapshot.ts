@@ -10,6 +10,8 @@ export type AgentsHealthSummary = {
   needsHuman: number
   offline: number
   needsSetup: number
+  working: number
+  unstable: number
   degraded: boolean
 }
 

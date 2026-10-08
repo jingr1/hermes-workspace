@@ -148,13 +148,23 @@ async function vacateForeignOccupant(
   }
 }
 
+/**
+ * Status / route probe: profile owns its listen port.
+ *
+ * Matches {@link getGatewayPoolStatus} (`healthy` vs `stopped`). Do **not** AND
+ * a short `/health` fetch here — Agents UI polls this on a hot path, and a
+ * 250ms health flake painted reachable gateways `offline` while chat
+ * (`ensureProfileGateway`) still worked.
+ *
+ * Ensure/spawn paths that need HTTP readiness use their own `ownedHealthy`
+ * loops with retries; they must not rely on this helper for that.
+ */
 export async function probeProfileGateway(
   profileName: string,
 ): Promise<boolean> {
   const port = resolveProfileGatewayPort(profileName)
   const name = (profileName || 'default').trim() || 'default'
-  if (!profileOwnsPort(name, port)) return false
-  return isHermesAgentHealthy(port, 250)
+  return profileOwnsPort(name, port)
 }
 
 export function getGatewayPoolSnapshot(): Array<PooledGateway> {

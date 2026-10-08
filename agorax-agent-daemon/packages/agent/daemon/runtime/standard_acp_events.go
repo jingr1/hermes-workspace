@@ -390,7 +390,12 @@ func standardACPPermissionRequested(
 		response:        make(chan pendingInteractiveResponse, 1),
 	}
 	pending.interactionRequested = true
-	if adapter != nil && adapter.config.deferApprovalUntilToolInput && pending.kind == "approval" && len(normalizedApprovalDisplayInput(params.ToolCall, knownInput)) == 0 {
+	// Ask-user still waits for question body. Ordinary approvals used to defer
+	// until display detail arrived, but Kimi bash often never emits rawInput —
+	// only a waiting_approval tool row — so withholding interaction.requested
+	// left Agorax with no approve surface. Publish immediately; later tool_call
+	// frames still merge richer preview into the pending input.
+	if adapter != nil && adapter.config.deferApprovalUntilToolInput && pending.kind == "ask-user" && len(normalizedApprovalDisplayInput(params.ToolCall, knownInput)) == 0 {
 		pending.interactionRequested = false
 	}
 	var bridgeErr error
@@ -451,8 +456,9 @@ func standardACPInteractiveToolCallWithKnownInput(toolCall map[string]any, known
 
 // standardACPDeferredInteractionRequestedEvents joins providers that emit
 // session/request_permission before matching tool_call input. Deferred ordinary
-// approvals are published only after display detail is known; deferred questions
-// additionally require one provider-representable single-select question.
+// approvals publish once the matching tool_call frame arrives (display detail
+// is merged when present); deferred questions additionally require one
+// provider-representable single-select question.
 func (a *standardACPAdapter) standardACPDeferredInteractionRequestedEvents(
 	session Session,
 	turnID string,
@@ -481,9 +487,11 @@ func (a *standardACPAdapter) standardACPDeferredInteractionRequestedEvents(
 		return nil
 	}
 	knownInput := normalizer.KnownToolCallInput(callID)
-	if len(knownInput) == 0 {
-		return nil
-	}
+	// Prefer structured known input; also harvest display fields from this
+	// update (rawInput or content-text JSON). Ordinary approvals publish once
+	// the matching tool_call frame arrives — even when display detail is still
+	// empty — so Kimi bash permissions that never emit rawInput stay approvable.
+	displayInput := normalizedApprovalDisplayInput(params.Update, knownInput)
 
 	a.mu.Lock()
 	acpSession := a.sessions[strings.TrimSpace(session.AgentSessionID)]
@@ -511,9 +519,25 @@ func (a *standardACPAdapter) standardACPDeferredInteractionRequestedEvents(
 				mergedInput[key] = clonePayloadValue(value)
 			}
 		}
+		for key, value := range displayInput {
+			if _, exists := mergedInput[key]; !exists {
+				mergedInput[key] = clonePayloadValue(value)
+			}
+		}
 		pending.input = mergedInput
 		if toolCall := payloadObject(mergedInput["toolCall"]); toolCall != nil {
-			toolCall["input"] = clonePayload(knownInput)
+			toolInput := clonePayload(knownInput)
+			if toolInput == nil {
+				toolInput = map[string]any{}
+			}
+			for key, value := range displayInput {
+				if _, exists := toolInput[key]; !exists {
+					toolInput[key] = clonePayloadValue(value)
+				}
+			}
+			if len(toolInput) > 0 {
+				toolCall["input"] = toolInput
+			}
 			mergedInput["toolCall"] = toolCall
 		}
 		if pending.prompt != nil {

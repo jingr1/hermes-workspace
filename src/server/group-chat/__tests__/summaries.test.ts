@@ -42,13 +42,76 @@ vi.mock('../../gateway-pool', () => ({
 }))
 
 import {
+  SUMMARY_PROMPT,
+  buildSummaryRosterLegend,
   extractSummaryText,
+  formatSummaryTranscriptLine,
   getContextForMember,
   isUsableSummaryText,
   maybeSummarizeRoom,
 } from '../summaries'
+import { addParticipant } from '../room-store'
 
 describe('summary text helpers', () => {
+  it('SUMMARY_PROMPT separates agent_id from model/provider names', () => {
+    expect(SUMMARY_PROMPT).toContain('agent id')
+    expect(SUMMARY_PROMPT).toContain('Kimi-K2.7-Code')
+    expect(SUMMARY_PROMPT).toContain('Token-X')
+    expect(SUMMARY_PROMPT).toContain('kimi-impl')
+  })
+
+  it('formatSummaryTranscriptLine tags agent_id', () => {
+    expect(
+      formatSummaryTranscriptLine({
+        id: 'm1',
+        roomId: 'r',
+        senderKind: 'agent',
+        senderParticipantId: 'orchestrator',
+        senderName: 'orchestrator',
+        content: 'Billing exhausted for Kimi-K2.7-Code via Token-X',
+        mentions: [],
+        mentionDepth: 0,
+        autoHandoff: false,
+        taskRefs: [],
+        answersPendingTurnId: null,
+        runId: null,
+        taskId: null,
+        createdAt: 1,
+      }),
+    ).toBe(
+      'orchestrator [agent_id=orchestrator]: Billing exhausted for Kimi-K2.7-Code via Token-X',
+    )
+  })
+
+  it('buildSummaryRosterLegend lists agent_id and runtime', () => {
+    const dbPath = resetCollabDbForTests()
+    const room = createRoom({ title: 'Roster', dbPath })
+    addParticipant({
+      roomId: room.id,
+      kind: 'agent',
+      participantId: 'kimi-impl',
+      displayName: 'kimi',
+      mentionName: 'kimi',
+      runtime: 'kimi',
+      dbPath,
+    })
+    addParticipant({
+      roomId: room.id,
+      kind: 'agent',
+      participantId: 'orchestrator',
+      displayName: 'orchestrator',
+      mentionName: 'orchestrator',
+      runtime: 'hermes',
+      profile: 'orchestrator',
+      dbPath,
+    })
+    const legend = buildSummaryRosterLegend(room.id, { dbPath })
+    expect(legend).toContain('agent_id=kimi-impl')
+    expect(legend).toContain('runtime=kimi')
+    expect(legend).toContain('agent_id=orchestrator')
+    expect(legend).toMatch(/model names are not members/i)
+  })
+
   it('rejects empty and placeholder summaries', () => {
     expect(isUsableSummaryText('')).toBe(false)
     expect(isUsableSummaryText('   ')).toBe(false)
@@ -131,6 +194,9 @@ describe('maybeSummarizeRoom persistence', () => {
     )
     expect(createSession).toHaveBeenCalled()
     expect(sendChat).toHaveBeenCalled()
+    const prompt = String(sendChat.mock.calls[0]?.[1]?.message ?? '')
+    expect(prompt).toContain('agent_id=')
+    expect(prompt).toContain('Kimi-K2.7-Code')
   })
 
   it('does not persist placeholder / empty LLM replies', async () => {

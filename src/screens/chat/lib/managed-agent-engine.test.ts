@@ -1,7 +1,98 @@
-import { describe, expect, it } from 'vitest'
-import { createManagedAgentEngine, hydrateManagedAgentEngine, managedAgentTargetId, selectManagedAgentChatState } from './managed-agent-engine'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  createManagedAgentCommandPort,
+  createManagedAgentEngine,
+  hydrateManagedAgentEngine,
+  managedAgentTargetId,
+  managedSessionSettingsPatch,
+  selectManagedAgentChatState,
+  shouldShowManagedProcessingIndicator,
+  syncPendingApprovalsIntoEngine,
+} from './managed-agent-engine'
+import { selectEngineInteractionsForSession } from '@agorax/agent-activity-core'
+import type { AgentActivityMessage } from '@agorax/agent-activity-core'
 
 describe('Managed Agent Engine adapter', () => {
+  it('upserts waiting_approval tool rows into pending Interactions for respond admit', () => {
+    const engine = createManagedAgentEngine({
+      workspaceId: 'workspace-1',
+      commandPort: { kind: 'typed', effects: unsupportedEffects(), execute: async () => undefined },
+    })
+    hydrateManagedAgentEngine(engine, {
+      ...detailDefaults,
+      workspaceId: 'workspace-1',
+      session: session(),
+      turns: [turn()],
+      messages: [
+        {
+          workspaceId: 'workspace-1',
+          agentSessionId: 'session-1',
+          messageId: 'toolcall:bash',
+          turnId: 'turn-1',
+          role: 'assistant',
+          kind: 'tool_call',
+          status: 'waiting_approval',
+          payload: {
+            callType: 'approval',
+            name: 'Approval',
+            status: 'waiting_approval',
+            input: {
+              requestId: '0',
+              options: [
+                { optionId: 'approve_once', name: 'Approve once', kind: 'allow_once' },
+              ],
+              toolCall: { title: 'Bash', toolCallId: 'bash-1' },
+            },
+            output: { text: '{"command":"pwd"}' },
+          },
+          version: 1,
+          sequence: 1,
+          occurredAtUnixMs: 1,
+        },
+      ],
+      interactions: [],
+    })
+    const interactions = selectEngineInteractionsForSession(
+      engine.getSnapshot(),
+      'session-1',
+    )
+    expect(interactions).toHaveLength(1)
+    expect(interactions[0]).toMatchObject({
+      requestId: '0',
+      turnId: 'turn-1',
+      kind: 'approval',
+      status: 'pending',
+    })
+    // Second sync is a no-op (no duplicate upserts needed for admit).
+    syncPendingApprovalsIntoEngine(engine, [
+      {
+        workspaceId: 'workspace-1',
+        agentSessionId: 'session-1',
+        messageId: 'toolcall:bash',
+        turnId: 'turn-1',
+        role: 'assistant',
+        kind: 'tool_call',
+        status: 'waiting_approval',
+        payload: {
+          callType: 'approval',
+          input: {
+            requestId: '0',
+            options: [
+              { optionId: 'approve_once', name: 'Approve once', kind: 'allow_once' },
+            ],
+          },
+        },
+        version: 1,
+        sequence: 1,
+        occurredAtUnixMs: 1,
+      },
+    ] as AgentActivityMessage[])
+    expect(
+      selectEngineInteractionsForSession(engine.getSnapshot(), 'session-1'),
+    ).toHaveLength(1)
+    engine.dispose()
+  })
+
   it('hydrates messages, turns, and interactions into one Engine owner', () => {
     const engine = createManagedAgentEngine({
       workspaceId: 'workspace-1',
@@ -20,8 +111,195 @@ describe('Managed Agent Engine adapter', () => {
     expect(state.messages).toHaveLength(1)
     expect(state.activeTurn?.turnId).toBe('turn-1')
     expect(state.isStreaming).toBe(true)
+    // Text already hosts the turn — empty-gap pill must stay off.
+    expect(state.showProcessingIndicator).toBe(false)
+    expect(state.streamingMessageId).toBe('message-1')
     expect(state.interactions[0]?.requestId).toBe('request-1')
     engine.dispose()
+  })
+
+  it('shows processing indicator only while the active turn has no host content', () => {
+    const engine = createManagedAgentEngine({
+      workspaceId: 'workspace-1',
+      commandPort: { kind: 'typed', effects: unsupportedEffects(), execute: async () => undefined },
+    })
+    hydrateManagedAgentEngine(engine, {
+      ...detailDefaults,
+      workspaceId: 'workspace-1',
+      session: session(),
+      turns: [turn()],
+      messages: [],
+      interactions: [],
+    })
+
+    const emptyGap = selectManagedAgentChatState(engine.getSnapshot(), 'session-1')
+    expect(emptyGap.isStreaming).toBe(true)
+    expect(emptyGap.showProcessingIndicator).toBe(true)
+    expect(emptyGap.streamingMessageId).toBeNull()
+
+    hydrateManagedAgentEngine(engine, {
+      ...detailDefaults,
+      workspaceId: 'workspace-1',
+      session: session(),
+      turns: [turn()],
+      messages: [{
+        workspaceId: 'workspace-1',
+        agentSessionId: 'session-1',
+        messageId: 'reasoning-1',
+        turnId: 'turn-1',
+        role: 'assistant',
+        kind: 'reasoning',
+        payload: { text: '用户在询问我当前在做什么。', source: 'runtime' },
+        version: 1,
+        sequence: 1,
+        occurredAtUnixMs: 1,
+      }],
+      interactions: [],
+    })
+
+    const withThinking = selectManagedAgentChatState(engine.getSnapshot(), 'session-1')
+    expect(withThinking.isStreaming).toBe(true)
+    expect(withThinking.showProcessingIndicator).toBe(false)
+    expect(withThinking.streamingMessageId).toBe('reasoning-1')
+    engine.dispose()
+  })
+
+  it('shouldShowManagedProcessingIndicator suppresses once turn has host content', () => {
+    const active = { turnId: 'turn-1', phase: 'running' }
+    const messages: AgentActivityMessage[] = [{
+      workspaceId: 'workspace-1',
+      agentSessionId: 'session-1',
+      messageId: 'a1',
+      turnId: 'turn-1',
+      role: 'assistant',
+      kind: 'text',
+      payload: { text: 'Done.' },
+      version: 1,
+      sequence: 1,
+      occurredAtUnixMs: 1,
+    }]
+    expect(shouldShowManagedProcessingIndicator([], active)).toBe(true)
+    expect(shouldShowManagedProcessingIndicator(messages, active)).toBe(false)
+    expect(shouldShowManagedProcessingIndicator(messages, null)).toBe(false)
+  })
+
+  it('suppresses the empty-gap pill for live assistant_thinking deltas', () => {
+    const active = { turnId: 'turn-1', phase: 'running' }
+    const liveThinking: AgentActivityMessage[] = [{
+      workspaceId: 'workspace-1',
+      agentSessionId: 'session-1',
+      messageId: 'thought-1',
+      turnId: 'turn-1',
+      role: 'assistant_thinking',
+      kind: 'reasoning',
+      payload: { text: 'The user greeted me in Chinese.', content: 'The user greeted me in Chinese.' },
+      version: 1,
+      sequence: 1,
+      occurredAtUnixMs: 1,
+    }]
+    expect(shouldShowManagedProcessingIndicator(liveThinking, active)).toBe(false)
+
+    const engine = createManagedAgentEngine({
+      workspaceId: 'workspace-1',
+      commandPort: { kind: 'typed', effects: unsupportedEffects(), execute: async () => undefined },
+    })
+    hydrateManagedAgentEngine(engine, {
+      ...detailDefaults,
+      workspaceId: 'workspace-1',
+      session: session(),
+      turns: [turn()],
+      messages: [],
+      interactions: [],
+    })
+    const projected = selectManagedAgentChatState(engine.getSnapshot(), 'session-1', {
+      sessionMessages: liveThinking,
+    })
+    expect(projected.showProcessingIndicator).toBe(false)
+    expect(projected.streamingMessageId).toBe('thought-1')
+    expect(projected.messages[0]?.role).toBe('assistant')
+    expect(projected.messages[0]?.content?.[0]).toMatchObject({
+      type: 'thinking',
+      thinking: 'The user greeted me in Chinese.',
+    })
+    engine.dispose()
+  })
+
+  it('does not let sticky isSubmitting resurrect the pill after host content', () => {
+    const active = { turnId: 'turn-1', phase: 'running' }
+    const messages: AgentActivityMessage[] = [
+      {
+        workspaceId: 'workspace-1',
+        agentSessionId: 'session-1',
+        messageId: 'u1',
+        turnId: 'turn-1',
+        role: 'user',
+        kind: 'text',
+        payload: { text: '你好' },
+        version: 1,
+        sequence: 1,
+        occurredAtUnixMs: 1,
+      },
+      {
+        workspaceId: 'workspace-1',
+        agentSessionId: 'session-1',
+        messageId: 'a1',
+        turnId: 'turn-1',
+        role: 'assistant',
+        kind: 'text',
+        payload: { text: '你好！有什么我可以帮你的吗？' },
+        version: 1,
+        sequence: 2,
+        occurredAtUnixMs: 2,
+      },
+    ]
+    expect(
+      shouldShowManagedProcessingIndicator(messages, active, {
+        isSubmitting: true,
+      }),
+    ).toBe(false)
+  })
+
+  it('suppresses the pill when host content lacks the active turnId', () => {
+    const active = { turnId: 'turn-active', phase: 'running' }
+    const messages: AgentActivityMessage[] = [
+      {
+        workspaceId: 'workspace-1',
+        agentSessionId: 'session-1',
+        messageId: 'u1',
+        turnId: 'turn-old',
+        role: 'user',
+        kind: 'text',
+        payload: { text: '你好' },
+        version: 1,
+        sequence: 1,
+        occurredAtUnixMs: 1,
+      },
+      {
+        workspaceId: 'workspace-1',
+        agentSessionId: 'session-1',
+        messageId: 'a1',
+        turnId: 'turn-old',
+        role: 'assistant',
+        kind: 'reasoning',
+        payload: { text: 'User just said 你好' },
+        version: 1,
+        sequence: 2,
+        occurredAtUnixMs: 2,
+      },
+      {
+        workspaceId: 'workspace-1',
+        agentSessionId: 'session-1',
+        messageId: 'a2',
+        turnId: 'turn-old',
+        role: 'assistant',
+        kind: 'text',
+        payload: { text: '你好！' },
+        version: 1,
+        sequence: 3,
+        occurredAtUnixMs: 3,
+      },
+    ]
+    expect(shouldShowManagedProcessingIndicator(messages, active)).toBe(false)
   })
 
   it('derives active tool calls from canonical tool_call messages', () => {
@@ -43,6 +321,7 @@ describe('Managed Agent Engine adapter', () => {
     ])
     expect(selectManagedAgentChatState(engine.getSnapshot(), 'session-1').messages).toEqual([
       {
+        id: 'tool-1',
         role: 'assistant',
         content: [{ type: 'toolCall', id: 'tool-1', name: 'read_file', arguments: { path: 'README.md' } }],
         timestamp: 1,
@@ -88,7 +367,12 @@ describe('Managed Agent Engine adapter', () => {
     })
 
     expect(selectManagedAgentChatState(engine.getSnapshot(), 'session-1').messages).toEqual([
-      { role: 'assistant', content: [{ type: 'thinking', thinking: 'Let me check the config first.' }], timestamp: 1 },
+      {
+        id: 'reasoning-1',
+        role: 'assistant',
+        content: [{ type: 'thinking', thinking: 'Let me check the config first.' }],
+        timestamp: 1,
+      },
     ])
     engine.dispose()
   })
@@ -115,6 +399,7 @@ describe('Managed Agent Engine adapter', () => {
     expect(state.activeToolCalls).toEqual([])
     expect(state.messages).toEqual([
       {
+        id: 'tool-1',
         role: 'assistant',
         content: [{ type: 'toolCall', id: 'tool-1', name: 'bash', arguments: { command: 'ls' } }],
         timestamp: 1,
@@ -122,6 +407,7 @@ describe('Managed Agent Engine adapter', () => {
         details: { input: { command: 'ls' }, output: 'README.md\nsrc' },
       },
       {
+        id: 'tool-2',
         role: 'assistant',
         content: [{ type: 'toolCall', id: 'tool-2', name: 'bash', arguments: { command: 'false' } }],
         timestamp: 2,
@@ -319,11 +605,95 @@ describe('Managed Agent Engine adapter', () => {
       }],
     })
     expect(state.messages).toEqual([
-      { role: 'assistant', content: [{ type: 'text', text: 'canonical live' }], timestamp: 1 },
+      {
+        id: 'message-1',
+        role: 'assistant',
+        content: [{ type: 'text', text: 'canonical live' }],
+        timestamp: 1,
+      },
     ])
     expect(state.activeTurn?.turnId).toBe('turn-1')
     engine.dispose()
   })
+
+  it('diffs composer model/effort against live session settings', () => {
+    expect(
+      managedSessionSettingsPatch({
+        selectedModel: 'opencode/exo-free',
+        current: { model: 'github-copilot/claude-haiku-5.5' },
+      }),
+    ).toEqual({ model: 'opencode/exo-free' })
+    expect(
+      managedSessionSettingsPatch({
+        selectedModel: 'opencode/exo-free',
+        current: { model: 'opencode/exo-free' },
+      }),
+    ).toBeNull()
+    expect(
+      managedSessionSettingsPatch({
+        selectedModel: 'opencode/exo-free',
+        effort: 'high',
+        current: { model: 'opencode/exo-free', reasoningEffort: 'medium' },
+      }),
+    ).toEqual({ reasoningEffort: 'high' })
+  })
+
+  it('returns a scoped session from updateSessionSettings so the Engine can settle', async () => {
+    const activity = {
+      workspaceId: 'workspace-1',
+      session: {
+        ID: 'session-1',
+        Provider: 'codex',
+        Kind: 'root',
+        ActiveTurnID: '',
+        // Daemon SessionSettings JSON is camelCase (`json:"model"`).
+        Settings: { model: 'opencode/exo-free' },
+        MessageVersion: 1,
+        Metadata: { visible: true },
+        RailSectionKey: '',
+      },
+      turns: [],
+      messages: [],
+      interactions: [],
+    }
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ activity }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const onActivity = vi.fn()
+    const port = createManagedAgentCommandPort('opencode-impl', onActivity)
+    const result = await port.effects.updateSessionSettings(
+      {
+        agentSessionId: 'session-1',
+        commandId: 'settings:1',
+        correlationId: 'session-1',
+        settings: { model: 'opencode/exo-free' },
+        workspaceId: 'workspace-1',
+      },
+      { commandId: 'settings:1', origin: 'engine' },
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/agents/opencode-impl/engine/session/session-1/settings',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ model: 'opencode/exo-free' }),
+      }),
+    )
+    expect(result).toEqual({
+      agentSessionId: 'session-1',
+      session: expect.objectContaining({
+        agentSessionId: 'session-1',
+        settings: expect.objectContaining({ model: 'opencode/exo-free' }),
+      }),
+    })
+    expect(onActivity).toHaveBeenCalled()
+  })
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
 
 const detailDefaults = {

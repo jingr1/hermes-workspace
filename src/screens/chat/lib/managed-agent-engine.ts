@@ -21,6 +21,7 @@ import {
   mapManagedAgentActivitySnapshot,
   type ManagedAgentActivityDetail,
 } from './managed-agent-activity-mapper'
+import { projectPendingApprovalsFromToolCallMessages } from './managed-agent-interactions'
 import {
   managedAgentActivateResponseFromJson,
   managedAgentCancelResponseFromJson,
@@ -30,6 +31,30 @@ import {
   managedAgentInteractionResponseFromJson,
 } from '@/lib/managed-agent-runtime/command-dtos'
 import type { ChatMessage } from '../types'
+
+/**
+ * Diff composer picks against the live session settings. Returns null when
+ * nothing changed so submit can skip the settings write.
+ */
+export function managedSessionSettingsPatch(input: {
+  selectedModel?: string | null
+  effort?: string | null
+  current?: {
+    model?: string | null
+    reasoningEffort?: string | null
+  } | null
+}): { model?: string; reasoningEffort?: string } | null {
+  const patch: { model?: string; reasoningEffort?: string } = {}
+  const selectedModel = input.selectedModel?.trim()
+  if (selectedModel && selectedModel !== (input.current?.model ?? null)) {
+    patch.model = selectedModel
+  }
+  const effort = input.effort?.trim()
+  if (effort && effort !== (input.current?.reasoningEffort ?? null)) {
+    patch.reasoningEffort = effort
+  }
+  return Object.keys(patch).length > 0 ? patch : null
+}
 
 export function createManagedAgentEngine(input: {
   workspaceId: string
@@ -171,7 +196,10 @@ export function createManagedAgentCommandPort(
         return { session }
       },
       updateSessionSettings: async (input) => {
-        await request(
+        // Engine validates settings results with requireTopLevelSessionId —
+        // returning `{}` marks the update "unknown" and blocks the prompt
+        // queue. Mirror rename/pin: map activity and return scoped session.
+        const payload = await request(
           `/api/agents/${encodeURIComponent(agentId)}/engine/session/${encodeURIComponent(input.agentSessionId)}/settings`,
           {
             ...(input.settings.model ? { model: input.settings.model } : {}),
@@ -180,7 +208,12 @@ export function createManagedAgentCommandPort(
               : {}),
           },
         )
-        return {}
+        const activity =
+          payload && typeof payload === 'object' && 'activity' in payload
+            ? (payload as { activity: unknown }).activity
+            : null
+        const { session } = await mapActivitySession(input.agentSessionId, activity)
+        return { agentSessionId: input.agentSessionId, session }
       },
       sendInput: async (input): Promise<AgentActivitySendInputResult> => {
         const response = managedAgentInputResponseFromJson(
@@ -357,6 +390,42 @@ export function hydrateManagedAgentEngine(
   for (const interaction of detail.interactions) {
     engine.dispatch({ type: 'interaction/upserted', interaction })
   }
+  // Kimi (and other deferred ACP approvals) may leave waiting_approval tool
+  // rows without interaction.requested. Upsert synthesized pending cards so
+  // submitInteractionResponse can admit the click (engine requires pending).
+  syncPendingApprovalsIntoEngine(engine, detail.messages, detail.interactions)
+}
+
+/**
+ * Upserts pending approval Interactions derived from waiting_approval tool_call
+ * messages when the daemon has not yet (or never) published interaction.requested.
+ * Idempotent against already-pending rows.
+ */
+export function syncPendingApprovalsIntoEngine(
+  engine: AgentSessionEngine,
+  messages: readonly AgentActivityMessage[],
+  existingInteractions?: readonly import('@agorax/agent-activity-core').AgentActivityInteraction[],
+): void {
+  const known =
+    existingInteractions ??
+    selectEngineInteractionsForSession(
+      engine.getSnapshot(),
+      messages[0]?.agentSessionId ?? null,
+    )
+  const synthesized = projectPendingApprovalsFromToolCallMessages(
+    messages,
+    known,
+  )
+  for (const interaction of synthesized) {
+    if (known.some(
+      (item) =>
+        item.turnId === interaction.turnId &&
+        item.requestId === interaction.requestId,
+    )) {
+      continue
+    }
+    engine.dispatch({ type: 'interaction/upserted', interaction })
+  }
 }
 
 /**
@@ -396,6 +465,11 @@ export function selectManagedAgentChatState(
      * still own turns/interactions; only the message lane is overridable.
      */
     sessionMessages?: readonly AgentActivityMessage[]
+    /**
+     * True while a submit intent is still requested/uncertain. Only lights the
+     * empty-gap pill before any trailing assistant host content exists.
+     */
+    isSubmitting?: boolean
   },
 ) {
   const sessionMessages =
@@ -435,6 +509,7 @@ export function selectManagedAgentChatState(
   const terminalError = terminalTurn?.phase === 'settled' && terminalTurn.outcome === 'failed'
     ? terminalTurn.error?.message ?? null
     : null
+  const turnActive = activeTurn !== null && activeTurn.phase !== 'settled'
   return {
     messages,
     activeTurn,
@@ -446,28 +521,184 @@ export function selectManagedAgentChatState(
     sessionTitle: agentSessionId
       ? selectEngineSession(state, agentSessionId)?.title?.trim() || null
       : null,
-    isStreaming: activeTurn !== null && activeTurn.phase !== 'settled',
+    isStreaming: turnActive,
+    /**
+     * Bottom empty-gap Thinking pill. Tutti-style: suppress once the active
+     * turn already has in-thread host content (Activity / reply owns UI).
+     * Distinct from `isStreaming` (composer Stop / turn-active).
+     */
+    showProcessingIndicator: shouldShowManagedProcessingIndicator(
+      sessionMessages,
+      activeTurn,
+      { isSubmitting: options?.isSubmitting === true },
+    ),
+    /** Assistant message id that should receive live streaming chrome. */
+    streamingMessageId: turnActive
+      ? selectManagedStreamingMessageId(sessionMessages, activeTurn.turnId)
+      : null,
     error: terminalError ??
       (visibleError
         ? visibleErrorText(visibleError.payload)
         : providerNotice && terminalTurn?.phase === 'settled'
           ? systemNoticeText(providerNotice.payload)
         : null),
-    interactions: selectEngineInteractionsForSession(state, agentSessionId),
+    interactions: projectPendingApprovalsFromToolCallMessages(
+      sessionMessages,
+      selectEngineInteractionsForSession(state, agentSessionId),
+    ),
     activeToolCalls: agentSessionId
       ? sessionMessages
           .filter((message) =>
             isToolCallKind(message.kind) &&
-            !isTerminalToolStatus(message.status)
+            !isTerminalToolStatus(message.status) &&
+            // Approval rows are interaction cards, not completed tools.
+            !isWaitingApprovalToolStatus(
+              message.status,
+              message.payload,
+            )
           )
           .map((message) => ({
             id: message.messageId,
             name: toolNameFromPayload(message.payload),
-            phase: message.status ?? 'running',
+            phase: normalizeActiveToolPhase(message.status),
             args: record(message.payload.input ?? message.payload.arguments),
           }))
       : [],
   }
+}
+
+function isWaitingApprovalToolStatus(
+  status: string | null | undefined,
+  payload: Record<string, unknown>,
+): boolean {
+  const resolved =
+    (typeof status === 'string' && status.trim()) ||
+    (typeof payload.status === 'string' && payload.status.trim()) ||
+    ''
+  if (
+    resolved === 'waiting_approval' ||
+    resolved === 'awaiting_approval' ||
+    resolved === 'waiting_input'
+  ) {
+    return true
+  }
+  return payload.callType === 'approval'
+}
+
+function normalizeActiveToolPhase(status: string | null | undefined): string {
+  const resolved = typeof status === 'string' ? status.trim() : ''
+  if (
+    resolved === 'waiting_approval' ||
+    resolved === 'awaiting_approval' ||
+    resolved === 'waiting_input' ||
+    resolved === 'waiting'
+  ) {
+    return 'running'
+  }
+  return resolved || 'running'
+}
+
+/**
+ * Tutti processing-row suppress for the managed message lane.
+ * Empty-gap pill only — never stay on once assistant host content exists,
+ * and never let sticky `isSubmitting` override that.
+ */
+export function shouldShowManagedProcessingIndicator(
+  sessionMessages: readonly AgentActivityMessage[],
+  activeTurn: { turnId: string; phase: string } | null,
+  options?: { isSubmitting?: boolean },
+): boolean {
+  // Same transcript the UI renders: trailing host content always wins.
+  if (trailingAssistantHostContent(sessionMessages)) return false
+
+  if (activeTurn && activeTurn.phase !== 'settled') {
+    return !turnHasProcessingHostContent(sessionMessages, activeTurn.turnId)
+  }
+
+  // Pre-turn submit gap only — and only while nothing has hosted yet.
+  return options?.isSubmitting === true
+}
+
+export function selectManagedStreamingMessageId(
+  sessionMessages: readonly AgentActivityMessage[],
+  activeTurnId: string,
+): string | null {
+  for (let index = sessionMessages.length - 1; index >= 0; index -= 1) {
+    const message = sessionMessages[index]
+    if (!message || message.turnId !== activeTurnId) continue
+    if (!isAssistantLaneRole(message.role)) continue
+    if (isProcessingHostMessage(message)) {
+      return message.messageId
+    }
+  }
+  // Orphan turnId: fall back to the latest trailing host message.
+  for (let index = sessionMessages.length - 1; index >= 0; index -= 1) {
+    const message = sessionMessages[index]
+    if (!message) continue
+    if (message.role === 'user') break
+    if (isProcessingHostMessage(message)) {
+      return message.messageId
+    }
+  }
+  return null
+}
+
+/**
+ * Live ACP thought deltas use role `assistant_thinking` + kind `reasoning`.
+ * Durable reporter remaps that to role `assistant` + kind `reasoning`. Both
+ * must host the in-thread Activity surface and suppress the empty-gap pill.
+ */
+function isAssistantLaneRole(role: string): boolean {
+  return role === 'assistant' || role === 'assistant_thinking'
+}
+
+function isProcessingHostMessage(message: AgentActivityMessage): boolean {
+  if (!isAssistantLaneRole(message.role)) return false
+  if (isToolCallKind(message.kind)) return true
+  if (message.kind === 'reasoning' || message.role === 'assistant_thinking') {
+    return reasoningTextFromPayload(message.payload).trim().length > 0
+  }
+  if (message.kind === 'text') {
+    return visibleErrorText(message.payload).trim().length > 0
+  }
+  // Unknown assistant kinds with visible text still host the in-thread surface.
+  return (
+    typeof message.payload.text === 'string' &&
+    message.payload.text.trim().length > 0
+  )
+}
+
+function turnHasProcessingHostContent(
+  sessionMessages: readonly AgentActivityMessage[],
+  turnId: string,
+): boolean {
+  const tagged = sessionMessages.filter((message) => message.turnId === turnId)
+  if (tagged.length > 0) {
+    return tagged.some((message) => isProcessingHostMessage(message))
+  }
+  // No rows carry this turnId (mapper lag) — use trailing-host fallback.
+  return trailingAssistantHostContent(sessionMessages)
+}
+
+function trailingAssistantHostContent(
+  sessionMessages: readonly AgentActivityMessage[],
+): boolean {
+  let lastUserIndex = -1
+  for (let index = sessionMessages.length - 1; index >= 0; index -= 1) {
+    if (sessionMessages[index]?.role === 'user') {
+      lastUserIndex = index
+      break
+    }
+  }
+  for (
+    let index = lastUserIndex + 1;
+    index < sessionMessages.length;
+    index += 1
+  ) {
+    const message = sessionMessages[index]
+    if (message && isProcessingHostMessage(message)) return true
+  }
+  return false
 }
 
 function toChatMessage(message: {
@@ -497,6 +728,7 @@ function toChatMessage(message: {
     )
     const rawOutput = message.payload.output
     return {
+      id: message.messageId,
       role: message.role,
       content: [{
         type: 'toolCall',
@@ -516,25 +748,40 @@ function toChatMessage(message: {
       ...(message.status === 'failed' || error ? { isError: true } : {}),
     }
   }
-  if (message.kind === 'reasoning') {
+  if (message.kind === 'reasoning' || message.role === 'assistant_thinking') {
     return {
-      role: message.role,
+      id: message.messageId,
+      // Chat list / MessageItem only treat `assistant` as the bot lane.
+      role: 'assistant',
       content: [{ type: 'thinking', thinking: reasoningTextFromPayload(message.payload) }],
       timestamp: message.occurredAtUnixMs,
       ...(message.status === 'failed' ? { isError: true } : {}),
     }
   }
   const text = message.kind === 'text'
-    ? visibleErrorText(message.payload)
+    ? visibleUserOrAssistantText(message.role, message.payload)
     : typeof message.payload.text === 'string'
       ? message.payload.text
       : ''
   return {
+    id: message.messageId,
     role: message.role,
     content: [{ type: 'text', text }],
     timestamp: message.occurredAtUnixMs,
     ...(message.status === 'failed' ? { isError: true } : {}),
   }
+}
+
+/** Prefer displayPrompt for user bubbles when skills were injected into content. */
+function visibleUserOrAssistantText(
+  role: string,
+  payload: Record<string, unknown>,
+): string {
+  if (role === 'user') {
+    const display = firstNonEmptyString(payload.displayPrompt)
+    if (display) return display
+  }
+  return visibleErrorText(payload)
 }
 
 // Daemon canonical kinds: "tool_call" (payload toolName/input); "tool" with

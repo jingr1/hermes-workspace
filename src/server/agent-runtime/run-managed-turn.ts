@@ -393,6 +393,8 @@ export async function startManagedChatRun(input: {
   model?: string
   effort?: string
   content?: AgentRunInput['content']
+  /** UI-only user text when task/content carry injected platform skills. */
+  displayPrompt?: string
   sessionId?: string | null
   roomId?: string | null
   cwd?: string | null
@@ -445,12 +447,14 @@ export async function startManagedChatRun(input: {
     toolAllowlist,
   })
 
+  const displayPrompt = input.displayPrompt?.trim() ?? ''
   try {
     await adapter.startRun({
       runId,
       agentId: input.agentId,
       task: input.task,
       ...(input.content ? { content: input.content } : {}),
+      ...(displayPrompt ? { displayPrompt } : {}),
       ...(input.model ? { model: input.model } : {}),
       ...(input.effort ? { effort: input.effort } : {}),
       ...(input.cwd ? { cwd: input.cwd } : {}),

@@ -13,6 +13,27 @@ vi.mock('../../agent-runtime/agents-config', () => ({
         mentionName: 'claude',
       },
       {
+        id: 'cursor-impl',
+        runtime: 'cursor',
+        profile: undefined,
+        displayName: 'Cursor',
+        mentionName: 'cursor',
+      },
+      {
+        id: 'kimi-impl',
+        runtime: 'kimi',
+        profile: undefined,
+        displayName: 'kimi',
+        mentionName: 'kimi',
+      },
+      {
+        id: 'opencode-impl',
+        runtime: 'opencode',
+        profile: undefined,
+        displayName: 'OpenCode',
+        mentionName: 'opencode',
+      },
+      {
         id: 'developer',
         runtime: 'hermes',
         profile: 'developer',
@@ -80,4 +101,35 @@ describe('healParticipantFromRegistry', () => {
     expect(member.runtime).toBe('claude-code')
     expect(member.profile).toBeNull()
   })
+
+  it.each([
+    ['cursor-impl', 'cursor'],
+    ['kimi-impl', 'kimi'],
+    ['opencode-impl', 'opencode'],
+  ] as const)(
+    'heals stale hermes runtime on %s → %s',
+    async (participantId, expectedRuntime) => {
+      const {
+        addParticipant,
+        createRoom,
+        healParticipantFromRegistry,
+        listParticipants,
+      } = await import('../room-store')
+      const room = createRoom({ title: 't', dbPath })
+      addParticipant({
+        roomId: room.id,
+        kind: 'agent',
+        participantId,
+        displayName: participantId,
+        runtime: 'hermes',
+        profile: participantId,
+        dbPath,
+      })
+      const stale = listParticipants(room.id, { dbPath })[0]!
+      expect(stale.runtime).toBe('hermes')
+      const healed = healParticipantFromRegistry(stale, { dbPath })
+      expect(healed.runtime).toBe(expectedRuntime)
+      expect(healed.profile).toBeNull()
+    },
+  )
 })

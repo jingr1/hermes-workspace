@@ -137,7 +137,7 @@ import { ErrorToastContainer, showErrorToast } from '@/components/error-toast'
 // ContextMeter removed — ContextIndicator in composer replaces top ContextBar
 import { persistRecoveryMessage, useChatStore } from '@/stores/chat-store'
 import {
-  PENDING_SESSION_MODEL_KEY,
+  pendingSessionModelKey,
   useSessionModelStore,
 } from '@/stores/session-model-store'
 import { useResearchCard } from '@/hooks/use-research-card'
@@ -199,6 +199,17 @@ type ChatScreenProps = {
   agentName?: string
   /** Runtime / provider for the new-session empty-state avatar. */
   agentRuntime?: string | null
+  /**
+   * Per-agent models catalog URL. When set, composer uses this instead of
+   * global Hermes `/api/models` (see GET /api/agents/:id/models).
+   */
+  modelsEndpoint?: string
+  /**
+   * Composer footer identity label (agent display name). Hermes should pass
+   * this so a per-agent modelsEndpoint does not fall through to a managed
+   * runtime brand.
+   */
+  runtimeLabel?: string
 }
 
 type PortableHistoryMessage = {
@@ -544,6 +555,8 @@ export function ChatScreen({
   skillsAgentId,
   agentName,
   agentRuntime,
+  modelsEndpoint,
+  runtimeLabel,
 }: ChatScreenProps) {
   const navigate = useNavigate()
   const pathname = useRouterState({
@@ -1189,12 +1202,12 @@ export function ChatScreen({
       !isNewChat && Boolean(resolvedSessionKey) && historyQuery.isSuccess,
   })
 
-  // Phase 4.1: Smart Model Suggestions — defer until history leaves the
-  // skeleton so cold gateway probes don't starve /api/history.
+  // Phase 4.1: Smart Model Suggestions — prefer per-agent catalog when set.
+  const resolvedModelsEndpoint = modelsEndpoint?.trim() || '/api/models'
   const modelsQuery = useQuery({
-    queryKey: ['models'],
+    queryKey: ['models', resolvedModelsEndpoint],
     queryFn: async () => {
-      const res = await fetch('/api/models')
+      const res = await fetch(resolvedModelsEndpoint)
       if (!res.ok) return { models: [] }
       const data = await res.json()
       return data
@@ -1283,15 +1296,26 @@ export function ChatScreen({
   // Must match ChatComposer’s modelSessionKey so picker selections are the
   // model actually sent on /api/send-stream (previously the store updated the
   // button label only, while sends always used the gateway/default model).
+  const pendingModelKey = pendingSessionModelKey(skillsAgentId)
   const modelSessionKey = isNewChat
-    ? PENDING_SESSION_MODEL_KEY
+    ? pendingModelKey
     : forcedSessionKey ||
       resolvedSessionKey ||
       activeCanonicalKey ||
       activeSessionKey ||
-      PENDING_SESSION_MODEL_KEY
+      pendingModelKey
   const sessionModel = useSessionModelStore((s) => s.models[modelSessionKey])
-  const currentModel = _localModelOverride || sessionModel || gatewayModel
+  // When chatting via a per-agent models endpoint, prefer that catalog's
+  // currentModel over Hermes session-status (which can still say Kimi).
+  const catalogCurrentModel =
+    typeof modelsQuery.data?.currentModel === 'string'
+      ? modelsQuery.data.currentModel.trim()
+      : ''
+  const currentModel =
+    _localModelOverride ||
+    sessionModel ||
+    (modelsEndpoint?.trim() ? catalogCurrentModel : '') ||
+    gatewayModel
 
   // Ref so sendMessage can always read latest thinkingLevel without being in deps
   const thinkingLevelRef = useRef<ThinkingLevel>(thinkingLevel)
@@ -1846,6 +1870,40 @@ export function ChatScreen({
     activeIsRealtimeStreaming,
     isPortableMode,
     localStreamingMessageId,
+  ])
+
+  const hermesShowProcessingIndicator = useMemo(() => {
+    const streamingText = (
+      stableActiveStreamingText ||
+      completedStreamingText.current ||
+      ''
+    ).trim()
+    const streamingThinking = (
+      realtimeStreamingThinking ||
+      completedStreamingThinking.current ||
+      ''
+    ).trim()
+    const hasInThreadLiveSurface =
+      streamingText.length > 0 ||
+      streamingThinking.length > 0 ||
+      activeToolCalls.length > 0 ||
+      liveToolActivity.length > 0 ||
+      realtimeLifecycleEvents.length > 0
+    if (hasInThreadLiveSurface) return false
+    return (
+      sending ||
+      waitingForResponse ||
+      derivedStreamingInfo.isStreaming
+    )
+  }, [
+    sending,
+    waitingForResponse,
+    derivedStreamingInfo.isStreaming,
+    stableActiveStreamingText,
+    realtimeStreamingThinking,
+    activeToolCalls,
+    liveToolActivity,
+    realtimeLifecycleEvents,
   ])
 
   const responseWaitSnapshotRef = useRef<ResponseWaitSnapshot | null>(null)
@@ -3389,7 +3447,7 @@ export function ChatScreen({
         // later turns in this thread keep using it.
         useSessionModelStore
           .getState()
-          .transferModel(PENDING_SESSION_MODEL_KEY, threadId)
+          .transferModel(pendingModelKey, threadId)
         const { optimisticMessage } = createOptimisticMessage(
           trimmedBody,
           attachmentPayload,
@@ -4194,6 +4252,9 @@ export function ChatScreen({
               gatewayQueriesEnabled: !historyLoading,
               slashRuntime: hermesSlashRuntime,
               skillsAgentId,
+              modelsEndpoint,
+              runtimeLabel:
+                runtimeLabel?.trim() || agentName?.trim() || undefined,
             }}
           >
             {hideUi ? null : (
@@ -4222,7 +4283,7 @@ export function ChatScreen({
                 }
                 notice={null}
                 noticePosition="end"
-                waitingForResponse={waitingForResponse}
+                showProcessingIndicator={hermesShowProcessingIndicator}
                 sessionKey={activeCanonicalKey}
                 pinToTop={false}
                 pinGroupMinHeight={pinGroupMinHeight}
@@ -4247,7 +4308,6 @@ export function ChatScreen({
                 liveToolActivity={liveToolActivity}
                 researchCard={researchCard}
                 isCompacting={isCompacting}
-                sending={sending}
               />
             )}
           </AgentChatFrame>

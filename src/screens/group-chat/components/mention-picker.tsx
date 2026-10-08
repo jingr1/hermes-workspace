@@ -1,5 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { MemberAvatar } from './member-avatar'
+import { countRoomAgentProviderSiblings } from '../lib/avatar-utils'
 import type { RoomParticipant } from '@/lib/group-chat-types'
 
 interface MentionToken {
@@ -229,14 +230,10 @@ export function MentionPicker({
                   kind={option.participant.kind}
                   size={24}
                   runtime={option.participant.runtime}
-                  providerSiblingCount={
-                    participants.filter(
-                      (other) =>
-                        other.kind === 'agent' &&
-                        (other.runtime || 'hermes') ===
-                          (option.participant?.runtime || 'hermes'),
-                    ).length
-                  }
+                  providerSiblingCount={countRoomAgentProviderSiblings(
+                    participants,
+                    option.participant.runtime,
+                  )}
                 />
               ) : (
                 <span className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold bg-slate-600 text-white">
@@ -278,7 +275,7 @@ export function MentionPicker({
         autoFocus={autoFocus}
         aria-label={ariaLabel}
         rows={1}
-        className="w-full resize-none rounded-lg border bg-transparent px-3 py-2 text-sm outline-none transition-colors focus-visible:ring-1"
+        className="field-bare w-full resize-none rounded-lg border bg-transparent px-3 py-2 text-sm outline-none transition-colors focus-visible:ring-1"
         style={{
           minHeight: '2.5rem',
           maxHeight: '10rem',

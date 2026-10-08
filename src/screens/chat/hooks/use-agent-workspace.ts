@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { writeLastAgent } from '../last-session'
 import type { AgentWithStatus } from '@/lib/agent-types'
 import {
@@ -8,13 +9,17 @@ import {
   fetchSessionsForAgent,
   subscribeAgentEvents,
 } from '@/lib/agent-api'
+import { AGENTS_SNAPSHOT_QUERY_KEY } from '@/hooks/use-agent-snapshot'
 import { useAgentStore } from '@/stores/agent-store'
+
+const SNAPSHOT_INVALIDATE_DEBOUNCE_MS = 300
 
 export function useAgentWorkspace() {
   // Select stable action references and individual state slices instead of the
   // entire store object. Subscribing to the whole store would cause every
   // setState to recreate this hook's `store` reference, re-running effects and
   // triggering an infinite render loop (Maximum update depth exceeded).
+  const queryClient = useQueryClient()
   const activeAgentId = useAgentStore((state) => state.activeAgentId)
   const agents = useAgentStore((state) => state.agents)
   const agentsLoading = useAgentStore((state) => state.agentsLoading)
@@ -27,6 +32,9 @@ export function useAgentWorkspace() {
   const updateAgent = useAgentStore((state) => state.updateAgent)
 
   const agentsLoadedRef = useRef(false)
+  const snapshotInvalidateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  )
 
   const loadAgents = useCallback(
     (opts?: { pickFirstWhenEmpty?: boolean }) => {
@@ -99,28 +107,56 @@ export function useAgentWorkspace() {
     writeLastAgent(activeAgentId)
   }, [activeAgentId, agents])
 
-  // Subscribe to global collab events for live status updates
+  // Live status: patch lightweight store fields + debounce-invalidate the
+  // shared snapshot query (chat sidebar + Operations both read presence from it).
   useEffect(() => {
-    return subscribeAgentEvents((event) => {
+    const scheduleSnapshotInvalidate = () => {
+      if (snapshotInvalidateTimerRef.current) {
+        clearTimeout(snapshotInvalidateTimerRef.current)
+      }
+      snapshotInvalidateTimerRef.current = setTimeout(() => {
+        snapshotInvalidateTimerRef.current = null
+        void queryClient.invalidateQueries({
+          queryKey: AGENTS_SNAPSHOT_QUERY_KEY,
+        })
+      }, SNAPSHOT_INVALIDATE_DEBOUNCE_MS)
+    }
+
+    const unsubscribe = subscribeAgentEvents((event) => {
       const message = event as Record<string, unknown>
       if (message.type !== 'agent_status') return
       const payload = message.payload as Record<string, unknown> | undefined
       if (!payload) return
       const agentId = typeof payload.agentId === 'string' ? payload.agentId : ''
       if (!agentId) return
-      const statusSnapshot = payload.status as
-        | AgentWithStatus['statusSnapshot']
-        | undefined
-      // Do NOT blindly adopt snapshot.state as the agent status. The snapshot
-      // state is raw runtime state (e.g. 'executing', 'idle'); the canonical
-      // status is derived on the server from runtime + sessions + group-chat
-      // activity. Re-fetch the full agent list so the UI stays consistent.
+
+      // SSE payload is the snapshot fields themselves (watcher publishes flat).
+      const statusSnapshot = (
+        payload.status && typeof payload.status === 'object'
+          ? payload.status
+          : payload
+      ) as AgentWithStatus['statusSnapshot']
+
       updateAgent({
         agentId,
-        currentTaskId: statusSnapshot?.taskId ?? undefined,
-        currentMissionId: statusSnapshot?.missionId ?? undefined,
+        currentTaskId:
+          typeof statusSnapshot?.taskId === 'string'
+            ? statusSnapshot.taskId
+            : undefined,
+        currentMissionId:
+          typeof statusSnapshot?.missionId === 'string'
+            ? statusSnapshot.missionId
+            : undefined,
         statusSnapshot,
       })
+      scheduleSnapshotInvalidate()
     })
-  }, [updateAgent])
+
+    return () => {
+      unsubscribe()
+      if (snapshotInvalidateTimerRef.current) {
+        clearTimeout(snapshotInvalidateTimerRef.current)
+      }
+    }
+  }, [queryClient, updateAgent])
 }

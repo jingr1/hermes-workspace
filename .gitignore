@@ -68,6 +68,8 @@ todos.json
 releases/
 .agorax/
 agorax-agent.db
+agorax-agent.db-shm
+agorax-agent.db-wal
 
 # Wrangler (Cloudflare Workers)
 .wrangler

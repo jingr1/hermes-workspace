@@ -428,3 +428,52 @@ func TestResolveACPPermissionDecisionOptionID(t *testing.T) {
 		t.Fatal("no options must not resolve")
 	}
 }
+
+func TestNormalizedApprovalDisplayInputHarvestsContentJSON(t *testing.T) {
+	t.Parallel()
+	got := normalizedApprovalDisplayInput(map[string]any{
+		"toolCallId": "6:bash",
+		"title":      "Bash",
+		"content": []any{
+			map[string]any{
+				"type": "content",
+				"content": map[string]any{
+					"type": "text",
+					"text": `{"command": "pwd"}`,
+				},
+			},
+		},
+	}, nil)
+	if asString(got["command"]) != "pwd" {
+		t.Fatalf("display input = %#v, want command pwd", got)
+	}
+}
+
+func TestOrdinaryApprovalPublishesInteractionImmediatelyWithoutToolInput(t *testing.T) {
+	t.Parallel()
+	transport := newStandardACPTransport("Kimi Code", "kimi-session-empty-input")
+	adapter := newKimiCodeExtensionTestAdapter(t, transport)
+	session := standardTestSession("acp:kimi-code")
+	if _, err := adapter.Start(context.Background(), session); err != nil {
+		t.Fatal(err)
+	}
+	session.ProviderSessionID = "kimi-session-empty-input"
+	normalizer := newACPTurnNormalizer()
+	events, pending, err := standardACPPermissionRequested(adapter, session, "turn-empty", json.RawMessage(`"0"`), json.RawMessage(`{
+		"toolCall": {"toolCallId": "6:bash", "title": "Bash"},
+		"options": [
+			{"optionId": "approve_once", "name": "Approve once", "kind": "allow_once"},
+			{"optionId": "reject", "name": "Reject", "kind": "reject_once"}
+		]
+	}`), normalizer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pending == nil || !pending.interactionRequested {
+		t.Fatalf("pending = %#v, want immediately published approval", pending)
+	}
+	requested := eventsOfType(events, activityshared.EventInteractionRequested)
+	if len(requested) != 1 {
+		t.Fatalf("permission events = %#v, want one interaction.requested", events)
+	}
+}

@@ -469,7 +469,7 @@ agents:
     dispatchable: true
     enabled: true
   - id: kimi-impl
-    name: kimi
+    name: Kimi
     role: Worker
     specialty: ""
     mission: Awaiting orchestrator dispatch.
@@ -489,6 +489,8 @@ agents:
     command: kimi
     args: []
     execution: local
+    mentionName: kimi
+    displayName: Kimi
     dispatchable: true
     enabled: true
   - id: cursor-impl

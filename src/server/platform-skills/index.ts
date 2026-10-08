@@ -45,6 +45,8 @@ export {
 export {
   buildManagedSkillPromptPrefix,
   buildTurnSkillInjection,
+  buildManagedActivatePrompt,
+  rewritePromptContentText,
   extractLeadingSkillTriggers,
   formatSkillBundleForPrompt,
 } from './prompt-inject'

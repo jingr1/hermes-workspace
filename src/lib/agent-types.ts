@@ -72,7 +72,8 @@ export interface AgentWithStatus extends Agent {
     detail?: string
   }
   statusSnapshot?: {
-    state: AgentStatus
+    /** Raw runtime state (e.g. executing / idle / blocked) — not folded. */
+    state: string
     currentTask?: string | null
     taskId?: string | null
     missionId?: string | null

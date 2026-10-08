@@ -324,6 +324,7 @@ export {
   selectEnginePromptQueue,
   selectEngineQueuedPrompt,
   selectEngineQueuedPrompts,
+  selectEngineVisibleQueuedPrompts,
   selectEngineSubmitWouldBeVisibleInQueue
 } from "./engine/promptQueue.selectors.ts";
 export type {

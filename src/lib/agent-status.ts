@@ -1,27 +1,31 @@
 /**
- * Unified agent status derivation.
+ * Agent presence — Multica-style dual axis (browser-safe).
  *
- * Both AgentList and Operations should use the same rules so an agent never
- * looks "green" in one place and "gray" in another. Status reflects *activity*
- * first, then connectivity, then configuration health.
+ * Two orthogonal dimensions (same idea as Multica `derive-presence`):
+ *   1. availability — runtime/probe reachability only
+ *   2. workload    — whether the agent has work on its plate right now
  *
- * Semantics:
- *   active     — currently doing work (recent runtime output, session activity,
- *                or group-chat message within the activity window)
- *   idle       — online/available but no recent activity
- *   offline    — not reachable / no runtime / no profile / gateway down
- *   blocked    — needs human intervention (needsHuman)
- *   error      — runtime/session reported an error state
- *   needsSetup — profile exists but has no model configured
+ * Gates (needsSetup / blocked / error) are separate flags. They may override
+ * the status *dot* for attention, but they do not redefine reachability.
+ *
+ * Provider CLI readiness (ready / not_installed) is NOT part of presence —
+ * surfaces that care about install/auth use the provider-status API.
+ *
+ * FS / SQLite helpers live in `agent-status-io.ts` (server-only). Do not import
+ * that module from client components — it pulls `node:os` via hermes-paths.
  */
-import * as fs from 'node:fs'
-import * as path from 'node:path'
-import { existsSync } from 'node:fs'
-import { getHermesRoot, getProfilesDir } from '../server/hermes-paths'
-import { getCollabDbPath } from '../server/collab-db'
-import { openSqliteDatabase } from '../server/sqlite-helper'
 import type { AgentStatus } from './agent-types'
 
+/** Reachability only — Multica AgentAvailability (minus archived). */
+export type AgentAvailability = 'online' | 'unstable' | 'offline'
+
+/** Current work on the plate — Multica Workload. */
+export type AgentWorkload = 'working' | 'queued' | 'idle'
+
+/**
+ * Folded single-axis status for filters and legacy dots.
+ * Prefer {@link AgentPresence} in new UI.
+ */
 export type UnifiedAgentStatus =
   | 'active'
   | 'idle'
@@ -30,73 +34,78 @@ export type UnifiedAgentStatus =
   | 'error'
   | 'needsSetup'
 
+export type AgentPresence = {
+  availability: AgentAvailability
+  workload: AgentWorkload
+  needsSetup: boolean
+  blocked: boolean
+  error: boolean
+  /** Folded display status — probe-offline wins over sticky blocked. */
+  unifiedStatus: UnifiedAgentStatus
+}
+
 export type GroupChatActivity = {
   lastMessageAt: number
   online: boolean
 }
 
-export function loadGroupChatActivity(): Map<string, GroupChatActivity> {
-  const dbPath = getCollabDbPath()
-  if (!existsSync(dbPath)) return new Map()
-  const db = openSqliteDatabase(dbPath, true)
-  try {
-    const onlineRows = db
-      .prepare(
-        `SELECT participant_id, MAX(online) as online
-         FROM room_participants
-         WHERE removed_at = 0
-         GROUP BY participant_id`,
-      )
-      .all() as Array<{ participant_id: string; online: number }>
+/** Probe just failed but we saw life recently → Multica `recently_lost` / unstable. */
+export const UNSTABLE_MS = 5 * 60 * 1000
 
-    const messageRows = db
-      .prepare(
-        `SELECT sender_participant_id as participant_id, MAX(created_at) as last_message_at
-         FROM room_messages
-         GROUP BY sender_participant_id`,
-      )
-      .all() as Array<{ participant_id: string; last_message_at: number }>
+/** Busy runtime/session without fresh output drops out of `working`. */
+export const WORK_STALE_MS = 2 * 60 * 1000
 
-    const activity = new Map<string, GroupChatActivity>()
-    for (const row of onlineRows) {
-      activity.set(row.participant_id, {
-        online: Boolean(row.online),
-        lastMessageAt: 0,
-      })
-    }
-    for (const row of messageRows) {
-      const existing = activity.get(row.participant_id)
-      if (existing) {
-        existing.lastMessageAt = Number(row.last_message_at)
-      } else {
-        activity.set(row.participant_id, {
-          online: false,
-          lastMessageAt: Number(row.last_message_at),
-        })
-      }
-    }
-    return activity
-  } finally {
-    db.close()
-  }
-}
+/** @deprecated Use WORK_STALE_MS — kept for callers that imported the old name. */
+export const ACTIVITY_STALE_MS = WORK_STALE_MS
 
-/** Milliseconds without output before an executing/running state is considered stale. */
-export const ACTIVITY_STALE_MS = 10 * 60 * 1000
+const BUSY_STATES = new Set([
+  'executing',
+  'thinking',
+  'writing',
+  'reviewing',
+  'syncing',
+  'running',
+  'busy',
+])
+
+const BLOCKED_STATES = new Set([
+  'blocked',
+  'needs_human',
+  'needs_human_approval',
+])
+
+const ERROR_STATES = new Set([
+  'error',
+  'failed',
+  'cancelled',
+  'canceled',
+  'killed',
+])
+
+const QUEUED_SESSION_STATES = new Set([
+  'queued',
+  'dispatched',
+  'waiting',
+  'waiting_local_directory',
+])
 
 export type AgentActivityInput = {
   runtimeState?: string | null
   runtimeLastOutputAt?: number | null
   runtimeNeedsHuman?: boolean
   runtimeBlockedReason?: string | null
+  currentTask?: string | null
+  missionId?: string | null
   latestSession?: { status: string; updatedAt?: number | null } | null
+  /** @deprecated Not used for presence — kept for call-site compat. */
   crewOnline?: boolean
+  /** @deprecated Not used for presence — kept for call-site compat. */
   groupChatLastMessageAt?: number | null
+  /** @deprecated Not used for presence — kept for call-site compat. */
   groupChatOnline?: boolean
   /**
-   * Explicit gateway/runtime reachability. When `false`, sticky signals
-   * (group-chat online bit, stale runtime.json) must not paint the agent idle.
-   * When omitted/`undefined`, those soft signals still apply (legacy callers).
+   * Gateway/runtime reachability. Sole signal for `online`.
+   * When omitted, availability falls back to last-seen → unstable/offline.
    */
   probeAvailable?: boolean
   hasModel?: boolean
@@ -106,159 +115,118 @@ function normalizeState(state?: string | null): string {
   return (state ?? '').toLowerCase().trim()
 }
 
-function extractModelFromConfigYaml(text: string): string | undefined {
-  // Hermes config.yaml stores model as a nested object:
-  //   model:
-  //     default: <model-id>
-  //     provider: <provider>
-  // Some profiles also use the flat string form:
-  //   model: provider/model-id
-  const flat = /^model:\s*(\S.*)$/m.exec(text)
-  if (flat) {
-    const value = flat[1].trim()
-    if (value && !value.startsWith('default:')) return value
-  }
-  const defaultMatch = /^model:[\s\S]*?^\s+default:\s*(.*)$/m.exec(text)
-  if (defaultMatch) {
-    const value = defaultMatch[1].trim()
-    if (value) return value
-  }
-  return undefined
+/** Reachability only — probe + short unstable window from last runtime output. */
+export function deriveAvailability(
+  input: Pick<AgentActivityInput, 'probeAvailable' | 'runtimeLastOutputAt'>,
+  nowMs: number = Date.now(),
+): AgentAvailability {
+  if (input.probeAvailable === true) return 'online'
+
+  const lastSeen = input.runtimeLastOutputAt ?? 0
+  if (lastSeen > 0 && nowMs - lastSeen < UNSTABLE_MS) return 'unstable'
+  return 'offline'
 }
 
+/** Work on the plate right now — independent of probe. */
+export function deriveWorkload(
+  input: Pick<
+    AgentActivityInput,
+    | 'runtimeState'
+    | 'runtimeLastOutputAt'
+    | 'runtimeNeedsHuman'
+    | 'currentTask'
+    | 'missionId'
+    | 'latestSession'
+  >,
+  nowMs: number = Date.now(),
+): AgentWorkload {
+  const state = normalizeState(input.runtimeState)
+  const sessionStatus = normalizeState(input.latestSession?.status)
+  const runtimeLast = input.runtimeLastOutputAt ?? 0
+  const sessionUpdated = input.latestSession?.updatedAt ?? 0
+  const freshRuntime = runtimeLast > 0 && nowMs - runtimeLast < WORK_STALE_MS
+  const freshSession =
+    sessionUpdated > 0 && nowMs - sessionUpdated < WORK_STALE_MS
+
+  if (BUSY_STATES.has(state) && freshRuntime) return 'working'
+  if (
+    (sessionStatus === 'running' || BUSY_STATES.has(sessionStatus)) &&
+    freshSession
+  ) {
+    return 'working'
+  }
+
+  // On the plate but not running: human gate or explicitly queued session.
+  // Do NOT use sticky currentTask/missionId from runtime.json — those linger
+  // after work ends and would paint every agent "queued" forever.
+  if (
+    input.runtimeNeedsHuman ||
+    BLOCKED_STATES.has(state) ||
+    QUEUED_SESSION_STATES.has(sessionStatus)
+  ) {
+    return 'queued'
+  }
+
+  return 'idle'
+}
+
+export function foldPresenceToUnifiedStatus(presence: {
+  availability: AgentAvailability
+  workload: AgentWorkload
+  needsSetup: boolean
+  blocked: boolean
+  error: boolean
+}): UnifiedAgentStatus {
+  if (presence.needsSetup) return 'needsSetup'
+  // Unreachable wins over sticky blocked/error (stale runtime.json).
+  if (presence.availability === 'offline') return 'offline'
+  if (presence.blocked) return 'blocked'
+  if (presence.error) return 'error'
+  if (presence.workload === 'working') return 'active'
+  if (
+    presence.availability === 'online' ||
+    presence.availability === 'unstable'
+  ) {
+    return 'idle'
+  }
+  return 'offline'
+}
+
+export function deriveAgentPresence(
+  input: AgentActivityInput,
+  nowMs: number = Date.now(),
+): AgentPresence {
+  const state = normalizeState(input.runtimeState)
+  const needsSetup = input.hasModel === false
+  const blocked =
+    Boolean(input.runtimeNeedsHuman) || BLOCKED_STATES.has(state)
+  const error = ERROR_STATES.has(state)
+
+  const availability = deriveAvailability(input, nowMs)
+  const workload = deriveWorkload(input, nowMs)
+
+  const presence = {
+    availability,
+    workload,
+    needsSetup,
+    blocked,
+    error,
+  }
+
+  return {
+    ...presence,
+    unifiedStatus: foldPresenceToUnifiedStatus(presence),
+  }
+}
+
+/** @deprecated Prefer {@link deriveAgentPresence}. */
 export function deriveUnifiedStatus(
   input: AgentActivityInput,
   nowMs: number = Date.now(),
 ): UnifiedAgentStatus {
-  const state = normalizeState(input.runtimeState)
-
-  // Configuration health wins everything: an unconfigured agent is unusable.
-  if (input.hasModel === false) return 'needsSetup'
-
-  // Explicit human gate / blocked.
-  if (input.runtimeNeedsHuman) return 'blocked'
-  if (
-    state === 'blocked' ||
-    state === 'needs_human' ||
-    state === 'needs_human_approval'
-  ) {
-    return 'blocked'
-  }
-
-  // Error states from runtime or session.
-  if (
-    state === 'error' ||
-    state === 'failed' ||
-    state === 'cancelled' ||
-    state === 'canceled' ||
-    state === 'killed'
-  ) {
-    return 'error'
-  }
-
-  const runtimeLastOutput = input.runtimeLastOutputAt ?? 0
-  const sessionUpdated = input.latestSession?.updatedAt ?? 0
-  const chatUpdated = input.groupChatLastMessageAt ?? 0
-  const lastActivity = Math.max(runtimeLastOutput, sessionUpdated, chatUpdated)
-  const recentlyActive =
-    lastActivity > 0 && nowMs - lastActivity < ACTIVITY_STALE_MS
-
-  const busyStates = new Set([
-    'executing',
-    'thinking',
-    'writing',
-    'reviewing',
-    'syncing',
-    'running',
-    'busy',
-  ])
-
-  if (busyStates.has(state) || recentlyActive) {
-    // A busy state only counts as active when we have seen output recently.
-    // Stale runtime.json entries (e.g. a zombie 'executing' from days ago)
-    // should not show green forever; they fall through to idle/offline below.
-    if (recentlyActive) return 'active'
-  }
-
-  // Online signals: recent runtime activity, crew heartbeat, group-chat
-  // membership, or a successful probe. Stale runtimeState alone is NOT enough
-  // — otherwise a months-old runtime.json paints the agent idle forever.
-  const onlineNow =
-    recentlyActive ||
-    Boolean(input.crewOnline) ||
-    Boolean(input.groupChatOnline) ||
-    input.probeAvailable === true
-
-  if (onlineNow) return 'idle'
-  return 'offline'
+  return deriveAgentPresence(input, nowMs).unifiedStatus
 }
 
-export function deriveUnifiedStatusForAgent(
-  agentId: string,
-  snapshot:
-    | { state?: string | null; updatedAt?: number | null; needsHuman?: boolean }
-    | null
-    | undefined,
-  probeAvailable: boolean,
-  groupChatMap: Map<string, GroupChatActivity>,
-  profileName?: string,
-): UnifiedAgentStatus {
-  const hasModel = profileHasModel(profileName ?? agentId)
-  const groupChat = groupChatMap.get(agentId)
-  return deriveUnifiedStatus(
-    {
-      runtimeState: snapshot?.state,
-      runtimeLastOutputAt: snapshot?.updatedAt,
-      runtimeNeedsHuman: snapshot?.needsHuman,
-      probeAvailable,
-      groupChatOnline: groupChat?.online,
-      groupChatLastMessageAt: groupChat?.lastMessageAt,
-      hasModel,
-    },
-    Date.now(),
-  )
-}
-
-export function readProfileModel(profileName: string): string | undefined {
-  const profileConfigPath = path.join(
-    getProfilesDir(),
-    profileName,
-    'config.yaml',
-  )
-
-  // 1. Prefer profile-specific config when the profile directory exists.
-  if (fs.existsSync(profileConfigPath)) {
-    try {
-      const text = fs.readFileSync(profileConfigPath, 'utf8')
-      const model = extractModelFromConfigYaml(text)
-      if (model) return model
-    } catch {
-      // fall through to global fallback
-    }
-  }
-
-  // 2. The implicit 'default' profile (and any profile without its own directory)
-  //    inherits from the global ~/.hermes/config.yaml model.default.
-  const globalConfigPath = path.join(getHermesRoot(), 'config.yaml')
-  if (fs.existsSync(globalConfigPath)) {
-    try {
-      const text = fs.readFileSync(globalConfigPath, 'utf8')
-      return extractModelFromConfigYaml(text)
-    } catch {
-      return undefined
-    }
-  }
-
-  return undefined
-}
-
-export function profileHasModel(profileName?: string): boolean {
-  if (!profileName) return false
-  const model = readProfileModel(profileName)
-  return Boolean(model && model.length > 0)
-}
-
-/** Map the unified status to a concrete AgentStatus for code that still uses the older union. */
 export function toAgentStatus(status: UnifiedAgentStatus): AgentStatus {
   switch (status) {
     case 'active':
@@ -276,7 +244,6 @@ export function toAgentStatus(status: UnifiedAgentStatus): AgentStatus {
   }
 }
 
-/** Return a human-readable label for the unified status. */
 export function statusLabel(status: UnifiedAgentStatus): string {
   switch (status) {
     case 'active':
@@ -291,5 +258,77 @@ export function statusLabel(status: UnifiedAgentStatus): string {
       return 'Error'
     case 'needsSetup':
       return 'Needs setup'
+  }
+}
+
+export function availabilityLabel(availability: AgentAvailability): string {
+  switch (availability) {
+    case 'online':
+      return 'Online'
+    case 'unstable':
+      return 'Unstable'
+    case 'offline':
+      return 'Offline'
+  }
+}
+
+export function workloadLabel(workload: AgentWorkload): string {
+  switch (workload) {
+    case 'working':
+      return 'Working'
+    case 'queued':
+      return 'Queued'
+    case 'idle':
+      return 'Idle'
+  }
+}
+
+/**
+ * Dot color priority (list indicator):
+ *   needsSetup → blocked → error → availability
+ * Workload never overrides the color; callers may pulse when working+online.
+ */
+export function presenceDotTone(presence: AgentPresence): {
+  tone:
+    | 'needsSetup'
+    | 'blocked'
+    | 'error'
+    | 'online'
+    | 'unstable'
+    | 'offline'
+  pulse: boolean
+  title: string
+} {
+  if (presence.needsSetup) {
+    return { tone: 'needsSetup', pulse: false, title: 'Needs setup' }
+  }
+  if (presence.availability === 'offline') {
+    return { tone: 'offline', pulse: false, title: 'Offline' }
+  }
+  if (presence.blocked) {
+    return { tone: 'blocked', pulse: false, title: 'Blocked' }
+  }
+  if (presence.error) {
+    return { tone: 'error', pulse: false, title: 'Error' }
+  }
+  if (presence.availability === 'unstable') {
+    return {
+      tone: 'unstable',
+      pulse: presence.workload === 'working',
+      title:
+        presence.workload === 'working'
+          ? 'Unstable · Working'
+          : 'Unstable',
+    }
+  }
+  return {
+    tone: 'online',
+    pulse: presence.workload === 'working',
+    title:
+      presence.workload === 'working'
+        ? 'Online · Working'
+        : presence.workload === 'queued'
+          ? 'Online · Queued'
+          : 'Online',
   }
 }

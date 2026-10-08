@@ -78,6 +78,26 @@ func IsKnownTurnPhase(phase string) bool {
 	return false
 }
 
+// NormalizeTurnPhase maps the open runtime phase vocabulary onto the closed
+// store enum (Tutti: tuttidservice/agent.normalizeTurnPhaseV2). Unknown
+// spellings are returned unchanged so callers still fail closed.
+func NormalizeTurnPhase(phase string) string {
+	switch phase {
+	case "submitted":
+		return TurnPhaseSubmitted
+	case "running", "working", "streaming", "in_progress", "active":
+		return TurnPhaseRunning
+	case "waiting", "waiting_approval", "waiting_input", "awaiting_approval":
+		return TurnPhaseWaiting
+	case "settling":
+		return TurnPhaseSettling
+	case "settled":
+		return TurnPhaseSettled
+	default:
+		return phase
+	}
+}
+
 func IsKnownTurnOutcome(outcome string) bool {
 	for _, known := range turnOutcomes {
 		if outcome == known {

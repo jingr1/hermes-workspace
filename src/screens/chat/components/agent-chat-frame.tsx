@@ -21,6 +21,7 @@ import type {
   ChatComposerHelpers,
   ThinkingLevel,
 } from './chat-composer'
+import type { ContextUsageOverride } from './context-indicator'
 import type { BusyMessageMode } from '@/screens/chat/lib/composer-primary-action'
 import type { AgentChatBrand } from '../agent-chat-brands'
 import type { SlashCommandRuntime } from '../slash-commands/types'
@@ -104,6 +105,7 @@ export type AgentChatFrameProps = {
     busyMessageMode?: BusyMessageMode
     canSteer?: boolean
     contextRefreshToken?: string | number
+    contextUsage?: ContextUsageOverride | null
     queuedCount?: number
     onClearQueue?: () => void
     focusKey?: string

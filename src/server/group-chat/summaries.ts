@@ -20,14 +20,62 @@ import {
   getMessages as globalGetMessages,
   sendChat as globalSendChat,
 } from '../hermes-api'
-import { getLatestMessages, getLatestSummary, saveSummary } from './room-store'
+import {
+  getLatestMessages,
+  getLatestSummary,
+  listParticipants,
+  saveSummary,
+} from './room-store'
 import {
   GROUP_SUMMARY_THRESHOLD,
   GROUP_SUMMARY_WINDOW_MAX,
 } from './constants'
-import type { RoomSummary } from './types'
+import type { RoomMessage, RoomSummary } from './types'
 
-const SUMMARY_PROMPT = `Summarize the following group chat messages concisely. Capture the key decisions, open questions, and who is responsible for what. Do not include greetings or meta-commentary.`
+/**
+ * Summary instructions: keep agent ids distinct from model/provider names so
+ * later turns (esp. managed kimi vs Hermes model "Kimi-K2.7-Code" on Token-X)
+ * do not conflate them.
+ */
+export const SUMMARY_PROMPT = `Summarize the following group chat messages concisely. Capture the key decisions, open questions, and who is responsible for what. Do not include greetings or meta-commentary.
+
+Naming rules (critical):
+- Attribute actions and failures to room members by their agent id / @handle (e.g. orchestrator, kimi-impl, cc-impl), never by a model or provider product name alone.
+- Model names (e.g. Kimi-K2.7-Code, claude-opus) and providers (e.g. Token-X, Anthropic) are NOT room members. If a billing/quota/rate-limit error mentions a model, write it as "agent <id> failed calling model <model> via <provider>", not as if that model were the agent.
+- Do not merge similarly named entities (kimi-impl ≠ Kimi-K2.7-Code).`
+
+/** Format one transcript line with stable agent-id tags for the summarizer. */
+export function formatSummaryTranscriptLine(message: RoomMessage): string {
+  if (message.senderKind === 'human') {
+    return `${message.senderName} (user): ${message.content}`
+  }
+  if (message.senderKind === 'system') {
+    return `system: ${message.content}`
+  }
+  const agentId = message.senderParticipantId?.trim()
+  const name = message.senderName.trim() || agentId || 'agent'
+  if (agentId) {
+    return `${name} [agent_id=${agentId}]: ${message.content}`
+  }
+  return `${name}: ${message.content}`
+}
+
+/** Optional roster legend so the LLM can map display names → agent ids. */
+export function buildSummaryRosterLegend(
+  roomId: string,
+  input?: { dbPath?: string },
+): string {
+  const agents = listParticipants(roomId, input).filter(
+    (p) => p.kind === 'agent' && !p.removedAt,
+  )
+  if (agents.length === 0) return ''
+  const lines = agents.map((p) => {
+    const handle = p.mentionName ? `@${p.mentionName}` : ''
+    const runtime = p.runtime && p.runtime !== 'human' ? ` runtime=${p.runtime}` : ''
+    return `- agent_id=${p.participantId} display=${p.displayName}${handle ? ` ${handle}` : ''}${runtime}`
+  })
+  return `Room members (agent_id is authoritative; model names are not members):\n${lines.join('\n')}\n\n`
+}
 
 const PLACEHOLDER_SUMMARY_RE = /^\(?\s*no summary\s*\)?$/i
 
@@ -126,10 +174,9 @@ async function maybeSummarizeRoomInner(
   const priorNote = isUsableSummaryText(latest?.content)
     ? `Previous summary:\n${latest!.content}\n\n`
     : ''
-  const transcript = window
-    .map((m) => `${m.senderName}: ${m.content}`)
-    .join('\n')
-  const fullPrompt = `${SUMMARY_PROMPT}\n\n${priorNote}${transcript}`
+  const roster = buildSummaryRosterLegend(roomId, input)
+  const transcript = window.map(formatSummaryTranscriptLine).join('\n')
+  const fullPrompt = `${SUMMARY_PROMPT}\n\n${roster}${priorNote}${transcript}`
 
   const profile = input?.profile
   if (profile) {

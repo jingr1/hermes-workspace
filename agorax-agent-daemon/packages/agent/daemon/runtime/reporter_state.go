@@ -376,7 +376,11 @@ func applyLifecycleSnapshotToPatch(patch *agentsessionstore.WorkspaceAgentStateP
 	if patch.Turn == nil {
 		patch.Turn = &agentsessionstore.WorkspaceAgentTurnPatch{TurnID: turnID}
 	}
-	patch.Turn.Phase = snapshot.Phase
+	persistedPhase := snapshot.Phase
+	if activityshared.TurnLifecyclePhaseIsWaiting(snapshot.Phase) {
+		persistedPhase = string(activityshared.TurnPhaseWaiting)
+	}
+	patch.Turn.Phase = persistedPhase
 	patch.Turn.ActiveTurnID = turnActive
 	patch.Turn.Outcome = outcome
 	patch.Turn.SubmitAvailability = submitAvailabilityPatchForSnapshotPhase(snapshot.Phase)
@@ -386,7 +390,7 @@ func applyLifecycleSnapshotToPatch(patch *agentsessionstore.WorkspaceAgentStateP
 	patch.SubmitAvailability = cloneSubmitAvailability(patch.Turn.SubmitAvailability)
 	patch.TurnLifecycle = &canonical.WorkspaceAgentTurnLifecycle{
 		ActiveTurnID:     turnActive,
-		Phase:            snapshot.Phase,
+		Phase:            persistedPhase,
 		Outcome:          nil,
 		CompletedCommand: cloneCompletedCommand(patch.Turn.CompletedCommand),
 	}
@@ -420,9 +424,9 @@ func currentPhaseForSnapshotPhase(phase string, outcome string) string {
 		}
 		return "idle"
 	case activityshared.TurnLifecyclePhaseIsWaiting(phase):
-		// Preserve the persisted vocabulary: waiting variants are stored
-		// verbatim (waiting_approval / waiting_input).
-		return phase
+		// Store Turn.Phase / CurrentPhase use the closed vocabulary: runtime
+		// waiting_approval / waiting_input collapse to waiting.
+		return string(activityshared.TurnPhaseWaiting)
 	case phase == string(activityshared.TurnPhaseSubmitted):
 		return "submitted"
 	case activityshared.TurnLifecyclePhaseIsLive(phase):
@@ -444,6 +448,12 @@ func applyExplicitTurnLifecycleToPatch(patch *agentsessionstore.WorkspaceAgentSt
 	if lifecyclePhase == "" {
 		return
 	}
+	// Store Turn.Phase is a closed vocabulary; runtime waiting_* aliases
+	// collapse to waiting. SubmitAvailability still keys off lifecyclePhase.
+	persistedPhase := lifecyclePhase
+	if activityshared.TurnLifecyclePhaseIsWaiting(lifecyclePhase) {
+		persistedPhase = string(activityshared.TurnPhaseWaiting)
+	}
 	activeTurnID := turnID
 	turnActive := &activeTurnID
 	outcome := strings.TrimSpace(event.Payload.TurnOutcome)
@@ -455,7 +465,7 @@ func applyExplicitTurnLifecycleToPatch(patch *agentsessionstore.WorkspaceAgentSt
 	if patch.Turn == nil {
 		patch.Turn = &agentsessionstore.WorkspaceAgentTurnPatch{TurnID: turnID}
 	}
-	patch.Turn.Phase = lifecyclePhase
+	patch.Turn.Phase = persistedPhase
 	patch.Turn.ActiveTurnID = turnActive
 	patch.Turn.Outcome = outcome
 	patch.Turn.SubmitAvailability = submitAvailabilityForExplicitLifecyclePhase(lifecyclePhase)
@@ -463,9 +473,12 @@ func applyExplicitTurnLifecycleToPatch(patch *agentsessionstore.WorkspaceAgentSt
 		patch.Turn.CompletedCommand = command
 	}
 	patch.SubmitAvailability = cloneSubmitAvailability(patch.Turn.SubmitAvailability)
+	if patch.CurrentPhase == "" && activityshared.TurnLifecyclePhaseIsWaiting(lifecyclePhase) {
+		patch.CurrentPhase = string(activityshared.TurnPhaseWaiting)
+	}
 	patch.TurnLifecycle = &canonical.WorkspaceAgentTurnLifecycle{
 		ActiveTurnID:     turnActive,
-		Phase:            lifecyclePhase,
+		Phase:            persistedPhase,
 		Outcome:          nil,
 		CompletedCommand: cloneCompletedCommand(patch.Turn.CompletedCommand),
 	}

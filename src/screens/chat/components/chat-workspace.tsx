@@ -9,6 +9,8 @@ import { ChatRouteLoading } from '../chat-route-loading'
 import { ManagedAgentChatView } from './managed-agent-chat-view'
 import { pickChatAgentId } from '../pick-chat-agent'
 import { useAgentStore } from '@/stores/agent-store'
+import { AssistantAvatarProvider } from '@/components/avatars'
+import { resolveAgentAvatarSrc } from '@/lib/agent-avatar'
 
 export function ChatWorkspace() {
   const navigate = useNavigate()
@@ -51,8 +53,14 @@ export function ChatWorkspace() {
   }
 
   if (agent.runtime === 'hermes') {
+    // Keyed by agentId so profile/session state does not leak across Hermes
+    // agents the way ManagedAgentChatView already remounts per agent.
     return (
-      <HermesChatShell agentId={agent.agentId} sessionId={sessionId ?? null} />
+      <HermesChatShell
+        key={agent.agentId}
+        agentId={agent.agentId}
+        sessionId={sessionId ?? null}
+      />
     )
   }
 
@@ -111,16 +119,25 @@ function HermesChatShell({
   const isNewChat = activeFriendlyId === 'new'
 
   return (
-    <ChatScreen
-      activeFriendlyId={activeFriendlyId}
-      isNewChat={isNewChat}
-      hermesChrome
-      skillsAgentId={agentId}
-      agentName={agent.name}
-      agentRuntime={agent.runtime}
-      onSessionResolved={(payload) => {
-        void payload
+    <AssistantAvatarProvider
+      value={{
+        src: resolveAgentAvatarSrc(agent.runtime),
+        alt: agent.name,
       }}
-    />
+    >
+      <ChatScreen
+        activeFriendlyId={activeFriendlyId}
+        isNewChat={isNewChat}
+        hermesChrome
+        skillsAgentId={agentId}
+        agentName={agent.name}
+        agentRuntime={agent.runtime}
+        runtimeLabel={agent.name}
+        modelsEndpoint={`/api/agents/${encodeURIComponent(agentId)}/models`}
+        onSessionResolved={(payload) => {
+          void payload
+        }}
+      />
+    </AssistantAvatarProvider>
   )
 }

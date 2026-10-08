@@ -1780,13 +1780,15 @@ select:not([multiple]) {
   border-radius: var(--radius-sm, 6px);
 }
 
-/* Text fields — match dropdown fill, keep thin border */
+/* Text fields — match dropdown fill, keep thin border.
+   `.field-bare` opts out: use for textareas nested in a painted surface
+   (e.g. composer with --composer-bg) so they stay transparent. */
 input:not([type='checkbox']):not([type='radio']):not([type='range']):not(
     [type='file']
   ):not([type='hidden']):not([type='button']):not([type='submit']):not(
     [type='reset']
-  ):not([type='image']),
-textarea {
+  ):not([type='image']):not(.field-bare),
+textarea:not(.field-bare) {
   background-color: var(--theme-input) !important;
   border-color: var(--theme-border);
   color: var(--theme-text);

@@ -1,9 +1,16 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { clearManagedSessionMessages, fetchSessionsForAgent } from '@/lib/agent-api'
+import {
+  clearManagedSessionMessages,
+  deleteManagedSession,
+  fetchSessionsForAgent,
+} from '@/lib/agent-api'
 import { useAgentStore } from '@/stores/agent-store'
-import { PENDING_SESSION_MODEL_KEY, useSessionModelStore } from '@/stores/session-model-store'
+import {
+  pendingSessionModelKey,
+  useSessionModelStore,
+} from '@/stores/session-model-store'
 import type {
   AgentActivityInteraction,
   AgentActivitySession,
@@ -23,9 +30,9 @@ import {
   createAgentActivityWorkspaceEventCoordinator,
   selectEngineInteractionResponse,
   selectEngineInteractionsForSession,
-  selectEngineQueuedPrompts,
   selectEngineSession,
   selectEngineSubmitAvailability,
+  selectEngineVisibleQueuedPrompts,
   selectSessionIsSubmitting,
 } from '@agorax/agent-activity-core'
 import { writeLastSession } from '../last-session'
@@ -35,8 +42,10 @@ import {
   createManagedAgentEngine,
   hydrateManagedAgentEngine,
   hydrateManagedAgentSessionDetail,
+  managedSessionSettingsPatch,
   selectManagedAgentChatState,
   subscribeManagedAgentEngine,
+  syncPendingApprovalsIntoEngine,
 } from '../lib/managed-agent-engine'
 import { managedPromptContentFromAttachments } from '@/lib/managed-agent-runtime/prompt-content'
 import { managedAgentTargetIdForRuntime } from '@/lib/managed-agent-runtime/agent-targets'
@@ -87,6 +96,9 @@ export type ManagedAgentChat = {
   activeSessionId: string
   messages: Array<ChatMessage>
   isStreaming: boolean
+  showProcessingIndicator: boolean
+  /** Message id that should render live streaming chrome for the active turn. */
+  streamingMessageId: string | null
   activeToolCalls: Array<{ id: string; name: string; phase: string; args?: unknown }>
   interactions: Array<AgentActivityInteraction>
   /**
@@ -131,6 +143,8 @@ const EMPTY_CHAT_STATE = {
   usage: null as ReturnType<typeof selectManagedAgentChatState>['usage'],
   sessionTitle: null as string | null,
   isStreaming: false,
+  showProcessingIndicator: false,
+  streamingMessageId: null as string | null,
   error: null as string | null,
   interactions: [] as Array<AgentActivityInteraction>,
   activeToolCalls: [] as Array<{ id: string; name: string; phase: string; args?: unknown }>,
@@ -347,7 +361,13 @@ export function useManagedAgentChat({
 
   const fetchSessionDetail = useCallback(async (displaySessionId: string): Promise<AgentActivitySessionDetailSnapshot> => {
     const response = await fetch(`/api/agents/${encodeURIComponent(agentId)}/engine/session/${encodeURIComponent(displaySessionId)}/detail`)
-    if (!response.ok) throw new Error(`Managed Agent session detail failed: ${response.status}`)
+    if (!response.ok) {
+      const error = new Error(`Managed Agent session detail failed: ${response.status}`) as Error & {
+        status?: number
+      }
+      error.status = response.status
+      throw error
+    }
     const body = await response.json().catch(() => null) as { detail?: AgentActivitySessionDetailSnapshot } | null
     if (!body?.detail?.session?.agentSessionId) {
       throw new Error('Managed Agent session detail returned an invalid snapshot')
@@ -363,13 +383,41 @@ export function useManagedAgentChat({
     const runtime = await ensureRuntime(displaySessionId, generation)
     if (generation !== activityGenerationRef.current) return
     if (canonicalSessionIdRef.current) return // already attached (e.g. activation)
-    const detail = await fetchSessionDetail(displaySessionId)
+    let detail: AgentActivitySessionDetailSnapshot
+    try {
+      detail = await fetchSessionDetail(displaySessionId)
+    } catch (reason) {
+      // Daemon 404 = stale display binding / pruned session. Drop the orphan
+      // row and open a fresh composer instead of a permanent error banner.
+      const status = reason && typeof reason === 'object' && 'status' in reason
+        ? Number((reason as { status?: number }).status)
+        : NaN
+      if (status === 404) {
+        void deleteManagedSession(agentId, displaySessionId)
+          .catch(() => undefined)
+          .finally(() => {
+            void refreshSessionList()
+          })
+        if (generation === activityGenerationRef.current) {
+          setActiveSessionId(null)
+        }
+        return
+      }
+      throw reason
+    }
     if (generation !== activityGenerationRef.current) return
     canonicalSessionIdRef.current = detail.session.agentSessionId
     hydrateManagedAgentSessionDetail(runtime.engine, detail)
     reconcileCurrentSession()
     void refreshSessionList()
-  }, [ensureRuntime, fetchSessionDetail, reconcileCurrentSession, refreshSessionList])
+  }, [
+    agentId,
+    ensureRuntime,
+    fetchSessionDetail,
+    reconcileCurrentSession,
+    refreshSessionList,
+    setActiveSessionId,
+  ])
 
   useEffect(() => {
     const generation = activityGenerationRef.current + 1
@@ -478,7 +526,24 @@ export function useManagedAgentChat({
         : undefined
     return selectManagedAgentChatState(engineSnapshot, agentSessionId, {
       sessionMessages,
+      isSubmitting: agentSessionId
+        ? selectSessionIsSubmitting(engineSnapshot, agentSessionId)
+        : false,
     })
+  }, [engineSnapshot, overlayEpoch])
+
+  // Keep engine interactions aligned with waiting_approval tool rows so
+  // submitInteractionResponse can admit clicks (Tutti derives prompts from
+  // those rows; Agorax also needs the Interaction entity for respond).
+  useEffect(() => {
+    const runtime = runtimeRef.current
+    const agentSessionId = canonicalSessionIdRef.current
+    if (!runtime || !agentSessionId || !engineSnapshot) return
+    const sessionMessages =
+      runtime.coordinator.project(
+        runtime.projectCanonicalSnapshot(engineSnapshot),
+      ).sessionMessagesById[agentSessionId] ?? []
+    syncPendingApprovalsIntoEngine(runtime.engine, sessionMessages)
   }, [engineSnapshot, overlayEpoch])
 
   // Per-interaction response settlement, straight from the engine's
@@ -510,8 +575,8 @@ export function useManagedAgentChat({
 
   // Composer contract comes from engine selectors, not local heuristics:
   // submit admission (blocked while the runtime reports unavailable or a
-  // pending interaction holds the session), in-flight submit, and the prompt
-  // queue depth for the queued-count badge.
+  // pending interaction holds the session), in-flight submit, and the
+  // composer-visible prompt queue depth (excludes immediate-send / in-flight).
   const composer: ManagedAgentComposerState = useMemo(() => {
     if (!engineSnapshot) {
       return {
@@ -528,7 +593,9 @@ export function useManagedAgentChat({
       availability: availability?.state ?? 'available',
       blockedReason: availability?.reason ?? null,
       isSubmitting: agentSessionId ? selectSessionIsSubmitting(engineSnapshot, agentSessionId) : false,
-      queuedCount: agentSessionId ? selectEngineQueuedPrompts(engineSnapshot, agentSessionId).length : 0,
+      queuedCount: agentSessionId
+        ? selectEngineVisibleQueuedPrompts(engineSnapshot, agentSessionId).length
+        : 0,
       capabilities: agentSessionId
         ? selectEngineSession(engineSnapshot, agentSessionId)?.capabilities ?? null
         : null,
@@ -551,7 +618,9 @@ export function useManagedAgentChat({
         const canonicalSessionId = crypto.randomUUID()
         if (activeSessionId.startsWith('new-')) {
           transferModel(activeSessionId, displaySessionId)
-          if (!getStoredModel(displaySessionId)) transferModel(PENDING_SESSION_MODEL_KEY, displaySessionId)
+          if (!getStoredModel(displaySessionId)) {
+            transferModel(pendingSessionModelKey(agentId), displaySessionId)
+          }
           pendingDisplaySessionIdRef.current = displaySessionId
         }
         displaySessionIdRef.current = displaySessionId
@@ -576,8 +645,27 @@ export function useManagedAgentChat({
         if (!accepted) throw new Error('Managed Agent activation was not accepted')
       } else {
         if (!chatRuntime) chatRuntime = await ensureRuntime(displaySessionIdRef.current, generation)
+        const agentSessionId = canonicalSessionIdRef.current
+        // Existing sessions resume with a sticky provider model. Composer picks
+        // only live in session-model-store unless we push them through
+        // updateSessionSettings (ACP session/set_model) before the prompt.
+        // The prompt queue drains only after the settings write settles.
+        const settingsPatch = managedSessionSettingsPatch({
+          selectedModel,
+          effort: options?.effort,
+          current: selectEngineSession(
+            chatRuntime.engine.getSnapshot(),
+            agentSessionId,
+          )?.settings,
+        })
+        if (settingsPatch) {
+          chatRuntime.engine.updateSessionSettings({
+            agentSessionId,
+            settings: settingsPatch,
+          })
+        }
         chatRuntime.engine.submitPrompt({
-          agentSessionId: canonicalSessionIdRef.current,
+          agentSessionId,
           clientSubmitId: crypto.randomUUID(),
           content: promptContent,
           displayPrompt: text,
@@ -626,6 +714,14 @@ export function useManagedAgentChat({
       })
       return
     }
+    // Ensure a pending Interaction exists before admit — synthesized cards from
+    // waiting_approval tool rows are not always in the engine yet.
+    const snapshot = runtime.engine.getSnapshot()
+    const sessionMessages =
+      runtime.coordinator.project(
+        runtime.projectCanonicalSnapshot(snapshot),
+      ).sessionMessagesById[agentSessionId] ?? []
+    syncPendingApprovalsIntoEngine(runtime.engine, sessionMessages)
     if (!runtime.engine.submitInteractionResponse({ agentSessionId, ...input })) {
       throw new Error('Interaction response was not accepted')
     }
@@ -658,6 +754,10 @@ export function useManagedAgentChat({
     activeSessionId,
     messages: chatState.messages,
     isStreaming: chatState.isStreaming,
+    // Projected — isSubmitting only fills the pre-turn empty gap and cannot
+    // override trailing assistant host content (sticky uncertain submits).
+    showProcessingIndicator: chatState.showProcessingIndicator,
+    streamingMessageId: chatState.streamingMessageId,
     activeToolCalls: chatState.activeToolCalls,
     interactions: [...chatState.interactions],
     interactionResponses,

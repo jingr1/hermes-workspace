@@ -278,3 +278,67 @@ func TestAppendThinkingChunkStillStreamsWithoutReviewPresentation(t *testing.T) 
 		t.Fatalf("content = %q", events[0].Payload.Content)
 	}
 }
+
+func TestFlushUnstreamedAssistantTextProjectsLiveDeltaBeforeFinish(t *testing.T) {
+	t.Parallel()
+
+	session := testSession()
+	normalizer := newACPTurnNormalizer()
+	normalizer.ApplyAssistantFinalText("你好！有什么我可以帮你的吗？")
+
+	live := normalizer.FlushUnstreamedAssistantText(session, "turn-1")
+	if len(live) != 1 {
+		t.Fatalf("FlushUnstreamedAssistantText events = %d, want 1", len(live))
+	}
+	stream := ProjectActivityEventsToStreamEvents(session, live)
+	if len(stream) != 1 || stream[0].EventType != StreamEventMessageDelta {
+		t.Fatalf("live stream = %#v, want one message delta", stream)
+	}
+	if again := normalizer.FlushUnstreamedAssistantText(session, "turn-1"); len(again) != 0 {
+		t.Fatalf("second flush = %d, want 0", len(again))
+	}
+
+	terminal := normalizer.FinishCompleted(session, "turn-1")
+	if got := ProjectActivityEventsToStreamEvents(session, terminal); len(got) != 0 {
+		t.Fatalf("precommit terminal leaked to live stream: %#v", got)
+	}
+}
+
+func TestFlushUnstreamedAssistantTextReprojectsFinalTextAfterStreamedStub(t *testing.T) {
+	t.Parallel()
+
+	session := testSession()
+	normalizer := newACPTurnNormalizer()
+	if events := normalizer.AppendAssistantChunk(session, "turn-1", "partial"); len(events) != 1 {
+		t.Fatalf("AppendAssistantChunk events = %d, want 1", len(events))
+	}
+	normalizer.ApplyAssistantFinalText("partial answer — full reply")
+	live := normalizer.FlushUnstreamedAssistantText(session, "turn-1")
+	if len(live) != 1 {
+		t.Fatalf("FlushUnstreamedAssistantText after Apply = %d, want 1 live set", len(live))
+	}
+	stream := ProjectActivityEventsToStreamEvents(session, live)
+	if len(stream) != 1 || stream[0].EventType != StreamEventMessageDelta {
+		t.Fatalf("live stream = %#v, want one message delta", stream)
+	}
+}
+
+func TestPartitionEventsForDurablePublishKeepsMessagesLive(t *testing.T) {
+	t.Parallel()
+
+	session := testSession()
+	normalizer := newACPTurnNormalizer()
+	normalizer.ApplyAssistantFinalText("答案")
+	finish := normalizer.FinishCompleted(session, "turn-1")
+	completed := standardACPRootProviderTurnCompletedEvent(session, "turn-1", activityshared.TurnOutcomeCompleted, map[string]any{
+		"stopReason": "end_turn",
+	})
+	mixed := append(append([]activityshared.Event{}, finish...), completed)
+	live, durable := partitionEventsForDurablePublish(mixed)
+	if len(live) != len(finish) {
+		t.Fatalf("live = %d, want %d finish events", len(live), len(finish))
+	}
+	if len(durable) != 1 || durable[0].Type != activityshared.EventRootProviderTurnCompleted {
+		t.Fatalf("durable = %#v, want root_provider_turn.completed", durable)
+	}
+}

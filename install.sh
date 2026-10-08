@@ -282,16 +282,16 @@ green "  Install complete!"
 bold "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 cat <<EOF
 
-Next steps (two terminals):
+Next steps:
 
-  1) Start the Hermes Agent gateway:
-       hermes gateway run
-     (first run may prompt for hermes setup)
+  Recommended (one command — gateway + managed-agent + UI):
+       cd $INSTALL_DIR && pnpm start:all
 
-  2) Start the workspace UI:
-       cd $INSTALL_DIR && pnpm dev
+  Or split terminals:
+       hermes gateway run                  # :8642 (optional on localhost — pool can lazy-start)
+       cd $INSTALL_DIR && pnpm dev         # :6734 UI
 
-  3) Open http://localhost:6734
+  Open http://localhost:6734
 
 If the gateway was already running before this install,
 restart it so API_SERVER_ENABLED=true takes effect.

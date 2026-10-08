@@ -1,4 +1,19 @@
 import { PERSONA_COLORS } from '@/components/agent-swarm/pixel-avatar'
+import { normalizeAgentAvatarProvider } from '@/lib/agent-avatar'
+import type { RoomParticipant } from '@/lib/group-chat-types'
+
+/** Count agents in a room that share the same avatar provider as `runtime`. */
+export function countRoomAgentProviderSiblings(
+  participants: ReadonlyArray<Pick<RoomParticipant, 'kind' | 'runtime'>>,
+  runtime: string | null | undefined,
+): number {
+  const key = normalizeAgentAvatarProvider(runtime)
+  return participants.filter(
+    (p) =>
+      p.kind === 'agent' &&
+      normalizeAgentAvatarProvider(p.runtime) === key,
+  ).length
+}
 
 const PRESET_COLORS = [
   '#3b82f6',

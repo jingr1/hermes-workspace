@@ -3,6 +3,8 @@ package agentruntime
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -79,7 +81,7 @@ func TestOpenCodeAdapterRejectsSparkNoneBeforePrompt(t *testing.T) {
 	}
 }
 
-func TestOpenCodeACPEnvInjectsModelConfigContent(t *testing.T) {
+func TestOpenCodeACPEnvInjectsPermissionConfigWithoutBakingModel(t *testing.T) {
 	t.Parallel()
 
 	session := standardTestSession(ProviderOpenCode)
@@ -98,8 +100,10 @@ func TestOpenCodeACPEnvInjectsModelConfigContent(t *testing.T) {
 			if err := json.Unmarshal([]byte(strings.TrimPrefix(item, "OPENCODE_CONFIG_CONTENT=")), &config); err != nil {
 				t.Fatalf("decode OPENCODE_CONFIG_CONTENT: %v", err)
 			}
-			if config["model"] != "anthropic/claude-sonnet-4-5" {
-				t.Fatalf("model config = %#v", config["model"])
+			// Model is applied only through ACP config options after session/new
+			// advertises the live set — baking it here caused provider.invalid-request.
+			if _, ok := config["model"]; ok {
+				t.Fatalf("model must not be baked into OPENCODE_CONFIG_CONTENT: %#v", config["model"])
 			}
 			permission, _ := config["permission"].(map[string]any)
 			if permission["*"] != "ask" || permission["glob"] != "allow" {
@@ -148,8 +152,11 @@ func TestOpenCodeACPEnvMergesUserConfigBeforeApplyingAuthoritativePermissions(t 
 	if err := json.Unmarshal([]byte(strings.TrimPrefix(env[2], "OPENCODE_CONFIG_CONTENT=")), &config); err != nil {
 		t.Fatalf("decode final OpenCode config: %v", err)
 	}
-	if config["theme"] != "system" || config["model"] != "openai/gpt-5" {
+	if config["theme"] != "system" {
 		t.Fatalf("preserved/generated config = %#v", config)
+	}
+	if _, ok := config["model"]; ok {
+		t.Fatalf("model must not be baked into OPENCODE_CONFIG_CONTENT: %#v", config["model"])
 	}
 	permission, _ := config["permission"].(map[string]any)
 	if permission["*"] != "ask" || permission["bash"] == "allow" {
@@ -277,6 +284,66 @@ func TestOpenCodeDoesNotRequireNewSessionForModelSettings(t *testing.T) {
 	}
 	if adapter.RequiresNewSessionForSettings(Session{}, SessionSettingsPatch{}) {
 		t.Fatal("empty patch required a new session")
+	}
+	if !adapter.config.restartForUnadvertisedModel {
+		t.Fatal("OpenCode must restart when a free model is absent from ACP options")
+	}
+}
+
+func TestOpenCodeUsesZenAuthOverlayForFreeModels(t *testing.T) {
+	t.Parallel()
+	if !openCodeUsesZenAuthOverlay("") {
+		t.Fatal("empty model should prefer zen overlay")
+	}
+	if !openCodeUsesZenAuthOverlay("opencode/exo-free") {
+		t.Fatal("opencode/* model should use zen overlay")
+	}
+	if openCodeUsesZenAuthOverlay("github-copilot/claude-haiku-5.5") {
+		t.Fatal("github-copilot models must keep stored Copilot auth")
+	}
+}
+
+func TestOpenCodeFinalEnvInjectsZenAuthOverlayForFreeModel(t *testing.T) {
+	overlayRoot := t.TempDir()
+	t.Setenv("AGORAX_OPENCODE_ZEN_AUTH_OVERLAY", overlayRoot)
+	resetOpenCodeZenAuthOverlayForTest()
+	t.Cleanup(resetOpenCodeZenAuthOverlayForTest)
+
+	descriptor, ok := providerregistry.Find(ProviderOpenCode)
+	if !ok {
+		t.Fatal("opencode provider missing")
+	}
+	session := standardTestSession(ProviderOpenCode)
+	session.Settings = &SessionSettings{Model: "opencode/exo-free"}
+	env, err := openCodeFinalEnv(
+		descriptor.Runtime.StandardACP.SettingsEnvironment,
+		session,
+		"",
+		[]string{"KEEP=1", "XDG_DATA_HOME=/tmp/should-be-replaced"},
+	)
+	if err != nil {
+		t.Fatalf("openCodeFinalEnv: %v", err)
+	}
+	foundOverlay := false
+	for _, item := range env {
+		if strings.HasPrefix(item, "XDG_DATA_HOME=") {
+			foundOverlay = true
+			if item == "XDG_DATA_HOME=/tmp/should-be-replaced" {
+				t.Fatalf("zen overlay did not replace inherited XDG_DATA_HOME: %q", item)
+			}
+			overlay := strings.TrimPrefix(item, "XDG_DATA_HOME=")
+			authPath := filepath.Join(overlay, "opencode", "auth.json")
+			data, readErr := os.ReadFile(authPath)
+			if readErr != nil {
+				t.Fatalf("read zen auth overlay: %v", readErr)
+			}
+			if strings.TrimSpace(string(data)) != "{}" {
+				t.Fatalf("zen auth overlay = %q, want {}", string(data))
+			}
+		}
+	}
+	if !foundOverlay {
+		t.Fatalf("env = %#v, want XDG_DATA_HOME zen overlay", env)
 	}
 }
 

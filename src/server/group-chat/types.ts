@@ -4,16 +4,21 @@
  * These are runtime representations of the collab.db tables. They are kept
  * close to the DB schema but add convenience fields (parsed JSON arrays) for
  * the runner.
+ *
+ * Runtime coercion helpers live in `./room-runtime` so this file stays
+ * type-only for client re-exports via `@/lib/group-chat-types`.
  */
+
+import type { AgentRuntimeKind } from '../agent-runtime/types'
 
 export type ParticipantKind = 'human' | 'agent' | 'system'
 
-export type RoomRuntime =
-  | 'hermes'
-  | 'claude-code'
-  | 'codex'
-  | 'deepseek-harness'
-  | 'human'
+/**
+ * Agent runtimes accepted in a room, plus `human`.
+ * Keep in sync with `AgentRuntimeKind` so chat and group-chat share the same
+ * provider set (avatars, managed turns, heal).
+ */
+export type RoomRuntime = AgentRuntimeKind | 'human'
 
 export type RoomState =
   | 'active'

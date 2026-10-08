@@ -17,7 +17,7 @@ func newMigratedProviderAdapters(
 	commandNetworkAccessPolicy CommandNetworkAccessPolicy,
 ) []Adapter {
 	descriptors := providerregistry.Migrated()
-	adapters := make([]Adapter, 0, len(descriptors))
+	adapters := make([]Adapter, 0, len(descriptors)+1)
 	for _, descriptor := range descriptors {
 		if err := providerregistry.Validate(descriptor); err != nil {
 			panic(fmt.Sprintf("invalid migrated provider descriptor: %v", err))
@@ -36,6 +36,21 @@ func newMigratedProviderAdapters(
 		}
 		adapters = append(adapters, adapter)
 	}
+	// Host-only Kimi Code ACP adapter. Not yet a full providerregistry migration
+	// (status/install still use the thin CLI stub in provider_ops), but session
+	// create must resolve acp:kimi-code the same way Tutti's extension path does.
+	kimi, err := NewStandardACPAdapter(StandardACPAdapterConfig{
+		Provider:      "acp:kimi-code",
+		Name:          "kimi-code-acp",
+		DisplayName:   "Kimi Code",
+		Command:       []string{"kimi", "acp"},
+		AgentTargetID: "extension:kimi-code",
+		AuthMessage:   "Kimi Code requires authentication; run `kimi login` on the host, then retry this session.",
+	}, transport, host)
+	if err != nil {
+		panic(fmt.Sprintf("kimi-code host adapter: %v", err))
+	}
+	adapters = append(adapters, kimi)
 	return adapters
 }
 

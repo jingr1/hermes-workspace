@@ -9,7 +9,8 @@ import (
 )
 
 // LoadLocalProviderModels reads the same local config sources the Workspace
-// legacy /models routes use (Claude settings.json, Codex config.toml).
+// legacy /models routes use (Claude settings.json, Codex config.toml), plus
+// OpenCode's own model list (`opencode api GET /api/model` / `opencode models`).
 // Returns nil when the provider is unknown or the config is missing — callers
 // must not invent a fake catalog.
 func LoadLocalProviderModels(provider string) []ModelOption {
@@ -18,6 +19,8 @@ func LoadLocalProviderModels(provider string) []ModelOption {
 		return loadClaudeCodeModelsFromSettings()
 	case "codex":
 		return loadCodexModelsFromConfig()
+	case "opencode":
+		return loadOpenCodeModelsFromCLI()
 	default:
 		return nil
 	}

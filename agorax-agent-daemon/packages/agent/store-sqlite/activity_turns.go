@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"agorax.local/agent-daemon/packages/agent/store-sqlite/canonical"
 )
 
 // RecordTurnTransition upserts one turn phase transition and keeps the
@@ -70,7 +72,7 @@ func (*Store) recordTurnTransitionTx(
 	workspaceID := strings.TrimSpace(transition.WorkspaceID)
 	agentSessionID := strings.TrimSpace(transition.AgentSessionID)
 	turnID := strings.TrimSpace(transition.TurnID)
-	phase := strings.TrimSpace(transition.Phase)
+	phase := canonical.NormalizeTurnPhase(strings.TrimSpace(transition.Phase))
 	capabilityRefs := normalizeCapabilityReferences(transition.CapabilityRefs)
 	if workspaceID == "" || agentSessionID == "" || turnID == "" {
 		return Turn{}, false, errors.New("workspace id, agent session id, and turn id are required")
@@ -82,6 +84,9 @@ func (*Store) recordTurnTransitionTx(
 	if !metadataOnly && !isKnownTurnPhase(phase) {
 		return Turn{}, false, fmt.Errorf("unknown workspace agent turn phase %q", phase)
 	}
+	// Persist the normalized phase so later transitions see waiting, not a
+	// runtime alias that isKnownTurnPhase would reject on replay.
+	transition.Phase = phase
 	if transition.Outcome != "" && !isKnownTurnOutcome(transition.Outcome) {
 		return Turn{}, false, fmt.Errorf("unknown workspace agent turn outcome %q", transition.Outcome)
 	}

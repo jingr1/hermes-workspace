@@ -8,13 +8,14 @@ import { startManagedChatRun } from '../../../../../server/agent-runtime/run-man
 import { getAgentRuntimeRouter } from '../../../../../server/agent-runtime/router'
 import { ensureManagedChatSession } from '../../../../../server/agent-runtime/managed-chat-store'
 import { resolveManagedChatWorkspaceCwd } from '../../../../../server/agent-runtime/managed-chat-workspace'
+import { buildWorkspaceScopedTextMessage } from '../../../../../lib/workspace-message-scope'
 import { loadWorkspaceCatalog } from '../../../workspace'
 import type { ManagedAgentActivateResponseDto } from '@/lib/managed-agent-runtime/command-dtos'
 import type { AgoraxManagedPromptContentBlock } from '@/lib/managed-agent-runtime/prompt-content'
 import { managedPromptContentBlocksFromUnknown } from '@/lib/managed-agent-runtime/prompt-content'
 import {
-  buildManagedSkillPromptPrefix,
-  buildTurnSkillInjection,
+  buildManagedActivatePrompt,
+  rewritePromptContentText,
 } from '../../../../../server/platform-skills'
 
 export const Route = createFileRoute('/api/agents/$agentId/engine/activate')({
@@ -72,50 +73,48 @@ export const Route = createFileRoute('/api/agents/$agentId/engine/activate')({
             { status: 400 },
           )
         }
-        ensureManagedChatSession({
-          id: displaySessionId,
-          agentId,
-          runtime: declaration.runtime,
-          ...(model ? { model } : {}),
-        })
         const workspace = await loadWorkspaceCatalog().catch(() => null)
         const cwd = resolveManagedChatWorkspaceCwd(workspace)
-        const turnInject = buildTurnSkillInjection(agentId, message)
-        const sessionPrefix =
-          turnInject.injected.length > 0
-            ? ''
-            : buildManagedSkillPromptPrefix(agentId)
-        const effectiveTask = sessionPrefix
-          ? `${sessionPrefix}\n\n${message}`
-          : turnInject.text
+        const { runtimeText, displayPrompt } = buildManagedActivatePrompt(
+          agentId,
+          message,
+        )
+        // Mirror Hermes / chat.ts: stamp the composer workspace into the first
+        // turn so the agent sees the selected path even before tool cwd binds.
+        const scopedRuntimeText = buildWorkspaceScopedTextMessage(
+          runtimeText,
+          workspace,
+        )
         // Rewrite text blocks in promptContent when present so attachments stay.
-        if (promptContent.length > 0 && effectiveTask !== message) {
-          const textIdx = promptContent.findIndex((b) => b.type === 'text')
-          if (textIdx >= 0) {
-            promptContent = promptContent.map((block, index) =>
-              index === textIdx && block.type === 'text'
-                ? { type: 'text', text: effectiveTask }
-                : block,
-            )
-          } else {
-            promptContent = [
-              { type: 'text', text: effectiveTask },
-              ...promptContent,
-            ]
-          }
+        if (promptContent.length > 0 && scopedRuntimeText !== message) {
+          promptContent = rewritePromptContentText(
+            promptContent,
+            scopedRuntimeText,
+          ) as Array<AgoraxManagedPromptContentBlock>
         }
         const started = await startManagedChatRun({
           agentId,
           runId: agentSessionId,
           sessionId: displaySessionId,
-          task: effectiveTask,
+          task: scopedRuntimeText,
           ...(promptContent.length ? { content: promptContent } : {}),
+          ...(scopedRuntimeText !== displayPrompt
+            ? { displayPrompt }
+            : {}),
           ...(model ? { model } : {}),
           ...(reasoningEffort ? { effort: reasoningEffort } : {}),
           ...(cwd ? { cwd } : {}),
         })
         if (!started.ok)
           return json({ error: started.error }, { status: started.status })
+        // Persist the display row only after daemon create succeeds — otherwise
+        // failed activates leave orphan sessions that 404 on detail hydrate.
+        ensureManagedChatSession({
+          id: displaySessionId,
+          agentId,
+          runtime: declaration.runtime,
+          ...(model ? { model } : {}),
+        })
         const runStore = new AgoraxManagedRunStore()
         const binding = await runStore.get(agentSessionId)
         const baseUrl = process.env.AGORAX_MANAGED_AGENT_URL?.trim()

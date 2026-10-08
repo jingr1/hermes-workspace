@@ -72,4 +72,32 @@ describe('prompt-builder workspace injection', () => {
     )
     expect(prompt).toContain('Room workspace: /ws')
   })
+
+  it('states agent_id and forbids claiming others quota as own status', () => {
+    const prompt = buildGroupChatTurnPrompt({
+      groupName: 'Room',
+      members: [member('kimi-impl'), member('orchestrator')],
+      viewer: member('kimi-impl'),
+      deltaLines: ['user: hi'],
+    })
+    expect(prompt).toContain('agent_id=kimi-impl')
+    expect(prompt).toMatch(/quota|billing|rate-limit/i)
+    expect(prompt).toContain('Kimi-K2.7-Code')
+    expect(prompt).toContain('Token-X')
+  })
+
+  it('buildTurnContext warns that summary model names are not the viewer', () => {
+    const prompt = buildTurnContext(
+      'Room',
+      [member('kimi-impl')],
+      member('kimi-impl'),
+      [],
+      '- Kimi-K2.7-Code: Token-X quota exhausted',
+      null,
+    )
+    expect(prompt).toContain('Earlier conversation summary')
+    expect(prompt).toMatch(/not you/i)
+    expect(prompt).toContain('Kimi-K2.7-Code: Token-X quota exhausted')
+    expect(prompt).toContain('agent_id=kimi-impl')
+  })
 })

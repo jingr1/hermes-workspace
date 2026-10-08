@@ -14,6 +14,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { MemberAvatar } from './member-avatar'
+import { countRoomAgentProviderSiblings } from '../lib/avatar-utils'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Delete01Icon } from '@hugeicons/core-free-icons'
 import type { RoomParticipant } from '@/lib/group-chat-types'
@@ -42,13 +43,10 @@ export function MemberRoster({ participants, onRemove }: MemberRosterProps) {
                     status={p.online ? 'idle' : 'failed'}
                     size={38}
                     runtime={p.runtime}
-                    providerSiblingCount={
-                      participants.filter(
-                        (other) =>
-                          other.kind === 'agent' &&
-                          (other.runtime || 'hermes') === (p.runtime || 'hermes'),
-                      ).length
-                    }
+                    providerSiblingCount={countRoomAgentProviderSiblings(
+                      participants,
+                      p.runtime,
+                    )}
                     showTooltip={false}
                   />
                 </DialogTrigger>

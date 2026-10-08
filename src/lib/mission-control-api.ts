@@ -14,6 +14,10 @@ export type AgentProbeResult = {
   detail?: string | null
 }
 
+export type AgentAvailability = 'online' | 'unstable' | 'offline'
+export type AgentWorkload = 'working' | 'queued' | 'idle'
+
+/** Folded display enum — prefer availability + workload. */
 export type UnifiedAgentStatus =
   | 'active'
   | 'idle'
@@ -38,6 +42,13 @@ export type AgentStatusEntry = {
     checkpointStatus: string
     lastSummary: string | null
     updatedAt: number
+    /** Reachability axis (Multica-style). */
+    availability: AgentAvailability
+    /** Work-on-plate axis (Multica-style). */
+    workload: AgentWorkload
+    blocked: boolean
+    error: boolean
+    /** Folded legacy status for filters. */
     unifiedStatus: UnifiedAgentStatus
     needsSetup: boolean
   } | null

@@ -699,6 +699,30 @@ func TestRecordTurnTransitionAllowsWaitingToResumeRunning(t *testing.T) {
 	}
 }
 
+func TestRecordTurnTransitionNormalizesWaitingApprovalAlias(t *testing.T) {
+	t.Parallel()
+	store := openTestStore(t, testOptions(&staticProjectPaths{}))
+	ctx := context.Background()
+	seedTurnTestSession(t, store, "ws-1", "session-1")
+
+	if _, accepted, err := store.RecordTurnTransition(ctx, TurnTransition{
+		WorkspaceID: "ws-1", AgentSessionID: "session-1", TurnID: "turn-1",
+		Phase: TurnPhaseRunning, OccurredAtUnixMS: 100,
+	}); err != nil || !accepted {
+		t.Fatalf("RecordTurnTransition(running) accepted=%v error=%v", accepted, err)
+	}
+	turn, accepted, err := store.RecordTurnTransition(ctx, TurnTransition{
+		WorkspaceID: "ws-1", AgentSessionID: "session-1", TurnID: "turn-1",
+		Phase: "waiting_approval", OccurredAtUnixMS: 200,
+	})
+	if err != nil || !accepted {
+		t.Fatalf("RecordTurnTransition(waiting_approval) accepted=%v error=%v", accepted, err)
+	}
+	if turn.Phase != TurnPhaseWaiting {
+		t.Fatalf("turn.Phase = %q, want %q", turn.Phase, TurnPhaseWaiting)
+	}
+}
+
 func TestRecordTurnTransitionRejectsSettlingRegression(t *testing.T) {
 	t.Parallel()
 	store := openTestStore(t, testOptions(&staticProjectPaths{}))

@@ -468,6 +468,11 @@ func normalizedApprovalDisplayInput(toolCall map[string]any, knownInput map[stri
 		}
 	}
 	acpApplyDiffContent(displayInput, toolCall["content"])
+	// Kimi (and some ACP frames) put the tool args JSON in content text
+	// blocks — e.g. `{"command":"pwd"}` — instead of rawInput. Harvest those
+	// fields so deferApprovalUntilToolInput can publish without waiting for a
+	// rawInput tool_call that never arrives.
+	acpApplyApprovalContentJSON(displayInput, toolCall["content"])
 	if command := normalizedApprovalDisplayCommand(firstNonEmptyShellCommand(displayInput["command"], displayInput["cmd"])); command != "" {
 		displayInput["command"] = command
 		delete(displayInput, "cmd")
@@ -476,6 +481,58 @@ func normalizedApprovalDisplayInput(toolCall map[string]any, knownInput map[stri
 		return nil
 	}
 	return displayInput
+}
+
+// acpApplyApprovalContentJSON merges display fields from ACP content text that
+// is itself a JSON object (Kimi bash permission preview). Diff blocks stay in
+// acpApplyDiffContent; this only fills missing keys.
+func acpApplyApprovalContentJSON(displayInput map[string]any, content any) {
+	if displayInput == nil {
+		return
+	}
+	text := strings.TrimSpace(acpTextContent(content))
+	if text == "" {
+		// Nested ACP shape: [{type:"content", content:{type:"text", text:"..."}}]
+		items, _ := content.([]any)
+		for _, item := range items {
+			entry, _ := item.(map[string]any)
+			if len(entry) == 0 {
+				continue
+			}
+			nested := entry["content"]
+			if nested == nil {
+				nested = entry
+			}
+			if candidate := strings.TrimSpace(acpTextContent(nested)); candidate != "" {
+				text = candidate
+				break
+			}
+			if candidate := strings.TrimSpace(asString(payloadObject(nested)["text"])); candidate != "" {
+				text = candidate
+				break
+			}
+		}
+	}
+	if text == "" || text[0] != '{' {
+		return
+	}
+	var parsed map[string]any
+	if json.Unmarshal([]byte(text), &parsed) != nil || len(parsed) == 0 {
+		return
+	}
+	for _, key := range []string{
+		"command", "cmd", "description", "reason", "grantRoot",
+		"file_path", "filePath", "path", "notebook_path",
+		"query", "search_query", "searchQuery", "url", "uri",
+		"prompt", "instruction", "pattern", "cwd", "changes", "fileChanges",
+	} {
+		if _, exists := displayInput[key]; exists {
+			continue
+		}
+		if value, ok := parsed[key]; ok && !payloadValueIsEmpty(value) {
+			displayInput[key] = clonePayloadValue(value)
+		}
+	}
 }
 
 func normalizedApprovalDisplayCommand(command any) string {

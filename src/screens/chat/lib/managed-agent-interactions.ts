@@ -1,5 +1,6 @@
 import type {
   AgentActivityInteraction,
+  AgentActivityMessage,
   InteractionResponseState,
 } from '@agorax/agent-activity-core'
 
@@ -330,6 +331,94 @@ function projectPlan(
     // providers fail closed at the daemon with an honest error.
     supportsResponse: true,
   }
+}
+
+/**
+ * When ACP deferApprovalUntilToolInput withholds interaction.requested (Kimi
+ * bash often parks command JSON in tool output instead of rawInput), the turn
+ * still has a waiting_approval tool_call message with options. Project those
+ * into pending Interactions so the approve panel can unblock SubmitInteractive
+ * against the live pendingApprovals map.
+ */
+export function projectPendingApprovalsFromToolCallMessages(
+  messages: readonly AgentActivityMessage[],
+  interactions: readonly AgentActivityInteraction[],
+): AgentActivityInteraction[] {
+  const pendingKeys = new Set(
+    interactions
+      .filter((item) => item.status === 'pending')
+      .map((item) => `${item.turnId}\0${item.requestId}`),
+  )
+  const synthesized: AgentActivityInteraction[] = []
+  for (const message of messages) {
+    if (message.kind !== 'tool_call' && message.kind !== 'tool') continue
+    const payload = record(message.payload)
+    if (!payload) continue
+    const status =
+      text(message.status) || text(payload.status)
+    if (status !== 'waiting_approval' && status !== 'awaiting_approval') {
+      continue
+    }
+    const callType = text(payload.callType)
+    if (callType && callType !== 'approval') continue
+    const input = record(payload.input) ?? {}
+    const requestId = text(input.requestId) || text(payload.requestId)
+    if (!requestId || !message.turnId) continue
+    const key = `${message.turnId}\0${requestId}`
+    if (pendingKeys.has(key)) continue
+    pendingKeys.add(key)
+
+    const mergedInput = mergeApprovalPreviewFromOutput(input, payload.output)
+    const toolCall = record(mergedInput.toolCall)
+    synthesized.push({
+      agentSessionId: message.agentSessionId,
+      turnId: message.turnId,
+      requestId,
+      kind: 'approval',
+      status: 'pending',
+      toolName:
+        text(toolCall?.title) ||
+        text(payload.toolName) ||
+        text(payload.name) ||
+        'Approval',
+      input: mergedInput,
+      output: record(payload.output),
+      createdAtUnixMs: message.occurredAtUnixMs,
+      updatedAtUnixMs: message.occurredAtUnixMs,
+    })
+  }
+  return synthesized.length === 0
+    ? [...interactions]
+    : [...interactions, ...synthesized]
+}
+
+function mergeApprovalPreviewFromOutput(
+  input: Record<string, unknown>,
+  output: unknown,
+): Record<string, unknown> {
+  const outputRecord = record(output)
+  const rawText = text(outputRecord?.text) || text(outputRecord?.output)
+  if (!rawText || rawText[0] !== '{') return { ...input }
+  let parsed: Record<string, unknown> | null = null
+  try {
+    const value = JSON.parse(rawText) as unknown
+    parsed = record(value)
+  } catch {
+    return { ...input }
+  }
+  if (!parsed) return { ...input }
+  const merged: Record<string, unknown> = { ...input }
+  for (const [key, value] of Object.entries(parsed)) {
+    if (merged[key] === undefined) merged[key] = value
+  }
+  const toolCall = record(merged.toolCall) ?? {}
+  const toolInput = record(toolCall.input) ?? {}
+  const nextToolInput = { ...toolInput }
+  for (const [key, value] of Object.entries(parsed)) {
+    if (nextToolInput[key] === undefined) nextToolInput[key] = value
+  }
+  merged.toolCall = { ...toolCall, input: nextToolInput }
+  return merged
 }
 
 // ── Per-interaction settlement ────────────────────────────────────────────

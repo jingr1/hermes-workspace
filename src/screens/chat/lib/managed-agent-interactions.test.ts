@@ -3,8 +3,10 @@ import type { AgentActivityInteraction } from '@agorax/agent-activity-core'
 import {
   normalizeManagedAgentQuestions,
   projectManagedAgentInteraction,
+  projectPendingApprovalsFromToolCallMessages,
   settleManagedAgentInteraction,
 } from './managed-agent-interactions'
+import type { AgentActivityMessage } from '@agorax/agent-activity-core'
 
 function interaction(
   overrides: Partial<AgentActivityInteraction> &
@@ -209,5 +211,94 @@ describe('settleManagedAgentInteraction', () => {
       }),
     ).toEqual({ state: 'failed', errorMessage: 'Managed Agent request failed: 409' })
     expect(settleManagedAgentInteraction(pending, null)).toEqual({ state: 'pending' })
+  })
+})
+
+describe('projectPendingApprovalsFromToolCallMessages', () => {
+  it('synthesizes a pending approval from waiting_approval tool_call output JSON', () => {
+    const message = {
+      workspaceId: 'workspace-1',
+      agentSessionId: 'session-1',
+      messageId: 'toolcall:6:bash',
+      turnId: 'turn-1',
+      role: 'assistant',
+      kind: 'tool_call',
+      status: 'waiting_approval',
+      payload: {
+        callType: 'approval',
+        name: 'Approval',
+        status: 'waiting_approval',
+        input: {
+          requestId: '0',
+          options: [
+            { optionId: 'approve_once', name: 'Approve once', kind: 'allow_once' },
+            { optionId: 'reject', name: 'Reject', kind: 'reject_once' },
+          ],
+          toolCall: { title: 'Bash', toolCallId: '6:bash' },
+        },
+        output: { text: '{"command": "pwd"}' },
+      },
+      version: 1,
+      sequence: 1,
+      occurredAtUnixMs: 10,
+    } as AgentActivityMessage
+
+    const projected = projectPendingApprovalsFromToolCallMessages([message], [])
+    expect(projected).toHaveLength(1)
+    expect(projected[0]).toMatchObject({
+      agentSessionId: 'session-1',
+      turnId: 'turn-1',
+      requestId: '0',
+      kind: 'approval',
+      status: 'pending',
+      toolName: 'Bash',
+      input: {
+        requestId: '0',
+        command: 'pwd',
+        toolCall: {
+          title: 'Bash',
+          toolCallId: '6:bash',
+          input: { command: 'pwd' },
+        },
+      },
+    })
+    const card = projectManagedAgentInteraction(projected[0]!)
+    expect(card?.detail).toBe('pwd')
+    expect(card?.actions.map((action) => action.id)).toEqual([
+      'approve_once',
+      'reject',
+    ])
+  })
+
+  it('does not duplicate an already-pending interaction', () => {
+    const message = {
+      workspaceId: 'workspace-1',
+      agentSessionId: 'session-1',
+      messageId: 'tool-1',
+      turnId: 'turn-1',
+      role: 'assistant',
+      kind: 'tool_call',
+      status: 'waiting_approval',
+      payload: {
+        callType: 'approval',
+        input: {
+          requestId: 'request-1',
+          options: [{ optionId: 'allow', name: 'Allow', kind: 'allow_once' }],
+        },
+      },
+      version: 1,
+      sequence: 1,
+      occurredAtUnixMs: 1,
+    } as AgentActivityMessage
+    const existing = interaction({
+      kind: 'approval',
+      input: {
+        requestId: 'request-1',
+        options: [{ optionId: 'allow', name: 'Allow', kind: 'allow_once' }],
+      },
+    })
+    expect(
+      projectPendingApprovalsFromToolCallMessages([message], [existing]),
+    ).toHaveLength(1)
   })
 })

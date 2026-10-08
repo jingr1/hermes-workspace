@@ -242,8 +242,7 @@ func TestForceRefreshClearsLoginInProgress(t *testing.T) {
 func TestKimiCodeEnablePreferenceWithoutAdapter(t *testing.T) {
 	ops := fakeProviderOps(t, t.TempDir(), t.TempDir(), nil)
 	ops.registeredProviders = func() map[string]bool {
-		// No acp:kimi-code adapter loaded — matches production until kimi is
-		// migrated into providerregistry.
+		// Preference-only path: stub registry omits acp:kimi-code.
 		return map[string]bool{"claude-code": true}
 	}
 	descriptor, ok := findProviderTarget("kimi-code")

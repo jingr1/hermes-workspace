@@ -419,10 +419,16 @@ func TestStandardACPAdapterJoinsKimiApprovalDetailAfterPermission(t *testing.T) 
 	case <-time.After(2 * time.Second):
 		t.Fatal("permission not observed")
 	}
+	// Ordinary approvals publish interaction.requested immediately so Agorax
+	// can approve even when Kimi never emits rawInput on a later tool_call.
+	var event activityshared.Event
 	select {
-	case event := <-requested:
-		t.Fatalf("premature interaction: %#v", event)
-	default:
+	case event = <-requested:
+	case <-time.After(2 * time.Second):
+		t.Fatal("approval interaction was not published with the permission frame")
+	}
+	if event.Payload.Interaction == nil || event.Payload.Interaction.Kind != "approval" {
+		t.Fatalf("interaction = %#v, want ordinary approval", event)
 	}
 	wrongTurnUpdate := json.RawMessage(`{"update":{"sessionUpdate":"tool_call","toolCallId":"read-file-1","title":"Read file","kind":"read","status":"pending","rawInput":{"path":"C:\\\\Users\\\\anonymous\\\\workspace\\\\wrong-turn.txt"}}}`)
 	wrongTurnNormalizer := newACPTurnNormalizer()
@@ -431,20 +437,10 @@ func TestStandardACPAdapterJoinsKimiApprovalDetailAfterPermission(t *testing.T) 
 		t.Fatalf("wrong-turn update published interaction: %#v", events)
 	}
 	close(gate)
-	var event activityshared.Event
-	select {
-	case event = <-requested:
-	case <-time.After(2 * time.Second):
-		t.Fatal("joined interaction not published")
-	}
-	toolInput := payloadObject(payloadObject(event.Payload.Interaction.Input["toolCall"])["input"])
-	if got := asString(toolInput["path"]); got != `C:\Users\anonymous\workspace\secret.txt` {
-		t.Fatalf("path=%q input=%#v", got, event.Payload.Interaction.Input)
-	}
 	select {
 	case duplicate := <-requested:
 		t.Fatalf("duplicate interaction: %#v", duplicate)
-	default:
+	case <-time.After(200 * time.Millisecond):
 	}
 	if _, err := adapter.SubmitInteractive(context.Background(), session, SubmitInteractiveInput{TurnID: "turn-kimi-read", RequestID: "permission-1", OptionID: "reject"}); err != nil {
 		t.Fatal(err)
@@ -518,11 +514,12 @@ func TestStandardACPAdapterKeepsKimiApprovalHiddenWhenToolUpdateNeverArrives(t *
 	requestedBeforeCancel := eventsOfType(emittedActivity, activityshared.EventInteractionRequested)
 	supersededBeforeCancel := eventsOfType(emittedActivity, activityshared.EventInteractionSuperseded)
 	mu.Unlock()
-	if len(requestedBeforeCancel) != 0 || len(supersededBeforeCancel) != 0 {
-		t.Fatalf("interaction events before cancellation: requested=%#v superseded=%#v", requestedBeforeCancel, supersededBeforeCancel)
+	// Ordinary approvals now publish immediately (Kimi may never send tool input).
+	if len(requestedBeforeCancel) != 1 || len(supersededBeforeCancel) != 0 {
+		t.Fatalf("interaction events before cancellation: requested=%#v superseded=%#v, want one requested", requestedBeforeCancel, supersededBeforeCancel)
 	}
-	if snapshot := adapter.SessionState(session); snapshot.PendingInteractive != nil {
-		t.Fatalf("pending interactive before cancellation=%#v, want hidden approval", snapshot.PendingInteractive)
+	if snapshot := adapter.SessionState(session); snapshot.PendingInteractive == nil {
+		t.Fatalf("pending interactive before cancellation=%#v, want live approval", snapshot.PendingInteractive)
 	}
 	cancelEvents, err := adapter.Cancel(context.Background(), session, "user")
 	if err != nil {
@@ -553,12 +550,11 @@ func TestStandardACPAdapterKeepsKimiApprovalHiddenWhenToolUpdateNeverArrives(t *
 	}
 	mu.Lock()
 	requested := eventsOfType(emittedActivity, activityshared.EventInteractionRequested)
-	superseded := eventsOfType(emittedActivity, activityshared.EventInteractionSuperseded)
 	failed := eventsOfType(emittedActivity, activityshared.EventCallFailed)
 	turnUpdates := eventsOfType(emittedActivity, activityshared.EventTurnUpdated)
 	mu.Unlock()
-	if len(requested) != 0 || len(superseded) != 0 {
-		t.Fatalf("hidden approval interaction events after cancellation: requested=%#v superseded=%#v", requested, superseded)
+	if len(requested) != 1 {
+		t.Fatalf("interaction.requested after cancellation=%#v, want the one published at permission", requested)
 	}
 	if snapshot := adapter.SessionState(session); snapshot.PendingInteractive != nil {
 		t.Fatalf("pending interactive after cancellation=%#v, want nil", snapshot.PendingInteractive)

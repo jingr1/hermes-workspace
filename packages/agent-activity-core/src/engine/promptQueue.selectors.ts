@@ -40,6 +40,29 @@ export function selectEngineQueuedPrompts(
   return selectEnginePromptQueue(state, agentSessionId)?.prompts ?? [];
 }
 
+/**
+ * Composer-facing queue depth. Matches Tutti AgentGUI: hide invisible
+ * immediate-send entries, the in-flight head, and the send-next promotion so
+ * an idle submit does not flash "1 message queued".
+ */
+export function selectEngineVisibleQueuedPrompts(
+  state: AgentSessionEngineStateBase,
+  agentSessionId: string | null | undefined
+): readonly EngineQueuedPrompt[] {
+  const record = selectEnginePromptQueue(state, agentSessionId);
+  if (!record?.prompts.length) {
+    return [];
+  }
+  const inFlightPromptId = record.inFlight?.promptId;
+  const sendNextPromptId = record.sendNextPromptId;
+  return record.prompts.filter(
+    (prompt) =>
+      prompt.visibleInQueue !== false &&
+      prompt.id !== inFlightPromptId &&
+      prompt.id !== sendNextPromptId
+  );
+}
+
 export function selectEngineHasQueuedPrompts(
   state: AgentSessionEngineStateBase
 ): boolean {

@@ -1,13 +1,15 @@
 /**
- * Shared Hermes profile gateway health probe for agent status surfaces.
+ * Shared Hermes profile gateway probe for agent status surfaces.
  *
- * Short TTL cache avoids hammering /health when Mission Control / agent list
- * poll status every few seconds.
+ * Availability follows port ownership (same signal as gateway-pool `healthy`).
+ * Detail distinguishes not-running vs port-not-owned. Short TTL cache avoids
+ * hammering ownership checks when Mission Control / agent list poll often;
+ * negative results use a shorter TTL so recovery shows up quickly.
  */
 import type { AgentProbeResult } from './types'
 
-const CACHE_TTL_MS = 2_000
-const HEALTH_TIMEOUT_MS = 250
+const POSITIVE_CACHE_TTL_MS = 2_000
+const NEGATIVE_CACHE_TTL_MS = 250
 
 type CacheEntry = { result: AgentProbeResult; expiresAt: number }
 
@@ -36,18 +38,26 @@ export async function probeHermesProfileGateway(
   let result: AgentProbeResult
   try {
     const { probeProfileGateway } = await import('../gateway-pool')
-    const { getProfileGatewayUrl } = await import('../gateway-ports')
-    const healthy = await probeProfileGateway(name)
+    const { getProfileGatewayUrl, resolveProfileGatewayPort } =
+      await import('../gateway-ports')
+    const owned = await probeProfileGateway(name)
     const url = getProfileGatewayUrl(name)
-    result = healthy
-      ? {
-          available: true,
-          detail: `hermes gateway ${url}`,
-        }
-      : {
-          available: false,
-          detail: `hermes gateway unreachable (${url})`,
-        }
+    if (owned) {
+      result = {
+        available: true,
+        detail: `hermes gateway ${url}`,
+      }
+    } else {
+      const { isPortInUse } = await import('../gateway-port-owner')
+      const port = resolveProfileGatewayPort(name)
+      const inUse = isPortInUse(port)
+      result = {
+        available: false,
+        detail: inUse
+          ? `hermes gateway port not owned (${url})`
+          : `hermes gateway not running (${url})`,
+      }
+    }
   } catch (error) {
     result = {
       available: false,
@@ -58,9 +68,10 @@ export async function probeHermesProfileGateway(
     }
   }
 
-  cache.set(name, { result, expiresAt: now + CACHE_TTL_MS })
+  const ttl = result.available ? POSITIVE_CACHE_TTL_MS : NEGATIVE_CACHE_TTL_MS
+  cache.set(name, { result, expiresAt: now + ttl })
   return result
 }
 
-/** @internal exposed for tests that want a deterministic timeout constant */
-export const HERMES_GATEWAY_PROBE_TIMEOUT_MS = HEALTH_TIMEOUT_MS
+/** @deprecated Ownership probe no longer uses a health fetch timeout. */
+export const HERMES_GATEWAY_PROBE_TIMEOUT_MS = 250

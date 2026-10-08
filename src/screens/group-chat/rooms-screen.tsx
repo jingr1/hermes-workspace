@@ -5,7 +5,10 @@ import { MemberRoster } from './components/member-roster'
 import { MentionPicker } from './components/mention-picker'
 import { PendingTurnCard } from './components/pending-turn-card'
 import { ManagedInteractionRoomCard } from './components/managed-interaction-card'
-import { getMemberColor } from './lib/avatar-utils'
+import {
+  countRoomAgentProviderSiblings,
+  getMemberColor,
+} from './lib/avatar-utils'
 import type {
   PendingTurn,
   Room,
@@ -191,10 +194,8 @@ export function RoomsScreen() {
   }) {
     if (!roomId) return
     const runtime = agent.runtime || 'hermes'
-    const isManaged =
-      runtime === 'claude-code' ||
-      runtime === 'codex' ||
-      runtime === 'deepseek-harness'
+    // Non-Hermes runtimes never carry a Hermes profile (mirrors RoomRuntime).
+    const isManaged = runtime !== 'hermes'
     await apiAddParticipant(roomId, {
       participantId: agent.id,
       kind: 'agent',
@@ -528,13 +529,10 @@ function MessageBubble({
         status="idle"
         size={36}
         runtime={sender?.runtime}
-        providerSiblingCount={
-          participants.filter(
-            (p) =>
-              p.kind === 'agent' &&
-              (p.runtime || 'hermes') === (sender?.runtime || 'hermes'),
-          ).length
-        }
+        providerSiblingCount={countRoomAgentProviderSiblings(
+          participants,
+          sender?.runtime,
+        )}
       />
       <div
         className={cn(

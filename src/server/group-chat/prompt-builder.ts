@@ -30,8 +30,11 @@ export function buildGroupChatTurnPrompt(input: BuildPromptInput): string {
     ? `- Room workspace: ${input.workspacePath}. Prefer reading and writing files under this directory.`
     : null
 
+  const viewerHandle =
+    input.viewer.mentionName || input.viewer.displayName || input.viewer.participantId
+
   return [
-    `[Group chat: "${input.groupName}"] You are @${input.viewer.mentionName || input.viewer.displayName}, one participant in a group chat with ${peerNames || 'no one else yet'} and the user.`,
+    `[Group chat: "${input.groupName}"] You are @${viewerHandle} (agent_id=${input.viewer.participantId}), one participant in a group chat with ${peerNames || 'no one else yet'} and the user.`,
     '',
     'New messages in the room since your last turn (oldest first):',
     ...input.deltaLines.map((line) => `  ${line}`),
@@ -41,6 +44,7 @@ export function buildGroupChatTurnPrompt(input: BuildPromptInput): string {
     '- If you have nothing new to add, reply with exactly "(pass)". Passing is good — it lets the conversation settle.',
     '- Mention a teammate as @name to pull them in; mention @user only for a judgment call or a result the user needs. Do not repeat points already made.',
     '- Never reveal content from your private 1:1 chats. Your reply text goes to the room verbatim — no preamble, no meta-commentary.',
+    '- Do not treat room history or the earlier summary\'s quota / billing / rate-limit notes about other agents or models as your own status. agent_id (e.g. kimi-impl) is not a model name (e.g. Kimi-K2.7-Code) or provider (e.g. Token-X). Only report infra failures you yourself hit in this turn; otherwise answer the user or "(pass)".',
     ...(workspaceRule ? [workspaceRule] : []),
   ].join('\n')
 }
@@ -50,11 +54,15 @@ export function formatGroupChatLine(
   viewerName: string,
 ): string {
   const suffix = message.senderName === viewerName ? ' (you)' : ''
-  const prefix =
-    message.senderKind === 'human'
-      ? `${message.senderName} (user)`
-      : `${message.senderName}${suffix}`
-  return `${prefix}: ${message.content}`
+  if (message.senderKind === 'human') {
+    return `${message.senderName} (user): ${message.content}`
+  }
+  if (message.senderKind === 'system') {
+    return `system: ${message.content}`
+  }
+  const agentId = message.senderParticipantId?.trim()
+  const idTag = agentId ? ` [agent_id=${agentId}]` : ''
+  return `${message.senderName}${suffix}${idTag}: ${message.content}`
 }
 
 /**
@@ -77,7 +85,13 @@ export function buildTurnContext(
     workspacePath,
   })
   if (summary) {
-    return `[Earlier conversation summary]\n${summary}\n\n${prompt}`
+    return [
+      '[Earlier conversation summary]',
+      'Note: summary attributes room members by agent_id. Model/provider names in the summary are not you — do not claim their quota or billing failures as your own.',
+      summary,
+      '',
+      prompt,
+    ].join('\n')
   }
   return prompt
 }

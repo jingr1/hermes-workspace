@@ -87,6 +87,11 @@ type standardACPConfig struct {
 	// finalizeEnv applies provider-owned environment composition after session,
 	// target, and managed-runtime overrides have been resolved.
 	finalizeEnv func([]string, Session) ([]string, error)
+	// restartForUnadvertisedModel replaces the live ACP process when the
+	// requested model is absent from the current session's advertised options
+	// but can be applied through finalizeEnv / launch-time config (OpenCode zen
+	// free models under a Copilot-auth overlay).
+	restartForUnadvertisedModel bool
 	// requiresNewSessionForSettings reports settings patches that can only
 	// take effect via a fresh process/session (spawn-time-only flags).
 	requiresNewSessionForSettings func(Session, SessionSettingsPatch) bool

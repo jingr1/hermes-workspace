@@ -120,11 +120,13 @@ export function createAgoraxManagedAgentTransport(
       const existing = displaySessionId
         ? await runStore.getByDisplaySession(displaySessionId)
         : null
+      const displayPrompt = run.displayPrompt?.trim() ?? ''
       if (existing && existing.backend === backend) {
         const response = await client.sendInput(existing.agentSessionId, {
           clientSubmitId: run.runId,
           content: run.task,
           ...(run.content ? { promptContent: run.content } : {}),
+          ...(displayPrompt ? { displayPrompt } : {}),
         })
         await runStore.bind({
           runId: run.runId,
@@ -145,6 +147,7 @@ export function createAgoraxManagedAgentTransport(
           clientSubmitId: run.runId,
           content: run.task,
           ...(run.content ? { promptContent: run.content } : {}),
+          ...(displayPrompt ? { displayPrompt } : {}),
           ...(run.cwd ? { cwd: run.cwd } : {}),
           ...(run.model ? { model: run.model } : {}),
           ...(run.effort ? { reasoningEffort: run.effort } : {}),

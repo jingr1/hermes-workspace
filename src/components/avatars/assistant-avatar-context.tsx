@@ -7,8 +7,9 @@ export type AssistantAvatarConfig = {
   alt: string
 }
 
+/** Hermes is the default chat host; managed runtimes override via Provider. */
 const DEFAULT_ASSISTANT_AVATAR: AssistantAvatarConfig = {
-  src: '/agent-avatars/agorax-rounded.png',
+  src: '/agent-avatars/hermes-rounded.png',
   alt: 'Hermes Agent',
 }
 

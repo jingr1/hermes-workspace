@@ -846,6 +846,22 @@ type UpdatePinInput struct {
 	Pinned         bool
 }
 
+// RemountSessionCwdInput rebinds an idle session onto a new working directory.
+// ACP providers pin cwd at session/new, so remount closes the live connection
+// and starts a fresh provider session while preserving canonical history.
+type RemountSessionCwdInput struct {
+	WorkspaceID    string
+	AgentSessionID string
+	Cwd            string
+}
+
+type RemountSessionCwdResult struct {
+	Session   ProviderRuntimeSession
+	Canonical storesqlite.Session
+	Live      bool
+	Remounted bool
+}
+
 type CreateSessionResult struct {
 	Session           ProviderRuntimeSession
 	Canonical         storesqlite.Session

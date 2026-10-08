@@ -8,7 +8,7 @@
  */
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { getProfilesDir } from './hermes-paths'
+import { getHermesRoot, getProfilesDir } from './hermes-paths'
 import { readSwarmRuntimeFile } from './swarm-foundation'
 import { publishChatEvent } from './chat-event-bus'
 import { getAgentRuntimeRouter } from './agent-runtime/router'
@@ -48,12 +48,22 @@ function getState(): WatcherState {
   return g[WATCHER_STATE_KEY] as WatcherState
 }
 
+/** `default` lives at ~/.hermes; other Hermes agents under profiles/<id>. */
+function hermesProfilePath(agentId: string): string {
+  if (agentId === 'default') return getHermesRoot()
+  return path.join(getProfilesDir(), agentId)
+}
+
 function readRuntime(agentId: string): SwarmRuntime | null {
-  const profilePath = path.join(getProfilesDir(), agentId)
+  const profilePath = hermesProfilePath(agentId)
   try {
-    const { runtime } = readSwarmRuntimeFile(profilePath, agentId, {
+    const { source, runtime } = readSwarmRuntimeFile(profilePath, agentId, {
       workspaceRoot: process.cwd(),
     })
+    // Missing runtime.json yields an in-memory fallback with no lastOutputAt.
+    // Treating that as a live snapshot + `Date.now()` made probe-down agents
+    // look "unstable" forever (especially `default`, which often has no file).
+    if (source === 'fallback') return null
     return runtime
   } catch {
     return null
@@ -74,7 +84,8 @@ function buildSnapshot(
     needsHuman: runtime.needsHuman,
     checkpointStatus: runtime.checkpointStatus,
     lastSummary: runtime.lastSummary ?? null,
-    updatedAt: runtime.lastOutputAt ?? Date.now(),
+    // Never invent "now" — that falsely trips the unstable window.
+    updatedAt: runtime.lastOutputAt ?? 0,
   }
 }
 
@@ -104,7 +115,7 @@ function scheduleFlush(agentId: string): void {
 function watchAgent(agentId: string): void {
   const state = getState()
   if (state.watchers.has(agentId)) return
-  const runtimePath = path.join(getProfilesDir(), agentId, 'runtime.json')
+  const runtimePath = path.join(hermesProfilePath(agentId), 'runtime.json')
   if (!fs.existsSync(runtimePath)) return
 
   try {

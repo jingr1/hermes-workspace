@@ -9,7 +9,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 
 	"agorax.local/agent-daemon/packages/agent/daemon/providerregistry"
 )
@@ -20,6 +22,12 @@ const (
 	openCodePermissionFullAccess = "full-access"
 	openCodePermissionEnv        = "OPENCODE_PERMISSION"
 	openCodeSparkModelID         = providerregistry.OpenCodeSparkModelID
+	openCodeZenAuthOverlayEnv    = "XDG_DATA_HOME"
+)
+
+var (
+	openCodeZenAuthOverlayMu   sync.Mutex
+	openCodeZenAuthOverlayPath string
 )
 
 func newOpenCodeAdapterFromProviderDescriptor(
@@ -36,12 +44,64 @@ func newOpenCodeAdapterFromProviderDescriptor(
 	adapter.config.finalizeEnv = func(env []string, session Session) ([]string, error) {
 		return openCodeFinalEnv(settingsEnvironment, session, os.Getenv(settingsEnvironment.Variable), env)
 	}
+	// Free `opencode/*` models are absent from ACP options while GitHub Copilot
+	// auth is stored; restart so finalizeEnv can swap in the zen auth overlay.
+	adapter.config.restartForUnadvertisedModel = true
 	adapter.config.automaticPermissionDecision = openCodeAutomaticPermissionDecision
 	adapter.config.filterPermissionOptions = openCodePermissionOptions
 	adapter.config.validateSettings = validateOpenCodeSettings
 	adapter.config.filterRuntimeConfigOptionDescriptors = filterOpenCodeRuntimeConfigOptionDescriptors
 	adapter.config.filterRuntimeConfigOptionValues = filterOpenCodeRuntimeConfigOptionValues
 	return adapter
+}
+
+// openCodeUsesZenAuthOverlay reports whether this session should hide stored
+// GitHub Copilot credentials so ACP advertises OpenCode zen free models.
+// Empty model defaults to zen: Copilot's sticky default is frequently rejected
+// with provider.invalid-request on session/prompt.
+func openCodeUsesZenAuthOverlay(model string) bool {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return true
+	}
+	provider, _, ok := strings.Cut(model, "/")
+	return ok && strings.EqualFold(provider, "opencode")
+}
+
+func resetOpenCodeZenAuthOverlayForTest() {
+	openCodeZenAuthOverlayMu.Lock()
+	defer openCodeZenAuthOverlayMu.Unlock()
+	openCodeZenAuthOverlayPath = ""
+}
+
+func ensureOpenCodeZenAuthOverlay() (string, error) {
+	openCodeZenAuthOverlayMu.Lock()
+	defer openCodeZenAuthOverlayMu.Unlock()
+	if openCodeZenAuthOverlayPath != "" {
+		return openCodeZenAuthOverlayPath, nil
+	}
+	base := strings.TrimSpace(os.Getenv("AGORAX_OPENCODE_ZEN_AUTH_OVERLAY"))
+	if base == "" {
+		cache := strings.TrimSpace(os.Getenv("XDG_CACHE_HOME"))
+		if cache == "" {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return "", fmt.Errorf("resolve OpenCode zen auth overlay home: %w", err)
+			}
+			cache = filepath.Join(home, ".cache")
+		}
+		base = filepath.Join(cache, "agorax", "opencode-zen-auth-overlay")
+	}
+	opencodeDir := filepath.Join(base, "opencode")
+	if err := os.MkdirAll(opencodeDir, 0o700); err != nil {
+		return "", fmt.Errorf("create OpenCode zen auth overlay: %w", err)
+	}
+	authPath := filepath.Join(opencodeDir, "auth.json")
+	if err := os.WriteFile(authPath, []byte("{}\n"), 0o600); err != nil {
+		return "", fmt.Errorf("write OpenCode zen auth overlay: %w", err)
+	}
+	openCodeZenAuthOverlayPath = base
+	return base, nil
 }
 
 func validateOpenCodeSettings(session Session, patch SessionSettingsPatch) error {
@@ -191,6 +251,11 @@ func openCodeConfigContent(
 			config[key] = value
 		}
 	}
+	// Never bake model into OPENCODE_CONFIG_CONTENT. The CLI/API registry
+	// advertises free ids (e.g. opencode/exo-free) that ACP session/prompt then
+	// rejects with provider.invalid-request. Model selection happens only via
+	// ACP config options after session/new advertises the live set.
+	delete(config, "model")
 	config["permission"] = openCodeInteractivePermissionRules()
 	agents, _ := config["agent"].(map[string]any)
 	if agents == nil {
@@ -234,16 +299,38 @@ func openCodeFinalEnv(
 	if err != nil {
 		return nil, err
 	}
-	result := make([]string, 0, len(env)+1)
+	useZenOverlay := openCodeUsesZenAuthOverlay(session.SettingsValue().Model)
+	var zenOverlay string
+	if useZenOverlay {
+		zenOverlay, err = ensureOpenCodeZenAuthOverlay()
+		if err != nil {
+			return nil, err
+		}
+	}
+	result := make([]string, 0, len(env)+2)
 	for _, item := range env {
 		key, _, ok := strings.Cut(item, "=")
-		if ok && (strings.EqualFold(strings.TrimSpace(key), variable) ||
-			strings.EqualFold(strings.TrimSpace(key), openCodePermissionEnv)) {
+		if !ok {
+			result = append(result, item)
+			continue
+		}
+		trimmed := strings.TrimSpace(key)
+		if strings.EqualFold(trimmed, variable) ||
+			strings.EqualFold(trimmed, openCodePermissionEnv) {
+			continue
+		}
+		// Replace any inherited data home when zen free models must win over
+		// stored GitHub Copilot credentials.
+		if useZenOverlay && strings.EqualFold(trimmed, openCodeZenAuthOverlayEnv) {
 			continue
 		}
 		result = append(result, item)
 	}
-	return append(result, openCodePermissionEnv+"={}", variable+"="+content), nil
+	result = append(result, openCodePermissionEnv+"={}", variable+"="+content)
+	if useZenOverlay {
+		result = append(result, openCodeZenAuthOverlayEnv+"="+zenOverlay)
+	}
+	return result, nil
 }
 
 // OpenCode's default policy allows most tools without consulting the ACP

@@ -158,6 +158,10 @@ export type OperationsAgent = GatewayConfigAgent & {
   meta: OperationsAgentMeta
   shortModel: string
   status: OperationsAgentStatus
+  /** Multica-style reachability axis from /api/agents/snapshot. */
+  availability: 'online' | 'unstable' | 'offline'
+  /** Multica-style workload axis from /api/agents/snapshot. */
+  workload: 'working' | 'queued' | 'idle'
   sessionKey: string
   sessions: GatewaySession[]
   latestSession: GatewaySession | null
@@ -935,10 +939,22 @@ export function useOperations() {
         (isHermes && !resolvedModel)
       const status = snap?.status
         ? mapUnifiedToOperationsStatus(
-            snap.status.unifiedStatus,
+            needsSetup ? 'needsSetup' : snap.status.unifiedStatus,
             needsSetup,
           )
         : getAgentStatus(latestSession, null, null, needsSetup)
+      const availability =
+        snap?.status?.availability ??
+        (status === 'offline' || status === 'needsSetup'
+          ? 'offline'
+          : 'online')
+      const workload =
+        snap?.status?.workload ??
+        (status === 'active'
+          ? 'working'
+          : status === 'blocked'
+            ? 'queued'
+            : 'idle')
       const recentOutputs = [
         ...agentSessions.map((session) =>
           buildSessionOutput(session, agent.id),
@@ -1011,6 +1027,8 @@ export function useOperations() {
             (isHermes ? 'Custom' : agentRuntimeLabel(resolvedAgent.runtime)),
         ),
         status,
+        availability,
+        workload,
         sessionKey: getOperationsSessionKey(agent.id),
         sessions: agentSessions,
         latestSession,

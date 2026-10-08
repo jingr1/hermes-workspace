@@ -18,6 +18,7 @@ import (
 	activity "agorax.local/agent-daemon/packages/agent/daemon/activity"
 	hostadapter "agorax.local/agent-daemon/packages/agent/daemon/hostadapter"
 	"agorax.local/agent-daemon/packages/agent/daemon/modelcatalog"
+	agentruntime "agorax.local/agent-daemon/packages/agent/daemon/runtime"
 	agenthost "agorax.local/agent-daemon/packages/agent/host"
 	storesqlite "agorax.local/agent-daemon/packages/agent/store-sqlite"
 	canonical "agorax.local/agent-daemon/packages/agent/store-sqlite/canonical"
@@ -59,7 +60,8 @@ func run() error {
 		StoreForWorkspace: func(string) *storesqlite.Store { return store },
 	}
 	hub := newEventHub()
-	localReporter := &localDurableReporter{adapter: activity.NewSessionActivityReporterAdapter(&localCanonicalReporter{store: store, hub: hub})}
+	canonicalReporter := &localCanonicalReporter{store: store, hub: hub}
+	localReporter := &localDurableReporter{adapter: activity.NewSessionActivityReporterAdapter(canonicalReporter)}
 	runtime, err := agentdaemon.NewRuntime(agentdaemon.Config{
 		Reporter: localReporter,
 		HostMetadata: agentdaemon.HostMetadata{
@@ -72,6 +74,12 @@ func run() error {
 		return fmt.Errorf("create Agorax agent runtime with reporter: %w", err)
 	}
 	defer runtime.Close()
+	// Tutti wires ObserveRootTurnSettled → ReconcileRootTurnSettlement after the
+	// store aggregates RootProviderTurn completion into a settled root turn.
+	// Slim agorax-agentd must do the same, or ACP adapters (Kimi/Cursor/…) leave
+	// the in-memory active turn forever and follow-up SendInput fails with
+	// ErrSessionActiveTurn.
+	canonicalReporter.controller = runtime.Controller()
 	// Project the precommit runtime stream (message_delta text/toolOutput/
 	// payload operations and loss signals) into the public activity WS.
 	runtime.Controller().SetStreamEventObserver(&agentActivityEventBridge{hub: hub})
@@ -156,14 +164,12 @@ func routesWithOps(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.D
 		}
 		// enabled reflects the providers that actually have a registered
 		// runtime adapter. claude-code is hosted by the daemon's Claude CLI
-		// adapter (print-mode `claude -p --output-format stream-json`, one
-		// managed process per turn), so it reports enabled here once the
-		// adapter is wired in the runtime. kimi-code has no migrated adapter
-		// yet — honor the Runtimes enable preference so the Switch sticks.
+		// adapter; kimi-code is a host ACP adapter registered as acp:kimi-code.
+		// When a Runtimes preference exists, it gates the enabled flag.
 		target := func(id string, provider string, identity string) map[string]any {
 			enabled := registered[provider]
 			if pref, ok := ops.userEnabledPreference(identity); ok {
-				enabled = pref && (enabled || identity == "kimi-code")
+				enabled = pref && enabled
 			}
 			return map[string]any{"id": id, "enabled": enabled}
 		}
@@ -255,6 +261,8 @@ func routesWithOps(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.D
 			ClientSubmitID  string          `json:"clientSubmitId"`
 			Content         json.RawMessage `json:"content"`
 			InitialContent  json.RawMessage `json:"initialContent"`
+			// UI-only text when InitialContent carries injected skills / bundles.
+			DisplayPrompt   string          `json:"displayPrompt"`
 			CWD             string          `json:"cwd"`
 			Model           string          `json:"model"`
 			ReasoningEffort string          `json:"reasoningEffort"`
@@ -289,6 +297,7 @@ func routesWithOps(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.D
 			AgentSessionID: input.AgentSessionID, AgentTargetID: input.AgentTargetID,
 			Provider: provider, ClientSubmitID: input.ClientSubmitID,
 			InitialContent: content,
+			InitialDisplayPrompt: strings.TrimSpace(input.DisplayPrompt),
 			Cwd:            stringPointer(input.CWD), Model: stringPointer(input.Model),
 			ReasoningEffort: stringPointer(input.ReasoningEffort),
 			RuntimeContext:  runtimeContext,
@@ -311,6 +320,8 @@ func routesWithOps(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.D
 		var input struct {
 			ClientSubmitID string          `json:"clientSubmitId"`
 			Content        json.RawMessage `json:"content"`
+			// UI-only text when Content carries injected skills / bundles.
+			DisplayPrompt  string          `json:"displayPrompt"`
 		}
 		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
 			writeJSON(response, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -319,6 +330,7 @@ func routesWithOps(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.D
 		result, err := host.SendInput(request.Context(), agenthost.SessionRef{WorkspaceID: request.PathValue("workspaceID"), AgentSessionID: request.PathValue("agentSessionID")}, agenthost.SendInput{
 			ClientSubmitID: input.ClientSubmitID,
 			Content:        promptText(input.Content),
+			DisplayPrompt:  strings.TrimSpace(input.DisplayPrompt),
 		})
 		if err != nil {
 			writeJSON(response, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -441,6 +453,28 @@ func routesWithOps(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.D
 			return
 		}
 		writeJSON(response, http.StatusOK, result)
+	})
+	mux.HandleFunc("POST /v1/workspaces/{workspaceID}/agent-sessions/{agentSessionID}/cwd", func(response http.ResponseWriter, request *http.Request) {
+		var input struct {
+			Cwd string `json:"cwd"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+			writeJSON(response, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		result, err := host.RemountSessionCwd(request.Context(), agenthost.RemountSessionCwdInput{
+			WorkspaceID: request.PathValue("workspaceID"), AgentSessionID: request.PathValue("agentSessionID"),
+			Cwd: input.Cwd,
+		})
+		if err != nil {
+			writeHostError(response, err)
+			return
+		}
+		writeJSON(response, http.StatusOK, map[string]any{
+			"remounted": result.Remounted,
+			"live":      result.Live,
+			"canonical": result.Canonical,
+		})
 	})
 	mux.HandleFunc("POST /v1/workspaces/{workspaceID}/agent-sessions/{agentSessionID}/settings", func(response http.ResponseWriter, request *http.Request) {
 		var input struct {
@@ -741,7 +775,8 @@ func providerFromTarget(target string) string {
 	case "local:opencode":
 		return "opencode"
 	case "extension:kimi-code":
-		return "kimi-code"
+		// Must match the runtime adapter Provider() / agent-targets catalog key.
+		return "acp:kimi-code"
 	default:
 		return target
 	}
@@ -759,8 +794,9 @@ func (r *localDurableReporter) ReportSubmitProvenance(ctx context.Context, input
 }
 
 type localCanonicalReporter struct {
-	store *storesqlite.Store
-	hub   *eventHub
+	store      *storesqlite.Store
+	hub        *eventHub
+	controller *agentruntime.Controller
 }
 
 func (r *localCanonicalReporter) ReportSessionState(ctx context.Context, input canonical.ReportSessionStateInput) (canonical.ReportSessionStateReply, error) {
@@ -817,10 +853,43 @@ func (r *localCanonicalReporter) ReportSessionState(ctx context.Context, input c
 		r.hub.publishActivity(input.WorkspaceID, input.AgentSessionID, activityEventTurnUpdate,
 			turnUpdateEventData(input.AgentSessionID, s.Turn, s.OccurredAtUnixMS))
 	}
+	// When RootProviderTurn completion settles the canonical root (no active
+	// children), release the runtime active-turn fence and publish the settled
+	// turn — matching Tutti's ObserveRootTurnSettled path.
+	if result.RootTurnAccepted && result.RootTurn.Phase == storesqlite.TurnPhaseSettled {
+		r.reconcileSettledRootTurn(input.WorkspaceID, input.AgentSessionID, result.RootTurn)
+		if r.hub != nil && s.Turn == nil {
+			r.hub.publishActivity(input.WorkspaceID, input.AgentSessionID, activityEventTurnUpdate,
+				turnUpdateEventData(input.AgentSessionID, result.RootTurn, s.OccurredAtUnixMS))
+		}
+	} else if result.TurnAccepted && result.Turn.Phase == storesqlite.TurnPhaseSettled {
+		r.reconcileSettledRootTurn(input.WorkspaceID, input.AgentSessionID, result.Turn)
+	}
 	if r.hub != nil && result.InteractionResult == storesqlite.InteractionTransitionApplied {
 		r.publishInteraction(input.WorkspaceID, input.AgentSessionID, result.Interaction)
 	}
 	return canonical.ReportSessionStateReply{Accepted: result.State.Accepted, StateApplied: result.State.StateApplied, LastEventAtUnixMS: result.State.LastEventUnixMS}, nil
+}
+
+func (r *localCanonicalReporter) reconcileSettledRootTurn(
+	workspaceID string,
+	agentSessionID string,
+	turn storesqlite.Turn,
+) {
+	if r == nil || r.controller == nil {
+		return
+	}
+	turnID := strings.TrimSpace(turn.TurnID)
+	if strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(agentSessionID) == "" || turnID == "" {
+		return
+	}
+	r.controller.ReconcileRootTurnSettlement(agentruntime.RootTurnSettlement{
+		RoomID:         workspaceID,
+		AgentSessionID: agentSessionID,
+		TurnID:         turnID,
+		Outcome:        turn.Outcome,
+		ErrorMessage:   turn.ErrorMessage,
+	})
 }
 
 func (r *localCanonicalReporter) ReportSessionMessages(ctx context.Context, input canonical.ReportSessionMessagesInput) (canonical.ReportSessionMessagesReply, error) {

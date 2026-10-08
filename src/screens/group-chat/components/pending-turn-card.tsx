@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { MemberAvatar } from './member-avatar'
+import { countRoomAgentProviderSiblings } from '../lib/avatar-utils'
 import type { PendingTurn, RoomParticipant } from '@/lib/group-chat-types'
 
 type PendingTurnCardProps = {
@@ -40,13 +41,10 @@ export function PendingTurnCard({
           status="thinking"
           size={36}
           runtime={requester?.runtime}
-          providerSiblingCount={
-            participants.filter(
-              (p) =>
-                p.kind === 'agent' &&
-                (p.runtime || 'hermes') === (requester?.runtime || 'hermes'),
-            ).length
-          }
+          providerSiblingCount={countRoomAgentProviderSiblings(
+            participants,
+            requester?.runtime,
+          )}
         />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">

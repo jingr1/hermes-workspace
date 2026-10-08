@@ -70,6 +70,8 @@ export type CreateAgoraxAgentSessionInput = {
   clientSubmitId: string
   content: string
   promptContent?: Array<AgoraxManagedPromptContentBlock>
+  /** UI-only text when content/promptContent carry injected skills. */
+  displayPrompt?: string
   cwd?: string
   model?: string
   title?: string
@@ -82,6 +84,8 @@ export type CreateAgoraxAgentSessionInput = {
 export type SendAgoraxAgentInput = {
   content: string
   promptContent?: Array<AgoraxManagedPromptContentBlock>
+  /** UI-only text when content/promptContent carry injected skills. */
+  displayPrompt?: string
   clientSubmitId: string
 }
 
@@ -223,6 +227,7 @@ export class AgoraxManagedAgentHttpClient {
     input: CreateAgoraxAgentSessionInput,
     options?: { signal?: AbortSignal },
   ): Promise<DaemonCreateSessionResponse> {
+    const displayPrompt = input.displayPrompt?.trim() ?? ''
     return this.createAgentSessionRequest(
       {
         agentSessionId: input.agentSessionId,
@@ -231,6 +236,7 @@ export class AgoraxManagedAgentHttpClient {
         initialContent: input.promptContent ?? [
           { type: 'text', text: input.content },
         ],
+        ...(displayPrompt ? { displayPrompt } : {}),
         ...(input.cwd ? { cwd: input.cwd } : {}),
         ...(input.model ? { model: input.model } : {}),
         ...(input.reasoningEffort
@@ -281,11 +287,13 @@ export class AgoraxManagedAgentHttpClient {
     input: SendAgoraxAgentInput,
     options?: { signal?: AbortSignal },
   ): Promise<DaemonSendInputResponse> {
+    const displayPrompt = input.displayPrompt?.trim() ?? ''
     return this.sendAgentSessionInputRequest(
       agentSessionId,
       {
         clientSubmitId: input.clientSubmitId,
         content: input.promptContent ?? [{ type: 'text', text: input.content }],
+        ...(displayPrompt ? { displayPrompt } : {}),
       },
       options,
     )
@@ -528,6 +536,25 @@ export class AgoraxManagedAgentHttpClient {
             ? { reasoningEffort: settings.reasoningEffort }
             : {}),
         }),
+      },
+      options?.signal,
+    )
+  }
+
+  /**
+   * Rebind an idle ACP session onto a new composer workspace cwd.
+   * Daemon closes the live provider connection and session/new with the path.
+   */
+  remountSessionCwd(
+    agentSessionId: string,
+    cwd: string,
+    options?: { signal?: AbortSignal },
+  ): Promise<{ remounted?: boolean; live?: boolean }> {
+    return this.requestJson(
+      `/v1/workspaces/${encodeURIComponent(this.workspaceId)}/agent-sessions/${encodeURIComponent(agentSessionId)}/cwd`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ cwd }),
       },
       options?.signal,
     )

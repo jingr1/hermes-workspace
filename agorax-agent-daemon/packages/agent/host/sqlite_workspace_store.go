@@ -291,6 +291,18 @@ func (s *SQLiteWorkspaceStore) UpdateSessionPinned(ctx context.Context, workspac
 	return session, changed, err
 }
 
+func (s *SQLiteWorkspaceStore) UpdateSessionCwd(ctx context.Context, workspaceID, sessionID, cwd string) (storesqlite.Session, bool, error) {
+	store, err := s.store(workspaceID)
+	if err != nil {
+		return storesqlite.Session{}, false, err
+	}
+	session, changed, err := store.UpdateSessionCwd(ctx, workspaceID, sessionID, cwd)
+	if err == nil && changed {
+		NotifyCommitted(ctx, s.Observer, CanonicalDelta(session.CommitDelta))
+	}
+	return session, changed, err
+}
+
 func (s *SQLiteWorkspaceStore) PlanDeleteSessions(ctx context.Context, input storesqlite.DeleteSessionsBatchInput) (storesqlite.DeleteSessionsPlan, error) {
 	store, err := s.store(input.WorkspaceID)
 	if err != nil {

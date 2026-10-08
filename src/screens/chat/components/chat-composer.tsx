@@ -26,7 +26,10 @@ import {
   shouldBlockZeroForkModelSwitch,
 } from './chat-composer-model-switch'
 import { ComposerPrimaryButton } from './composer-primary-button'
-import { ContextIndicator } from './context-indicator'
+import {
+  ContextIndicator,
+  type ContextUsageOverride,
+} from './context-indicator'
 import type { CSSProperties, Ref } from 'react'
 
 import type { ModelCatalogEntry, ModelSwitchResponse } from '@/lib/model-types'
@@ -49,7 +52,7 @@ import { useFeatureCapability } from '@/hooks/use-feature-capability'
 import { MOBILE_TAB_BAR_OFFSET } from '@/components/mobile-tab-bar'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import {
-  PENDING_SESSION_MODEL_KEY,
+  pendingSessionModelKey,
   useSessionModelStore,
 } from '@/stores/session-model-store'
 import { Button } from '@/components/ui/button'
@@ -154,17 +157,25 @@ type ChatComposerProps = {
   canSteer?: boolean
   /** Bumps context indicator refresh after stream lifecycle events */
   contextRefreshToken?: string | number
+  /**
+   * Managed-runtime context window. When set (including `null`), skips Hermes
+   * `/api/context-usage` polling and drives ContextIndicator from this value.
+   */
+  contextUsage?: ContextUsageOverride | null
   /** Embedded inside another surface (e.g. Operations card), so mobile composer
    * must stay inline instead of docking fixed to the viewport bottom. */
   embedded?: boolean
   hideModelSelector?: boolean
   /**
-   * Runtime identity label shown in the composer footer (e.g. "Claude Code",
-   * "Codex"). Defaults to "Claude Code" for managed runtimes.
+   * Runtime identity label shown in the composer footer (e.g. agent name for
+   * managed runtimes or Hermes agents). When omitted, Hermes falls back to the
+   * active profile name — do not default to a managed runtime brand here:
+   * Hermes also passes a per-agent `modelsEndpoint`.
    */
   runtimeLabel?: string
   /**
-   * Tooltip/config hint for the runtime identity label.
+   * Tooltip/config hint for the runtime identity label. Presence selects the
+   * managed-runtime identity chrome (terminal icon); Hermes omits this.
    */
   runtimeConfigHint?: string
   /**
@@ -986,12 +997,13 @@ function ChatComposerComponent({
   busyMessageMode = 'queue',
   canSteer = false,
   contextRefreshToken,
+  contextUsage,
   gatewayQueriesEnabled = true,
   queuedCount = 0,
   onClearQueue,
   slashRuntime,
   skillsAgentId,
-  runtimeLabel = 'Claude Code',
+  runtimeLabel,
   runtimeConfigHint,
 }: ChatComposerProps) {
   const resolvedModelsEndpoint = modelsEndpoint?.trim() || '/api/models'
@@ -1000,6 +1012,14 @@ function ChatComposerComponent({
     useCustomModelsEndpoint || gatewayQueriesEnabled
   // Expanding "other providers" only makes sense for the Hermes catalog.
   const allowProviderExpansion = !useCustomModelsEndpoint && gatewayQueriesEnabled
+  // Per-agent modelsEndpoint is shared by Hermes + managed. Identity chrome
+  // must not key off that flag alone — managed passes runtimeConfigHint;
+  // Hermes shows the agent/profile name with the profile icon.
+  const resolvedRuntimeLabel = runtimeLabel?.trim() || ''
+  const useManagedRuntimeIdentity = Boolean(runtimeConfigHint?.trim())
+  const runtimeIdentityLabel =
+    resolvedRuntimeLabel ||
+    (useManagedRuntimeIdentity ? 'Claude Code' : '')
   const queryClient = useQueryClient()
   const sessionTruncateCap = useFeatureCapability('sessionTruncate')
   const sessionCompressCap = useFeatureCapability('sessionCompress')
@@ -1266,45 +1286,87 @@ function ChatComposerComponent({
   void modelsQuery.data
 
   // Per-session model override, persisted to localStorage keyed by sessionKey.
-  // Drives both the composer label and the model passed to startStreaming.
-  // Replaces an earlier flow that PATCHed ~/.hermes/config.yaml — that path
-  // 404s and would clobber the global default for every channel anyway.
-  // New chats have no concrete session yet — persist under the pending key
-  // so the pick survives until chat-screen migrates it onto the real id.
+  // New chats use an agent-scoped pending key so picks don't leak across agents.
   const modelSessionKey =
     typeof sessionKey === 'string' && sessionKey.trim().length > 0
       ? sessionKey.trim()
-      : PENDING_SESSION_MODEL_KEY
+      : pendingSessionModelKey(skillsAgentId)
   const persistedSessionModel = useSessionModelStore(
     (s) => s.models[modelSessionKey],
   )
   const setPersistedSessionModel = useSessionModelStore((s) => s.setModel)
   const clearPersistedSessionModel = useSessionModelStore((s) => s.clearModel)
 
-  // Custom catalogs (Claude Code): drop stale Hermes picks like
-  // "Claude-Sonnet-3.5" that aren't in ~/.claude/settings.json.
+  const catalogModelIds = useMemo(() => {
+    const catalog = modelsQuery.data?.models ?? []
+    const ids = new Set<string>()
+    for (const entry of catalog) {
+      const id =
+        typeof entry === 'string' ? entry.trim() : String(entry.id ?? '').trim()
+      if (!id) continue
+      ids.add(id)
+      if (id.includes('/')) ids.add(id.slice(id.lastIndexOf('/') + 1))
+    }
+    return ids
+  }, [modelsQuery.data?.models])
+
+  const catalogCurrentModel = (modelsQuery.data?.currentModel || '').trim()
+
+  // Drop persisted picks that aren't in this agent's catalog (or when the
+  // catalog is empty — never keep showing a foreign default like Kimi).
   useEffect(() => {
     if (!useCustomModelsEndpoint) return
-    const catalog = modelsQuery.data?.models
-    if (!catalog?.length) return
+    if (!modelsQuery.isFetched && !modelsQuery.isError) return
     const persisted = persistedSessionModel?.trim()
     if (!persisted) return
-    const ids = new Set(
-      catalog.map((entry) =>
-        typeof entry === 'string' ? entry : String(entry.id ?? ''),
-      ),
-    )
+    if (catalogModelIds.size === 0) {
+      clearPersistedSessionModel(modelSessionKey)
+      return
+    }
     const bare = persisted.includes('/')
       ? persisted.slice(persisted.lastIndexOf('/') + 1)
       : persisted
-    if (!ids.has(persisted) && !ids.has(bare)) {
+    if (!catalogModelIds.has(persisted) && !catalogModelIds.has(bare)) {
       clearPersistedSessionModel(modelSessionKey)
     }
   }, [
+    catalogModelIds,
     clearPersistedSessionModel,
     modelSessionKey,
-    modelsQuery.data?.models,
+    modelsQuery.isError,
+    modelsQuery.isFetched,
     persistedSessionModel,
+    useCustomModelsEndpoint,
+  ])
+
+  // Seed the store from catalog current when the button already shows that
+  // value but localStorage is empty. Otherwise submit skips updateSessionSettings
+  // and sticky provider models (e.g. OpenCode Copilot) keep failing while the
+  // composer label still reads as the free catalog default.
+  useEffect(() => {
+    if (!useCustomModelsEndpoint) return
+    if (!modelsQuery.isFetched || modelsQuery.isError) return
+    if (persistedSessionModel?.trim()) return
+    if (!catalogCurrentModel) return
+    if (catalogModelIds.size === 0) return
+    const bare = catalogCurrentModel.includes('/')
+      ? catalogCurrentModel.slice(catalogCurrentModel.lastIndexOf('/') + 1)
+      : catalogCurrentModel
+    if (
+      !catalogModelIds.has(catalogCurrentModel) &&
+      !catalogModelIds.has(bare)
+    ) {
+      return
+    }
+    setPersistedSessionModel(modelSessionKey, catalogCurrentModel)
+  }, [
+    catalogCurrentModel,
+    catalogModelIds,
+    modelSessionKey,
+    modelsQuery.isError,
+    modelsQuery.isFetched,
+    persistedSessionModel,
+    setPersistedSessionModel,
     useCustomModelsEndpoint,
   ])
 
@@ -1432,22 +1494,40 @@ function ChatComposerComponent({
     [sessionKey],
   )
   // On new chat, currentModel is empty until a session is created.
-  // Read the runtime model from the models query (first item is from the current provider).
+  // Read the runtime model from the models query (first item is default).
   const configuredModel = useMemo(() => {
     const models = modelsQuery.data?.models ?? []
     if (!models.length) return ''
     const first = models[0]
     return typeof first === 'string' ? first : first.id || first.name || ''
   }, [modelsQuery.data])
-  // Derive the label directly from the store so navigation between sessions
-  // updates without a render-window flash from a stale React-state mirror.
-  // Custom catalogs (Claude Code) may also expose currentModel from settings.
-  const modelButtonLabel =
-    persistedSessionModel ||
-    currentModel ||
-    modelsQuery.data?.currentModel ||
-    configuredModel ||
-    '⚕ Hermes Agent'
+
+  const persistedInCatalog = useMemo(() => {
+    const persisted = persistedSessionModel?.trim()
+    if (!persisted) return ''
+    if (catalogModelIds.size === 0) return ''
+    const bare = persisted.includes('/')
+      ? persisted.slice(persisted.lastIndexOf('/') + 1)
+      : persisted
+    if (catalogModelIds.has(persisted) || catalogModelIds.has(bare)) {
+      return persisted
+    }
+    return ''
+  }, [catalogModelIds, persistedSessionModel])
+
+  // Per-agent catalog wins over Hermes session-status / stale localStorage.
+  // Never display a model that isn't in this agent's supported list.
+  const modelButtonLabel = useCustomModelsEndpoint
+    ? persistedInCatalog ||
+      catalogCurrentModel ||
+      configuredModel ||
+      runtimeIdentityLabel ||
+      'Select model'
+    : persistedSessionModel ||
+      currentModel ||
+      catalogCurrentModel ||
+      configuredModel ||
+      '⚕ Hermes Agent'
 
   // Measure composer height and set CSS variable for scroll padding
   useLayoutEffect(() => {
@@ -2849,6 +2929,7 @@ function ChatComposerComponent({
                 <ContextIndicator
                   sessionId={sessionKey}
                   refreshToken={contextRefreshToken}
+                  usage={contextUsage}
                 />
                 {showMicButton ? (
                   <button
@@ -3292,12 +3373,13 @@ function ChatComposerComponent({
 
                 {!hideModelSelector ? (
                   <>
-                    {/* Runtime identity — Hermes profile, or Claude Code label */}
+                    {/* Runtime identity — Hermes agent/profile, or managed label */}
                     <span
                       className="inline-flex max-w-[8rem] items-center gap-1.5 px-1 text-xs text-primary-500"
                       title={
-                        useCustomModelsEndpoint
-                          ? runtimeConfigHint || `${runtimeLabel} · managed runtime`
+                        useManagedRuntimeIdentity
+                          ? runtimeConfigHint ||
+                            `${runtimeIdentityLabel} · managed runtime`
                           : activeProfile
                             ? [
                                 activeProfile.name,
@@ -3309,10 +3391,10 @@ function ChatComposerComponent({
                                 )
                                 .filter(Boolean)
                                 .join(' · ')
-                            : activeProfileName
+                            : resolvedRuntimeLabel || activeProfileName
                       }
                     >
-                      {useCustomModelsEndpoint ? (
+                      {useManagedRuntimeIdentity ? (
                         <svg
                           width="13"
                           height="13"
@@ -3344,9 +3426,7 @@ function ChatComposerComponent({
                         </svg>
                       )}
                       <span className="truncate">
-                        {useCustomModelsEndpoint
-                          ? runtimeLabel
-                          : activeProfileName}
+                        {runtimeIdentityLabel || activeProfileName}
                       </span>
                     </span>
 
@@ -3746,6 +3826,7 @@ function ChatComposerComponent({
                 <ContextIndicator
                   sessionId={sessionKey}
                   refreshToken={contextRefreshToken}
+                  usage={contextUsage}
                 />
                 {showMicButton ? (
                   <PromptInputAction tooltip={micTooltip}>

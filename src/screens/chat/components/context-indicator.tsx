@@ -1,12 +1,23 @@
 'use client'
 
-import { memo, useCallback, useEffect, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { formatTokens } from '@/lib/format-tokens'
 
 const POLL_MS = 15_000
 const RING_RADIUS = 9.75
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
+
+export type ContextUsageOverride = {
+  usedTokens: number
+  maxTokens: number
+  contextPercent?: number
+  model?: string
+  thresholdTokens?: number
+  cacheReadTokens?: number
+  cacheWriteTokens?: number
+  cacheHitPercent?: number | null
+}
 
 type ContextData = {
   contextPercent: number
@@ -43,17 +54,66 @@ function computeCacheHitPercent(
   return Math.min(100, Math.round((cacheRead / promptTotal) * 100))
 }
 
+/** @internal exported for unit tests */
+export function normalizeContextUsageOverride(
+  usage: ContextUsageOverride | null | undefined,
+): ContextData | null {
+  if (!usage) return null
+  const maxTokens = Number(usage.maxTokens) || 0
+  if (maxTokens <= 0) return null
+  const usedTokens = Math.max(0, Number(usage.usedTokens) || 0)
+  const contextPercent =
+    typeof usage.contextPercent === 'number' &&
+    Number.isFinite(usage.contextPercent)
+      ? usage.contextPercent
+      : Math.round((usedTokens / maxTokens) * 1000) / 10
+  const thresholdTokens =
+    typeof usage.thresholdTokens === 'number' &&
+    Number.isFinite(usage.thresholdTokens)
+      ? usage.thresholdTokens
+      : 0
+  const cacheReadTokens = Number(usage.cacheReadTokens) || 0
+  const cacheWriteTokens = Number(usage.cacheWriteTokens) || 0
+  return {
+    contextPercent,
+    model: typeof usage.model === 'string' ? usage.model : '',
+    maxTokens,
+    usedTokens,
+    thresholdTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
+    cacheHitPercent: computeCacheHitPercent(
+      cacheReadTokens,
+      cacheWriteTokens,
+      usage.cacheHitPercent,
+    ),
+  }
+}
+
+/**
+ * When `usage` is provided (including `null`), Hermes `/api/context-usage`
+ * polling is skipped — managed runtimes push `contextWindow` instead.
+ * Omit `usage` for Hermes to keep the existing poll path.
+ */
 function ContextIndicatorComponent({
   sessionId,
   refreshToken,
+  usage,
 }: {
   sessionId?: string
   refreshToken?: string | number
+  usage?: ContextUsageOverride | null
 }) {
-  const [ctx, setCtx] = useState<ContextData>(EMPTY)
+  const external = usage !== undefined
+  const overrideCtx = useMemo(
+    () => (external ? normalizeContextUsageOverride(usage) : null),
+    [external, usage],
+  )
+  const [polledCtx, setPolledCtx] = useState<ContextData>(EMPTY)
   const [tooltipOpen, setTooltipOpen] = useState(false)
 
   const refresh = useCallback(async () => {
+    if (external) return
     try {
       const params = sessionId
         ? `?sessionId=${encodeURIComponent(sessionId)}`
@@ -70,7 +130,7 @@ function ContextIndicatorComponent({
         Number(data.thresholdTokens) ||
         (maxTokens > 0 ? Math.floor(maxTokens * 0.5) : 0)
 
-      setCtx({
+      setPolledCtx({
         contextPercent: Number(data.contextPercent) || 0,
         model: typeof data.model === 'string' ? data.model : '',
         maxTokens,
@@ -87,9 +147,10 @@ function ContextIndicatorComponent({
     } catch {
       /* ignore */
     }
-  }, [sessionId])
+  }, [external, sessionId])
 
   useEffect(() => {
+    if (external) return
     const boot = window.setTimeout(() => {
       void refresh()
     }, 2500)
@@ -98,12 +159,15 @@ function ContextIndicatorComponent({
       window.clearTimeout(boot)
       window.clearInterval(id)
     }
-  }, [refresh])
+  }, [external, refresh])
 
   useEffect(() => {
+    if (external) return
     if (refreshToken == null) return
     void refresh()
-  }, [refresh, refreshToken])
+  }, [external, refresh, refreshToken])
+
+  const ctx = external ? (overrideCtx ?? EMPTY) : polledCtx
 
   if (ctx.maxTokens <= 0) return null
 

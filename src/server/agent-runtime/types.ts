@@ -66,6 +66,11 @@ export type AgentRunInput = {
   task: string
   /** Canonical structured prompt content for runtimes that support it. */
   content?: Array<AgoraxManagedPromptContentBlock>
+  /**
+   * UI-only user text when `task`/`content` carry injected platform skills.
+   * Forwarded to the daemon as `displayPrompt` so the chat bubble stays short.
+   */
+  displayPrompt?: string
   /** Working directory (per-mission worktree in P2b; repo cwd today). */
   cwd?: string
   roomId?: string | null

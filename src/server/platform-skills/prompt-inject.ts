@@ -83,3 +83,47 @@ export function buildTurnSkillInjection(
     : `${bundle}\n\n(Use the skill(s) above.)`
   return { text, injected: skillNames }
 }
+
+/**
+ * Replace the first text block with `runtimeText`, or prepend one when missing.
+ * Used so attachments stay while platform-skill injection rewrites the prompt.
+ */
+export function rewritePromptContentText<T extends { type: string; text?: string }>(
+  promptContent: Array<T>,
+  runtimeText: string,
+): Array<T | { type: 'text'; text: string }> {
+  if (promptContent.length === 0) {
+    return [{ type: 'text', text: runtimeText }]
+  }
+  const textIdx = promptContent.findIndex((block) => block.type === 'text')
+  if (textIdx >= 0) {
+    return promptContent.map((block, index) =>
+      index === textIdx && block.type === 'text'
+        ? { ...block, type: 'text' as const, text: runtimeText }
+        : block,
+    )
+  }
+  return [{ type: 'text', text: runtimeText }, ...promptContent]
+}
+
+/**
+ * Session activate: prepend all enabled skills when the user did not /trigger
+ * a subset. Returns runtime prompt + the unchanged user-visible text.
+ */
+export function buildManagedActivatePrompt(
+  agentId: string,
+  userMessage: string,
+): { runtimeText: string; displayPrompt: string } {
+  const turnInject = buildTurnSkillInjection(agentId, userMessage)
+  if (turnInject.injected.length > 0) {
+    return { runtimeText: turnInject.text, displayPrompt: userMessage }
+  }
+  const sessionPrefix = buildManagedSkillPromptPrefix(agentId)
+  if (!sessionPrefix) {
+    return { runtimeText: userMessage, displayPrompt: userMessage }
+  }
+  return {
+    runtimeText: `${sessionPrefix}\n\n${userMessage}`,
+    displayPrompt: userMessage,
+  }
+}

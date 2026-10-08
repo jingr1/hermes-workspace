@@ -19,8 +19,9 @@ type NewAgentSessionActivationInput = Extract<
  * Outbound projection for POST .../agent-sessions. Fields declared by the
  * daemon decode struct (agorax-agentd/main.go) cross the HTTP boundary:
  * agentSessionId, agentTargetId, provider, clientSubmitId, content,
- * initialContent, cwd, model, reasoningEffort, mcp*. Local prompt fields
- * such as `uri`, `hostPath`, `uploadStatus`, and `assetId` never cross.
+ * initialContent, displayPrompt, cwd, model, reasoningEffort, mcp*. Local
+ * prompt fields such as `uri`, `hostPath`, `uploadStatus`, and `assetId`
+ * never cross.
  *
  * TODO(daemon-endpoint): remaining daemon fields (capabilityRefs,
  * initialGoalControl, railPlacement, permissionModeId, planMode, speed,
@@ -35,6 +36,7 @@ export function daemonCreateAgentSessionRequestFromActivity(
     mcpToolAllowlist?: string[];
   }
 ): DaemonCreateAgentSessionRequest {
+  const displayPrompt = input.initialDisplayPrompt?.trim() ?? "";
   return {
     agentSessionId: input.agentSessionId,
     agentTargetId: input.agentTargetId,
@@ -44,6 +46,7 @@ export function daemonCreateAgentSessionRequestFromActivity(
     initialContent: daemonPromptContentBlocksFromActivity(
       input.initialContent ?? []
     ),
+    ...(displayPrompt ? { displayPrompt } : {}),
     ...(input.cwd?.trim() ? { cwd: input.cwd } : {}),
     ...(input.model?.trim() ? { model: input.model } : {}),
     ...(input.reasoningEffort?.trim()
@@ -85,16 +88,18 @@ export function daemonCreateAgentSessionRequestFromActivation(
 
 /**
  * Outbound projection for POST .../input. The daemon decode struct accepts
- * only clientSubmitId and content; displayPrompt, guidance/targetTurnId,
+ * clientSubmitId, content, and displayPrompt; guidance/targetTurnId,
  * capabilityRefs, and submitDiagnostics are dropped
  * TODO(daemon-endpoint).
  */
 export function daemonSendAgentSessionInputRequestFromActivity(
   input: AgentActivitySendInput
 ): DaemonSendAgentSessionInputRequest {
+  const displayPrompt = input.displayPrompt?.trim() ?? "";
   return {
     clientSubmitId: input.clientSubmitId,
-    content: daemonPromptContentBlocksFromActivity(input.content)
+    content: daemonPromptContentBlocksFromActivity(input.content),
+    ...(displayPrompt ? { displayPrompt } : {})
   };
 }
 

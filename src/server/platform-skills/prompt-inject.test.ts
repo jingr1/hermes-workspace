@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   extractLeadingSkillTriggers,
   formatSkillBundleForPrompt,
+  rewritePromptContentText,
 } from './prompt-inject'
 
 describe('platform-skills prompt-inject', () => {
@@ -33,5 +34,19 @@ describe('platform-skills prompt-inject', () => {
     ])
     expect(text).toContain('## Skill: reviewer')
     expect(text).toContain('Be careful.')
+  })
+
+  it('rewrites the first text block and keeps attachments', () => {
+    const rewritten = rewritePromptContentText(
+      [
+        { type: 'text', text: '你好' },
+        { type: 'image', name: 'a.png' },
+      ],
+      '<!-- skills -->\n\n你好',
+    )
+    expect(rewritten).toEqual([
+      { type: 'text', text: '<!-- skills -->\n\n你好' },
+      { type: 'image', name: 'a.png' },
+    ])
   })
 })

@@ -223,6 +223,12 @@ type SessionManagementStore interface {
 	UpdateSessionPinned(context.Context, string, string, bool) (storesqlite.Session, bool, error)
 }
 
+// SessionCwdStore is the optional durable mutation for mid-session workspace
+// remounts. Host remount fails closed when the backing store lacks it.
+type SessionCwdStore interface {
+	UpdateSessionCwd(context.Context, string, string, string) (storesqlite.Session, bool, error)
+}
+
 // SessionBatchManagementStore is the atomic canonical mutation boundary for
 // project/section deletion. It is separate from single-session management so
 // runtimes can advertise batch support only when the backing store implements

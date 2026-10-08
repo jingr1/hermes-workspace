@@ -192,6 +192,15 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
       const agent = agents.find((a) => a.agentId === agentId)
       if (!agent) return
 
+      // Pin highlight immediately. HermesChatShell derives its profile target
+      // from activeAgentId — activating the new profile *before* this left the
+      // previous shell mounted, which re-activated the old profile and left
+      // the sidebar highlight stuck.
+      const previousAgentId = useAgentStore.getState().activeAgentId
+      if (previousAgentId !== agent.agentId) {
+        useAgentStore.getState().setActiveAgentId(agent.agentId)
+      }
+
       if (agent.runtime === 'hermes') {
         const targetProfile = agent.runtimeConfig.profile ?? agent.agentId
         void (async () => {
@@ -225,13 +234,18 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
             // Keep localStorage-resolved session; ChatScreen can refresh later.
           }
 
+          const sessionId =
+            resolvedSession !== 'new' ? resolvedSession : null
+          useAgentStore
+            .getState()
+            .setActiveAgentId(agent.agentId, { sessionId })
+
           // Stay on the unified agent workspace (same shell as Claude Code).
           // Pass last session so the agent route does not land on a blank "new".
           navigate({
             to: '/chat/agent/$agentId',
             params: { agentId: agent.agentId },
-            search:
-              resolvedSession !== 'new' ? { session: resolvedSession } : {},
+            search: sessionId ? { session: sessionId } : {},
           })
         })()
         return
@@ -239,9 +253,8 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
 
       // Non-Hermes agent: remember current, restore target's last.
       if (activeFriendlyId && activeFriendlyId !== 'new') {
-        const currentAgentId = useAgentStore.getState().activeAgentId
-        if (currentAgentId) {
-          writeLastSession(activeFriendlyId, currentAgentId)
+        if (previousAgentId) {
+          writeLastSession(activeFriendlyId, previousAgentId)
         } else if (activeProfileName) {
           writeLastSession(activeFriendlyId, activeProfileName)
         }
@@ -266,11 +279,16 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
 
       if (resolvedSession === 'new') resolvedSession = 'new'
 
+      const sessionId =
+        resolvedSession !== 'new' ? resolvedSession : null
+      useAgentStore
+        .getState()
+        .setActiveAgentId(agent.agentId, { sessionId })
+
       navigate({
         to: '/chat/agent/$agentId',
         params: { agentId: agent.agentId },
-        search:
-          resolvedSession !== 'new' ? { session: resolvedSession } : {},
+        search: sessionId ? { session: sessionId } : {},
       })
     },
     [

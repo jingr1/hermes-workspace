@@ -7,10 +7,11 @@ import {
   startAgentStatusWatcher,
 } from './agent-status-watcher'
 import type { AgentStatusEntry } from '../lib/mission-control-api'
+import type { AgentPresence } from '../lib/agent-status'
 import {
-  deriveUnifiedStatusForAgent,
+  deriveAgentPresenceForAgent,
   loadGroupChatActivity,
-} from '../lib/agent-status'
+} from '../lib/agent-status-io'
 
 export type AgentsStatusPayload = {
   agents: Array<AgentStatusEntry>
@@ -25,11 +26,40 @@ export type AgentsHealthSummary = {
   needsHuman: number
   offline: number
   needsSetup: number
+  working: number
+  unstable: number
   degraded: boolean
 }
 
 export type AgentsSnapshotPayload = AgentsStatusPayload & {
   health: AgentsHealthSummary
+}
+
+function emptyGroupChatMap() {
+  return loadGroupChatActivity()
+}
+
+function attachPresenceFields(
+  base: Omit<
+    NonNullable<AgentStatusEntry['status']>,
+    | 'availability'
+    | 'workload'
+    | 'blocked'
+    | 'error'
+    | 'unifiedStatus'
+    | 'needsSetup'
+  >,
+  presence: AgentPresence,
+): NonNullable<AgentStatusEntry['status']> {
+  return {
+    ...base,
+    availability: presence.availability,
+    workload: presence.workload,
+    blocked: presence.blocked,
+    error: presence.error,
+    unifiedStatus: presence.unifiedStatus,
+    needsSetup: presence.needsSetup,
+  }
 }
 
 function summarizeHealth(
@@ -41,14 +71,21 @@ function summarizeHealth(
   let needsHuman = 0
   let offline = 0
   let needsSetup = 0
+  let working = 0
+  let unstable = 0
   for (const agent of agents) {
-    const unified = agent.status?.unifiedStatus
-    if (unified === 'active' || unified === 'idle') online += 1
-    if (unified === 'active') active += 1
-    if (unified === 'blocked' || unified === 'error') blocked += 1
-    if (agent.status?.needsHuman || unified === 'blocked') needsHuman += 1
-    if (unified === 'offline') offline += 1
-    if (unified === 'needsSetup' || agent.status?.needsSetup) needsSetup += 1
+    const status = agent.status
+    if (!status) continue
+    if (status.availability === 'online') online += 1
+    if (status.availability === 'unstable') unstable += 1
+    if (status.availability === 'offline') offline += 1
+    if (status.workload === 'working') working += 1
+    if (status.unifiedStatus === 'active') active += 1
+    if (status.blocked || status.error || status.unifiedStatus === 'blocked') {
+      blocked += 1
+    }
+    if (status.needsHuman || status.blocked) needsHuman += 1
+    if (status.needsSetup) needsSetup += 1
   }
   return {
     online,
@@ -57,6 +94,8 @@ function summarizeHealth(
     needsHuman,
     offline,
     needsSetup,
+    working,
+    unstable,
     degraded: blocked > 0 || needsHuman > 0,
   }
 }
@@ -65,7 +104,7 @@ export async function buildAgentsStatusPayload(): Promise<AgentsStatusPayload> {
   startAgentStatusWatcher()
   const router = getAgentRuntimeRouter()
   const agents = await router.probeAll()
-  const groupChatMap = loadGroupChatActivity()
+  const groupChatMap = emptyGroupChatMap()
 
   const hermesAgentIds = new Set([
     ...router.registry.agents
@@ -85,7 +124,7 @@ export async function buildAgentsStatusPayload(): Promise<AgentsStatusPayload> {
   const entries: Array<AgentStatusEntry> = agents.map((agent) => {
     const isHermes = hermesAgentIds.has(agent.agentId)
     const snapshot = isHermes ? (statuses.get(agent.agentId) ?? null) : null
-    const unified = deriveUnifiedStatusForAgent(
+    const presence = deriveAgentPresenceForAgent(
       agent.agentId,
       snapshot,
       Boolean(agent.available),
@@ -93,35 +132,35 @@ export async function buildAgentsStatusPayload(): Promise<AgentsStatusPayload> {
       router.registry.byId.get(agent.agentId)?.profile,
     )
     const runtime = agent.runtime as AgentStatusEntry['runtime']
-    const status: AgentStatusEntry['status'] = snapshot
-      ? {
-          agentId: snapshot.agentId,
-          runtime,
-          state: snapshot.state,
-          currentTask: snapshot.currentTask,
-          taskId: snapshot.taskId,
-          missionId: snapshot.missionId,
-          needsHuman: snapshot.needsHuman,
-          checkpointStatus: snapshot.checkpointStatus,
-          lastSummary: snapshot.lastSummary,
-          updatedAt: snapshot.updatedAt,
-          unifiedStatus: unified,
-          needsSetup: unified === 'needsSetup',
-        }
-      : {
-          agentId: agent.agentId,
-          runtime,
-          state: 'offline',
-          currentTask: null,
-          taskId: null,
-          missionId: null,
-          needsHuman: false,
-          checkpointStatus: 'none',
-          lastSummary: null,
-          updatedAt: Date.now(),
-          unifiedStatus: unified,
-          needsSetup: unified === 'needsSetup',
-        }
+    const status = attachPresenceFields(
+      snapshot
+        ? {
+            agentId: snapshot.agentId,
+            runtime,
+            state: snapshot.state,
+            currentTask: snapshot.currentTask,
+            taskId: snapshot.taskId,
+            missionId: snapshot.missionId,
+            needsHuman: snapshot.needsHuman,
+            checkpointStatus: snapshot.checkpointStatus,
+            lastSummary: snapshot.lastSummary,
+            updatedAt: snapshot.updatedAt,
+          }
+        : {
+            agentId: agent.agentId,
+            runtime,
+            state: 'offline',
+            currentTask: null,
+            taskId: null,
+            missionId: null,
+            needsHuman: false,
+            checkpointStatus: 'none',
+            lastSummary: null,
+            // 0 = never seen; do not use Date.now() (false unstable).
+            updatedAt: 0,
+          },
+      presence,
+    )
     return {
       agentId: agent.agentId,
       runtime,
@@ -141,7 +180,7 @@ export async function buildAgentsStatusPayload(): Promise<AgentsStatusPayload> {
     router.registry.orphanProfiles.map(async (profile) => {
       const probe = await probeHermesProfileGateway(profile)
       const snapshot = statuses.get(profile) ?? null
-      const unified = deriveUnifiedStatusForAgent(
+      const presence = deriveAgentPresenceForAgent(
         profile,
         snapshot,
         Boolean(probe.available),
@@ -159,13 +198,28 @@ export async function buildAgentsStatusPayload(): Promise<AgentsStatusPayload> {
             probe.detail ?? `hermes profile ${profile} (unmanaged path)`,
         },
         status: snapshot
-          ? {
-              ...snapshot,
-              runtime: 'hermes' as const,
-              unifiedStatus: unified,
-              needsSetup: unified === 'needsSetup',
-            }
-          : null,
+          ? attachPresenceFields(
+              {
+                ...snapshot,
+                runtime: 'hermes' as const,
+              },
+              presence,
+            )
+          : attachPresenceFields(
+              {
+                agentId: profile,
+                runtime: 'hermes',
+                state: 'offline',
+                currentTask: null,
+                taskId: null,
+                missionId: null,
+                needsHuman: false,
+                checkpointStatus: 'none',
+                lastSummary: null,
+                updatedAt: 0,
+              },
+              presence,
+            ),
       }
     }),
   )

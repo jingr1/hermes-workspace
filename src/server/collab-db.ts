@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS room_participants (
   mention_name TEXT,
   description TEXT,
   profile TEXT,            -- hermes profile name (runtime=hermes)
-  runtime TEXT,           -- hermes | claude-code | codex | deepseek-harness
+  runtime TEXT,           -- hermes | claude-code | codex | cursor | opencode | kimi | deepseek-harness
   is_owner INTEGER DEFAULT 0,
   online INTEGER DEFAULT 0,
   joined_at INTEGER,

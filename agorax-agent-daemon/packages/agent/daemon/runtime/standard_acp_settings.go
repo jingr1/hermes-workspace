@@ -175,20 +175,40 @@ func (a *standardACPAdapter) applySessionConfigOptions(
 	modelSet := false
 	if model := strings.TrimSpace(settings.Model); model != "" && modelConfigID != "" &&
 		(supported[modelConfigID] || (modelConfigID == "model" && modelsAPI)) {
-		modelAlreadySelected := a.sessionConfigOptionMatches(session.AgentSessionID, modelConfigID, model)
-		if !modelAlreadySelected {
-			var err error
-			if modelsAPI && modelConfigID == "model" {
-				err = a.setSessionModel(ctx, client, session, model)
+		advertised := a.sessionConfigOptionAdvertisesValue(session.AgentSessionID, modelConfigID, model)
+		if !advertised && a.config.restartForUnadvertisedModel {
+			// Catalog drift (OpenCode zen registry vs ACP ads): keep the live
+			// agent default instead of failing the whole session launch.
+			a.logStartupConfigOptionRejected(session, modelConfigID, model, fmt.Errorf("model not advertised after launch"))
+			if current := strings.TrimSpace(a.sessionCurrentModelID(session.AgentSessionID)); current != "" {
+				a.updateSessionConfigOption(session.AgentSessionID, modelConfigID, current)
+			}
+		} else {
+			modelAlreadySelected := a.sessionConfigOptionMatches(session.AgentSessionID, modelConfigID, model)
+			if !modelAlreadySelected {
+				var err error
+				if modelsAPI && modelConfigID == "model" {
+					err = a.setSessionModel(ctx, client, session, model)
+				} else {
+					err = a.setSessionConfigOption(ctx, client, session, modelConfigID, model)
+				}
+				if err != nil {
+					if a.config.restartForUnadvertisedModel {
+						a.logStartupConfigOptionRejected(session, modelConfigID, model, err)
+						if current := strings.TrimSpace(a.sessionCurrentModelID(session.AgentSessionID)); current != "" {
+							a.updateSessionConfigOption(session.AgentSessionID, modelConfigID, current)
+						}
+					} else {
+						return fmt.Errorf("agent session ACP model configuration failed: %w", err)
+					}
+				} else {
+					modelSet = modelsAPI && modelConfigID == "model"
+					a.updateSessionConfigOption(session.AgentSessionID, modelConfigID, model)
+				}
 			} else {
-				err = a.setSessionConfigOption(ctx, client, session, modelConfigID, model)
+				a.updateSessionConfigOption(session.AgentSessionID, modelConfigID, model)
 			}
-			if err != nil {
-				return fmt.Errorf("agent session ACP model configuration failed: %w", err)
-			}
-			modelSet = modelsAPI && modelConfigID == "model"
 		}
-		a.updateSessionConfigOption(session.AgentSessionID, modelConfigID, model)
 	}
 	if reasoning := strings.TrimSpace(settings.ReasoningEffort); reasoning != "" {
 		if a.config.setModelReasoningEffortMeta {
@@ -577,8 +597,9 @@ func (a *standardACPAdapter) ApplySessionSettings(
 		model := strings.TrimSpace(*patch.Model)
 		// A model the live agent advertises as a selectable option can be
 		// switched in place via set_config_option, even if it is a concrete id
-		// (e.g. Opus 4.6) rather than one of the static aliases. Only models the
-		// running agent has not advertised still require a fresh session.
+		// (e.g. Opus 4.6) rather than one of the static aliases. Models that are
+		// not advertised either restart the process (when finalizeEnv can make
+		// them available — OpenCode zen free under Copilot auth) or are skipped.
 		modelConfigID := a.effectiveModelConfigOptionID()
 		advertised := modelConfigID != "" && a.sessionConfigOptionAdvertisesValue(session.AgentSessionID, modelConfigID, model)
 		if advertised {
@@ -594,6 +615,34 @@ func (a *standardACPAdapter) ApplySessionSettings(
 					return fmt.Errorf("agent session ACP model configuration failed: %w", err)
 				}
 				a.updateSessionConfigOption(session.AgentSessionID, modelConfigID, model)
+			}
+		} else if model != "" && a.config.restartForUnadvertisedModel {
+			if err := a.admitReplacementLocked(session.AgentSessionID); err != nil {
+				return err
+			}
+			if err := a.resumeLocked(ctx, session); err != nil {
+				return fmt.Errorf("agent session ACP model restart failed: %w", err)
+			}
+			acpSession = a.getUsableSession(session.AgentSessionID)
+			if acpSession == nil || acpSession.client == nil {
+				return fmt.Errorf("agent session ACP model restart lost the live client")
+			}
+			if strings.TrimSpace(session.ProviderSessionID) == "" {
+				session.ProviderSessionID = acpSession.providerSessionID
+			}
+			// After zen restart, the requested id may still be absent from ACP
+			// ads (catalog drift). Prefer an advertised value over a hard fail.
+			if a.sessionConfigOptionAdvertisesValue(session.AgentSessionID, modelConfigID, model) {
+				if !a.sessionConfigOptionMatches(session.AgentSessionID, modelConfigID, model) {
+					if err := a.setSessionConfigOption(ctx, acpSession.client, session, modelConfigID, model); err != nil {
+						return fmt.Errorf("agent session ACP model configuration failed: %w", err)
+					}
+					a.updateSessionConfigOption(session.AgentSessionID, modelConfigID, model)
+				}
+				modelSet = true
+			} else if current := strings.TrimSpace(a.sessionCurrentModelID(session.AgentSessionID)); current != "" {
+				a.updateSessionConfigOption(session.AgentSessionID, modelConfigID, current)
+				modelSet = true
 			}
 		}
 	}

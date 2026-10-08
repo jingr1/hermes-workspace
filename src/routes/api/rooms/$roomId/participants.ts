@@ -5,41 +5,29 @@ import { getAgentRuntimeRouter } from '../../../../server/agent-runtime/router'
 import {
   addParticipant,
   getRoom,
+  healParticipantFromRegistry,
   listParticipants,
 } from '../../../../server/group-chat/room-store'
 import { GROUP_CHAT_MAX_MEMBERS } from '../../../../server/group-chat/constants'
+import {
+  coerceRoomRuntime,
+  isManagedRoomRuntime,
+} from '../../../../server/group-chat/room-runtime'
 import type { RoomRuntime } from '../../../../server/group-chat/types'
-
-const MANAGED_RUNTIMES = new Set<RoomRuntime>([
-  'claude-code',
-  'codex',
-  'deepseek-harness',
-])
 
 function resolveParticipantRuntime(
   participantId: string,
   bodyRuntime: string | undefined,
 ): RoomRuntime {
-  if (
-    bodyRuntime === 'claude-code' ||
-    bodyRuntime === 'codex' ||
-    bodyRuntime === 'deepseek-harness' ||
-    bodyRuntime === 'hermes'
-  ) {
-    return bodyRuntime
-  }
+  const fromBody = coerceRoomRuntime(bodyRuntime)
+  if (fromBody && fromBody !== 'human') return fromBody
+
   const decl = getAgentRuntimeRouter().registry.agents.find(
     (a) => a.id === participantId,
   )
-  if (
-    decl &&
-    (decl.runtime === 'claude-code' ||
-      decl.runtime === 'codex' ||
-      decl.runtime === 'deepseek-harness' ||
-      decl.runtime === 'hermes')
-  ) {
-    return decl.runtime
-  }
+  const fromDecl = coerceRoomRuntime(decl?.runtime)
+  if (fromDecl && fromDecl !== 'human') return fromDecl
+
   return 'hermes'
 }
 
@@ -57,7 +45,11 @@ export const Route = createFileRoute('/api/rooms/$roomId/participants')({
         return json({
           ok: true,
           room,
-          participants: listParticipants(params.roomId),
+          // Heal stale runtimes (e.g. cursor/kimi/opencode coerced to hermes)
+          // so roster avatars match 1:1 chat.
+          participants: listParticipants(params.roomId).map((p) =>
+            healParticipantFromRegistry(p),
+          ),
         })
       },
       POST: async ({ request, params }) => {
@@ -101,7 +93,7 @@ export const Route = createFileRoute('/api/rooms/$roomId/participants')({
           (a) => a.id === participantId,
         )
         // Managed agents never carry a Hermes profile (agent id is not a gateway).
-        const profile = MANAGED_RUNTIMES.has(runtime)
+        const profile = isManagedRoomRuntime(runtime)
           ? null
           : body.profile === null
             ? null

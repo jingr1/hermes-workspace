@@ -237,6 +237,7 @@ import { Route as ApiAgentsCodexImplConfigRouteImport } from './routes/api/agent
 import { Route as ApiAgentsClaudeCodeModelsRouteImport } from './routes/api/agents/claude-code/models'
 import { Route as ApiAgentsAgentIdSkillsRouteImport } from './routes/api/agents/$agentId/skills'
 import { Route as ApiAgentsAgentIdSessionsRouteImport } from './routes/api/agents/$agentId/sessions'
+import { Route as ApiAgentsAgentIdModelsRouteImport } from './routes/api/agents/$agentId/models'
 import { Route as ApiAgentsAgentIdMcpRouteImport } from './routes/api/agents/$agentId/mcp'
 import { Route as ApiAgentsAgentIdLocalSkillsRouteImport } from './routes/api/agents/$agentId/local-skills'
 import { Route as ApiAgentsAgentIdChatRouteImport } from './routes/api/agents/$agentId/chat'
@@ -1431,6 +1432,11 @@ const ApiAgentsAgentIdSessionsRoute =
     path: '/api/agents/$agentId/sessions',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiAgentsAgentIdModelsRoute = ApiAgentsAgentIdModelsRouteImport.update({
+  id: '/api/agents/$agentId/models',
+  path: '/api/agents/$agentId/models',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAgentsAgentIdMcpRoute = ApiAgentsAgentIdMcpRouteImport.update({
   id: '/api/agents/$agentId/mcp',
   path: '/api/agents/$agentId/mcp',
@@ -1834,6 +1840,7 @@ export interface FileRoutesByFullPath {
   '/api/agents/$agentId/chat': typeof ApiAgentsAgentIdChatRoute
   '/api/agents/$agentId/local-skills': typeof ApiAgentsAgentIdLocalSkillsRoute
   '/api/agents/$agentId/mcp': typeof ApiAgentsAgentIdMcpRouteWithChildren
+  '/api/agents/$agentId/models': typeof ApiAgentsAgentIdModelsRoute
   '/api/agents/$agentId/sessions': typeof ApiAgentsAgentIdSessionsRouteWithChildren
   '/api/agents/$agentId/skills': typeof ApiAgentsAgentIdSkillsRouteWithChildren
   '/api/agents/claude-code/models': typeof ApiAgentsClaudeCodeModelsRoute
@@ -2092,6 +2099,7 @@ export interface FileRoutesByTo {
   '/api/agents/$agentId/chat': typeof ApiAgentsAgentIdChatRoute
   '/api/agents/$agentId/local-skills': typeof ApiAgentsAgentIdLocalSkillsRoute
   '/api/agents/$agentId/mcp': typeof ApiAgentsAgentIdMcpRouteWithChildren
+  '/api/agents/$agentId/models': typeof ApiAgentsAgentIdModelsRoute
   '/api/agents/$agentId/sessions': typeof ApiAgentsAgentIdSessionsRouteWithChildren
   '/api/agents/$agentId/skills': typeof ApiAgentsAgentIdSkillsRouteWithChildren
   '/api/agents/claude-code/models': typeof ApiAgentsClaudeCodeModelsRoute
@@ -2354,6 +2362,7 @@ export interface FileRoutesById {
   '/api/agents/$agentId/chat': typeof ApiAgentsAgentIdChatRoute
   '/api/agents/$agentId/local-skills': typeof ApiAgentsAgentIdLocalSkillsRoute
   '/api/agents/$agentId/mcp': typeof ApiAgentsAgentIdMcpRouteWithChildren
+  '/api/agents/$agentId/models': typeof ApiAgentsAgentIdModelsRoute
   '/api/agents/$agentId/sessions': typeof ApiAgentsAgentIdSessionsRouteWithChildren
   '/api/agents/$agentId/skills': typeof ApiAgentsAgentIdSkillsRouteWithChildren
   '/api/agents/claude-code/models': typeof ApiAgentsClaudeCodeModelsRoute
@@ -2617,6 +2626,7 @@ export interface FileRouteTypes {
     | '/api/agents/$agentId/chat'
     | '/api/agents/$agentId/local-skills'
     | '/api/agents/$agentId/mcp'
+    | '/api/agents/$agentId/models'
     | '/api/agents/$agentId/sessions'
     | '/api/agents/$agentId/skills'
     | '/api/agents/claude-code/models'
@@ -2875,6 +2885,7 @@ export interface FileRouteTypes {
     | '/api/agents/$agentId/chat'
     | '/api/agents/$agentId/local-skills'
     | '/api/agents/$agentId/mcp'
+    | '/api/agents/$agentId/models'
     | '/api/agents/$agentId/sessions'
     | '/api/agents/$agentId/skills'
     | '/api/agents/claude-code/models'
@@ -3136,6 +3147,7 @@ export interface FileRouteTypes {
     | '/api/agents/$agentId/chat'
     | '/api/agents/$agentId/local-skills'
     | '/api/agents/$agentId/mcp'
+    | '/api/agents/$agentId/models'
     | '/api/agents/$agentId/sessions'
     | '/api/agents/$agentId/skills'
     | '/api/agents/claude-code/models'
@@ -3359,6 +3371,7 @@ export interface RootRouteChildren {
   ApiAgentsAgentIdChatRoute: typeof ApiAgentsAgentIdChatRoute
   ApiAgentsAgentIdLocalSkillsRoute: typeof ApiAgentsAgentIdLocalSkillsRoute
   ApiAgentsAgentIdMcpRoute: typeof ApiAgentsAgentIdMcpRouteWithChildren
+  ApiAgentsAgentIdModelsRoute: typeof ApiAgentsAgentIdModelsRoute
   ApiAgentsAgentIdSessionsRoute: typeof ApiAgentsAgentIdSessionsRouteWithChildren
   ApiAgentsAgentIdSkillsRoute: typeof ApiAgentsAgentIdSkillsRouteWithChildren
   ApiAgentsClaudeCodeModelsRoute: typeof ApiAgentsClaudeCodeModelsRoute
@@ -4974,6 +4987,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentsAgentIdSessionsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/agents/$agentId/models': {
+      id: '/api/agents/$agentId/models'
+      path: '/api/agents/$agentId/models'
+      fullPath: '/api/agents/$agentId/models'
+      preLoaderRoute: typeof ApiAgentsAgentIdModelsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/agents/$agentId/mcp': {
       id: '/api/agents/$agentId/mcp'
       path: '/api/agents/$agentId/mcp'
@@ -5821,6 +5841,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentsAgentIdChatRoute: ApiAgentsAgentIdChatRoute,
   ApiAgentsAgentIdLocalSkillsRoute: ApiAgentsAgentIdLocalSkillsRoute,
   ApiAgentsAgentIdMcpRoute: ApiAgentsAgentIdMcpRouteWithChildren,
+  ApiAgentsAgentIdModelsRoute: ApiAgentsAgentIdModelsRoute,
   ApiAgentsAgentIdSessionsRoute: ApiAgentsAgentIdSessionsRouteWithChildren,
   ApiAgentsAgentIdSkillsRoute: ApiAgentsAgentIdSkillsRouteWithChildren,
   ApiAgentsClaudeCodeModelsRoute: ApiAgentsClaudeCodeModelsRoute,

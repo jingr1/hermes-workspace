@@ -1,3 +1,6 @@
+'use client'
+
+import { useEffect, useMemo } from 'react'
 import { AgentIdentityAvatar } from '@/components/avatars'
 import {
   TooltipContent,
@@ -5,6 +8,13 @@ import {
   TooltipRoot,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { fetchAgents } from '@/lib/agent-api'
+import type { AgentWithStatus } from '@/lib/agent-types'
+import {
+  countAgentsByProvider,
+  normalizeAgentAvatarProvider,
+} from '@/lib/agent-avatar'
+import { useAgentStore } from '@/stores/agent-store'
 import { getInitials } from '../lib/avatar-utils'
 
 type MemberAvatarProps = {
@@ -14,12 +24,35 @@ type MemberAvatarProps = {
   status?: 'idle' | 'thinking' | 'running' | 'complete' | 'failed'
   size?: number
   className?: string
-  /** Agent runtime / provider — selects circular base art. */
+  /**
+   * Fallback only — preferred source is GET /api/agents via agent store
+   * (same path chat uses for AgentIdentityAvatar).
+   */
   runtime?: string
-  /** Hermes (and other) roster size; >1 shows two-letter initials. */
+  /** Fallback sibling count when the agent registry is not loaded yet. */
   providerSiblingCount?: number
   /** When false, skip the built-in tooltip (parent already provides one). */
   showTooltip?: boolean
+}
+
+/** Dedupe concurrent MemberAvatar mounts before the registry is warm. */
+let agentsLoadPromise: Promise<void> | null = null
+
+function ensureAgentRegistryLoaded(
+  agentsLength: number,
+  setAgents: (agents: Array<AgentWithStatus>) => void,
+) {
+  if (agentsLength > 0 || agentsLoadPromise) return
+  agentsLoadPromise = fetchAgents()
+    .then((data) => {
+      setAgents(data.agents)
+    })
+    .catch(() => {
+      /* keep prop fallbacks */
+    })
+    .finally(() => {
+      agentsLoadPromise = null
+    })
 }
 
 function AvatarFace({
@@ -29,10 +62,8 @@ function AvatarFace({
   runtime,
   providerSiblingCount,
 }: {
-  id: string
   name: string
   kind: 'human' | 'agent' | 'system'
-  status: 'idle' | 'thinking' | 'running' | 'complete' | 'failed'
   size: number
   runtime?: string
   providerSiblingCount?: number
@@ -68,22 +99,40 @@ export function MemberAvatar({
   id,
   name,
   kind,
-  status = 'idle',
   size = 32,
   className,
   runtime,
   providerSiblingCount,
   showTooltip = true,
 }: MemberAvatarProps) {
+  const agents = useAgentStore((state) => state.agents)
+  const setAgents = useAgentStore((state) => state.setAgents)
+
+  useEffect(() => {
+    if (kind !== 'agent') return
+    ensureAgentRegistryLoaded(agents.length, setAgents)
+  }, [kind, agents.length, setAgents])
+
+  // Same identity path as chat AgentList: GET /api/agents runtime + sibling count.
+  const registryAgent =
+    kind === 'agent' ? agents.find((a) => a.agentId === id) : undefined
+  const resolvedRuntime = registryAgent?.runtime ?? runtime ?? 'hermes'
+  const siblingCounts = useMemo(
+    () => (agents.length > 0 ? countAgentsByProvider(agents) : null),
+    [agents],
+  )
+  const resolvedSiblingCount =
+    siblingCounts?.get(normalizeAgentAvatarProvider(resolvedRuntime)) ??
+    providerSiblingCount ??
+    1
+
   const face = (
     <AvatarFace
-      id={id}
       name={name}
       kind={kind}
-      status={status}
       size={size}
-      runtime={runtime}
-      providerSiblingCount={providerSiblingCount}
+      runtime={resolvedRuntime}
+      providerSiblingCount={resolvedSiblingCount}
     />
   )
 

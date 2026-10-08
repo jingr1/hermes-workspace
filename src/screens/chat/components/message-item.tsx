@@ -2245,6 +2245,17 @@ function MessageItemComponent({
       return
     }
 
+    // Managed ACP often flushes the full reply in one `set` (empty → complete).
+    // Word-reveal from 0 would hide the bubble for seconds after Activity ends.
+    if (textGrew && previousLength === 0 && nextTotalWords > 0) {
+      if (revealTimerRef.current !== null) {
+        window.clearInterval(revealTimerRef.current)
+        revealTimerRef.current = null
+      }
+      setRevealedWordCount(nextTotalWords)
+      return
+    }
+
     if (revealTimerRef.current !== null) {
       return
     }

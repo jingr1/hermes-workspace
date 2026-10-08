@@ -420,6 +420,8 @@ export interface DaemonCreateAgentSessionRequest {
   clientSubmitId: string;
   content?: string | DaemonPromptContentBlock[];
   initialContent?: string | DaemonPromptContentBlock[];
+  /** UI-only text when initialContent carries injected skills / bundles. */
+  displayPrompt?: string;
   cwd?: string;
   model?: string;
   reasoningEffort?: string;
@@ -429,10 +431,12 @@ export interface DaemonCreateAgentSessionRequest {
   mcpToolAllowlist?: string[];
 }
 
-/** POST .../input request body (decode struct: clientSubmitId, content). */
+/** POST .../input request body (decode struct: clientSubmitId, content, displayPrompt). */
 export interface DaemonSendAgentSessionInputRequest {
   clientSubmitId: string;
   content: string | DaemonPromptContentBlock[];
+  /** UI-only text when content carries injected skills / bundles. */
+  displayPrompt?: string;
 }
 
 /** POST .../interactions/{requestId}/response request body. */

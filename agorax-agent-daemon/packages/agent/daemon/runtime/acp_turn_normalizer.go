@@ -14,6 +14,8 @@ type acpTurnNormalizer struct {
 	assistantMessageID        string
 	assistantContent          strings.Builder
 	assistantSegmentCompleted bool
+	assistantLiveEmitted      bool
+	assistantLiveText         string
 	thinkingMessageID         string
 	thinkingContent           strings.Builder
 	thinkingSegmentCompleted  bool
@@ -142,6 +144,8 @@ func (n *acpTurnNormalizer) AppendAssistantChunk(session Session, turnID string,
 		n.assistantMessageID = newID()
 		n.assistantContent.Reset()
 		n.assistantSegmentCompleted = false
+		n.assistantLiveEmitted = false
+		n.assistantLiveText = ""
 	}
 	liveOperation := n.mergeAssistantText(chunk)
 	if liveOperation == nil {
@@ -152,6 +156,43 @@ func (n *acpTurnNormalizer) AppendAssistantChunk(session Session, turnID string,
 	}
 	event := n.assistantSnapshotEvent(session, turnID, messageStreamStateStreaming)
 	attachTextLiveOperation(&event, liveOperation, RoleAssistant, "text")
+	n.assistantLiveEmitted = true
+	n.assistantLiveText = n.assistantContent.String()
+	return []activityshared.Event{event}
+}
+
+// FlushUnstreamedAssistantText projects the current assistant buffer as a live
+// set before Finish. Completed Finish snapshots are intentionally precommit (no
+// live stream). Kimi/Cursor often stream thought chunks, then only put the
+// answer in the prompt result (or replace a tiny early agent_message_chunk via
+// ApplyAssistantFinalText). Without this live set the reply stays invisible
+// until the durable terminal barrier — after ACTIVITY has already gone quiet.
+//
+// Re-set when the open buffer differs from the last live projection: a prior
+// chunk may be a stub, and ApplyAssistantFinalText updates the buffer without
+// emitting.
+func (n *acpTurnNormalizer) FlushUnstreamedAssistantText(session Session, turnID string) []activityshared.Event {
+	if n == nil || n.suppressAssistantOutput || n.assistantSegmentCompleted {
+		return nil
+	}
+	if n.assistantMessageID == "" || n.assistantContent.Len() == 0 {
+		return nil
+	}
+	text := n.assistantContent.String()
+	if strings.TrimSpace(text) == "" {
+		return nil
+	}
+	if n.assistantLiveEmitted && n.assistantLiveText == text {
+		return nil
+	}
+	event := n.assistantSnapshotEvent(session, turnID, messageStreamStateStreaming)
+	value, _ := json.Marshal(text)
+	attachTextLiveOperation(&event, &liveprotocol.MessageContentOperation{
+		Operation: "set",
+		Value:     value,
+	}, RoleAssistant, "text")
+	n.assistantLiveEmitted = true
+	n.assistantLiveText = text
 	return []activityshared.Event{event}
 }
 
@@ -263,6 +304,8 @@ func (n *acpTurnNormalizer) ApplyAssistantFinalText(finalText string) {
 	if n.assistantMessageID == "" || n.assistantSegmentCompleted {
 		n.assistantMessageID = newID()
 		n.assistantSegmentCompleted = false
+		n.assistantLiveEmitted = false
+		n.assistantLiveText = ""
 	}
 	n.assistantContent.Reset()
 	_, _ = n.assistantContent.WriteString(finalText)

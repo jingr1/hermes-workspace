@@ -11,14 +11,19 @@ import type { ChatMessage } from '../types'
  */
 export function AgentChatMessagePane({
   messages,
-  waitingForResponse,
+  showProcessingIndicator,
+  isStreaming = false,
+  streamingMessageId = null,
   sessionKey,
   emptyState,
   headerHeight = 48,
   activeToolCalls,
 }: {
   messages: Array<ChatMessage>
-  waitingForResponse: boolean
+  showProcessingIndicator: boolean
+  /** Turn-active: message-level live chrome / Stop, not the bottom pill. */
+  isStreaming?: boolean
+  streamingMessageId?: string | null
   sessionKey: string
   emptyState?: ReactNode
   headerHeight?: number
@@ -29,7 +34,7 @@ export function AgentChatMessagePane({
   return (
     <ChatMessageList
       messages={messages}
-      waitingForResponse={waitingForResponse}
+      showProcessingIndicator={showProcessingIndicator}
       researchCard={undefined}
       loading={false}
       empty={empty}
@@ -38,7 +43,8 @@ export function AgentChatMessagePane({
       pinGroupMinHeight={0}
       headerHeight={headerHeight}
       sessionKey={sessionKey}
-      isStreaming={waitingForResponse}
+      isStreaming={isStreaming}
+      streamingMessageId={streamingMessageId}
       activeToolCalls={activeToolCalls}
     />
   )

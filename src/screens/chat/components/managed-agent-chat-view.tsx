@@ -13,6 +13,7 @@ import { useExternalAgentSessions } from '../hooks/use-external-agent-sessions'
 import { useManagedAgentChat } from '../hooks/use-managed-agent-chat'
 import { useChatMobile } from '../hooks/use-chat-mobile'
 import { AssistantAvatarProvider } from '@/components/avatars'
+import { resolveAgentAvatarSrc } from '@/lib/agent-avatar'
 import { useQueryClient } from '@tanstack/react-query'
 import { CHAT_OPEN_SETTINGS_EVENT, CHAT_PENDING_MESSAGE_STORAGE_KEY } from '../chat-events'
 import type { AgentWithStatus } from '@/lib/agent-types'
@@ -51,12 +52,10 @@ function getBrand(agent: AgentWithStatus) {
   return chatBrandForRuntime(agent.runtime)
 }
 
-function getModelsEndpoint(agentId: string, runtime: string): string | undefined {
-  if (runtime === 'codex') return `/api/agents/${encodeURIComponent(agentId)}/models`
-  if (runtime === 'claude-code') return '/api/agents/claude-code/models'
-  // Other managed runtimes have no legacy models route yet; the composer
-  // falls back to its default endpoint and the stored model selection.
-  return undefined
+function getModelsEndpoint(agentId: string): string {
+  // Always agent-scoped. Never fall back to global Hermes /api/models —
+  // that made every managed agent look identical.
+  return `/api/agents/${encodeURIComponent(agentId)}/models`
 }
 
 /**
@@ -170,8 +169,8 @@ export function ManagedAgentChatView({
 
   const brand = useMemo(() => getBrand(agent), [agent])
   const modelsEndpoint = useMemo(
-    () => getModelsEndpoint(agent.agentId, agent.runtime),
-    [agent.agentId, agent.runtime],
+    () => getModelsEndpoint(agent.agentId),
+    [agent.agentId],
   )
 
   const composerBrand = useMemo(() => {
@@ -215,55 +214,51 @@ export function ManagedAgentChatView({
     return enabled.length > 0 ? `Capabilities: ${enabled.join(' · ')}` : 'No optional capabilities reported'
   }, [chat.composer.capabilities])
 
-  const turnMetaHint = useMemo(() => {
-    const parts: string[] = []
-    const fileChanges = chat.fileChanges as
-      | { filesChanged?: number; linesAdded?: number; linesRemoved?: number }
-      | null
-      | undefined
-    if (fileChanges && typeof fileChanges === 'object') {
-      const files = fileChanges.filesChanged
-      const added = fileChanges.linesAdded
-      const removed = fileChanges.linesRemoved
-      if (
-        typeof files === 'number' ||
-        typeof added === 'number' ||
-        typeof removed === 'number'
-      ) {
-        parts.push(
-          `Files ${typeof files === 'number' ? files : '—'} · +${typeof added === 'number' ? added : 0}/−${typeof removed === 'number' ? removed : 0}`,
-        )
-      }
-    }
+  // Always pass contextUsage (including null) so ContextIndicator skips Hermes
+  // /api/context-usage polling for managed runtimes.
+  const contextUsage = useMemo(() => {
     const usage = chat.usage as
       | { contextWindow?: { usedTokens?: number; totalTokens?: number } | null }
       | null
       | undefined
     const window = usage?.contextWindow
     if (
-      window &&
-      typeof window.usedTokens === 'number' &&
-      typeof window.totalTokens === 'number' &&
-      window.totalTokens > 0
+      !window ||
+      typeof window.usedTokens !== 'number' ||
+      typeof window.totalTokens !== 'number' ||
+      window.totalTokens <= 0
     ) {
-      parts.push(
-        `Context ${Math.round((window.usedTokens / window.totalTokens) * 100)}%`,
-      )
+      return null
     }
-    return parts.length > 0 ? parts.join(' · ') : null
-  }, [chat.fileChanges, chat.usage])
+    return {
+      usedTokens: window.usedTokens,
+      maxTokens: window.totalTokens,
+    }
+  }, [chat.usage])
+
+  const turnMetaHint = useMemo(() => {
+    const fileChanges = chat.fileChanges as
+      | { filesChanged?: number; linesAdded?: number; linesRemoved?: number }
+      | null
+      | undefined
+    if (!fileChanges || typeof fileChanges !== 'object') return null
+    const files = fileChanges.filesChanged
+    const added = fileChanges.linesAdded
+    const removed = fileChanges.linesRemoved
+    if (
+      typeof files !== 'number' &&
+      typeof added !== 'number' &&
+      typeof removed !== 'number'
+    ) {
+      return null
+    }
+    return `Files ${typeof files === 'number' ? files : '—'} · +${typeof added === 'number' ? added : 0}/−${typeof removed === 'number' ? removed : 0}`
+  }, [chat.fileChanges])
 
   return (
     <AssistantAvatarProvider
       value={{
-        src:
-          agent.runtime === 'codex'
-            ? '/agent-avatars/codex-rounded.png'
-            : agent.runtime === 'cursor'
-              ? '/agent-avatars/cursor-rounded.png'
-              : agent.runtime === 'opencode'
-                ? '/agent-avatars/opencode-rounded.png'
-                : '/agent-avatars/claude-rounded.png',
+        src: resolveAgentAvatarSrc(agent.runtime),
         alt: agent.name,
       }}
     >
@@ -299,7 +294,10 @@ export function ManagedAgentChatView({
               sessionKey: chat.activeSessionId,
               embedded: true,
               modelsEndpoint,
-              modelKeyMode: 'bare',
+              // OpenCode model ids are already `provider/model` (e.g.
+              // `opencode/exo-free`); Claude Code / Codex / Cursor need bare ids.
+              modelKeyMode:
+                agent.runtime === 'opencode' ? 'provider-prefixed' : 'bare',
               gatewayQueriesEnabled: false,
               slashRuntime,
               skillsAgentId: agent.agentId,
@@ -307,6 +305,7 @@ export function ManagedAgentChatView({
               onThinkingLevelChange: handleThinkingLevelChange,
               runtimeLabel: composerBrand.label,
               runtimeConfigHint: `${composerBrand.hint} · ${capabilityHint}`,
+              contextUsage,
             }}
             topNotices={
               <>
@@ -322,15 +321,23 @@ export function ManagedAgentChatView({
                 ) : null}
               </>
             }
+            // Tutti docks interactive prompts above the composer
+            // (composerFloatingPrompt / bottom dock), not above the transcript.
+            aboveComposer={
+              <ManagedAgentInteractionPanel
+                interactions={chat.interactions.filter(
+                  (interaction) => interaction.status === 'pending',
+                )}
+                responses={chat.interactionResponses}
+                onRespond={chat.respondToInteraction}
+              />
+            }
           >
-            <ManagedAgentInteractionPanel
-              interactions={chat.interactions}
-              responses={chat.interactionResponses}
-              onRespond={chat.respondToInteraction}
-            />
             <AgentChatMessagePane
               messages={chat.messages}
-              waitingForResponse={chat.isStreaming}
+              showProcessingIndicator={chat.showProcessingIndicator}
+              isStreaming={chat.isStreaming}
+              streamingMessageId={chat.streamingMessageId}
               activeToolCalls={chat.activeToolCalls}
               sessionKey={chat.activeSessionId}
               emptyState={

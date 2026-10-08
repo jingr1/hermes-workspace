@@ -82,7 +82,8 @@ test("create projection targets only fields the daemon decodes", () => {
     agentSessionId: "session-1",
     agentTargetId: "local:codex",
     clientSubmitId: "submit-1",
-    initialContent: [{ text: "hello", type: "text" }]
+    initialContent: [{ text: "hello", type: "text" }],
+    displayPrompt: "hello"
   });
 });
 
@@ -112,7 +113,7 @@ test("request projection rejects unsupported image MIME types", () => {
   );
 });
 
-test("send projection drops fields the daemon input decode struct lacks", () => {
+test("send projection keeps displayPrompt and drops unsupported fields", () => {
   const projected = daemonSendAgentSessionInputRequestFromActivity({
     agentSessionId: "session-1",
     capabilityRefs: [{ capability: "agorax", source: "slash_command" }],
@@ -131,7 +132,8 @@ test("send projection drops fields the daemon input decode struct lacks", () => 
     content: [
       { text: "list my calendar events", type: "text" },
       { connectorKey: "lark-cli", type: "connector" }
-    ]
+    ],
+    displayPrompt: "/lark-cli list my calendar events"
   });
 });
 

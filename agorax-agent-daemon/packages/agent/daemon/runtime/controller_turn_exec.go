@@ -230,15 +230,25 @@ func (c *Controller) runBlockingExecTurn(
 		session = accepted
 		emitted = append(emitted, events...)
 		if eventsRequireDurablePublish(events) {
-			durableEvents := events
+			liveEvents, durableEvents := partitionEventsForDurablePublish(events)
+			// Publish non-terminal facts (e.g. final assistant text) immediately
+			// so the UI is not blocked by the commit-before-publish barrier that
+			// only RootProviderTurnCompleted / turn settled events require.
+			if len(liveEvents) > 0 {
+				if !c.isProvisionalSession(session) {
+					c.publish(session, liveEvents)
+				}
+				c.enqueueSessionReport(ctx, session, liveEvents)
+				emittedSummary.observe(liveEvents, session)
+			}
 			if pendingTerminalCommit != nil {
-				pendingTerminalCommit.merge(session, events)
+				pendingTerminalCommit.merge(session, durableEvents)
 				durableEvents = pendingTerminalCommit.events
 			}
 			if err := c.reportSessionBeforePublish(ctx, session, durableEvents); err != nil {
 				if pendingTerminalCommit == nil {
 					pendingTerminalCommit = &pendingCanonicalTerminalCommit{}
-					pendingTerminalCommit.merge(session, events)
+					pendingTerminalCommit.merge(session, durableEvents)
 				}
 				slog.Error(
 					"agent session terminal activity report failed before publish",
@@ -403,7 +413,12 @@ func (c *Controller) runAsyncExecTurn(ctx context.Context, session Session, adap
 			emittedSummary.observe(events, session)
 		}
 		if eventsRequireDurablePublish(events) {
-			if err := c.reportSessionBeforePublish(ctx, session, events); err != nil {
+			liveEvents, durableEvents := partitionEventsForDurablePublish(events)
+			if len(liveEvents) > 0 {
+				c.publish(session, liveEvents)
+				c.enqueueSessionReport(ctx, session, liveEvents)
+			}
+			if err := c.reportSessionBeforePublish(ctx, session, durableEvents); err != nil {
 				slog.Error(
 					"agent session terminal activity report failed before publish",
 					"event", "agent_session.activity_report.terminal_barrier_failed",
@@ -414,11 +429,11 @@ func (c *Controller) runAsyncExecTurn(ctx context.Context, session Session, adap
 				)
 				return
 			}
+			c.publish(session, durableEvents)
+			return
 		}
 		c.publish(session, events)
-		if !eventsRequireDurablePublish(events) {
-			c.enqueueSessionReport(ctx, session, events)
-		}
+		c.enqueueSessionReport(ctx, session, events)
 	}
 	emitCommands := func(snapshot AgentSessionCommandSnapshot) {
 		mu.Lock()
@@ -559,21 +574,46 @@ func turnHasTerminalEvent(events []activityshared.Event, turnID string) bool {
 
 func eventsRequireDurablePublish(events []activityshared.Event) bool {
 	for _, event := range events {
-		switch event.Type {
-		case activityshared.EventSessionCompleted,
-			activityshared.EventSessionFailed,
-			activityshared.EventTurnCompleted,
-			activityshared.EventTurnFailed,
-			activityshared.EventTurnCanceled,
-			activityshared.EventRootProviderTurnCompleted:
-			return true
-		}
-		if snapshot, ok := activityshared.TurnLifecycleSnapshotFromEvent(event); ok &&
-			strings.TrimSpace(snapshot.Phase) == string(activityshared.TurnPhaseSettled) {
+		if eventRequiresDurablePublish(event) {
 			return true
 		}
 	}
 	return false
+}
+
+func eventRequiresDurablePublish(event activityshared.Event) bool {
+	switch event.Type {
+	case activityshared.EventSessionCompleted,
+		activityshared.EventSessionFailed,
+		activityshared.EventTurnCompleted,
+		activityshared.EventTurnFailed,
+		activityshared.EventTurnCanceled,
+		activityshared.EventRootProviderTurnCompleted:
+		return true
+	}
+	if snapshot, ok := activityshared.TurnLifecycleSnapshotFromEvent(event); ok &&
+		strings.TrimSpace(snapshot.Phase) == string(activityshared.TurnPhaseSettled) {
+		return true
+	}
+	return false
+}
+
+// partitionEventsForDurablePublish keeps assistant/tool message facts on the
+// live publish path when adapters still batch them with terminal settlement.
+func partitionEventsForDurablePublish(events []activityshared.Event) (live, durable []activityshared.Event) {
+	if len(events) == 0 {
+		return nil, nil
+	}
+	live = make([]activityshared.Event, 0, len(events))
+	durable = make([]activityshared.Event, 0, 1)
+	for _, event := range events {
+		if eventRequiresDurablePublish(event) {
+			durable = append(durable, event)
+			continue
+		}
+		live = append(live, event)
+	}
+	return live, durable
 }
 
 func turnLifecycleSnapshotSettledTurn(events []activityshared.Event, turnID string) bool {

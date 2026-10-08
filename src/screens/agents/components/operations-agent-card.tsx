@@ -30,55 +30,78 @@ import {
 } from '../hooks/use-agent-chat'
 import type { OperationsAgent } from '../hooks/use-operations'
 
-function getStatusStyles(
-  status: OperationsAgent['status'],
-  needsSetup: boolean,
-) {
-  if (needsSetup || status === 'needsSetup') {
+/**
+ * Dot = availability (+ gate overrides). Label folds workload like Multica
+ * chips ("Online · Working") so Chat and Operations stay aligned.
+ */
+function getStatusStyles(agent: OperationsAgent) {
+  if (agent.needsSetup || agent.status === 'needsSetup') {
     return {
       dot: 'bg-amber-400',
       ring: 'text-amber-400',
       label: 'Needs setup',
       border: 'border-amber-300/40',
+      pulse: false,
     }
   }
 
-  switch (status) {
-    case 'active':
-      return {
-        dot: 'bg-emerald-500',
-        ring: 'text-emerald-500',
-        label: 'Active',
-        border: 'border-emerald-300/30',
-      }
-    case 'idle':
-      return {
-        dot: 'bg-sky-400',
-        ring: 'text-sky-400',
-        label: 'Idle',
-        border: 'border-sky-300/30',
-      }
-    case 'offline':
-      return {
-        dot: 'bg-neutral-400',
-        ring: 'text-neutral-400',
-        label: 'Offline',
-        border: 'border-neutral-300/30',
-      }
-    case 'blocked':
-      return {
-        dot: 'bg-rose-500',
-        ring: 'text-rose-500',
-        label: 'Blocked',
-        border: 'border-rose-300/30',
-      }
-    case 'error':
-      return {
-        dot: 'bg-red-500',
-        ring: 'text-red-500',
-        label: 'Error',
-        border: 'border-red-300/30',
-      }
+  if (agent.availability === 'offline' || agent.status === 'offline') {
+    return {
+      dot: 'bg-neutral-400',
+      ring: 'text-neutral-400',
+      label: 'Offline',
+      border: 'border-neutral-300/30',
+      pulse: false,
+    }
+  }
+
+  if (agent.status === 'blocked' || agent.needsHuman) {
+    return {
+      dot: 'bg-rose-500',
+      ring: 'text-rose-500',
+      label: 'Blocked',
+      border: 'border-rose-300/30',
+      pulse: false,
+    }
+  }
+
+  if (agent.status === 'error') {
+    return {
+      dot: 'bg-red-500',
+      ring: 'text-red-500',
+      label: 'Error',
+      border: 'border-red-300/30',
+      pulse: false,
+    }
+  }
+
+  if (agent.availability === 'unstable') {
+    return {
+      dot: 'bg-amber-500',
+      ring: 'text-amber-500',
+      label:
+        agent.workload === 'working'
+          ? 'Unstable · Working'
+          : agent.workload === 'queued'
+            ? 'Unstable · Queued'
+            : 'Unstable',
+      border: 'border-amber-300/40',
+      pulse: agent.workload === 'working',
+    }
+  }
+
+  // online
+  return {
+    dot: 'bg-emerald-500',
+    ring: 'text-emerald-500',
+    label:
+      agent.workload === 'working'
+        ? 'Online · Working'
+        : agent.workload === 'queued'
+          ? 'Online · Queued'
+          : 'Online',
+    border: 'border-emerald-300/30',
+    pulse: agent.workload === 'working',
   }
 }
 
@@ -246,7 +269,7 @@ export function OperationsAgentCard({
 }) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-  const status = getStatusStyles(agent.status, agent.needsSetup)
+  const status = getStatusStyles(agent)
   const displayName = stripEmojiPrefix(agent.name)
   const [showCronPanel, setShowCronPanel] = useState(false)
   const [showChat, setShowChat] = useState(false)
@@ -407,9 +430,7 @@ export function OperationsAgentCard({
               <span
                 className={cn(
                   'h-2 w-2 shrink-0 rounded-full',
-                  agent.status === 'active' &&
-                    !agent.needsSetup &&
-                    'animate-pulse',
+                  status.pulse && 'animate-pulse',
                   status.dot,
                 )}
                 aria-label={status.label}

@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto'
 import { ensureCollabDb, getCollabDbPath, createCollabId } from '../collab-db'
 import { openSqliteDatabase } from '../sqlite-helper'
 import { loadAgentsRegistry } from '../agent-runtime/agents-config'
+import { coerceRoomRuntime, isManagedRoomRuntime } from './room-runtime'
 import type {
   GroupMember,
   MentionTarget,
@@ -506,18 +507,12 @@ export function healParticipantFromRegistry(
   const decl = loadAgentsRegistry().agents.find((a) => a.id === p.participantId)
   if (!decl) return p
 
-  const runtime = (
-    decl.runtime === 'claude-code' ||
-    decl.runtime === 'codex' ||
-    decl.runtime === 'deepseek-harness' ||
-    decl.runtime === 'hermes'
-      ? decl.runtime
-      : p.runtime
-  ) as RoomRuntime
-  const profile =
-    runtime === 'hermes'
-      ? (decl.profile?.trim() || p.profile || null)
-      : null
+  const fromDecl = coerceRoomRuntime(decl.runtime)
+  if (!fromDecl || fromDecl === 'human') return p
+  const runtime = fromDecl
+  const profile = isManagedRoomRuntime(runtime)
+    ? null
+    : decl.profile?.trim() || p.profile || null
 
   if (runtime === p.runtime && profile === (p.profile ?? null)) {
     return p

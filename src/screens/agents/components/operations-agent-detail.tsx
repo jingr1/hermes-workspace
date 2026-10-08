@@ -34,18 +34,21 @@ import {
   usePlatformMcpLibrary,
 } from '@/screens/mcp/hooks/use-platform-mcp'
 
-// Fetch models from the local filesystem endpoint — no gateway dependency.
-// Falls back gracefully when /api/models (gateway-backed) is unreachable.
-async function fetchModelsLocal(): Promise<{
+/** Per-agent catalog — never the global Hermes /api/models list. */
+async function fetchAgentModels(agentId: string): Promise<{
   ok?: boolean
   models?: Array<GatewayModelCatalogEntry>
+  currentModel?: string | null
 }> {
-  const response = await fetch('/api/models')
+  const response = await fetch(
+    `/api/agents/${encodeURIComponent(agentId)}/models`,
+  )
   if (!response.ok)
     throw new Error(`Failed to load models (${response.status})`)
   return (await response.json()) as {
     ok?: boolean
     models?: Array<GatewayModelCatalogEntry>
+    currentModel?: string | null
   }
 }
 
@@ -140,11 +143,9 @@ function ModelSelector({
     }
     const idMatch = models.find((m) => m.id === value)
     if (idMatch) return idMatch
-    return {
-      id: value,
-      provider: slashIndex > 0 ? value.slice(0, slashIndex) : 'model',
-      name: value.split('/').pop() ?? value,
-    }
+    // Do not fabricate a label for models outside this agent's catalog —
+    // that made unsupported defaults (e.g. Kimi) look selected.
+    return null
   })()
 
   return (
@@ -1327,29 +1328,41 @@ export function OperationsAgentDetail({
   }, [agent?.id, open])
 
   const modelsQuery = useQuery({
-    queryKey: ['operations', 'models'],
-    queryFn: fetchModelsLocal,
-    enabled: open,
+    queryKey: ['operations', 'models', agent?.id ?? ''],
+    queryFn: () => fetchAgentModels(agent!.id),
+    enabled: open && Boolean(agent?.id),
   })
 
   const models = useMemo(() => {
-    const fromApi = (modelsQuery.data?.models ?? [])
+    return (modelsQuery.data?.models ?? [])
       .map(normalizeModel)
       .filter((entry): entry is AvailableModel => Boolean(entry))
+  }, [modelsQuery.data?.models])
 
-    // Always inject the agent's current configured model as the first option
-    // so the dropdown is never empty even when /api/models-local returns nothing.
-    const currentModel = agent?.model?.trim()
-    if (currentModel && !fromApi.some((m) => m.id === currentModel)) {
-      const slashIdx = currentModel.indexOf('/')
-      fromApi.unshift({
-        id: currentModel,
-        provider: slashIdx > 0 ? currentModel.slice(0, slashIdx) : 'model',
-        name: currentModel.split('/').pop() ?? currentModel,
-      })
-    }
-    return fromApi
-  }, [modelsQuery.data?.models, agent?.model])
+  // Keep the form value on a model that actually exists for this agent.
+  useEffect(() => {
+    if (!open || !agent) return
+    if (!modelsQuery.isFetched) return
+    const catalogIds = new Set(models.map((m) => m.id))
+    const apiCurrent = modelsQuery.data?.currentModel?.trim() || ''
+    const current = model.trim()
+    if (current && catalogIds.has(current)) return
+    const preferred =
+      (apiCurrent && catalogIds.has(apiCurrent) && apiCurrent) ||
+      (agent.model?.trim() &&
+        catalogIds.has(agent.model.trim()) &&
+        agent.model.trim()) ||
+      apiCurrent ||
+      ''
+    if (preferred !== current) setModel(preferred)
+  }, [
+    agent,
+    model,
+    models,
+    modelsQuery.data?.currentModel,
+    modelsQuery.isFetched,
+    open,
+  ])
 
   if (!open || !agent) return null
 
