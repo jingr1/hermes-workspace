@@ -79,7 +79,6 @@ import { useChatMeasurements } from './hooks/use-chat-measurements'
 import { useChatHistory } from './hooks/use-chat-history'
 import { useRealtimeChatHistory } from './hooks/use-realtime-chat-history'
 import { snapshotOptimisticUserMessages } from './hooks/optimistic-message-reinject'
-import { useSmoothStreamingText } from './hooks/use-smooth-streaming-text'
 import { useStreamingMessage } from './hooks/use-streaming-message'
 import { useActiveRunCheck } from './hooks/use-active-run-check'
 import { useChatMobile } from './hooks/use-chat-mobile'
@@ -1602,10 +1601,8 @@ export function ChatScreen({
   const activeRealtimeStreamingText = isPortableMode
     ? localStreamingText
     : realtimeStreamingText
-  const smoothActiveStreamingText = useSmoothStreamingText(
-    activeRealtimeStreamingText,
-    activeIsRealtimeStreaming,
-  )
+  // Reveal / block-memo live inside Markdown (`streaming`); keep sticky only
+  // so empty tool-phase frames do not clear the last visible assistant text.
   const stickyStreamingTextRef = useRef<{ runId: string | null; text: string }>(
     {
       runId: null,
@@ -1616,13 +1613,11 @@ export function ChatScreen({
     isStreaming: activeIsRealtimeStreaming,
     runId: streamingRunId ?? null,
     rawText: activeRealtimeStreamingText,
-    smoothedText: smoothActiveStreamingText,
+    smoothedText: activeRealtimeStreamingText,
     previousState: stickyStreamingTextRef.current,
   })
   const stableActiveStreamingText = activeIsRealtimeStreaming
-    ? smoothActiveStreamingText ||
-      activeRealtimeStreamingText ||
-      stickyStreamingTextRef.current.text
+    ? activeRealtimeStreamingText || stickyStreamingTextRef.current.text
     : ''
 
   // Use realtime-merged messages for display (SSE + history)

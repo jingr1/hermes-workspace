@@ -14,6 +14,15 @@ import { ExcalidrawEmbed, ExcalidrawFromUrl } from './embeds/excalidraw-embed'
 import { MermaidEmbed } from './embeds/mermaid-embed'
 import type { Components } from 'react-markdown'
 import { normalizeMathDelimiters } from '@/lib/markdown-math'
+import {
+  hashMarkdownBlockContent,
+  splitStreamingMarkdownBlocks,
+  stabilizeStreamingMarkdownTail,
+  useStreamingVisibleText,
+  STREAMING_MARKDOWN_FRAME_MS,
+  STREAMING_MARKDOWN_MAX_CHARS_PER_SECOND,
+  STREAMING_MARKDOWN_TAIL_FLUSH_CHARS,
+} from '@/lib/streaming-markdown'
 import { cn } from '@/lib/utils'
 import 'katex/dist/katex.min.css'
 
@@ -104,6 +113,11 @@ export type MarkdownProps = {
   id?: string
   className?: string
   components?: Partial<Components>
+  /**
+   * Tutti-aligned live path: char-rate reveal + tail stabilize + blank-line
+   * blocks with memoized settled segments (only the open tail re-parses).
+   */
+  streaming?: boolean
 }
 
 function parseMarkdownIntoBlocks(markdown: string): Array<string> {
@@ -615,16 +629,48 @@ function MarkdownComponent({
   id,
   className,
   components = INITIAL_COMPONENTS,
+  streaming = false,
 }: MarkdownProps) {
   const generatedId = useId()
   const blockId = id ?? generatedId
-  const blocks = useMemo(
-    () =>
-      parseMarkdownIntoBlocks(
-        normalizeMathDelimiters(rewriteLocalMediaSources(children)),
-      ),
+
+  const preparedSource = useMemo(
+    () => normalizeMathDelimiters(rewriteLocalMediaSources(children)),
     [children],
   )
+
+  const visibleSource = useStreamingVisibleText(preparedSource, {
+    enabled: streaming,
+    frameMs: STREAMING_MARKDOWN_FRAME_MS,
+    maxCharsPerSecond: STREAMING_MARKDOWN_MAX_CHARS_PER_SECOND,
+    trailingFlushChars: STREAMING_MARKDOWN_TAIL_FLUSH_CHARS,
+  })
+
+  const stabilizedSource = useMemo(
+    () =>
+      stabilizeStreamingMarkdownTail(visibleSource, { streaming }).content,
+    [streaming, visibleSource],
+  )
+
+  const settledBlocks = useMemo(
+    () => (streaming ? null : parseMarkdownIntoBlocks(preparedSource)),
+    [preparedSource, streaming],
+  )
+
+  const streamingBlocks = useMemo(
+    () => (streaming ? splitStreamingMarkdownBlocks(stabilizedSource) : null),
+    [stabilizedSource, streaming],
+  )
+
+  const blocks = streaming
+    ? (streamingBlocks ?? []).map((block, index) => ({
+        key: `${blockId}-stream-${index}:${hashMarkdownBlockContent(block.initialKeyContent)}`,
+        content: block.content,
+      }))
+    : (settledBlocks ?? []).map((block, index) => ({
+        key: `${blockId}-block-${index}`,
+        content: block,
+      }))
 
   return (
     <div
@@ -632,11 +678,12 @@ function MarkdownComponent({
         'flex flex-col gap-2 break-words overflow-hidden',
         className,
       )}
+      data-streaming-markdown={streaming ? 'true' : undefined}
     >
-      {blocks.map((block, index) => (
+      {blocks.map((block) => (
         <MemoizedMarkdownBlock
-          key={`${blockId}-block-${index}`}
-          content={block}
+          key={block.key}
+          content={block.content}
           components={components}
         />
       ))}

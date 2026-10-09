@@ -2195,13 +2195,19 @@ function MessageItemComponent({
     }
   }, [])
 
-  // Simulate streaming is only active while words are still being revealed
+  // Simulate streaming is only active while words are still being revealed.
+  // Live remote streams skip word-reveal — Tutti-style char budget + block
+  // memo live inside Markdown (`streaming` prop) to avoid O(n²) re-parse.
   const displayWordCount = countWords(displayText)
   const revealComplete =
     revealedWordCount >= displayWordCount && displayWordCount > 0
   const effectiveIsStreaming =
     remoteStreamingActive || (_simulateStreaming && !revealComplete)
-  const assistantDisplayText = effectiveIsStreaming ? revealedText : displayText
+  const assistantDisplayText = remoteStreamingActive
+    ? displayText
+    : effectiveIsStreaming
+      ? revealedText
+      : displayText
   const assistantCorruptionWarning = useMemo(
     () => detectAssistantCorruptionWarning(role, assistantDisplayText),
     [role, assistantDisplayText],
@@ -2219,6 +2225,22 @@ function MessageItemComponent({
   )
 
   useEffect(() => {
+    // Live remote stream: Markdown owns reveal — keep word counters in sync
+    // without a second animation layer.
+    if (remoteStreamingActive) {
+      if (revealTimerRef.current !== null) {
+        window.clearInterval(revealTimerRef.current)
+        revealTimerRef.current = null
+      }
+      const nextTotalWords = countWords(displayText)
+      targetWordCountRef.current = nextTotalWords
+      previousTextRef.current = displayText
+      previousTextLengthRef.current = displayText.length
+      setRevealedWordCount(nextTotalWords)
+      setRevealedText(displayText)
+      return
+    }
+
     const nextTotalWords = countWords(displayText)
     const previousText = previousTextRef.current
     const previousLength = previousTextLengthRef.current
@@ -2297,9 +2319,11 @@ function MessageItemComponent({
       revealTimerRef.current = window.setInterval(tick, TICK_INTERVAL_MS)
       return wordCount
     })
-  }, [displayText, effectiveIsStreaming])
+  }, [displayText, effectiveIsStreaming, remoteStreamingActive])
 
   useEffect(() => {
+    if (remoteStreamingActive) return
+
     if (!effectiveIsStreaming) {
       setRevealedText((currentText) =>
         currentText === displayText ? currentText : displayText,
@@ -2312,7 +2336,12 @@ function MessageItemComponent({
     setRevealedText((currentText) =>
       currentText === nextRevealedText ? currentText : nextRevealedText,
     )
-  }, [displayText, effectiveIsStreaming, revealedWordCount])
+  }, [
+    displayText,
+    effectiveIsStreaming,
+    revealedWordCount,
+    remoteStreamingActive,
+  ])
 
   const thinking =
     remoteStreamingActive && remoteStreamingThinking !== undefined
@@ -2893,6 +2922,7 @@ function MessageItemComponent({
                   ) : parsedInlineArtifacts.cleanedText ? (
                     <MessageContent
                       markdown
+                      streaming={remoteStreamingActive}
                       className={cn(
                         'text-primary-900 bg-transparent w-full text-pretty transition-all duration-100',
                         effectiveIsStreaming && 'chat-streaming-content',

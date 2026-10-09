@@ -348,6 +348,7 @@ export function stripInternalTags(text: string): string {
     .map((part, i) => {
       if (i % 2 === 1) return part // inside code block — leave untouched
       return part
+        .replace(/<think>[\s\S]*?<\/think>/gi, '')
         .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
         .replace(/<antThinking>[\s\S]*?<\/antThinking>/gi, '')
         .replace(/<thought>[\s\S]*?<\/thought>/gi, '')
@@ -1075,15 +1076,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const streamingMap = new Map(state.streamingState)
         const prev = streamingMap.get(sessionKey) ?? createEmptyStreamingState()
 
-        // The server (send-stream) already splits inline thinking blocks out
-        // of the text stream and emits them as 'thinking' events, so chunk
-        // text here is the clean visible content. Replace when fullReplace
-        // (default), append when fullReplace is explicitly false.
+        // Server usually strips thinking into dedicated events; still run a
+        // client-side split so leaked <think>/<thinking> never prints in the
+        // reply bubble (esp. when providers inline reasoning into text deltas).
+        const rawChunk =
+          event.fullReplace === false ? prev.text + event.text : event.text
+        // Split before stripInternalTags — otherwise <think> is deleted and
+        // never reaches Activity thinking.
+        const split = splitInlineThinking(rawChunk, { streaming: true })
+        // Prefer dedicated thinking-event text; only fold in newly extracted
+        // leaked tags (avoid duplicating the same block under fullReplace).
+        const extracted = split.reasoning.trim()
+        const prevThinking = prev.thinking.trim()
+        const mergedThinking = !extracted
+          ? prev.thinking
+          : !prevThinking
+            ? extracted
+            : prevThinking.includes(extracted)
+              ? prev.thinking
+              : extracted.includes(prevThinking)
+                ? extracted
+                : `${prev.thinking}\n\n${extracted}`
         const next: StreamingState = {
           ...prev,
-          text: stripFinalTags(
-            event.fullReplace === false ? prev.text + event.text : event.text,
-          ),
+          text: stripFinalTags(split.content),
+          thinking: mergedThinking,
           runId: event.runId ?? prev.runId,
         }
 
@@ -1213,13 +1230,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
         } else if (streaming && streaming.text) {
           // Fallback: build from streaming state if no final payload.
           // Strip any <final> tags that may have accumulated in the stream buffer.
-          const cleanStreamText = stripFinalTags(streaming.text)
+          const split = splitInlineThinking(streaming.text, {
+            streaming: false,
+          })
+          const cleanStreamText = stripFinalTags(split.content)
           const content: Array<MessageContent> = []
+          const finalThinking = [streaming.thinking, split.reasoning]
+            .map((part) => part.trim())
+            .filter(Boolean)
+            .join('\n\n')
 
-          if (streaming.thinking) {
+          if (finalThinking) {
             content.push({
               type: 'thinking',
-              thinking: streaming.thinking,
+              thinking: finalThinking,
             } as ThinkingContent)
           }
 

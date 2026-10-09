@@ -48,6 +48,29 @@ describe('stripInternalTags', () => {
     )
     expect(result).toBe('hello `code`\n```\nkept <thinking>x</thinking>\n```')
   })
+
+  it('also strips short-form <think> tags outside fences', () => {
+    const result = stripInternalTags(
+      '<think>plan</think>\nvisible answer',
+    )
+    expect(result).toBe('visible answer')
+  })
+})
+
+describe('streaming chunk thinking separation', () => {
+  it('keeps leaked <think> out of the visible reply bubble text', () => {
+    const sessionKey = 'test-think-leak'
+    useChatStore.getState().clearSession(sessionKey)
+    useChatStore.getState().processEvent({
+      type: 'chunk',
+      sessionKey,
+      text: '<think>I should inspect the files</think>\nHere is the fix.',
+      fullReplace: true,
+    })
+    const streaming = useChatStore.getState().streamingState.get(sessionKey)
+    expect(streaming?.text).toBe('Here is the fix.')
+    expect(streaming?.thinking).toContain('I should inspect the files')
+  })
 })
 
 describe('splitInlineThinking', () => {
