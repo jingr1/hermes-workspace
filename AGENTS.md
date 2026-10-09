@@ -21,7 +21,7 @@
 
 **Agent 列表读路径：** UI 统一用 `GET /api/agents`（`agents.yaml` + status）。单 agent 能力用 `GET /api/agents/:id/capabilities`（**Hermes + managed**）：Hermes 读 profile FS；managed 读平台绑定 + runtime settings（如 Claude/Codex model）。`GET /api/profiles/capabilities` 仍仅 Hermes profile。声明增删改用 `/api/agent-registry`。
 
-当前版本：`2.5.0`。本地开发：`pnpm start:all`（gateway + managed-agent `:8788` + UI）或 `pnpm dev`（默认 `PORT=6734`；localhost 下 gateway pool 可 lazy-start）。
+当前版本：`2.5.0`。本地开发：`pnpm start:all`（gateway + managed-agent `:8788` + Vite UI）或 `pnpm build && pnpm start`（同栈 + 生产 UI）；仅 UI 用 `pnpm start:ui` / `pnpm dev`（默认 `PORT=6734`；localhost 下 gateway pool 可 lazy-start）。
 
 ---
 

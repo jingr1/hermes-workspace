@@ -12,7 +12,7 @@ pnpm build
 cp .env.example .env # if you have not configured it yet
 ```
 
-Set at least the same environment you use for `pnpm start`, for example:
+Set at least the same environment you use for `pnpm start:ui`, for example:
 
 ```bash
 export HERMES_API_URL=http://127.0.0.1:8642
@@ -32,7 +32,7 @@ Defaults:
 - `HOST=127.0.0.1`
 - `PORT=6734`
 - `NODE_ENV=production`
-- command: `pnpm start`
+- command: `pnpm start:ui` (UI only; gateway/daemon stay separate)
 
 Override them inline if needed:
 

@@ -1078,8 +1078,12 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
   )
 
   const cancelStreaming = useCallback(
-    (options?: { userStop?: boolean }) => {
+    (options?: { userStop?: boolean; sessionKey?: string | null }) => {
       const userStop = options?.userStop === true
+      const sessionKey =
+        options?.sessionKey?.trim() ||
+        activeSessionKeyRef.current?.trim() ||
+        null
       if (
         !userStop &&
         (lifecyclePhaseRef.current === 'accepted' ||
@@ -1092,8 +1096,37 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
         eventSourceRef.current.abort()
         eventSourceRef.current = null
       }
-      if (userStop && activeRunIdRef.current) {
-        unregisterSendStreamRun(activeRunIdRef.current)
+      if (userStop) {
+        const waitingRunId = sessionKey
+          ? (useChatStore.getState().waitingSessionMeta[sessionKey]?.runId ??
+            null)
+          : null
+        const stopRunId = activeRunIdRef.current || waitingRunId
+        // Hard-stop on the server even when this tab lost its AbortController
+        // (handoff / remount). Browser abort alone is not enough after detach.
+        if (stopRunId) {
+          void fetch(`/api/runs/${encodeURIComponent(stopRunId)}/stop`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(
+              sessionKey ? { sessionKey } : {},
+            ),
+          }).catch(() => {})
+          unregisterSendStreamRun(stopRunId)
+        } else if (sessionKey) {
+          // Fall back: stop whatever live handles remain for this session.
+          void fetch(
+            `/api/runs/${encodeURIComponent(`session:${sessionKey}`)}/stop`,
+            {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ sessionKey }),
+            },
+          ).catch(() => {})
+        }
+        if (sessionKey) {
+          useChatStore.getState().clearSessionWaiting(sessionKey)
+        }
         activeRunIdRef.current = null
       }
       finishedRef.current = userStop || lifecyclePhaseRef.current !== 'handoff'

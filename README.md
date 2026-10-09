@@ -99,9 +99,9 @@ Three paths — pick the one that matches you:
 
 | Service | Port | How it starts |
 | ------- | ---- | ------------- |
-| **Agorax UI** (Workspace) | `:6734` | `pnpm dev` / `pnpm start` / `pnpm start:all` |
-| **Hermes Agent gateway** | `:8642` (+ per-profile `:8643`…) | Manual `hermes gateway run`, or **lazy-started** by the Workspace gateway pool on localhost |
-| **Managed Agent daemon** (Claude Code / Codex / Cursor / OpenCode / Kimi) | `:8788` | `pnpm dev:managed-agent` or included in `pnpm start:all` |
+| **Agorax UI** (Workspace) | `:6734` | `pnpm dev` / `pnpm start` / `pnpm start:all` / `pnpm start:ui` |
+| **Hermes Agent gateway** | `:8642` (+ per-profile `:8643`…) | Manual `hermes gateway run`, included in `pnpm start` / `pnpm start:all`, or **lazy-started** by the Workspace gateway pool on localhost |
+| **Managed Agent daemon** (Claude Code / Codex / Cursor / OpenCode / Kimi) | `:8788` | `pnpm dev:managed-agent`, or included in `pnpm start` / `pnpm start:all` |
 | **Hermes dashboard** (optional analytics) | `:9119` | `hermes dashboard` |
 
 Prerequisite: `API_SERVER_ENABLED=true` in `~/.hermes/.env` so the gateway serves HTTP APIs.
@@ -129,12 +129,14 @@ cd ~/agorax && pnpm dev:managed-agent   # terminal 2 · :8788 (only if you use m
 cd ~/agorax && pnpm dev                 # terminal 3 · :6734
 ```
 
-Production mode (same `:6734`):
+Production mode (gateway + Managed Agent daemon + UI on `:6734`):
 
 ```bash
 pnpm install   # required after clone, pull, or switching a worktree/branch
 pnpm build && pnpm start
 ```
+
+`pnpm start` starts Hermes gateway (skips if already running), Managed Agent daemon on `:8788`, and the production UI. For UI-only (e.g. systemd/launchd workspace service), use `pnpm start:ui`. Dev equivalent of the full stack: `pnpm start:all` (Vite UI).
 
 `node_modules` is not shared across git worktrees — after updating `release/*` (or any separate checkout), run `pnpm install` there before `pnpm build`. If start fails with `Could not locate the bindings file` for `better-sqlite3`, compile it with the same Node major you use to run (`node -v`):
 

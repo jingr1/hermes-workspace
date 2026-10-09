@@ -497,6 +497,31 @@ export const Route = createFileRoute('/api/send-stream')({
         const abortController = new AbortController()
         let keepUpstreamAlive = false
         let detachedHandoff = false
+        const liveRunIds = new Set<string>()
+        // Bind a run id to this request's AbortController so POST /api/runs/:id/stop
+        // can hard-interrupt Hermes even after the browser lost its fetch handle.
+        const bindLiveSendRun = (runId: string, runSessionKey: string) => {
+          const trimmed = runId.trim()
+          if (!trimmed) return
+          liveRunIds.add(trimmed)
+          registerActiveSendRun(trimmed, {
+            sessionKey: runSessionKey,
+            abortUpstream: () => {
+              clearRunDetached(trimmed)
+              keepUpstreamAlive = false
+              detachedHandoff = false
+              if (!abortController.signal.aborted) {
+                abortController.abort()
+              }
+            },
+          })
+        }
+        const unbindLiveSendRuns = () => {
+          for (const id of liveRunIds) {
+            unregisterActiveSendRun(id)
+          }
+          liveRunIds.clear()
+        }
         // Close the browser SSE leg. When keepUpstreamAlive is true (profile
         // handoff), the upstream Hermes gateway request continues in this
         // handler until run.completed / error.
@@ -524,6 +549,9 @@ export const Route = createFileRoute('/api/send-stream')({
           ) {
             abortController.abort()
           }
+          if (!keepUpstreamAlive && !detachedHandoff) {
+            unbindLiveSendRuns()
+          }
         }
 
         function handleClientDisconnect() {
@@ -538,6 +566,9 @@ export const Route = createFileRoute('/api/send-stream')({
               markRunStatus(runSessionKey, activeId, 'handoff'),
             )
           } else if (evaluation.runIdToUnregister) {
+            // Handoff keeps handles alive for a later explicit Stop; abort path
+            // drops them in closeStream via unbindLiveSendRuns.
+            liveRunIds.delete(evaluation.runIdToUnregister)
             unregisterActiveSendRun(evaluation.runIdToUnregister)
             activeRunId = null
           }
@@ -632,10 +663,6 @@ export const Route = createFileRoute('/api/send-stream')({
                 clearTimeout(streamTimeoutTimer)
                 streamTimeoutTimer = null
               }
-              if (activeRunId && !detachedHandoff) {
-                unregisterActiveSendRun(activeRunId)
-                activeRunId = null
-              }
               if (
                 shouldAbortUpstreamOnStreamClose({
                   explicitAbort: options?.abortUpstream,
@@ -644,6 +671,10 @@ export const Route = createFileRoute('/api/send-stream')({
                 })
               ) {
                 abortController.abort()
+              }
+              if (!keepUpstreamAlive && !detachedHandoff) {
+                unbindLiveSendRuns()
+                activeRunId = null
               }
               try {
                 controller.close()
@@ -682,14 +713,8 @@ export const Route = createFileRoute('/api/send-stream')({
                 let accumulated = ''
 
                 activeRunId = runId
-                registerActiveSendRun(runId)
+                bindLiveSendRun(runId, portableSessionKey)
                 persistRunStarted(runId, portableSessionKey, portableFriendlyId)
-                unregisterTimer = setTimeout(() => {
-                  if (activeRunId) {
-                    unregisterActiveSendRun(activeRunId)
-                    activeRunId = null
-                  }
-                }, SEND_STREAM_RUN_TIMEOUT_MS)
 
                 sendEvent('started', {
                   runId,
@@ -1114,6 +1139,24 @@ export const Route = createFileRoute('/api/send-stream')({
               // useRealtimeChatHistory from creating duplicate message bubbles.
               const skipPublish = true
 
+              // Bind a Workspace run id immediately so Stop works before the
+              // gateway emits its own run_id (and after the browser remounts).
+              const workspaceRunId = crypto.randomUUID()
+              activeRunId = workspaceRunId
+              bindLiveSendRun(workspaceRunId, sessionKey)
+              persistRunStarted(
+                workspaceRunId,
+                sessionKey,
+                resolvedFriendlyId || sessionKey,
+              )
+              startedSent = true
+              sendEvent('started', {
+                runId: workspaceRunId,
+                sessionKey,
+                friendlyId: resolvedFriendlyId || sessionKey,
+              })
+              lastActivity = 'Processing your message...'
+
               // Mid-run tool polling: vanilla Hermes Agent currently does not
               // emit tool.* SSE events live (callback signature drift). Until
               // upstream fixes that, we synthesize live tool events by polling
@@ -1208,20 +1251,11 @@ export const Route = createFileRoute('/api/send-stream')({
                           ? data.run_id
                           : (activeRunId ?? undefined)
 
-                      if (runId && !activeRunId) {
-                        activeRunId = runId
-                        registerActiveSendRun(runId)
-                        persistRunStarted(
-                          runId,
-                          sessionKeyFromEvent,
-                          sessionKeyFromEvent,
-                        )
-                        unregisterTimer = setTimeout(() => {
-                          if (activeRunId) {
-                            unregisterActiveSendRun(activeRunId)
-                            activeRunId = null
-                          }
-                        }, SEND_STREAM_RUN_TIMEOUT_MS)
+                      if (runId) {
+                        // Alias gateway run ids to the same AbortController so
+                        // either Workspace or Hermes run id can Stop the turn.
+                        bindLiveSendRun(runId, sessionKeyFromEvent)
+                        if (!activeRunId) activeRunId = runId
                       }
 
                       if (!startedSent && runId) {

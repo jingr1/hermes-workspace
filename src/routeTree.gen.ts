@@ -225,6 +225,7 @@ import { Route as ApiSessionsSessionKeyStatusRouteImport } from './routes/api/se
 import { Route as ApiSessionsSessionKeyCompressRouteImport } from './routes/api/sessions/$sessionKey.compress'
 import { Route as ApiSessionsSessionKeyActiveRunRouteImport } from './routes/api/sessions/$sessionKey.active-run'
 import { Route as ApiRunsRunIdSteerRouteImport } from './routes/api/runs/$runId.steer'
+import { Route as ApiRunsRunIdStopRouteImport } from './routes/api/runs/$runId.stop'
 import { Route as ApiRoomsRoomIdPendingTurnsRouteImport } from './routes/api/rooms/$roomId/pending-turns'
 import { Route as ApiRoomsRoomIdParticipantsRouteImport } from './routes/api/rooms/$roomId/participants'
 import { Route as ApiRoomsRoomIdMessagesRouteImport } from './routes/api/rooms/$roomId/messages'
@@ -1364,6 +1365,11 @@ const ApiRunsRunIdSteerRoute = ApiRunsRunIdSteerRouteImport.update({
   path: '/api/runs/$runId/steer',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiRunsRunIdStopRoute = ApiRunsRunIdStopRouteImport.update({
+  id: '/api/runs/$runId/stop',
+  path: '/api/runs/$runId/stop',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiRoomsRoomIdPendingTurnsRoute =
   ApiRoomsRoomIdPendingTurnsRouteImport.update({
     id: '/pending-turns',
@@ -1854,6 +1860,7 @@ export interface FileRoutesByFullPath {
   '/api/rooms/$roomId/participants': typeof ApiRoomsRoomIdParticipantsRouteWithChildren
   '/api/rooms/$roomId/pending-turns': typeof ApiRoomsRoomIdPendingTurnsRouteWithChildren
   '/api/runs/$runId/steer': typeof ApiRunsRunIdSteerRoute
+  '/api/runs/$runId/stop': typeof ApiRunsRunIdStopRoute
   '/api/sessions/$sessionKey/active-run': typeof ApiSessionsSessionKeyActiveRunRoute
   '/api/sessions/$sessionKey/compress': typeof ApiSessionsSessionKeyCompressRoute
   '/api/sessions/$sessionKey/status': typeof ApiSessionsSessionKeyStatusRoute
@@ -2113,6 +2120,7 @@ export interface FileRoutesByTo {
   '/api/rooms/$roomId/participants': typeof ApiRoomsRoomIdParticipantsRouteWithChildren
   '/api/rooms/$roomId/pending-turns': typeof ApiRoomsRoomIdPendingTurnsRouteWithChildren
   '/api/runs/$runId/steer': typeof ApiRunsRunIdSteerRoute
+  '/api/runs/$runId/stop': typeof ApiRunsRunIdStopRoute
   '/api/sessions/$sessionKey/active-run': typeof ApiSessionsSessionKeyActiveRunRoute
   '/api/sessions/$sessionKey/compress': typeof ApiSessionsSessionKeyCompressRoute
   '/api/sessions/$sessionKey/status': typeof ApiSessionsSessionKeyStatusRoute
@@ -2376,6 +2384,7 @@ export interface FileRoutesById {
   '/api/rooms/$roomId/participants': typeof ApiRoomsRoomIdParticipantsRouteWithChildren
   '/api/rooms/$roomId/pending-turns': typeof ApiRoomsRoomIdPendingTurnsRouteWithChildren
   '/api/runs/$runId/steer': typeof ApiRunsRunIdSteerRoute
+  '/api/runs/$runId/stop': typeof ApiRunsRunIdStopRoute
   '/api/sessions/$sessionKey/active-run': typeof ApiSessionsSessionKeyActiveRunRoute
   '/api/sessions/$sessionKey/compress': typeof ApiSessionsSessionKeyCompressRoute
   '/api/sessions/$sessionKey/status': typeof ApiSessionsSessionKeyStatusRoute
@@ -3378,6 +3387,7 @@ export interface RootRouteChildren {
   ApiAgentsCodexImplConfigRoute: typeof ApiAgentsCodexImplConfigRoute
   ApiAgentsCodexImplModelsRoute: typeof ApiAgentsCodexImplModelsRoute
   ApiRunsRunIdSteerRoute: typeof ApiRunsRunIdSteerRoute
+  ApiRunsRunIdStopRoute: typeof ApiRunsRunIdStopRoute
   ApiMissionsMissionIdIndexRoute: typeof ApiMissionsMissionIdIndexRoute
   ApiAgentsAgentIdActivitySessionIdRoute: typeof ApiAgentsAgentIdActivitySessionIdRoute
   ApiAgentsAgentIdEngineActivateRoute: typeof ApiAgentsAgentIdEngineActivateRoute
@@ -4903,6 +4913,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiRunsRunIdSteerRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/runs/$runId/stop': {
+      id: '/api/runs/$runId/stop'
+      path: '/api/runs/$runId/stop'
+      fullPath: '/api/runs/$runId/stop'
+      preLoaderRoute: typeof ApiRunsRunIdStopRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/rooms/$roomId/pending-turns': {
       id: '/api/rooms/$roomId/pending-turns'
       path: '/pending-turns'
@@ -5848,6 +5865,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentsCodexImplConfigRoute: ApiAgentsCodexImplConfigRoute,
   ApiAgentsCodexImplModelsRoute: ApiAgentsCodexImplModelsRoute,
   ApiRunsRunIdSteerRoute: ApiRunsRunIdSteerRoute,
+  ApiRunsRunIdStopRoute: ApiRunsRunIdStopRoute,
   ApiMissionsMissionIdIndexRoute: ApiMissionsMissionIdIndexRoute,
   ApiAgentsAgentIdActivitySessionIdRoute:
     ApiAgentsAgentIdActivitySessionIdRoute,

@@ -53,7 +53,7 @@ case "$(uname -s)" in
   <key>ProgramArguments</key>
   <array>
     <string>$PNPM_BIN</string>
-    <string>start</string>
+    <string>start:ui</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict>
@@ -87,7 +87,7 @@ WorkingDirectory=$ROOT_DIR
 Environment=NODE_ENV=$NODE_ENV
 Environment=HOST=$HOST
 Environment=PORT=$PORT
-ExecStart=$PNPM_BIN start
+ExecStart=$PNPM_BIN start:ui
 Restart=always
 RestartSec=5
 

@@ -3549,15 +3549,27 @@ export function ChatScreen({
       )
     }
     activeSendRef.current = null
-    cancelStreaming({ userStop: true })
+    cancelStreaming({
+      userStop: true,
+      sessionKey:
+        forcedSessionKey ||
+        resolvedSessionKey ||
+        activeSessionKey ||
+        activeFriendlyId ||
+        null,
+    })
     clearCompletedStreaming()
     setSending(false)
     streamFinish()
   }, [
+    activeFriendlyId,
+    activeSessionKey,
     cancelStreaming,
     clearCompletedStreaming,
+    forcedSessionKey,
     isMobile,
     queryClient,
+    resolvedSessionKey,
     streamFinish,
   ])
   abortActiveStreamRef.current = handleAbortStreaming

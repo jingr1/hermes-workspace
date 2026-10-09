@@ -335,6 +335,15 @@ export async function steerRun(
   })
 }
 
+/** Interrupt a durable Hermes `/v1/runs/{id}` turn (best-effort). */
+export async function stopRun(
+  runId: string,
+): Promise<{ run_id: string; status: string }> {
+  const trimmedRunId = runId.trim()
+  if (!trimmedRunId) throw new Error('runId required')
+  return hermesPost(`/v1/runs/${encodeURIComponent(trimmedRunId)}/stop`, {})
+}
+
 // ── Conversion helpers (Claude → Chat format) ─────────────────
 
 /** Convert a HermesMessage to the ChatMessage format the frontend expects */
