@@ -20,7 +20,7 @@ function formatDate(value?: number | null): string {
 
 /**
  * Compact Swarm health strip — replaces the full Agent Bus panel.
- * Deep-links to /swarm2 for ops; keeps KPI glanceable on Agents.
+ * Deep-links to /swarm for ops; keeps KPI glanceable on Agents.
  */
 export function SwarmHealthBar({
   health,
@@ -73,7 +73,7 @@ export function SwarmHealthBar({
         ) : null}
       </div>
       <Link
-        to="/swarm2"
+        to="/swarm"
         className="inline-flex shrink-0 items-center justify-center rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg)] px-3 py-1.5 text-xs font-medium text-[var(--theme-text)] transition-colors hover:border-[var(--theme-accent)] hover:bg-[var(--theme-accent-soft)]"
       >
         Open Swarm

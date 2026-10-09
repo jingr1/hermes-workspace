@@ -140,6 +140,7 @@ if [[ -n "$existing" ]]; then
   fi
 fi
 
+export AGORAX_MANAGED_AGENT_HOST="$HOST"
 export AGORAX_MANAGED_AGENT_PORT="$PORT"
 export AGORAX_AGENT_DB_PATH="$DB_PATH"
 

@@ -20,7 +20,7 @@
 # the workspace service so local source is compiled instead of pulled.
 
 services:
-  hermes-workspace:
+  agorax:
     build:
       context: .
       dockerfile: ./Dockerfile

@@ -748,8 +748,8 @@ function CapabilitiesTab({
             {inlineError.includes('503') ||
             inlineError.includes('unavailable') ? (
               <p className="mt-1 text-xs opacity-75">
-                This action requires the Hermes Dashboard to be connected (port
-                9119).
+                Check that the agent profile is available and the local
+                workspace control plane is running.
               </p>
             ) : null}
           </div>

@@ -351,29 +351,26 @@ async function parseJsonObject(
 }
 
 /**
- * `/api/model/info` and `/api/config` live on the dashboard (:9119), not the
- * gateway runtime. In zero-fork mode `dashboard.available` is often false
- * (local control plane skips probing) even while the dashboard is up — so
- * always try dashboardFetch first, then fall back to CLAUDE_API.
+ * Prefer gateway / local config. Dashboard :9119 is optional and only tried
+ * when `shouldUseDashboard()` is true.
  */
 async function fetchGatewayJson(
   path: string,
 ): Promise<Record<string, unknown> | null> {
   try {
-    try {
-      const dashboardPayload = await parseJsonObject(
-        await dashboardFetch(path, {
-          signal: AbortSignal.timeout(2500),
-        }),
-      )
-      if (dashboardPayload) return dashboardPayload
-    } catch {
-      /* fall through to gateway */
-    }
-
-    return await parseJsonObject(
+    const gatewayPayload = await parseJsonObject(
       await fetch(`${CLAUDE_API}${path}`, {
         headers: authHeaders(),
+        signal: AbortSignal.timeout(2500),
+      }),
+    )
+    if (gatewayPayload) return gatewayPayload
+
+    const { shouldUseDashboard } = await import('./gateway-capabilities')
+    if (!shouldUseDashboard()) return null
+
+    return await parseJsonObject(
+      await dashboardFetch(path, {
         signal: AbortSignal.timeout(2500),
       }),
     )

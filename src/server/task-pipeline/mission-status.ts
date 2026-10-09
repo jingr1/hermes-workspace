@@ -5,18 +5,14 @@
  * Optional `boardLane` is only a human pin; effective status = boardLane ?? state.
  */
 import type { SwarmMissionAssignment } from '../swarm-missions'
+import {
+  MISSION_STATUSES,
+  type MissionStatus,
+  isMissionStatus,
+} from '../schema'
 
-export const MISSION_STATUSES = [
-  'todo',
-  'ready',
-  'running',
-  'review',
-  'blocked',
-  'done',
-  'cancelled',
-] as const
-
-export type MissionStatus = (typeof MISSION_STATUSES)[number]
+export type { MissionStatus }
+export { MISSION_STATUSES, isMissionStatus }
 
 /** @deprecated Use MissionStatus — same set (Multica: column = status). */
 export type KanbanLane = MissionStatus
@@ -36,13 +32,6 @@ const LEGACY_STATUS_MAP: Record<string, MissionStatus> = {
   blocked: 'blocked',
   done: 'done',
   cancelled: 'cancelled',
-}
-
-export function isMissionStatus(value: unknown): value is MissionStatus {
-  return (
-    typeof value === 'string' &&
-    (MISSION_STATUSES as readonly string[]).includes(value)
-  )
 }
 
 /** Normalize persisted / API / legacy swarm states into MissionStatus. */

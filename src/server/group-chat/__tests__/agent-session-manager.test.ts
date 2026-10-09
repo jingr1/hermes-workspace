@@ -19,13 +19,20 @@ function makeMockClient(profile: string) {
     string,
     { model?: string | null; has_model_config?: boolean }
   >()
+  const deletedIds = new Set<string>()
+  let createCounter = 0
   return {
     baseUrl: `http://127.0.0.1:8643`,
     profileName: profile,
     defaultModel: profile === 'architect' ? 'Kimi-K2.7-Code' : null,
     defaultProvider: profile === 'architect' ? 'tokenx' : null,
     createSession: vi.fn(async ({ title }: { title: string }) => {
-      const id = `${profile}:${title}`
+      let id = `${profile}:${title}`
+      // Real gateways assign fresh ids; simulate that by never reusing a
+      // previously-deleted deterministic id so retirement tests see a new id.
+      if (deletedIds.has(id)) {
+        id = `${profile}:${title}:${++createCounter}`
+      }
       backend.set(id, true)
       sessions.set(id, { model: null, has_model_config: false })
       return { id, model: null, has_model_config: false }
@@ -45,6 +52,7 @@ function makeMockClient(profile: string) {
     deleteSession: vi.fn(async (sessionId: string) => {
       backend.delete(sessionId)
       sessions.delete(sessionId)
+      deletedIds.add(sessionId)
     }),
     /** Test helper: mark a session as model-poisoned. */
     __poison(sessionId: string, model = 'Kimi-K2.7-Code') {

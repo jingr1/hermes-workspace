@@ -11,10 +11,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 let tempRoot: string
 let dbPath: string
 
+let prevHermesHome: string | undefined
+let prevCollabDb: string | undefined
+
 async function loadModules() {
   vi.resetModules()
   tempRoot = mkdtempSync(join(tmpdir(), 'reconcile-test-'))
   dbPath = join(tempRoot, 'collab.db')
+  prevHermesHome = process.env.HERMES_HOME
+  prevCollabDb = process.env.HERMES_COLLAB_DB
+  // pid-registry + collab writers must land under /tmp, not ~/.hermes
+  // (sandbox / live gateway make that tree read-only).
+  process.env.HERMES_HOME = tempRoot
+  process.env.HERMES_COLLAB_DB = dbPath
   vi.doMock('../collab-db', async () => {
     const actual = await vi.importActual('../collab-db')
     return { ...actual, getCollabDbPath: () => dbPath }
@@ -25,6 +34,7 @@ async function loadModules() {
   })
   vi.doMock('../../server/swarm-environment', () => ({
     SWARM_CANONICAL_REPO: tempRoot,
+    SWARM_MISSIONS_PATH: join(tempRoot, '.runtime', 'swarm-missions.json'),
     SWARM_MEMORY_HANDOFFS: join(tempRoot, 'memory'),
     SWARM_LEGACY_OUTPUT_ROOT: join(tempRoot, 'output'),
   }))
@@ -42,6 +52,10 @@ afterEach(() => {
   vi.doUnmock('../collab-db')
   vi.doUnmock('../../server/collab-db')
   vi.doUnmock('../../server/swarm-environment')
+  if (prevHermesHome === undefined) delete process.env.HERMES_HOME
+  else process.env.HERMES_HOME = prevHermesHome
+  if (prevCollabDb === undefined) delete process.env.HERMES_COLLAB_DB
+  else process.env.HERMES_COLLAB_DB = prevCollabDb
   try {
     rmSync(tempRoot, { recursive: true, force: true })
   } catch {

@@ -89,6 +89,34 @@ services:
     ports:
       - '127.0.0.1:8642:8642'
 
+  # The managed-agent daemon hosts Claude Code / Codex / Cursor / OpenCode / Kimi
+  # runtimes for the workspace. It shares the same volumes so provider sessions
+  # and workspace files are in the same filesystem namespace.
+  agorax-managed-agent:
+    image: ghcr.io/outsourc-e/agorax:latest
+    restart: unless-stopped
+    command: ['/usr/local/bin/agorax-agentd']
+    env_file:
+      - .env
+    environment:
+      HERMES_HOME: /home/workspace/.hermes
+      AGORAX_DIR: /workspace
+      AGORAX_WORKSPACE_ID: ${AGORAX_WORKSPACE_ID:-default}
+      # Bind on all interfaces so the agorax container can reach us on the
+      # docker network. The workspace talks to http://agorax-managed-agent:8788.
+      AGORAX_MANAGED_AGENT_HOST: 0.0.0.0
+      AGORAX_MANAGED_AGENT_PORT: '8788'
+      AGORAX_AGENT_DB_PATH: /home/workspace/.hermes/.agorax/agent.db
+    volumes:
+      - hermes-agent-data:/home/workspace/.hermes
+      - hermes-workspace-files:/workspace
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://127.0.0.1:8788/health >/dev/null || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   # The Agorax Web UI
   # Connects to hermes-agent at http://hermes-agent:8642
   agorax:
@@ -97,14 +125,17 @@ services:
     depends_on:
       hermes-agent:
         condition: service_healthy
+      agorax-managed-agent:
+        condition: service_healthy
     env_file:
       - .env
     environment:
       HERMES_HOME: /home/workspace/.hermes
       AGORAX_DIR: /workspace
-      # Internal Docker network URL (not localhost!)
+      # Internal Docker network URLs (not localhost!)
       HERMES_API_URL: http://hermes-agent:8642
       HERMES_DASHBOARD_URL: http://hermes-agent:9119
+      AGORAX_MANAGED_AGENT_URL: http://agorax-managed-agent:8788
       # Must match API_SERVER_KEY on the hermes-agent side when that is set
       HERMES_API_TOKEN: ${API_SERVER_KEY:-}
       # Workspace session password. REQUIRED when HOST is non-loopback (the

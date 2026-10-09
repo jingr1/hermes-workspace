@@ -434,6 +434,7 @@ export async function fetchDashboardToken(options?: {
 }): Promise<string> {
   const force = options?.force === true
 
+  if (!shouldUseDashboard()) return ''
   if (!force && dashboardTokenCache) return dashboardTokenCache
   if (!force && dashboardTokenPromise) return dashboardTokenPromise
 
@@ -498,6 +499,9 @@ export async function dashboardFetch(
   path: string,
   init: RequestInit = {},
 ): Promise<Response> {
+  if (!shouldUseDashboard()) {
+    return dashboardUnavailableResponse(path)
+  }
   const requestPath = withDashboardBase(path)
   const method = (init.method || 'GET').toUpperCase()
   const doFetch = async (forceToken = false) => {
@@ -562,7 +566,7 @@ export async function gatewayFetch(
  * When true, sessions/skills/config/jobs capabilities are satisfied locally
  * without requiring dashboard :9119 or even a running gateway.
  */
-function hasLocalControlPlane(): boolean {
+export function hasLocalControlPlane(): boolean {
   try {
     const home =
       process.env.HERMES_HOME ||
@@ -586,6 +590,35 @@ function hasLocalControlPlane(): boolean {
   } catch {
     return false
   }
+}
+
+/**
+ * Whether hot paths should attempt Hermes Dashboard (:9119).
+ * Local Agorax (profile FS control plane) never depends on it unless
+ * `HERMES_USE_DASHBOARD=1` is set for rare remote/debug cases.
+ */
+export function shouldUseDashboard(): boolean {
+  if (process.env.HERMES_USE_DASHBOARD === '1') return true
+  if (hasLocalControlPlane()) return false
+  if (Date.now() < dashboardNegativeUntil) return false
+  if (capabilities.probed && !capabilities.dashboard.available) return false
+  return true
+}
+
+function dashboardUnavailableResponse(path: string): Response {
+  return new Response(
+    JSON.stringify({
+      error: 'dashboard unavailable',
+      path,
+      reason: hasLocalControlPlane()
+        ? 'local-control-plane'
+        : 'dashboard-unreachable',
+    }),
+    {
+      status: 503,
+      headers: { 'Content-Type': 'application/json' },
+    },
+  )
 }
 
 // ── Probing ───────────────────────────────────────────────────────

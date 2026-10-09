@@ -121,7 +121,7 @@ function spawnGateway(profileName: string, port: number): ChildProcess {
 }
 ```
 
-**Note**: The gateway must be spawned via `hermes gateway`, not via the workspace's internal gateway.ts. The workspace becomes an orchestrator, not a gateway host.
+**Note**: The gateway must be spawned via `hermes gateway` (or the workspace gateway pool). The workspace is an orchestrator, not a gateway host.
 
 ### 4.4 Health Monitor
 

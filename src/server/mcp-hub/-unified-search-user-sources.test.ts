@@ -15,15 +15,19 @@ vi.mock('./sources/generic-json', () => ({
 vi.mock('../mcp-hub-sources-store', () => ({
   readHubSources: vi.fn(),
 }))
-vi.mock('../hermes-dashboard-api', () => ({
-  getConfig: vi.fn(),
+vi.mock('../mcp-profile-config', () => ({
+  listProfileMcpServers: vi.fn(),
+}))
+vi.mock('../profiles-browser', () => ({
+  getActiveProfileName: vi.fn(() => 'default'),
 }))
 
 import { fetchLocalFile } from './sources/local-file'
 import { fetchMcpGet } from './sources/mcp-get'
 import { fetchGenericJson } from './sources/generic-json'
 import { readHubSources } from '../mcp-hub-sources-store'
-import { getConfig } from '../hermes-dashboard-api'
+import { listProfileMcpServers } from '../mcp-profile-config'
+import { getActiveProfileName } from '../profiles-browser'
 import { unifiedSearch } from './index'
 import type { HubMcpEntry } from './types'
 
@@ -31,7 +35,8 @@ const mockFetchLocalFile = vi.mocked(fetchLocalFile)
 const mockFetchMcpGet = vi.mocked(fetchMcpGet)
 const mockFetchGenericJson = vi.mocked(fetchGenericJson)
 const mockReadHubSources = vi.mocked(readHubSources)
-const mockGetConfig = vi.mocked(getConfig)
+const mockListProfileMcpServers = vi.mocked(listProfileMcpServers)
+const mockGetActiveProfileName = vi.mocked(getActiveProfileName)
 
 function makeEntry(
   name: string,
@@ -81,7 +86,8 @@ const BUILTIN_SOURCES_RESULT = {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockGetConfig.mockResolvedValue({})
+  mockGetActiveProfileName.mockReturnValue('default')
+  mockListProfileMcpServers.mockReturnValue([])
   mockFetchMcpGet.mockResolvedValue({ entries: [] })
   mockFetchLocalFile.mockResolvedValue({ entries: [] })
   mockReadHubSources.mockResolvedValue(BUILTIN_SOURCES_RESULT as never)

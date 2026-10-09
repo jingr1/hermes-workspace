@@ -113,11 +113,15 @@ func run() error {
 }
 
 func listenAddress() string {
+	host := os.Getenv("AGORAX_MANAGED_AGENT_HOST")
+	if host == "" {
+		host = "127.0.0.1"
+	}
 	port := defaultPort
 	if value, err := strconv.Atoi(os.Getenv("AGORAX_MANAGED_AGENT_PORT")); err == nil && value > 0 && value < 65536 {
 		port = value
 	}
-	return fmt.Sprintf("127.0.0.1:%d", port)
+	return fmt.Sprintf("%s:%d", host, port)
 }
 
 func agentDBPath() string {

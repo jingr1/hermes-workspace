@@ -10,7 +10,13 @@ import {
   ensureGatewayProbed,
   getCapabilities,
   getGatewayMode,
+  shouldUseDashboard,
 } from '../../../server/gateway-capabilities'
+import {
+  getActiveProfileName,
+  readModelProviderFromConfig,
+  readProfile,
+} from '../../../server/profiles-browser'
 
 export const Route = createFileRoute('/api/model/info')({
   server: {
@@ -24,13 +30,35 @@ export const Route = createFileRoute('/api/model/info')({
         const gatewayMode = getGatewayMode()
 
         let rawPayload: unknown = null
-        try {
-          const response = await dashboardFetch('/api/model/info')
-          if (response.ok) {
-            rawPayload = await response.json()
+        if (shouldUseDashboard()) {
+          try {
+            const response = await dashboardFetch('/api/model/info')
+            if (response.ok) {
+              rawPayload = await response.json()
+            }
+          } catch {
+            rawPayload = null
           }
-        } catch {
-          rawPayload = null
+        }
+
+        if (!rawPayload) {
+          try {
+            const profile = readProfile(getActiveProfileName() || 'default')
+            const { model, provider } = readModelProviderFromConfig(
+              profile.config,
+            )
+            if (model) {
+              rawPayload = {
+                model,
+                provider: provider || 'unknown',
+                mode: 'enhanced',
+                supports_runtime_switching: true,
+                vanilla_agent: false,
+              }
+            }
+          } catch {
+            rawPayload = null
+          }
         }
 
         const normalized = normalizeModelInfoResponse(rawPayload)

@@ -1,15 +1,17 @@
 /**
- * Client for the Hermes dashboard analytics endpoint.
+ * Hermes usage client.
  *
- * The dashboard sits on its own port (:9119 by default) and exposes
- * `/api/analytics/usage` with per-day rollups and `by_model`/`by_task`
- * summaries. We use `dashboardFetch` so authentication is handled
- * consistently with the rest of the workspace.
+ * Prefer local profile `state.db` (no Dashboard :9119). Optionally fall back
+ * to the dashboard analytics endpoint when `HERMES_USE_DASHBOARD=1`.
  *
- * Only Hermes-runtime agents are reported by the dashboard; non-Hermes
- * runtimes (Claude Code / Codex) are sourced separately via session scanners.
+ * Non-Hermes runtimes (Claude Code / Codex) are sourced separately via
+ * session scanners.
  */
-import { dashboardFetch } from '../gateway-capabilities'
+import {
+  dashboardFetch,
+  shouldUseDashboard,
+} from '../gateway-capabilities'
+import { scanHermesSessions } from './hermes-session-scanner'
 
 const REQUEST_TIMEOUT_MS = 8_000
 
@@ -162,8 +164,19 @@ function dedupeModels(records: GatewayUsageRecord[]): GatewayUsageRecord[] {
 export async function fetchGatewayAnalytics(
   days: number,
 ): Promise<GatewayAnalyticsResponse> {
+  const windowDays = Math.max(1, days)
+  const sinceMs = Date.now() - windowDays * 24 * 60 * 60 * 1000
+  const localRecords = dedupeModels(scanHermesSessions(sinceMs))
+  if (localRecords.length > 0 || !shouldUseDashboard()) {
+    return {
+      ok: true,
+      days: windowDays,
+      records: localRecords,
+    }
+  }
+
   const res = await dashboardFetch(
-    `/api/analytics/usage?days=${encodeURIComponent(String(days))}`,
+    `/api/analytics/usage?days=${encodeURIComponent(String(windowDays))}`,
     {
       headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -175,8 +188,8 @@ export async function fetchGatewayAnalytics(
     return {
       ok: false,
       error: `HTTP ${res.status}: ${text || res.statusText}`,
-      days,
-      records: [],
+      days: windowDays,
+      records: localRecords,
     }
   }
 
@@ -186,8 +199,8 @@ export async function fetchGatewayAnalytics(
 
   return {
     ok: true,
-    days,
-    records,
+    days: windowDays,
+    records: records.length > 0 ? records : localRecords,
     totals,
   }
 }

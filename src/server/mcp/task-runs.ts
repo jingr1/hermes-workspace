@@ -3,23 +3,14 @@ import { openSqliteDatabase } from '../sqlite-helper'
 import { getSwarmMission } from '../swarm-missions'
 import { existsSync } from 'node:fs'
 import type { SwarmMissionAssignment } from '../swarm-missions'
+import {
+  TASK_RUN_STATUSES,
+  type TaskRunStatus,
+  isTaskRunStatus,
+} from '../schema'
 
-export type TaskRunStatus =
-  | 'running'
-  | 'done'
-  | 'blocked'
-  | 'needs_input'
-  | 'failed'
-  | 'cancelled'
-
-export const TASK_RUN_STATUSES: ReadonlyArray<TaskRunStatus> = [
-  'running',
-  'done',
-  'blocked',
-  'needs_input',
-  'failed',
-  'cancelled',
-]
+export type { TaskRunStatus }
+export { TASK_RUN_STATUSES, isTaskRunStatus }
 
 export type TaskRun = {
   id: string
@@ -146,7 +137,7 @@ export function completeTaskRun(input: {
   filesChanged?: string | null
   dbPath?: string
 }): boolean {
-  if (!TASK_RUN_STATUSES.includes(input.status)) {
+  if (!isTaskRunStatus(input.status)) {
     throw new Error(`Invalid TaskRunStatus: ${input.status}`)
   }
   const dbPath = input.dbPath ?? getCollabDbPath()

@@ -566,14 +566,23 @@ Using **Ollama, LM Studio, or another local server**? No key needed — just poi
 docker compose up
 ```
 
-This pulls two pre-built images and starts them:
+This pulls pre-built images and starts three services:
 
 - **hermes-agent** → `nousresearch/hermes-agent:latest` on port **8642**
 - **agorax** → `ghcr.io/outsourc-e/agorax:latest` on port **6734**
+- **agorax-managed-agent** → same Agorax image, internal port **8788**
 
 No local build. First run takes a minute to pull; subsequent starts are instant.
 Agent state (config, sessions, skills, memory, credentials) persists in the
-`hermes-agent-data` Docker volume, so containers can be recreated without data loss.
+`hermes-agent-data` Docker volume, and the managed-agent DB lives alongside it
+at `/home/workspace/.hermes/.agorax/agent.db`, so containers can be recreated
+without data loss.
+
+> **Managed runtimes (Claude Code / Codex / …):** the daemon service is included,
+> but the actual provider CLIs are not bundled in the base image. To use them in
+> Docker, install the CLI inside a custom image (e.g. `npm install -g
+> @anthropic-ai/claude-code @openai/codex`) or run them on the host and point
+> the workspace at the host daemon with `AGORAX_MANAGED_AGENT_URL`.
 
 ### Step 3: Access the Workspace
 
@@ -627,9 +636,10 @@ docker compose down && docker compose up -d
 | ---------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | `[workspace] refusing to start — HERMES_PASSWORD is unset`                   | Add `HERMES_PASSWORD=<secret>` to `.env`                           |
 | Login silently fails (no error, page reloads)                                | Add `COOKIE_SECURE=0` for HTTP, or `COOKIE_SECURE=1` + HTTPS       |
-| `[Api_Server] Refusing to start: binding to 0.0.0.0 requires API_SERVER_KEY` | Add `API_SERVER_KEY=*** to `.env`                                  |
+| `[Api_Server] Refusing to start: binding to 0.0.0.0 requires API_SERVER_KEY` | Add `API_SERVER_KEY=***` to `.env`                                 |
 | `No user allowlists configured. All unauthorized users will be denied.`      | Add `GATEWAY_ALLOW_ALL_USERS=true` to `.env`                       |
-| `CLAUDE_DASHBOARD_TOKEN is not set` warning                                  | Set `CLAUDE_DASHBOARD_TOKEN` to the same value as `API_SERVER_KEY` |
+| `HERMES_DASHBOARD_TOKEN is not set` warning                                  | Set `HERMES_DASHBOARD_TOKEN` to the same value as `API_SERVER_KEY` |
+| Managed agents show "daemon unreachable"                                     | Check `docker compose logs agorax-managed-agent`; verify `AGORAX_MANAGED_AGENT_URL=http://agorax-managed-agent:8788` inside the `agorax` container |
 | 500 Internal Server Error on login after setting all the above               | Clear browser cookies for the workspace domain, then retry         |
 
 ### Building from source
@@ -643,10 +653,30 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 
 The base `docker-compose.yml` stays untouched — the overlay adds a `build:`
 block for the `agorax` service so the local repo is compiled
-instead of pulled. The Hermes Agent service still uses the canonical
-`nousresearch/hermes-agent:latest` image; if you need a custom agent
-build, tag it locally and override `image:` in your own
-`compose.override.yml`.
+instead of pulled. The overlay also builds the `agorax-managed-agent`
+Go daemon from `agorax-agent-daemon/` into the same image. The Hermes
+Agent service still uses the canonical `nousresearch/hermes-agent:latest`
+image; if you need a custom agent build, tag it locally and override
+`image:` in your own `compose.override.yml`.
+
+### Build the image manually
+
+If you only need the workspace image (for example, to push to a private
+registry or test a CI change):
+
+```bash
+docker build -t agorax .
+```
+
+The Dockerfile is multi-stage: it compiles the `agorax-managed-agent` Go
+daemon, installs Node dependencies, runs `pnpm build`, and copies only
+the runtime artefacts into the final `node:22-slim` image. To build for a
+managed-agent-only change without rebuilding the entire UI, target the
+`daemon-build` stage:
+
+```bash
+docker build --target daemon-build -t agorax-daemon .
+```
 
 ### Using a Pre-Built Image (Coolify / Easypanel / Dokploy / Unraid)
 
@@ -674,11 +704,15 @@ port: 6734
 env:
   HERMES_API_URL: http://hermes-agent:8642 # point at your gateway
   HERMES_API_TOKEN: ${API_SERVER_KEY} # if gateway auth is enabled
+  AGORAX_MANAGED_AGENT_URL: http://agorax-managed-agent:8788 # managed runtimes (Claude Code / Codex / …)
 ```
 
 The image is built for `linux/amd64` and `linux/arm64`. Pair it with either
 a `nousresearch/hermes-agent:latest` container (what our `docker-compose.yml`
-does by default) or an existing gateway on another host.
+does by default) or an existing gateway on another host. If you use managed
+runtimes, deploy the same Agorax image a second time as the managed-agent
+daemon with command `['/usr/local/bin/agorax-agentd']` and the same
+`/home/workspace/.hermes` and `/workspace` volumes.
 
 ---
 

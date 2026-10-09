@@ -30,7 +30,6 @@ describe('provider catalog', () => {
       '.hermes',
       'workspace',
     )
-    delete process.env.HERMES_HOME
   })
 
   afterEach(() => {
@@ -331,6 +330,7 @@ describe('provider catalog', () => {
       expect(credential).toEqual({
         baseUrl: 'https://api.deepseek.com/v1',
         apiKey: 'ds-secret',
+        keyEnv: 'DEEPSEEK_API_KEY',
       })
     })
 
@@ -340,6 +340,7 @@ describe('provider catalog', () => {
       expect(credential).toEqual({
         baseUrl: 'https://api.deepseek.com/v1',
         apiKey: '',
+        keyEnv: 'DEEPSEEK_API_KEY',
       })
     })
 

@@ -23,14 +23,16 @@ async function loadModule() {
   hasSessionShouldFail = false
   tempRoot = mkdtempSync(join(tmpdir(), 'swarm-notifications-test-'))
   const publishChatEvent = vi.fn()
+  const mockExecFileSync = (cmd: string, args: ReadonlyArray<string>) => {
+    execFileSyncCalls.push({ cmd, args: [...args] })
+    if (args[0] === 'has-session' && hasSessionShouldFail) {
+      throw new Error('no session')
+    }
+    return Buffer.alloc(0)
+  }
   vi.doMock('node:child_process', () => ({
-    execFileSync: (cmd: string, args: ReadonlyArray<string>) => {
-      execFileSyncCalls.push({ cmd, args: [...args] })
-      if (args[0] === 'has-session' && hasSessionShouldFail) {
-        throw new Error('no session')
-      }
-      return Buffer.alloc(0)
-    },
+    default: { execFileSync: mockExecFileSync },
+    execFileSync: mockExecFileSync,
   }))
   vi.doMock('./swarm-foundation', () => ({
     getSwarmProfilePath: (workerId: string) => join(tempRoot, workerId),

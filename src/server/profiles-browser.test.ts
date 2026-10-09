@@ -243,13 +243,13 @@ describe('getMessagesForProfile', () => {
   it('reads messages from a named profile state.db without a gateway', () => {
     const profileRoot = path.join(tempHome, '.hermes', 'profiles', 'writer')
     fs.mkdirSync(profileRoot, { recursive: true })
-    const { DatabaseSync } = nodeRequire('node:sqlite') as {
-      DatabaseSync: new (path: string) => {
-        exec: (sql: string) => void
-        close: () => void
-      }
+    const Database = nodeRequire('better-sqlite3') as new (
+      path: string,
+    ) => {
+      exec: (sql: string) => void
+      close: () => void
     }
-    const db = new DatabaseSync(path.join(profileRoot, 'state.db'))
+    const db = new Database(path.join(profileRoot, 'state.db'))
     db.exec(`
       CREATE TABLE sessions (
         id TEXT PRIMARY KEY, title TEXT, started_at REAL, message_count INTEGER
@@ -284,13 +284,13 @@ describe('getMessagesForProfile', () => {
   it('returns an empty array when the db exists but the session has no messages', () => {
     const profileRoot = path.join(tempHome, '.hermes', 'profiles', 'writer')
     fs.mkdirSync(profileRoot, { recursive: true })
-    const { DatabaseSync } = nodeRequire('node:sqlite') as {
-      DatabaseSync: new (path: string) => {
-        exec: (sql: string) => void
-        close: () => void
-      }
+    const Database = nodeRequire('better-sqlite3') as new (
+      path: string,
+    ) => {
+      exec: (sql: string) => void
+      close: () => void
     }
-    const db = new DatabaseSync(path.join(profileRoot, 'state.db'))
+    const db = new Database(path.join(profileRoot, 'state.db'))
     db.exec(`
       CREATE TABLE messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -1,36 +1,36 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { z } from 'zod'
-import { dashboardFetch } from '../../server/gateway-capabilities'
 
 const BodySchema = z.object({
   provider: z.string().min(1),
   deviceCode: z.string().min(1),
 })
 
-type DashboardOAuthPollResponse = {
+type PortalOAuthPollResponse = {
   status?: unknown
+  error?: unknown
   error_message?: unknown
   message?: unknown
+  access_token?: unknown
 }
 
 function readString(value: unknown): string {
   return typeof value === 'string' ? value : ''
 }
 
-// Dashboard OAuth poll statuses we forward as still-in-flight. `slow_down` and
-// `authorization_pending` are RFC 8628 device-flow intermediate states; the
-// dashboard relays them through, and treating them as errors halts polling
-// prematurely.
+// RFC 8628 device-flow intermediate states — keep polling.
 const PENDING_STATUSES = new Set([
   'pending',
   'authorization_pending',
   'slow_down',
 ])
 
-export function mapDashboardOAuthPoll(data: DashboardOAuthPollResponse) {
+export function mapDashboardOAuthPoll(data: PortalOAuthPollResponse) {
   const status = readString(data.status)
-  if (status === 'approved') return { status: 'success' }
+  if (status === 'approved' || status === 'success' || data.access_token) {
+    return { status: 'success' }
+  }
   if (PENDING_STATUSES.has(status)) return { status: 'pending' }
 
   return {
@@ -38,6 +38,7 @@ export function mapDashboardOAuthPoll(data: DashboardOAuthPollResponse) {
     message:
       readString(data.error_message) ||
       readString(data.message) ||
+      readString(data.error) ||
       (status ? `OAuth ${status}` : 'OAuth authorization failed'),
   }
 }
@@ -66,28 +67,57 @@ export const Route = createFileRoute('/api/oauth/poll-token')({
         const parsed = BodySchema.safeParse(body)
         if (!parsed.success) {
           return json(
-            { error: 'Missing provider or deviceCode' },
+            { status: 'error', message: 'Missing provider or deviceCode' },
             { status: 400 },
           )
         }
 
         const provider = parsed.data.provider.trim()
-        const sessionId = parsed.data.deviceCode.trim()
+        const deviceCode = parsed.data.deviceCode.trim()
+
+        if (provider !== 'nous') {
+          return json({
+            status: 'error',
+            message: `OAuth device flow not supported for provider: ${provider}`,
+          })
+        }
 
         try {
-          const res = await dashboardFetch(
-            `/api/providers/oauth/${encodeURIComponent(provider)}/poll/${encodeURIComponent(sessionId)}`,
+          // Mirror oauth.device-code.ts: talk to Nous Portal directly.
+          // Do not proxy through Hermes Dashboard :9119.
+          const res = await fetch(
+            'https://portal.nousresearch.com/api/oauth/device/token',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+              },
+              body: new URLSearchParams({
+                client_id: 'claude-cli',
+                device_code: deviceCode,
+                grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+              }).toString(),
+              signal: AbortSignal.timeout(15_000),
+            },
           )
-          const data = await res.json().catch(() => ({}))
+          const data = (await res.json().catch(() => ({}))) as PortalOAuthPollResponse
 
           if (!res.ok) {
+            const mapped = mapDashboardOAuthPoll({
+              ...data,
+              status:
+                readString(data.error) ||
+                readString(data.status) ||
+                (res.status === 400 ? 'authorization_pending' : 'error'),
+            })
+            if (mapped.status === 'pending') return json(mapped)
             return json({
               status: 'error',
               message: readError(data, 'OAuth polling failed'),
             })
           }
 
-          return json(mapDashboardOAuthPoll(data as DashboardOAuthPollResponse))
+          return json(mapDashboardOAuthPoll(data))
         } catch (err) {
           return json({
             status: 'error',

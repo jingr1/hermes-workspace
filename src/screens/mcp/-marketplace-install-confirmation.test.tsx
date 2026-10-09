@@ -7,9 +7,22 @@
  * Uses React.act + createRoot directly (not @testing-library/react) to avoid
  * the vitest ESM/CJS dual-instance issue with React 19 hooks in jsdom.
  */
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import {
+  describe,
+  expect,
+  it,
+  vi,
+  beforeAll,
+  beforeEach,
+  afterEach,
+} from 'vitest'
 import React from 'react'
 import { createRoot } from 'react-dom/client'
+
+beforeAll(() => {
+  // React 19's createRoot in jsdom needs this flag for act() to be accepted.
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true
+})
 
 // Mock UI primitives before importing the component so vi.mock hoisting works.
 // The factories use the same React import as the test (ESM) to avoid dual-instance.
@@ -296,7 +309,7 @@ describe('InstallConfirmationDialog — 2-click commit', () => {
     })
 
     expect(global.fetch).toHaveBeenCalledWith(
-      '/api/mcp',
+      '/api/platform-mcp',
       expect.objectContaining({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

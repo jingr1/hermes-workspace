@@ -280,7 +280,7 @@ describe('respondToManagedInteractionCard', () => {
       dbPath,
     })
     expect(result.ok).toBe(false)
-    expect(result.status).toBe(409)
+    expect(result.status).toBe(400)
     expect(respondToInteraction).not.toHaveBeenCalled()
   })
 

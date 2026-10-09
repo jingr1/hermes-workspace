@@ -1238,7 +1238,7 @@ function ClaudeConfigSection({
     }
     try {
       const res = await fetch(
-        `/api/claude-proxy/api/available-models?provider=${encodeURIComponent(provider)}`,
+        `/api/hermes-proxy/api/available-models?provider=${encodeURIComponent(provider)}`,
       )
       if (res.ok) {
         const result = (await res.json()) as AvailableModelsResponse
@@ -2203,13 +2203,13 @@ function ConnectionSection() {
 
       <SettingsRow
         label="Dashboard URL"
-        description="Extended APIs — sessions, skills, config, jobs. Default http://127.0.0.1:9119."
+        description="Optional Hermes Dashboard link (analytics only). Local Agorax does not need :9119."
       >
         <input
           className={inputClass}
           value={dashboardInput}
           onChange={(e) => setDashboardInput(e.target.value)}
-          placeholder="http://100.x.y.z:9119"
+          placeholder="http://127.0.0.1:9119 (optional)"
           spellCheck={false}
           autoCorrect="off"
           autoCapitalize="off"

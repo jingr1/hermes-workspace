@@ -12,14 +12,14 @@ These features are NOT part of the initial roadmap. Build them AFTER the v4 mock
 
 **What:** Verification doesn't stop at one tsc pass. Loop: run tsc → errors? → send back to agent → fix → re-run. Max 3 iterations before escalating to human review.
 **Why:** Anthropic explicitly identifies this as the pattern that makes agents reliable. Current single-pass fails silently.
-**Where:** `workspace-daemon/src/verification.ts` + `checkpoint-builder.ts`
+**Where:** mission/swarm verification path（原 `workspace-daemon` 已移除；落点见 `src/server/task-pipeline/` / LangGraph harden gate）
 **Pattern source:** Anthropic Skills Guide — "Iterative Refinement" design pattern
 
 ### 2. Agent Handoffs (Context Passing Between Agents)
 
 **What:** When one agent finishes a wave, it passes structured context (git diff, error log, what it built, what it skipped) to the next agent. No more blind starts.
 **Why:** Current agents start each task cold. Handoffs are first-class in OpenAI Agents SDK — explicit control transfer with context. This is what keeps overnight runs coherent.
-**Where:** New `workspace-daemon/src/handoff.ts`, update adapter interfaces
+**Where:** `docs/swarm/HANDOFF-PROTOCOL.md` + swarm dispatch handoff（原 `workspace-daemon` 已移除）
 **Pattern source:** OpenAI Agents SDK — "Handoffs" primitive
 
 ### 3. Specialized Agent Roles
@@ -32,7 +32,7 @@ These features are NOT part of the initial roadmap. Build them AFTER the v4 mock
 - **Validator** — runs tsc, tests, reviews diff
 - **Deployer** — git ops, PR creation, notifications
   **Why:** The "App Factory" screenshot runs specialized roles. Generic agents miss domain context.
-  **Where:** `workspace-daemon/src/adapters/` — one file per role
+  **Where:** `agents.yaml` roster + Hermes/managed adapters（原 `workspace-daemon` 已移除）
   **Pattern source:** Anthropic Skills — "Domain-specific intelligence" + App Factory pattern
 
 ---
@@ -50,7 +50,7 @@ These features are NOT part of the initial roadmap. Build them AFTER the v4 mock
 
 **What:** When a checkpoint is rejected, auto-revert to pre-task git state rather than leaving dirty code in tree.
 **Why:** Currently a rejection leaves broken code that the next agent inherits.
-**Where:** `workspace-daemon/src/git-ops.ts` — add `revertToCheckpoint()` method
+**Where:** `src/server/git-ops.ts` — add `revertToCheckpoint()` method
 
 ### 6. Context-Aware Tool Selection
 

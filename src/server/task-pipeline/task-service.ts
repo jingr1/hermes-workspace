@@ -281,7 +281,6 @@ export function instantiatePipeline(input: {
     ),
     briefSpecVersion: specVersion,
     pipelineId: input.template.id,
-    taskId: null,
     specVersion,
     executionMode: 'pipeline',
     createdByWorkerId: 'system:pipeline',

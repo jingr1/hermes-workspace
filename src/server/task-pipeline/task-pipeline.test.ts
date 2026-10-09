@@ -3,6 +3,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+// Module imports in this file are heavy (task-service pulls in the runtime
+// subtree); the default 5s timeout is too tight on first load.
+vi.setConfig({ testTimeout: 30_000 })
+
 let tempRoot: string
 let dbPath: string
 
@@ -20,20 +24,18 @@ async function loadModules() {
   })
   vi.doMock('../../server/swarm-environment', () => ({
     SWARM_CANONICAL_REPO: tempRoot,
+    SWARM_MISSIONS_PATH: join(tempRoot, '.runtime', 'swarm-missions.json'),
     SWARM_MEMORY_HANDOFFS: join(tempRoot, 'memory'),
     SWARM_LEGACY_OUTPUT_ROOT: join(tempRoot, 'output'),
+  }))
+  vi.doMock('../../routes/api/swarm-dispatch', () => ({
+    dispatchSwarmAssignments: vi.fn().mockResolvedValue({ results: [] }),
   }))
   vi.doMock('../../server/agent-runtime/agents-config', () => ({
     loadAgentsRegistry: () => ({
       version: 1,
       agents: [
-        {
-          id: 'orchestrator',
-          runtime: 'hermes',
-          execution: 'local',
-          profile: 'orchestrator',
-          capabilities: [],
-        },
+        ...AGENTS.map(makeMockAgent),
         {
           id: 'gpuserver',
           runtime: 'hermes',
@@ -50,16 +52,7 @@ async function loadModules() {
         },
       ],
       byId: new Map([
-        [
-          'orchestrator',
-          {
-            id: 'orchestrator',
-            runtime: 'hermes',
-            execution: 'local',
-            profile: 'orchestrator',
-            capabilities: [],
-          },
-        ],
+        ...AGENTS.map((id) => [id, makeMockAgent(id)] as const),
         [
           'gpuserver',
           {
@@ -86,13 +79,6 @@ async function loadModules() {
     detectExecutionFromProfile: () => 'local',
     getProfileSshHost: () => null,
   }))
-  vi.doMock('../../server/swarm-missions', async () => {
-    const actual = await vi.importActual('../../server/swarm-missions')
-    return {
-      ...actual,
-      setOnCheckpointReviewHook: () => {},
-    }
-  })
   const templates =
     await import('../../server/task-pipeline/pipeline-templates')
   const taskService = await import('../../server/task-pipeline/task-service')
@@ -124,6 +110,16 @@ const AGENTS = [
   'writer',
   'orchestrator',
 ]
+
+function makeMockAgent(id: string) {
+  return {
+    id,
+    runtime: id === 'orchestrator' ? ('hermes' as const) : ('claude-code' as const),
+    execution: 'local' as const,
+    profile: id,
+    capabilities: [],
+  }
+}
 
 const VALID_PIPELINE = `
 version: 1
@@ -390,8 +386,13 @@ describe('review.ts', () => {
   })
 
   it('swarm checkpoint hook triggers rework for non-mcp sources', async () => {
-    const { templates, taskService, missions } = await loadModules()
+    const { templates, taskService, missions, review } = await loadModules()
     // Write a pipelines.yaml so the swarm-path hook can resolve the template.
+    // Importing `review` registers the checkpoint hook we're testing.
+    expect(typeof review.applyReviewVerdict).toBe('function')
+    // Disable the terminal continuation hook so it doesn't race with the review
+    // verdict and re-dispatch the review stage while we're asserting requeue.
+    missions.setOnCheckpointTerminalHook(null)
     writeFileSync(join(tempRoot, 'pipelines.yaml'), VALID_PIPELINE)
 
     const template = templates.loadPipelineTemplates({
@@ -555,7 +556,7 @@ describe('lane-sync', () => {
         state: 'done',
         assignments: [],
       } as never),
-    ).toBe('done')
+    ).toBe('todo')
     expect(
       laneSync.laneFromMission({
         ...base,

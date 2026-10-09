@@ -31,11 +31,13 @@ async function loadModules() {
   })
   vi.doMock('../../server/swarm-environment', () => ({
     SWARM_CANONICAL_REPO: tempRoot,
+    SWARM_MISSIONS_PATH: join(tempRoot, '.runtime', 'swarm-missions.json'),
     SWARM_MEMORY_HANDOFFS: join(tempRoot, 'memory'),
     SWARM_LEGACY_OUTPUT_ROOT: join(tempRoot, 'output'),
   }))
   vi.doMock('../swarm-environment', () => ({
     SWARM_CANONICAL_REPO: tempRoot,
+    SWARM_MISSIONS_PATH: join(tempRoot, '.runtime', 'swarm-missions.json'),
     SWARM_MEMORY_HANDOFFS: join(tempRoot, 'memory'),
     SWARM_LEGACY_OUTPUT_ROOT: join(tempRoot, 'output'),
   }))

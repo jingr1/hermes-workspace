@@ -5,6 +5,10 @@
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
+vi.mock('@tanstack/react-router', () => ({
+  createFileRoute: (_path: string) => (opts: unknown) => ({ options: opts }),
+}))
+
 vi.mock('../../../server/mcp-hub-sources-store', () => ({
   readHubSources: vi.fn(),
   addHubSource: vi.fn(),

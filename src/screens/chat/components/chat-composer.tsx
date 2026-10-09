@@ -276,7 +276,7 @@ type ModelSwitchNotice = {
   retryProvider?: string
 }
 
-// Models are fetched through the workspace API proxy (/api/models, /api/claude-proxy)
+// Models are fetched through the workspace API proxy (/api/models, /api/hermes-proxy)
 // to support Docker and reverse-proxy deployments where the browser cannot reach
 // the Hermes Agent gateway directly.
 
@@ -457,7 +457,7 @@ async function fetchModelsForProvider(
   if (!normalizedProvider) return []
 
   const response = await fetch(
-    `/api/claude-proxy/api/available-models?provider=${encodeURIComponent(normalizedProvider)}`,
+    `/api/hermes-proxy/api/available-models?provider=${encodeURIComponent(normalizedProvider)}`,
   )
   if (!response.ok) {
     throw new Error(`Hermes models request failed (${response.status})`)
@@ -505,7 +505,7 @@ async function switchModel(
   const patch: Record<string, string> = { model: modelId }
   if (modelProvider) patch.provider = modelProvider
 
-  const response = await fetch('/api/claude-proxy/api/config', {
+  const response = await fetch('/api/hermes-proxy/api/config', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(patch),

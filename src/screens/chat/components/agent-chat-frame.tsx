@@ -121,7 +121,7 @@ export type AgentChatFrameProps = {
 
 /**
  * Shared agent chat chrome: Header → empty/list → Composer + right file sidebar.
- * Does not own Hermes Terminal / Approvals / AgentViewPanel.
+ * Does not own Hermes Terminal / Approvals.
  */
 export const AgentChatFrame = forwardRef<
   AgentChatFrameHandle,

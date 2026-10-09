@@ -1,6 +1,4 @@
 import React, {
-  Suspense,
-  lazy,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -147,24 +145,6 @@ import { useChatMode } from '@/hooks/use-chat-mode'
 import { useChatActivityStore } from '@/stores/chat-activity-store'
 import { _localModelOverride } from '@/screens/chat/local-model-override'
 
-const loadAgentViewPanel = () =>
-  import('@/components/agent-view/agent-view-panel').then((module) => ({
-    default: module.AgentViewPanel,
-  }))
-// Retry once — Vite HMR/program reload can briefly fail dynamic imports.
-const AgentViewPanel = lazy(() =>
-  loadAgentViewPanel().catch(
-    () =>
-      new Promise<Awaited<ReturnType<typeof loadAgentViewPanel>>>((resolve) => {
-        window.setTimeout(() => {
-          resolve(loadAgentViewPanel())
-        }, 250)
-      }),
-  ),
-)
-// Warm the chunk early so opening chat does not race a cold transform.
-void import('@/components/agent-view/agent-view-panel')
-
 type ChatScreenProps = {
   activeFriendlyId: string
   isNewChat?: boolean
@@ -189,7 +169,7 @@ type ChatScreenProps = {
    */
   sessionController?: SessionController
   /**
-   * Hermes-only chrome: TerminalPanel, AgentViewPanel, approvals strip.
+   * Hermes-only chrome: TerminalPanel, approvals strip.
    * Managed runtimes pass false.
    */
   hermesChrome?: boolean
@@ -4313,11 +4293,6 @@ export function ChatScreen({
           </AgentChatFrame>
         )}
 
-        {hermesChrome && !compact && !isFocusMode ? (
-          <Suspense fallback={null}>
-            <AgentViewPanel />
-          </Suspense>
-        ) : null}
       </div>
       {hermesChrome &&
         !compact &&

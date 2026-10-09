@@ -135,7 +135,7 @@ API 要点：
 
 当 Phase 2 orchestrator 置 `needs_human=True` 时：
 
-- **Dashboard（推荐）：** 打开 `/swarm2`。Human Gate 面板会显示阻塞 worker、阻塞类型、checkpoint、待办分配与路由分析。点 **继续执行** 恢复，或 **中止**。
+- **Dashboard（推荐）：** 打开 `/swarm`。Human Gate 面板会显示阻塞 worker、阻塞类型、checkpoint、待办分配与路由分析。点 **继续执行** 恢复，或 **中止**。
 - **CLI 回退：**
   - `python -m hermes_langgraph_orchestrator --execute --resume approved --mission-id <id>`
   - `python -m hermes_langgraph_orchestrator --execute --resume abort --mission-id <id>`
@@ -177,7 +177,7 @@ set -g exit-unattached off
 2. TUI 空壳检测：`src/routes/api/swarm-direct-chat.ts` 发送前检查 session 是否真在跑 Hermes；仅 bare shell 则 kill 重建，避免消息当 shell 命令执行。
 3. CLI shell ready：`tmuxPaneLooksLikeShellReady` 识别 `~$` 结尾，忽略 `.bashrc` 噪音。
 4. `workflowId`：`src/routes/api/swarm-langgraph/run.ts` 不把短名（如 `rdi`）当路径；仅含 `/` 或 `\` 时才当绝对路径。
-5. Human Gate「继续等待」：`langgraph-human-gate.ts` → resume API → `HERMES_LANGGRAPH_CONTINUE_WAIT_MINUTES` → orchestrator `wait_for_checkpoints` 覆盖 `staleMinutes`；UI 在 `/swarm2`。
+5. Human Gate「继续等待」：`langgraph-human-gate.ts` → resume API → `HERMES_LANGGRAPH_CONTINUE_WAIT_MINUTES` → orchestrator `wait_for_checkpoints` 覆盖 `staleMinutes`；UI 在 `/swarm`。
 6. 部分 workflow（如 `rdi.yaml`）把 `timeout` 从 `retry` 改为 `escalate`，超时进 Human Gate 而非无限重试。
 
 ---
@@ -210,7 +210,7 @@ set -g exit-unattached off
 | 群聊                         | `src/server/group-chat/`、`src/screens/group-chat/`、`src/routes/api/rooms*` |
 | 1:1 Chat / managed companion | `src/screens/chat/`、`src/routes/api/agents/`                                |
 | Missions / Agents UI         | `/missions`、`/agents`（旧 `/mission-control` `/operations` `/profiles` redirect）；合同见 `docs/ia-missions-agents-merge.md`、`docs/mission-task-domain.md`（mission-keyed，无 kanban card） |
-| Swarm UI                     | `src/screens/swarm2/`、`src/routes/swarm2.tsx`                               |
+| Swarm UI                     | `src/screens/swarm/`、`src/routes/swarm.tsx`（`/swarm2` redirect）            |
 | Profile 同步                 | `scripts/sync-swarm-profiles.mjs`                                            |
 | 项目 / worktree              | `projects.yaml`、`docs/mission-project-domain.md`、`src/server/git-ops.ts`、`src/server/task-pipeline/` |
 

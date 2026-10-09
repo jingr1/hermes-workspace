@@ -12,18 +12,15 @@ const STORAGE_KEY = 'dashboard.layout.v1'
  */
 export type WidgetId =
   | 'analytics_chart'
-  | 'usage_stats'
   | 'usage_tables'
   | 'top_models'
   | 'provider_mix'
-  | 'cache_efficiency'
   | 'velocity'
   | 'cost_ledger'
   | 'sessions_intelligence'
   | 'logs_tail'
   | 'operator_tip'
   | 'skills_usage'
-  | 'achievements'
   | 'mix_rhythm'
 
 export type WidgetMeta = {
@@ -37,14 +34,6 @@ export type WidgetMeta = {
 }
 
 export const WIDGET_CATALOG: ReadonlyArray<WidgetMeta> = [
-  {
-    id: 'usage_stats',
-    label: 'Usage stats',
-    description:
-      'Cross-runtime token consumption, cache hit rate, and estimated cost for the selected window.',
-    column: 'main',
-    hideable: true,
-  },
   {
     id: 'usage_tables',
     label: 'Usage tables',
@@ -72,13 +61,6 @@ export const WIDGET_CATALOG: ReadonlyArray<WidgetMeta> = [
     label: 'Provider mix',
     description:
       'Token share by provider family (anthropic / openai / local / etc).',
-    column: 'main',
-    hideable: true,
-  },
-  {
-    id: 'cache_efficiency',
-    label: 'Cache efficiency',
-    description: 'Cache-hit rate with daily sparkline. Higher = lower cost.',
     column: 'main',
     hideable: true,
   },
@@ -128,13 +110,6 @@ export const WIDGET_CATALOG: ReadonlyArray<WidgetMeta> = [
     hideable: true,
   },
   {
-    id: 'achievements',
-    label: 'Achievements',
-    description: 'Recent unlocks & progress.',
-    column: 'rail',
-    hideable: true,
-  },
-  {
     id: 'mix_rhythm',
     label: 'Mix & rhythm',
     description: 'Token mix + hour-of-day activity strip.',
@@ -173,7 +148,7 @@ const DEFAULT_HIDDEN: ReadonlyArray<WidgetId> = [
  * so existing localStorage entries with `attention` get migrated
  * cleanly instead of silently re-hiding stale ids.
  */
-const STORAGE_VERSION = 4
+const STORAGE_VERSION = 7
 
 function readLayout(): StoredLayout {
   if (typeof window === 'undefined') {

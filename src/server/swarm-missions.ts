@@ -5,8 +5,9 @@ import {
   renameSync,
   writeFileSync,
 } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { SWARM_CANONICAL_REPO } from './swarm-environment'
+import { dirname } from 'node:path'
+import { SWARM_CANONICAL_REPO, SWARM_MISSIONS_PATH } from './swarm-environment'
+export { SWARM_MISSIONS_PATH }
 import { applyArtifactPathPolicy } from './swarm-mission-artifacts'
 import type { ParsedSwarmCheckpoint } from './swarm-checkpoints'
 import {
@@ -14,16 +15,29 @@ import {
   normalizeMissionStatus,
   type MissionStatus,
 } from './task-pipeline/mission-status'
+import {
+  SWARM_MISSION_ASSIGNMENT_STATES,
+  TERMINAL_ASSIGNMENT_STATES,
+  type SwarmMissionAssignmentState,
+  isSwarmMissionAssignmentState,
+} from './schema'
+import {
+  type MissionRepository,
+  SqliteMissionRepository,
+} from './task-pipeline/mission-repository'
+import {
+  fireCheckpointReviewHook,
+  fireCheckpointTerminalHook,
+  setOnCheckpointReviewHook,
+  setOnCheckpointTerminalHook,
+} from './task-pipeline/mission-hooks'
 
-export type SwarmMissionAssignmentState =
-  | 'queued'
-  | 'dispatched'
-  | 'checkpointed'
-  | 'blocked'
-  | 'needs_input'
-  | 'reviewing'
-  | 'done'
-  | 'cancelled'
+export type { SwarmMissionAssignmentState }
+export {
+  SWARM_MISSION_ASSIGNMENT_STATES,
+  TERMINAL_ASSIGNMENT_STATES,
+  isSwarmMissionAssignmentState,
+}
 
 /** Multica-style: mission.state === board column. */
 export type SwarmMissionState = MissionStatus
@@ -155,12 +169,6 @@ type SwarmMissionStore = {
   missions: Array<SwarmMission>
 }
 
-export const SWARM_MISSIONS_PATH = join(
-  SWARM_CANONICAL_REPO,
-  '.runtime',
-  'swarm-missions.json',
-)
-
 function now(): number {
   return Date.now()
 }
@@ -246,33 +254,27 @@ function inferReviewRequired(task: string, rationale?: string | null): boolean {
   )
 }
 
-const TERMINAL_ASSIGNMENT_STATES = new Set<SwarmMissionAssignmentState>([
-  'done',
-  'cancelled',
-  // checkpointed/blocked/needs_input are terminal for dispatch purposes: a worker
-  // may receive a new assignment on re-dispatch without inheriting stale checkpoints.
-  'checkpointed',
-  'blocked',
-  'needs_input',
-])
+const terminalAssignmentStateSet = new Set<string>(
+  TERMINAL_ASSIGNMENT_STATES,
+)
 
 function isTerminalAssignment(assignment: SwarmMissionAssignment): boolean {
-  return TERMINAL_ASSIGNMENT_STATES.has(assignment.state)
+  return terminalAssignmentStateSet.has(assignment.state)
 }
 
-export function listSwarmMissions(limit = 20): Array<SwarmMission> {
+function _legacylistSwarmMissions(limit = 20): Array<SwarmMission> {
   return readStore()
     .missions.sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, Math.max(1, Math.min(100, limit)))
 }
 
-export function getSwarmMission(missionId: string): SwarmMission | null {
+function _legacygetSwarmMission(missionId: string): SwarmMission | null {
   return (
     readStore().missions.find((mission) => mission.id === missionId) ?? null
   )
 }
 
-export function archiveStaleMissions(staleMs: number = 6 * 60 * 60 * 1000): {
+function _legacyarchiveStaleMissions(staleMs: number = 6 * 60 * 60 * 1000): {
   archivedIds: Array<string>
   count: number
 } {
@@ -357,7 +359,7 @@ export function assertAcyclicDependencies(
   }
 }
 
-export function createOrUpdateMission(input: {
+function _legacycreateOrUpdateMission(input: {
   missionId?: string | null
   title: string
   spec?: string
@@ -465,7 +467,7 @@ export function createOrUpdateMission(input: {
     })
   }
   // Cycle guard (plan risk table): a cyclic dependsOn graph makes
-  // readyQueuedAssignments return [] forever — the pipeline silently dies.
+  // _legacyreadyQueuedAssignments return [] forever — the pipeline silently dies.
   // Reject at registration time, where the error is loud and attributable.
   assertAcyclicDependencies(mission.assignments)
   mission.updatedAt = now()
@@ -474,7 +476,7 @@ export function createOrUpdateMission(input: {
   return Object.assign(mission, { _created: createdMission })
 }
 
-export function markMissionAssignmentDispatched(input: {
+function _legacymarkMissionAssignmentDispatched(input: {
   missionId: string
   workerId: string
   task: string
@@ -530,40 +532,12 @@ export type RecordCheckpointResult =
   | (SwarmMission & { _completed?: boolean; _ignoredReason?: string })
   | null
 
-type CheckpointTerminalHook = (input: {
-  missionId: string
-  assignmentId: string
-  workerId: string
-  checkpoint: ParsedSwarmCheckpoint
-  source?: string | null
-}) => void | Promise<void>
-
-type CheckpointReviewHook = (input: {
-  missionId: string
-  assignmentId: string
-  workerId: string
-  checkpoint: ParsedSwarmCheckpoint
-  source?: string | null
-}) => void | Promise<void>
-
-let onCheckpointTerminal: CheckpointTerminalHook | null = null
-let onCheckpointReview: CheckpointReviewHook | null = null
-
-/** Register a hook fired after a terminal DONE/HANDOFF checkpoint is recorded. */
-export function setOnCheckpointTerminalHook(
-  hook: CheckpointTerminalHook | null,
-): void {
-  onCheckpointTerminal = hook
+export {
+  setOnCheckpointTerminalHook,
+  setOnCheckpointReviewHook,
 }
 
-/** Register a hook fired when a checkpoint contains a REVIEW_OUTCOME verdict. */
-export function setOnCheckpointReviewHook(
-  hook: CheckpointReviewHook | null,
-): void {
-  onCheckpointReview = hook
-}
-
-export function recordMissionCheckpoint(input: {
+function _legacyRecordMissionCheckpoint(input: {
   missionId?: string | null
   assignmentId?: string | null
   workerId: string
@@ -640,43 +614,29 @@ export function recordMissionCheckpoint(input: {
   // Swarm-path orchestration hooks. MCP callers (source === 'mcp') handle
   // review verdict and next-stage dispatch in advance.ts; firing these hooks
   // for them would double-process the checkpoint.
-  if (checkpoint.reviewOutcome && onCheckpointReview) {
-    Promise.resolve(
-      onCheckpointReview({
-        missionId: mission.id,
-        assignmentId: assignment.id,
-        workerId: input.workerId,
-        checkpoint,
-        source: input.source,
-      }),
-    ).catch((error) => {
-      console.error(
-        '[swarm-missions] review hook failed:',
-        error instanceof Error ? error.message : String(error),
-      )
-    })
+  if (checkpoint.reviewOutcome) {
+    fireCheckpointReviewHook(
+      mission.id,
+      assignment.id,
+      input.workerId,
+      checkpoint,
+      input.source,
+    )
   }
-  if (isTerminalAssignment(assignment) && onCheckpointTerminal) {
-    Promise.resolve(
-      onCheckpointTerminal({
-        missionId: mission.id,
-        assignmentId: assignment.id,
-        workerId: input.workerId,
-        checkpoint,
-        source: input.source,
-      }),
-    ).catch((error) => {
-      console.error(
-        '[swarm-missions] terminal hook failed:',
-        error instanceof Error ? error.message : String(error),
-      )
-    })
+  if (isTerminalAssignment(assignment)) {
+    fireCheckpointTerminalHook(
+      mission.id,
+      assignment.id,
+      input.workerId,
+      checkpoint,
+      input.source,
+    )
   }
 
   return Object.assign(mission, { _completed: completed })
 }
 
-export function recordMissionAssignmentBlocked(input: {
+function _legacyrecordMissionAssignmentBlocked(input: {
   missionId?: string | null
   assignmentId?: string | null
   workerId: string
@@ -753,7 +713,7 @@ export function recordMissionAssignmentBlocked(input: {
   return { mission, assignment, changed }
 }
 
-export function appendMissionContinuation(input: {
+function _legacyappendMissionContinuation(input: {
   missionId?: string | null
   workerId: string
   task: string
@@ -799,10 +759,10 @@ export function appendMissionContinuation(input: {
   return mission
 }
 
-export function readyQueuedAssignments(
+function _legacyreadyQueuedAssignments(
   missionId: string,
 ): Array<SwarmMissionAssignment> {
-  const mission = getSwarmMission(missionId)
+  const mission = _legacygetSwarmMission(missionId)
   if (!mission) return []
   const doneIds = new Set(
     mission.assignments
@@ -815,7 +775,7 @@ export function readyQueuedAssignments(
   )
 }
 
-export function requeueMissionAssignment(input: {
+function _legacyrequeueMissionAssignment(input: {
   missionId: string
   assignmentId: string
   reason: string
@@ -843,11 +803,11 @@ export function requeueMissionAssignment(input: {
 }
 
 /**
- * Requeue a terminal assignment for rework. Unlike requeueMissionAssignment,
+ * Requeue a terminal assignment for rework. Unlike _legacyrequeueMissionAssignment,
  * this works on checkpointed/done/reviewing assignments and clears their
  * checkpoint so the next dispatch starts fresh.
  */
-export function requeueAssignmentForRework(input: {
+function _legacyrequeueAssignmentForRework(input: {
   missionId: string
   assignmentId: string
   reason: string
@@ -897,7 +857,7 @@ export function requeueAssignmentForRework(input: {
  * Re-runs the cycle guard after rewiring. Single write, one place for the
  * invariant.
  */
-export function setAssignmentBaseRef(
+function _legacysetAssignmentBaseRef(
   missionId: string,
   assignmentId: string,
   baseRef: string,
@@ -913,7 +873,7 @@ export function setAssignmentBaseRef(
   return mission
 }
 
-export function setAssignmentHeadSha(
+function _legacysetAssignmentHeadSha(
   missionId: string,
   assignmentId: string,
   headSha: string,
@@ -929,7 +889,7 @@ export function setAssignmentHeadSha(
   return mission
 }
 
-export function setMissionTaskId(input: {
+function _legacysetMissionTaskId(input: {
   missionId: string
   taskId: string | null
 }): SwarmMission | null {
@@ -942,7 +902,7 @@ export function setMissionTaskId(input: {
   return mission
 }
 
-export function updateMissionRoomId(input: {
+function _legacyupdateMissionRoomId(input: {
   missionId: string
   roomId: string | null
 }): SwarmMission | null {
@@ -955,7 +915,7 @@ export function updateMissionRoomId(input: {
   return mission
 }
 
-export function patchMissionFields(input: {
+function _legacypatchMissionFields(input: {
   missionId: string
   title?: string
   spec?: string
@@ -1015,7 +975,7 @@ export function patchMissionFields(input: {
 }
 
 /** Hard-delete a mission from the swarm store. Returns false if missing. */
-export function deleteSwarmMission(missionId: string): boolean {
+function _legacydeleteSwarmMission(missionId: string): boolean {
   const store = readStore()
   const next = store.missions.filter((item) => item.id !== missionId)
   if (next.length === store.missions.length) return false
@@ -1023,7 +983,7 @@ export function deleteSwarmMission(missionId: string): boolean {
   return true
 }
 
-export function rewriteAssignmentDependencies(input: {
+function _legacyrewriteAssignmentDependencies(input: {
   missionId: string
   dependsOnByAssignmentId: Record<string, Array<string>>
   stageKeyByAssignmentId?: Record<string, string>
@@ -1068,7 +1028,7 @@ export function rewriteAssignmentDependencies(input: {
   return mission
 }
 
-export function cancelSwarmAssignment(input: {
+function _legacycancelSwarmAssignment(input: {
   missionId?: string | null
   assignmentId?: string | null
   workerId?: string | null
@@ -1124,7 +1084,7 @@ export function cancelSwarmAssignment(input: {
   return { mission, assignment, changed: true }
 }
 
-export function appendSwarmMissionOrchestratorEvent(input: {
+function _legacyappendSwarmMissionOrchestratorEvent(input: {
   missionId: string
   message: string
   data?: Record<string, unknown>
@@ -1145,7 +1105,7 @@ export function appendSwarmMissionOrchestratorEvent(input: {
   return mission
 }
 
-export function cancelSwarmMission(input: {
+function _legacycancelSwarmMission(input: {
   missionId?: string | null
   actor?: string | null
   reason?: string | null
@@ -1191,7 +1151,7 @@ export function cancelSwarmMission(input: {
   }
 }
 
-export function markMissionAssignmentReviewed(input: {
+function _legacymarkMissionAssignmentReviewed(input: {
   missionId?: string | null
   assignmentId: string
   reviewerId?: string
@@ -1220,7 +1180,7 @@ export function markMissionAssignmentReviewed(input: {
   return mission
 }
 
-export function markMissionAssignmentsReviewedByWorker(input: {
+function _legacymarkMissionAssignmentsReviewedByWorker(input: {
   missionId?: string | null
   reviewerId: string
   excludeAssignmentId?: string | null
@@ -1262,13 +1222,13 @@ export function markMissionAssignmentsReviewedByWorker(input: {
   }
 }
 
-export function listSwarmReports(input?: {
+function _legacylistSwarmReports(input?: {
   missionId?: string | null
   workerId?: string | null
   limit?: number
 }): Array<SwarmCheckpointReport> {
   const limit = Math.max(1, Math.min(500, input?.limit ?? 100))
-  const mission = input?.missionId ? getSwarmMission(input.missionId) : null
+  const mission = input?.missionId ? _legacygetSwarmMission(input.missionId) : null
   const missions = mission ? [mission] : readStore().missions
 
   return missions
@@ -1278,4 +1238,207 @@ export function listSwarmReports(input?: {
     .filter((report) => !input?.workerId || report.workerId === input.workerId)
     .sort((a, b) => b.recordedAt - a.recordedAt)
     .slice(0, limit)
+}
+
+export const listSwarmMissions = (limit?: number): Array<SwarmMission> =>
+  getMissionRepository().listMissions(limit)
+
+export const getSwarmMission = (missionId: string): SwarmMission | null =>
+  getMissionRepository().getMission(missionId)
+
+export const archiveStaleMissions = (staleMs?: number): { archivedIds: Array<string>; count: number } =>
+  getMissionRepository().archiveStaleMissions(staleMs)
+
+export const createOrUpdateMission = (
+  input: Parameters<MissionRepository['createOrUpdateMission']>[0],
+): CreateOrUpdateMissionResult => getMissionRepository().createOrUpdateMission(input)
+
+export const markMissionAssignmentDispatched = (
+  input: Parameters<MissionRepository['markAssignmentDispatched']>[0],
+): SwarmMission | null => getMissionRepository().markAssignmentDispatched(input)
+
+export const recordMissionCheckpoint = (
+  input: Parameters<MissionRepository['recordCheckpoint']>[0],
+): RecordCheckpointResult => getMissionRepository().recordCheckpoint(input)
+
+export const recordMissionAssignmentBlocked = (
+  input: Parameters<MissionRepository['recordAssignmentBlocked']>[0],
+): ReturnType<MissionRepository['recordAssignmentBlocked']> =>
+  getMissionRepository().recordAssignmentBlocked(input)
+
+export const appendMissionContinuation = (
+  input: Parameters<MissionRepository['appendContinuation']>[0],
+): SwarmMission | null => getMissionRepository().appendContinuation(input)
+
+export const readyQueuedAssignments = (
+  missionId: string,
+): Array<SwarmMissionAssignment> =>
+  getMissionRepository().readyQueuedAssignments(missionId)
+
+export const requeueMissionAssignment = (
+  input: Parameters<MissionRepository['requeueAssignment']>[0],
+): SwarmMission | null => getMissionRepository().requeueAssignment(input)
+
+export const requeueAssignmentForRework = (
+  input: Parameters<MissionRepository['requeueAssignmentForRework']>[0],
+): SwarmMission | null => getMissionRepository().requeueAssignmentForRework(input)
+
+export const setAssignmentBaseRef = (
+  missionId: string,
+  assignmentId: string,
+  baseRef: string,
+): SwarmMission | null =>
+  getMissionRepository().setAssignmentBaseRef(missionId, assignmentId, baseRef)
+
+export const setAssignmentHeadSha = (
+  missionId: string,
+  assignmentId: string,
+  headSha: string,
+): SwarmMission | null =>
+  getMissionRepository().setAssignmentHeadSha(missionId, assignmentId, headSha)
+
+export const setMissionTaskId = (
+  input: Parameters<MissionRepository['setMissionTaskId']>[0],
+): SwarmMission | null => getMissionRepository().setMissionTaskId(input)
+
+export const updateMissionRoomId = (
+  input: Parameters<MissionRepository['updateMissionRoomId']>[0],
+): SwarmMission | null => getMissionRepository().updateMissionRoomId(input)
+
+export const patchMissionFields = (
+  input: Parameters<MissionRepository['patchMissionFields']>[0],
+): SwarmMission | null => getMissionRepository().patchMissionFields(input)
+
+export const deleteSwarmMission = (missionId: string): boolean =>
+  getMissionRepository().deleteMission(missionId)
+
+export const rewriteAssignmentDependencies = (
+  input: Parameters<MissionRepository['rewriteAssignmentDependencies']>[0],
+): SwarmMission | null => getMissionRepository().rewriteAssignmentDependencies(input)
+
+export const cancelSwarmAssignment = (
+  input: Parameters<MissionRepository['cancelAssignment']>[0],
+): ReturnType<MissionRepository['cancelAssignment']> =>
+  getMissionRepository().cancelAssignment(input)
+
+export const appendSwarmMissionOrchestratorEvent = (
+  input: Parameters<MissionRepository['appendOrchestratorEvent']>[0],
+): SwarmMission | null => getMissionRepository().appendOrchestratorEvent(input)
+
+export const cancelSwarmMission = (
+  input: Parameters<MissionRepository['cancelMission']>[0],
+): ReturnType<MissionRepository['cancelMission']> =>
+  getMissionRepository().cancelMission(input)
+
+export const markMissionAssignmentReviewed = (
+  input: Parameters<MissionRepository['markAssignmentReviewed']>[0],
+): SwarmMission | null => getMissionRepository().markAssignmentReviewed(input)
+
+export const markMissionAssignmentsReviewedByWorker = (
+  input: Parameters<MissionRepository['markAssignmentsReviewedByWorker']>[0],
+): ReturnType<MissionRepository['markAssignmentsReviewedByWorker']> =>
+  getMissionRepository().markAssignmentsReviewedByWorker(input)
+
+export const listSwarmReports = (
+  input?: Parameters<MissionRepository['listReports']>[0],
+): Array<SwarmCheckpointReport> => getMissionRepository().listReports(input)
+
+// ── Repository facade (SQLite source of truth, JSON as export cache) ─────
+
+let missionRepository: MissionRepository | null = null
+
+function getMissionRepository(): MissionRepository {
+  if (!missionRepository) {
+    missionRepository =
+      process.env.AGORAX_MISSION_SQLITE_SOT === '1'
+        ? new SqliteMissionRepository()
+        : new JsonMissionRepository()
+  }
+  return missionRepository
+}
+
+/** Test hook: replace the repository singleton. */
+export function setMissionRepositoryForTests(
+  repo: MissionRepository | null,
+): void {
+  missionRepository = repo
+}
+
+/** Backwards-compatible JSON backend: wraps the legacy in-memory JSON store. */
+class JsonMissionRepository implements MissionRepository {
+  listMissions(limit?: number) {
+    return _legacylistSwarmMissions(limit)
+  }
+  getMission(missionId: string) {
+    return _legacygetSwarmMission(missionId)
+  }
+  createOrUpdateMission(input: Parameters<MissionRepository['createOrUpdateMission']>[0]) {
+    return _legacycreateOrUpdateMission(input)
+  }
+  markAssignmentDispatched(input: Parameters<MissionRepository['markAssignmentDispatched']>[0]) {
+    return _legacymarkMissionAssignmentDispatched(input)
+  }
+  recordCheckpoint(input: Parameters<MissionRepository['recordCheckpoint']>[0]) {
+    return _legacyRecordMissionCheckpoint(input)
+  }
+  recordAssignmentBlocked(input: Parameters<MissionRepository['recordAssignmentBlocked']>[0]) {
+    return _legacyrecordMissionAssignmentBlocked(input)
+  }
+  appendContinuation(input: Parameters<MissionRepository['appendContinuation']>[0]) {
+    return _legacyappendMissionContinuation(input)
+  }
+  readyQueuedAssignments(missionId: string) {
+    return _legacyreadyQueuedAssignments(missionId)
+  }
+  requeueAssignment(input: Parameters<MissionRepository['requeueAssignment']>[0]) {
+    return _legacyrequeueMissionAssignment(input)
+  }
+  requeueAssignmentForRework(input: Parameters<MissionRepository['requeueAssignmentForRework']>[0]) {
+    return _legacyrequeueAssignmentForRework(input)
+  }
+  setAssignmentBaseRef(missionId: string, assignmentId: string, baseRef: string) {
+    return _legacysetAssignmentBaseRef(missionId, assignmentId, baseRef)
+  }
+  setAssignmentHeadSha(missionId: string, assignmentId: string, headSha: string) {
+    return _legacysetAssignmentHeadSha(missionId, assignmentId, headSha)
+  }
+  setMissionTaskId(input: Parameters<MissionRepository['setMissionTaskId']>[0]) {
+    return _legacysetMissionTaskId(input)
+  }
+  updateMissionRoomId(input: Parameters<MissionRepository['updateMissionRoomId']>[0]) {
+    return _legacyupdateMissionRoomId(input)
+  }
+  patchMissionFields(input: Parameters<MissionRepository['patchMissionFields']>[0]) {
+    return _legacypatchMissionFields(input)
+  }
+  deleteMission(missionId: string) {
+    return _legacydeleteSwarmMission(missionId)
+  }
+  rewriteAssignmentDependencies(input: Parameters<MissionRepository['rewriteAssignmentDependencies']>[0]) {
+    return _legacyrewriteAssignmentDependencies(input)
+  }
+  cancelAssignment(input: Parameters<MissionRepository['cancelAssignment']>[0]) {
+    return _legacycancelSwarmAssignment(input)
+  }
+  appendOrchestratorEvent(input: Parameters<MissionRepository['appendOrchestratorEvent']>[0]) {
+    return _legacyappendSwarmMissionOrchestratorEvent(input)
+  }
+  cancelMission(input: Parameters<MissionRepository['cancelMission']>[0]) {
+    return _legacycancelSwarmMission(input)
+  }
+  markAssignmentReviewed(input: Parameters<MissionRepository['markAssignmentReviewed']>[0]) {
+    return _legacymarkMissionAssignmentReviewed(input)
+  }
+  markAssignmentsReviewedByWorker(input: Parameters<MissionRepository['markAssignmentsReviewedByWorker']>[0]) {
+    return _legacymarkMissionAssignmentsReviewedByWorker(input)
+  }
+  listReports(input?: Parameters<MissionRepository['listReports']>[0]) {
+    return _legacylistSwarmReports(input)
+  }
+  archiveStaleMissions(staleMs?: number) {
+    return _legacyarchiveStaleMissions(staleMs)
+  }
+  exportToJson() {
+    return _legacylistSwarmMissions(1000)
+  }
 }

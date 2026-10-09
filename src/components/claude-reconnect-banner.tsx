@@ -22,7 +22,7 @@ async function probeClaudeHealth(): Promise<boolean> {
   }
   // Fallback to direct health proxy
   try {
-    const response = await fetch('/api/claude-proxy/health', {
+    const response = await fetch('/api/hermes-proxy/health', {
       cache: 'no-store',
     })
     return response.ok

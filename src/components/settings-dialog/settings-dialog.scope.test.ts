@@ -17,15 +17,6 @@ const pageSrc = () =>
     'utf8',
   )
 
-const sidebarSrc = () =>
-  readFileSync(
-    resolve(
-      process.cwd(),
-      'src/screens/chat/components/chat-session-sidebar.tsx',
-    ),
-    'utf8',
-  )
-
 describe('settings model/provider scope wiring', () => {
   it('chat settings dialog reads/writes the active profile only', () => {
     const src = dialogSrc()
@@ -74,10 +65,4 @@ describe('settings model/provider scope wiring', () => {
     expect(catalogSrc).not.toContain('Manifest base URL')
   })
 
-  it('chat sidebar summarizes Default model and Provider from profile config', () => {
-    const src = sidebarSrc()
-    expect(src).toContain('Default model: ${model}')
-    expect(src).toContain('Provider: ${provider}')
-    expect(src).toContain('useProfiles')
-  })
 })

@@ -10,7 +10,7 @@
  *   2) Summary compression marks older messages without losing them.
  *   3) A single drive produces deterministic runner state (watermarks + posted).
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GroupMember, GroupTurnResult } from '../types'
 import { resetCollabDbForTests } from '../room-store'
 import {
@@ -32,22 +32,31 @@ import {
 } from '../runner-state'
 
 // Mock the turn executor so tests never hit real gateways.
-const executeMemberTurn = vi.fn()
-vi.mock('../turn-executor', () => ({
-  executeMemberTurn,
-}))
+// We use a single stable mock reference and vi.doMock inside importRunner()
+// so that dynamic re-imports after vi.resetModules() always pick up the mock.
+const sharedExecuteMemberTurnMock = vi.fn()
+const mockExecuteMemberTurn = sharedExecuteMemberTurnMock
 
 // Mock summaries so threshold compression is deterministic.
 const SUMMARY_TEXT = '[SUMMARY] key decisions retained'
-const maybeSummarizeRoom = vi.fn()
-const getContextForMember = vi.fn(() => ({
-  summary: null as string | null,
-  messages: [],
-}))
 vi.mock('../summaries', () => ({
-  maybeSummarizeRoom,
-  getContextForMember,
+  maybeSummarizeRoom: vi.fn(),
+  getContextForMember: vi.fn(() => ({
+    summary: null as string | null,
+    messages: [],
+  })),
 }))
+import { maybeSummarizeRoom, getContextForMember } from '../summaries'
+const mockMaybeSummarizeRoom = vi.mocked(maybeSummarizeRoom)
+const mockGetContextForMember = vi.mocked(getContextForMember)
+
+async function importRunner() {
+  vi.doMock('../turn-executor', () => ({
+    executeMemberTurn: sharedExecuteMemberTurnMock,
+  }))
+  const mod = await import('../group-chat-runner')
+  return mod
+}
 
 function makeMember(pid: string, profile: string): GroupMember {
   return {
@@ -63,25 +72,22 @@ function makeMember(pid: string, profile: string): GroupMember {
   }
 }
 
-async function importRunner() {
-  const mod = await import('../group-chat-runner')
-  return mod
-}
-
 describe('group-chat clean baseline', () => {
   let dbPath: string
+  let prevCollabDb: string | undefined
   let room: ReturnType<typeof createRoom>
   let memberA: GroupMember
   let memberB: GroupMember
   let memberC: GroupMember
 
   beforeEach(async () => {
-    vi.resetModules()
-    executeMemberTurn.mockReset()
-    maybeSummarizeRoom.mockReset()
-    getContextForMember.mockReturnValue({ summary: null, messages: [] })
+    mockExecuteMemberTurn.mockReset()
+    mockMaybeSummarizeRoom.mockReset()
+    mockGetContextForMember.mockReturnValue({ summary: null, messages: [] })
 
     dbPath = resetCollabDbForTests()
+    prevCollabDb = process.env.HERMES_COLLAB_DB
+    process.env.HERMES_COLLAB_DB = dbPath
     clearAllRunnerState()
 
     room = createRoom({ title: 'Baseline room', dbPath })
@@ -118,6 +124,11 @@ describe('group-chat clean baseline', () => {
     memberC = makeMember('orchestrator', 'orchestrator')
   })
 
+  afterEach(() => {
+    if (prevCollabDb === undefined) delete process.env.HERMES_COLLAB_DB
+    else process.env.HERMES_COLLAB_DB = prevCollabDb
+  })
+
   describe('invariant 1: message count consistency across member gateways', () => {
     it('each member receives the same number of unseen room messages in delta order', async () => {
       // Seed 7 room messages from different senders.
@@ -141,7 +152,7 @@ describe('group-chat clean baseline', () => {
         last: string
       }> = []
 
-      executeMemberTurn.mockImplementation(async () => {
+      mockExecuteMemberTurn.mockImplementation(async () => {
         const roomLog2 = getLatestMessages(room.id, { dbPath, limit: 200 })
         // Capture what each responder would see; real runner slices by watermark.
         return { kind: 'pass' } satisfies GroupTurnResult
@@ -267,7 +278,7 @@ describe('group-chat clean baseline', () => {
       })
 
       let callCount = 0
-      executeMemberTurn.mockImplementation(async ({ member }) => {
+      mockExecuteMemberTurn.mockImplementation(async ({ member }) => {
         callCount++
         return {
           kind: 'reply',
@@ -324,7 +335,7 @@ describe('group-chat clean baseline', () => {
         dbPath,
       })
 
-      executeMemberTurn.mockImplementation(async ({ member }) => ({
+      mockExecuteMemberTurn.mockImplementation(async ({ member }) => ({
         kind: 'reply',
         text: `${member.displayName} ack`,
       }))
@@ -366,7 +377,7 @@ describe('group-chat clean baseline', () => {
       })
 
       const callsByMember = new Map<string, number>()
-      executeMemberTurn.mockImplementation(async ({ member }) => {
+      mockExecuteMemberTurn.mockImplementation(async ({ member }) => {
         callsByMember.set(
           member.participantId,
           (callsByMember.get(member.participantId) ?? 0) + 1,
@@ -405,7 +416,7 @@ describe('group-chat clean baseline', () => {
       })
 
       const callsByMember = new Map<string, number>()
-      executeMemberTurn.mockImplementation(async ({ member }) => {
+      mockExecuteMemberTurn.mockImplementation(async ({ member }) => {
         callsByMember.set(
           member.participantId,
           (callsByMember.get(member.participantId) ?? 0) + 1,

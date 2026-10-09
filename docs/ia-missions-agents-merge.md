@@ -3,7 +3,7 @@
 > 状态：已确认（2026-09-20）  
 > 取代：侧栏「Missions Overview + Operations + Profiles(+Monitoring)」三入口重叠模型  
 > 相关：[`operations-redesign-spec.md`](./operations-redesign-spec.md)（Agents 页内部配置深度仍有效，页面名改为 Agents）  
-> 明确不做：不把 `/swarm2` 并进 Missions 或 Agents
+> 明确不做：不把 `/swarm` 并进 Missions 或 Agents
 
 ---
 
@@ -15,7 +15,7 @@
 | -------- | -------- | ------ | ------ |
 | **Missions** | `/missions` | 「在做什么」 | MissionSurface（board/list/swimlane）+ 详情 Tasks；Create Mission（Goal / pipeline / assignee）；可选群聊 |
 | **Agents** | `/agents` | 「是谁、能干什么、健康吗」 | profile 配置、轻量健康/用量、cron、outputs |
-| **Swarm** | `/swarm2` | 「编排现场」 | dispatch / tmux / Human Gate / checkpoint |
+| **Swarm** | `/swarm` | 「编排现场」 | dispatch / tmux / Human Gate / checkpoint |
 
 **删除的独立入口：**
 
@@ -107,7 +107,7 @@ Overview 里「谁在忙哪张卡」迁到 Agents 卡，避免 Missions↔Agents
 | 字段 | 展示 | 交互 |
 | ---- | ---- | ---- |
 | `currentTask` / `missionId` / task card id | 卡上单行标题或 id | 点击 → `/missions?missionId=<missionId>`（兼容 `taskId` card id） |
-| checkpoint / needsHuman | 状态点旁短标签 | needsHuman 时可次要链到 `/swarm2` |
+| checkpoint / needsHuman | 状态点旁短标签 | needsHuman 时可次要链到 `/swarm` |
 
 无 current task 时不占位空行（或显示 Idle）。
 

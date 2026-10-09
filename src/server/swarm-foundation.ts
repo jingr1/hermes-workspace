@@ -459,7 +459,8 @@ export function readSwarmRuntimeFile(
       source: 'runtime.json',
       runtime: normalizeSwarmRuntime(workerId, raw, options),
     }
-  } catch {
+  } catch (err) {
+    console.log('readSwarmRuntimeFile catch', runtimePath, err instanceof Error ? err.message : String(err))
     return {
       source: 'fallback',
       runtime: normalizeSwarmRuntime(workerId, {}, options),

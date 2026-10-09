@@ -92,7 +92,7 @@ export async function fetchModelsForJobProvider(
 
   try {
     const response = await fetch(
-      `/api/claude-proxy/api/available-models?provider=${encodeURIComponent(normalizedProvider)}`,
+      `/api/hermes-proxy/api/available-models?provider=${encodeURIComponent(normalizedProvider)}`,
     )
     if (response.ok) {
       const data = (await response.json()) as { models?: Array<{ id: string }> }

@@ -202,12 +202,12 @@ import { Route as ApiKnowledgeListRouteImport } from './routes/api/knowledge/lis
 import { Route as ApiKnowledgeGraphRouteImport } from './routes/api/knowledge/graph'
 import { Route as ApiKnowledgeConfigRouteImport } from './routes/api/knowledge/config'
 import { Route as ApiHermesTasksTaskIdRouteImport } from './routes/api/hermes-tasks.$taskId'
+import { Route as ApiHermesProxySplatRouteImport } from './routes/api/hermes-proxy/$'
 import { Route as ApiGitDiffRouteImport } from './routes/api/git/diff'
 import { Route as ApiExternalMemorySearchRouteImport } from './routes/api/external-memory/search'
 import { Route as ApiExternalMemoryProvidersRouteImport } from './routes/api/external-memory/providers'
 import { Route as ApiExternalMemoryCandidatesRouteImport } from './routes/api/external-memory/candidates'
 import { Route as ApiDashboardOverviewRouteImport } from './routes/api/dashboard/overview'
-import { Route as ApiClaudeProxySplatRouteImport } from './routes/api/claude-proxy/$'
 import { Route as ApiClaudeJobsJobIdRouteImport } from './routes/api/claude-jobs.$jobId'
 import { Route as ApiClaudeCodeSettingsRouteImport } from './routes/api/claude-code/settings'
 import { Route as ApiAuthCodexRouteImport } from './routes/api/auth.codex'
@@ -1242,6 +1242,11 @@ const ApiHermesTasksTaskIdRoute = ApiHermesTasksTaskIdRouteImport.update({
   path: '/$taskId',
   getParentRoute: () => ApiHermesTasksRoute,
 } as any)
+const ApiHermesProxySplatRoute = ApiHermesProxySplatRouteImport.update({
+  id: '/api/hermes-proxy/$',
+  path: '/api/hermes-proxy/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiGitDiffRoute = ApiGitDiffRouteImport.update({
   id: '/api/git/diff',
   path: '/api/git/diff',
@@ -1267,11 +1272,6 @@ const ApiExternalMemoryCandidatesRoute =
 const ApiDashboardOverviewRoute = ApiDashboardOverviewRouteImport.update({
   id: '/api/dashboard/overview',
   path: '/api/dashboard/overview',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiClaudeProxySplatRoute = ApiClaudeProxySplatRouteImport.update({
-  id: '/api/claude-proxy/$',
-  path: '/api/claude-proxy/$',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiClaudeJobsJobIdRoute = ApiClaudeJobsJobIdRouteImport.update({
@@ -1755,12 +1755,12 @@ export interface FileRoutesByFullPath {
   '/api/auth/codex': typeof ApiAuthCodexRoute
   '/api/claude-code/settings': typeof ApiClaudeCodeSettingsRoute
   '/api/claude-jobs/$jobId': typeof ApiClaudeJobsJobIdRoute
-  '/api/claude-proxy/$': typeof ApiClaudeProxySplatRoute
   '/api/dashboard/overview': typeof ApiDashboardOverviewRoute
   '/api/external-memory/candidates': typeof ApiExternalMemoryCandidatesRoute
   '/api/external-memory/providers': typeof ApiExternalMemoryProvidersRoute
   '/api/external-memory/search': typeof ApiExternalMemorySearchRoute
   '/api/git/diff': typeof ApiGitDiffRoute
+  '/api/hermes-proxy/$': typeof ApiHermesProxySplatRoute
   '/api/hermes-tasks/$taskId': typeof ApiHermesTasksTaskIdRoute
   '/api/knowledge/config': typeof ApiKnowledgeConfigRoute
   '/api/knowledge/graph': typeof ApiKnowledgeGraphRoute
@@ -2014,12 +2014,12 @@ export interface FileRoutesByTo {
   '/api/auth/codex': typeof ApiAuthCodexRoute
   '/api/claude-code/settings': typeof ApiClaudeCodeSettingsRoute
   '/api/claude-jobs/$jobId': typeof ApiClaudeJobsJobIdRoute
-  '/api/claude-proxy/$': typeof ApiClaudeProxySplatRoute
   '/api/dashboard/overview': typeof ApiDashboardOverviewRoute
   '/api/external-memory/candidates': typeof ApiExternalMemoryCandidatesRoute
   '/api/external-memory/providers': typeof ApiExternalMemoryProvidersRoute
   '/api/external-memory/search': typeof ApiExternalMemorySearchRoute
   '/api/git/diff': typeof ApiGitDiffRoute
+  '/api/hermes-proxy/$': typeof ApiHermesProxySplatRoute
   '/api/hermes-tasks/$taskId': typeof ApiHermesTasksTaskIdRoute
   '/api/knowledge/config': typeof ApiKnowledgeConfigRoute
   '/api/knowledge/graph': typeof ApiKnowledgeGraphRoute
@@ -2277,12 +2277,12 @@ export interface FileRoutesById {
   '/api/auth/codex': typeof ApiAuthCodexRoute
   '/api/claude-code/settings': typeof ApiClaudeCodeSettingsRoute
   '/api/claude-jobs/$jobId': typeof ApiClaudeJobsJobIdRoute
-  '/api/claude-proxy/$': typeof ApiClaudeProxySplatRoute
   '/api/dashboard/overview': typeof ApiDashboardOverviewRoute
   '/api/external-memory/candidates': typeof ApiExternalMemoryCandidatesRoute
   '/api/external-memory/providers': typeof ApiExternalMemoryProvidersRoute
   '/api/external-memory/search': typeof ApiExternalMemorySearchRoute
   '/api/git/diff': typeof ApiGitDiffRoute
+  '/api/hermes-proxy/$': typeof ApiHermesProxySplatRoute
   '/api/hermes-tasks/$taskId': typeof ApiHermesTasksTaskIdRoute
   '/api/knowledge/config': typeof ApiKnowledgeConfigRoute
   '/api/knowledge/graph': typeof ApiKnowledgeGraphRoute
@@ -2541,12 +2541,12 @@ export interface FileRouteTypes {
     | '/api/auth/codex'
     | '/api/claude-code/settings'
     | '/api/claude-jobs/$jobId'
-    | '/api/claude-proxy/$'
     | '/api/dashboard/overview'
     | '/api/external-memory/candidates'
     | '/api/external-memory/providers'
     | '/api/external-memory/search'
     | '/api/git/diff'
+    | '/api/hermes-proxy/$'
     | '/api/hermes-tasks/$taskId'
     | '/api/knowledge/config'
     | '/api/knowledge/graph'
@@ -2800,12 +2800,12 @@ export interface FileRouteTypes {
     | '/api/auth/codex'
     | '/api/claude-code/settings'
     | '/api/claude-jobs/$jobId'
-    | '/api/claude-proxy/$'
     | '/api/dashboard/overview'
     | '/api/external-memory/candidates'
     | '/api/external-memory/providers'
     | '/api/external-memory/search'
     | '/api/git/diff'
+    | '/api/hermes-proxy/$'
     | '/api/hermes-tasks/$taskId'
     | '/api/knowledge/config'
     | '/api/knowledge/graph'
@@ -3062,12 +3062,12 @@ export interface FileRouteTypes {
     | '/api/auth/codex'
     | '/api/claude-code/settings'
     | '/api/claude-jobs/$jobId'
-    | '/api/claude-proxy/$'
     | '/api/dashboard/overview'
     | '/api/external-memory/candidates'
     | '/api/external-memory/providers'
     | '/api/external-memory/search'
     | '/api/git/diff'
+    | '/api/hermes-proxy/$'
     | '/api/hermes-tasks/$taskId'
     | '/api/knowledge/config'
     | '/api/knowledge/graph'
@@ -3315,12 +3315,12 @@ export interface RootRouteChildren {
   ApiAgentsSnapshotRoute: typeof ApiAgentsSnapshotRoute
   ApiAgentsStatusRoute: typeof ApiAgentsStatusRoute
   ApiClaudeCodeSettingsRoute: typeof ApiClaudeCodeSettingsRoute
-  ApiClaudeProxySplatRoute: typeof ApiClaudeProxySplatRoute
   ApiDashboardOverviewRoute: typeof ApiDashboardOverviewRoute
   ApiExternalMemoryCandidatesRoute: typeof ApiExternalMemoryCandidatesRoute
   ApiExternalMemoryProvidersRoute: typeof ApiExternalMemoryProvidersRoute
   ApiExternalMemorySearchRoute: typeof ApiExternalMemorySearchRoute
   ApiGitDiffRoute: typeof ApiGitDiffRoute
+  ApiHermesProxySplatRoute: typeof ApiHermesProxySplatRoute
   ApiKnowledgeConfigRoute: typeof ApiKnowledgeConfigRoute
   ApiKnowledgeGraphRoute: typeof ApiKnowledgeGraphRoute
   ApiKnowledgeListRoute: typeof ApiKnowledgeListRoute
@@ -4742,6 +4742,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiHermesTasksTaskIdRouteImport
       parentRoute: typeof ApiHermesTasksRoute
     }
+    '/api/hermes-proxy/$': {
+      id: '/api/hermes-proxy/$'
+      path: '/api/hermes-proxy/$'
+      fullPath: '/api/hermes-proxy/$'
+      preLoaderRoute: typeof ApiHermesProxySplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/git/diff': {
       id: '/api/git/diff'
       path: '/api/git/diff'
@@ -4775,13 +4782,6 @@ declare module '@tanstack/react-router' {
       path: '/api/dashboard/overview'
       fullPath: '/api/dashboard/overview'
       preLoaderRoute: typeof ApiDashboardOverviewRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/claude-proxy/$': {
-      id: '/api/claude-proxy/$'
-      path: '/api/claude-proxy/$'
-      fullPath: '/api/claude-proxy/$'
-      preLoaderRoute: typeof ApiClaudeProxySplatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/claude-jobs/$jobId': {
@@ -5784,12 +5784,12 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentsSnapshotRoute: ApiAgentsSnapshotRoute,
   ApiAgentsStatusRoute: ApiAgentsStatusRoute,
   ApiClaudeCodeSettingsRoute: ApiClaudeCodeSettingsRoute,
-  ApiClaudeProxySplatRoute: ApiClaudeProxySplatRoute,
   ApiDashboardOverviewRoute: ApiDashboardOverviewRoute,
   ApiExternalMemoryCandidatesRoute: ApiExternalMemoryCandidatesRoute,
   ApiExternalMemoryProvidersRoute: ApiExternalMemoryProvidersRoute,
   ApiExternalMemorySearchRoute: ApiExternalMemorySearchRoute,
   ApiGitDiffRoute: ApiGitDiffRoute,
+  ApiHermesProxySplatRoute: ApiHermesProxySplatRoute,
   ApiKnowledgeConfigRoute: ApiKnowledgeConfigRoute,
   ApiKnowledgeGraphRoute: ApiKnowledgeGraphRoute,
   ApiKnowledgeListRoute: ApiKnowledgeListRoute,

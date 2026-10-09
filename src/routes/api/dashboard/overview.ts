@@ -5,7 +5,6 @@
  *   - gateway status (running, active_agents, restart_requested)
  *   - connected platforms (api_server, telegram, discord, etc.)
  *   - cron summary (total / paused / running / next_run_at)
- *   - achievements (recent unlocks + total unlocked count)
  *   - current model info (provider, model, context length, capabilities)
  *   - analytics rollup (last N days, top models, optional cost)
  *
@@ -42,14 +41,11 @@ export const Route = createFileRoute('/api/dashboard/overview')({
         try {
           const url = new URL(request.url)
           const days = Number(url.searchParams.get('days') ?? '30')
-          const limit = Number(url.searchParams.get('achievements') ?? '3')
           const logsLimit = Number(url.searchParams.get('logs') ?? '24')
           const overview = await buildDashboardOverview({
             fetcher: overviewFetcher,
             gatewayFetcher: overviewGatewayFetcher,
             analyticsWindowDays: Number.isFinite(days) && days > 0 ? days : 30,
-            achievementsLimit:
-              Number.isFinite(limit) && limit > 0 ? Math.min(limit, 12) : 3,
             logsLimit:
               Number.isFinite(logsLimit) && logsLimit > 0
                 ? Math.min(logsLimit, 100)

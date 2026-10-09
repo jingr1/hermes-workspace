@@ -19,7 +19,9 @@ import { getHermesRoot } from './hermes-paths'
  */
 
 export function getCollabDbPath(): string {
-  return path.join(getHermesRoot(), 'collab.db')
+  return (
+    process.env.HERMES_COLLAB_DB ?? path.join(getHermesRoot(), 'collab.db')
+  )
 }
 
 const MIGRATIONS: Array<{ version: number; sql: string }> = [
@@ -359,6 +361,85 @@ CREATE INDEX IF NOT EXISTS idx_agent_mcp_servers_agent
   ON agent_mcp_servers(agent_id, enabled);
 CREATE INDEX IF NOT EXISTS idx_agent_mcp_servers_server
   ON agent_mcp_servers(server_id);
+`,
+  },
+  {
+    version: 10,
+    sql: `
+-- Mission / assignment state moves from swarm-missions.json into collab.db.
+-- JSON becomes an export cache; SQLite is the source of truth.
+CREATE TABLE IF NOT EXISTS missions (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  state TEXT NOT NULL,
+  spec TEXT NOT NULL DEFAULT '',
+  acceptance_criteria TEXT NOT NULL DEFAULT '[]',
+  spec_version INTEGER NOT NULL DEFAULT 1,
+  pipeline_id TEXT,
+  project_id TEXT,
+  workspace_mode TEXT,
+  execution_mode TEXT,
+  assignee_type TEXT,
+  assignee_id TEXT,
+  room_id TEXT,
+  priority INTEGER,
+  labels TEXT NOT NULL DEFAULT '[]',
+  board_lane TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_missions_state_updated
+  ON missions(state, updated_at);
+CREATE INDEX IF NOT EXISTS idx_missions_project
+  ON missions(project_id, state);
+
+CREATE TABLE IF NOT EXISTS assignments (
+  id TEXT PRIMARY KEY,
+  mission_id TEXT NOT NULL,
+  worker_id TEXT NOT NULL,
+  task TEXT NOT NULL,
+  rationale TEXT,
+  depends_on TEXT NOT NULL DEFAULT '[]',
+  review_required INTEGER NOT NULL DEFAULT 0,
+  state TEXT NOT NULL,
+  dispatched_at INTEGER,
+  completed_at INTEGER,
+  reviewed_at INTEGER,
+  reviewed_by TEXT,
+  checkpoint_json TEXT,
+  stage_key TEXT,
+  brief_spec_version INTEGER,
+  requires TEXT NOT NULL DEFAULT '[]',
+  created_by_worker_id TEXT NOT NULL DEFAULT 'system:pipeline',
+  dispatchable INTEGER NOT NULL DEFAULT 1,
+  external_ref_json TEXT,
+  workspace_path TEXT,
+  base_ref TEXT,
+  head_sha TEXT,
+  FOREIGN KEY (mission_id) REFERENCES missions(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_assignments_mission
+  ON assignments(mission_id, state);
+CREATE INDEX IF NOT EXISTS idx_assignments_worker
+  ON assignments(worker_id, state);
+
+-- Mission events: canonical event log derived from the old JSON events array.
+CREATE TABLE IF NOT EXISTS mission_events (
+  id TEXT PRIMARY KEY,
+  mission_id TEXT NOT NULL,
+  type TEXT NOT NULL,
+  at INTEGER NOT NULL,
+  worker_id TEXT,
+  assignment_id TEXT,
+  message TEXT NOT NULL,
+  data_json TEXT,
+  FOREIGN KEY (mission_id) REFERENCES missions(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_mission_events_mission
+  ON mission_events(mission_id, at);
 `,
   },
 ]

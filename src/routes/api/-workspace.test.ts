@@ -9,6 +9,7 @@ import {
 } from './workspace'
 import {
   WorkspaceFolderAccessError,
+  __resetHermesStateRootsForTests,
   listWorkspaceFolders,
 } from '../../server/workspace-path-policy'
 
@@ -23,7 +24,15 @@ async function makeDir(...parts: Array<string>) {
 
 beforeEach(async () => {
   tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'hermes-workspace-route-'))
-  process.env = { ...originalEnv }
+  // Mutate keys in place — replacing process.env wholesale breaks Node's
+  // special Env object and leaves hermes-state-root caches stale.
+  for (const key of Object.keys(process.env)) {
+    if (!(key in originalEnv)) delete process.env[key]
+  }
+  for (const [key, value] of Object.entries(originalEnv)) {
+    if (value === undefined) delete process.env[key]
+    else process.env[key] = value
+  }
   process.env.HERMES_HOME = path.join(tempRoot, '.hermes')
   delete process.env.AGORAX_DIR
   delete process.env.CLAUDE_WORKSPACE_DIR
@@ -32,10 +41,18 @@ beforeEach(async () => {
   // The catalog is cached module-side with a TTL keyed by profile only (not
   // by HERMES_HOME); each test swaps HERMES_HOME, so flush the cache.
   invalidateWorkspaceCatalogCache()
+  __resetHermesStateRootsForTests()
 })
 
 afterEach(async () => {
-  process.env = { ...originalEnv }
+  for (const key of Object.keys(process.env)) {
+    if (!(key in originalEnv)) delete process.env[key]
+  }
+  for (const [key, value] of Object.entries(originalEnv)) {
+    if (value === undefined) delete process.env[key]
+    else process.env[key] = value
+  }
+  __resetHermesStateRootsForTests()
   await fs.rm(tempRoot, { recursive: true, force: true })
 })
 

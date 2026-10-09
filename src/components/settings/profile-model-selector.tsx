@@ -86,7 +86,7 @@ export function ProfileModelSelector({
       const catalogEntry = catalog.find((entry) => entry.id === providerId)
       try {
         const res = await fetch(
-          `/api/claude-proxy/api/available-models?provider=${encodeURIComponent(providerId)}`,
+          `/api/hermes-proxy/api/available-models?provider=${encodeURIComponent(providerId)}`,
         )
         if (res.ok) {
           const data = (await res.json()) as { models?: Array<{ id: string }> }

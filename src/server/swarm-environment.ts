@@ -4,6 +4,11 @@ import { homedir } from 'node:os'
 import { getHermesRoot, getProfilesDir, getLocalBinDir } from './hermes-paths'
 
 export const SWARM_CANONICAL_REPO = resolve(process.cwd())
+export const SWARM_MISSIONS_PATH = join(
+  SWARM_CANONICAL_REPO,
+  '.runtime',
+  'swarm-missions.json',
+)
 export const SWARM_MEMORY_ROOT =
   process.env.HERMES_SWARM_MEMORY_ROOT || join(homedir(), 'hermes-workspace')
 export const SWARM_MEMORY_HANDOFFS = join(SWARM_MEMORY_ROOT, 'memory')
@@ -51,7 +56,7 @@ export function getSwarmEnvironment(): SwarmEnvironment {
     wrapperPattern: join(localBinDir, 'swarmN'),
     tmuxSessionPattern: 'swarm-<workerId>',
     defaultBuildCommand: `cd ${SWARM_CANONICAL_REPO} && npm run build`,
-    defaultTestCommand: `cd ${SWARM_CANONICAL_REPO} && npm test -- src/screens/swarm2`,
+    defaultTestCommand: `cd ${SWARM_CANONICAL_REPO} && npm test -- src/screens/swarm`,
     defaultDevCommand: `cd ${SWARM_CANONICAL_REPO} && PORT=3002 npm run dev`,
     runtimeApis: [
       '/api/swarm-environment',

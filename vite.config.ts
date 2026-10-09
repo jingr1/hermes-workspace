@@ -1,6 +1,4 @@
 import { URL, fileURLToPath } from 'node:url'
-import { execSync, spawn } from 'node:child_process'
-import type { ChildProcess } from 'node:child_process'
 import {
   copyFileSync,
   existsSync,
@@ -8,9 +6,7 @@ import {
   readFileSync,
   writeFileSync,
 } from 'node:fs'
-import net from 'node:net'
 import { resolve, join } from 'node:path'
-import os from 'node:os'
 import * as yaml from 'yaml'
 
 // devtools removed
@@ -96,196 +92,6 @@ const config = defineConfig(({ mode, command }) => {
     }
   }
 
-  let workspaceDaemonStarted = false
-  let workspaceDaemonStarting = false
-  let workspaceDaemonShuttingDown = false
-  let workspaceDaemonRestarting = false
-  let workspaceDaemonChild: ChildProcess | null = null
-  let workspaceDaemonRetryCount = 0
-  const workspaceDaemonPort = '3099'
-  const daemonCwd = resolve('workspace-daemon')
-  const daemonSrcEntry = resolve('workspace-daemon/src/server.ts')
-  const daemonDistEntry = resolve('workspace-daemon/dist/server.js')
-  const workspaceDaemonDbPath = resolve(
-    'workspace-daemon/.workspaces/workspace.db',
-  )
-
-  const getWorkspaceDaemonDelayMs = (attempt: number) =>
-    Math.min(1000 * 2 ** Math.max(attempt - 1, 0), 30000)
-
-  const startWorkspaceDaemon = () => {
-    if (workspaceDaemonShuttingDown) return
-    if (workspaceDaemonStarted || workspaceDaemonStarting) return
-
-    const spawnCommand = existsSync(daemonSrcEntry)
-      ? {
-          commandName: 'npx',
-          args: ['tsx', 'watch', 'src/server.ts'],
-          options: {
-            cwd: daemonCwd,
-            env: {
-              ...process.env,
-              PORT: workspaceDaemonPort,
-              DB_PATH: workspaceDaemonDbPath,
-              ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? '',
-            },
-            stdio: 'inherit' as const,
-          },
-        }
-      : existsSync(daemonDistEntry)
-        ? {
-            commandName: 'node',
-            args: ['dist/server.js'],
-            options: {
-              cwd: daemonCwd,
-              env: {
-                ...process.env,
-                PORT: workspaceDaemonPort,
-                DB_PATH: workspaceDaemonDbPath,
-                ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? '',
-              },
-              stdio: 'inherit' as const,
-            },
-          }
-        : null
-
-    if (!spawnCommand) {
-      workspaceDaemonStarting = false
-      console.error('[workspace-daemon] no server entry found to spawn.')
-      return
-    }
-
-    workspaceDaemonStarted = true
-    workspaceDaemonStarting = false
-    const child = spawn(
-      spawnCommand.commandName,
-      spawnCommand.args,
-      spawnCommand.options,
-    )
-    workspaceDaemonChild = child
-
-    child.on('exit', (code) => {
-      if (workspaceDaemonChild === child) {
-        workspaceDaemonChild = null
-      }
-
-      if (workspaceDaemonShuttingDown || workspaceDaemonRestarting) {
-        workspaceDaemonStarted = false
-        workspaceDaemonStarting = false
-        return
-      }
-
-      if (code === 0) {
-        workspaceDaemonStarted = false
-        workspaceDaemonStarting = false
-        return
-      }
-
-      if (workspaceDaemonRetryCount >= 20) {
-        workspaceDaemonStarted = false
-        workspaceDaemonStarting = false
-        console.error(
-          `[workspace-daemon] crashed with code ${code ?? 'unknown'}; max restart attempts reached.`,
-        )
-        return
-      }
-
-      workspaceDaemonRetryCount += 1
-      const delayMs = getWorkspaceDaemonDelayMs(workspaceDaemonRetryCount)
-      console.error(
-        `[workspace-daemon] crashed with code ${code ?? 'unknown'}; restarting in ${Math.round(
-          delayMs / 1000,
-        )}s (${workspaceDaemonRetryCount}/20).`,
-      )
-
-      workspaceDaemonStarting = true
-      workspaceDaemonStarted = false
-      setTimeout(() => {
-        startWorkspaceDaemon()
-      }, delayMs)
-    })
-
-    child.on('error', (error) => {
-      console.error(`[workspace-daemon] failed to spawn: ${error.message}`)
-    })
-  }
-
-  const stopWorkspaceDaemon = async () => {
-    const child = workspaceDaemonChild
-    if (!child) {
-      workspaceDaemonStarted = false
-      workspaceDaemonStarting = false
-      return
-    }
-
-    workspaceDaemonRestarting = true
-
-    await new Promise<void>((resolve) => {
-      const exitTimer = setTimeout(() => {
-        if (!child.killed && child.pid) {
-          try {
-            process.kill(child.pid, 'SIGKILL')
-          } catch {
-            // ignore
-          }
-        }
-      }, 5000)
-
-      child.once('exit', () => {
-        clearTimeout(exitTimer)
-        resolve()
-      })
-
-      if (child.pid) {
-        try {
-          process.kill(child.pid, 'SIGTERM')
-        } catch {
-          clearTimeout(exitTimer)
-          resolve()
-        }
-      } else {
-        clearTimeout(exitTimer)
-        resolve()
-      }
-    })
-
-    workspaceDaemonStarted = false
-    workspaceDaemonStarting = false
-    workspaceDaemonRestarting = false
-  }
-
-  const restartWorkspaceDaemon = async () => {
-    workspaceDaemonRetryCount = 0
-    await stopWorkspaceDaemon()
-    workspaceDaemonStarted = false
-    workspaceDaemonStarting = false
-    startWorkspaceDaemon()
-  }
-
-  const isPortInUse = (port: number) =>
-    new Promise<boolean>((resolvePortCheck) => {
-      const socket = net.createConnection({ port, host: '127.0.0.1' })
-      socket.once('connect', () => {
-        socket.destroy()
-        resolvePortCheck(true)
-      })
-      socket.once('error', () => resolvePortCheck(false))
-    })
-
-  const hasHealthyWorkspaceDaemon = async () => {
-    try {
-      const response = await fetch(
-        `http://127.0.0.1:${workspaceDaemonPort}/api/workspace/version`,
-        {
-          signal: AbortSignal.timeout(2000),
-        },
-      )
-      return response.ok
-    } catch {
-      return false
-    }
-  }
-
   // Allow access from Tailscale, LAN, or custom domains via env var
   // e.g. CLAUDE_ALLOWED_HOSTS=my-server.tail1234.ts.net,192.168.1.50
   const _allowedHosts: string[] | true = env.CLAUDE_ALLOWED_HOSTS?.trim()
@@ -294,7 +100,7 @@ const config = defineConfig(({ mode, command }) => {
         .map((h) => h.trim())
         .filter(Boolean)
     : ['.ts.net'] // allow all Tailscale hostnames by default
-  let proxyTarget = 'http://127.0.0.1:18789'
+  let proxyTarget = 'http://127.0.0.1:8642'
 
   try {
     const parsed = new URL(claudeApiUrl)
@@ -453,38 +259,11 @@ const config = defineConfig(({ mode, command }) => {
         ],
       },
       proxy: {
-        // WebSocket proxy: clients connect to /ws-claude on the Agorax
-        // server (any IP/port), which internally forwards to the local server.
-        // This means phone/LAN/Docker users never need to reach port 18789 directly.
-        '/ws-claude': {
-          target: proxyTarget,
-          changeOrigin: false,
-          ws: true,
-          rewrite: (path) => path.replace(/^\/ws-claude/, ''),
-        },
-        // REST API proxy: API proxy for Hermes backend
-        '/api/claude-proxy': {
+        // Dev proxy for Hermes backend (settings / model catalog paths).
+        '/api/hermes-proxy': {
           target: proxyTarget,
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api\/claude-proxy/, ''),
-        },
-        '/claude-ui': {
-          target: proxyTarget,
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/claude-ui/, ''),
-          ws: true,
-          configure: (proxy) => {
-            proxy.on('proxyRes', (_proxyRes) => {
-              // Strip iframe-blocking headers so we can embed
-              delete _proxyRes.headers['x-frame-options']
-              delete _proxyRes.headers['content-security-policy']
-            })
-          },
-        },
-        '/workspace-api': {
-          target: 'http://127.0.0.1:3099',
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/workspace-api/, ''),
+          rewrite: (path) => path.replace(/^\/api\/hermes-proxy/, ''),
         },
       },
     },
@@ -495,7 +274,9 @@ const config = defineConfig(({ mode, command }) => {
         projects: ['./tsconfig.json'],
       }),
       tailwindcss(),
-      tanstackStart(),
+      // Disable TanStack Start's route-file transform in Vitest so that
+      // createFileRoute() calls keep their inline server handlers for tests.
+      ...(process.env.VITEST ? [] : [tanstackStart()]),
       viteReact(),
       {
         name: 'hermes-dev-no-cache',
@@ -513,10 +294,7 @@ const config = defineConfig(({ mode, command }) => {
         },
       },
       {
-        name: 'workspace-daemon',
-        buildStart() {
-          if (command !== 'serve') return
-        },
+        name: 'agorax-dev-server',
         configureServer(server) {
           // Content Security Policy as a real HTTP response header. Sending
           // it here (not as a `<meta>` tag) keeps the policy authoritative
@@ -552,7 +330,7 @@ const config = defineConfig(({ mode, command }) => {
             res.setHeader('Permissions-Policy', 'microphone=(self), camera=()')
             next()
           })
-          server.middlewares.use(async (req, res, next) => {
+          server.middlewares.use((req, res, next) => {
             const requestPath = req.url?.split('?')[0]
             if (req.method === 'GET' && requestPath === '/api/healthcheck') {
               res.statusCode = 200
@@ -568,30 +346,7 @@ const config = defineConfig(({ mode, command }) => {
             // had an inline shortcut handler here that returned a slim
             // body ({ok, mode, backend}) which silently broke things like
             // useFeatureCapability/useFeatureAvailable in dev mode. See #285.
-
-            if (
-              req.method !== 'POST' ||
-              requestPath !== '/api/workspace/daemon/restart'
-            ) {
-              next()
-              return
-            }
-
-            try {
-              await restartWorkspaceDaemon()
-              res.statusCode = 200
-              res.setHeader('content-type', 'application/json')
-              res.end(JSON.stringify({ ok: true }))
-            } catch (error) {
-              res.statusCode = 500
-              res.setHeader('content-type', 'application/json')
-              res.end(
-                JSON.stringify({
-                  error:
-                    error instanceof Error ? error.message : 'Internal error',
-                }),
-              )
-            }
+            next()
           })
 
           // PATCH /api/swarm-roster — writes directly to swarm.yaml.
@@ -739,16 +494,6 @@ const config = defineConfig(({ mode, command }) => {
             next()
           })
 
-          server.httpServer?.on('close', () => {
-            workspaceDaemonShuttingDown = true
-            workspaceDaemonStarted = false
-            workspaceDaemonStarting = false
-            if (workspaceDaemonChild) {
-              workspaceDaemonChild.kill()
-              workspaceDaemonChild = null
-            }
-          })
-
           // Auto-start hermes-agent when dev server launches.
           // Skip when launchd manages the gateway (AGORAX_AUTO_START_AGENT=false)
           // to avoid SIGTERM cycle on close that nukes the launchd-managed process.
@@ -760,56 +505,32 @@ const config = defineConfig(({ mode, command }) => {
 
           // The group-chat runner is started by the server module import in
           // src/routes/api/connection-status.ts, so no extra startup is needed here.
-
-          if (
-            command !== 'serve' ||
-            workspaceDaemonStarted ||
-            workspaceDaemonStarting
-          )
-            return
-
-          workspaceDaemonStarting = true
-          void (async () => {
-            const running = await isPortInUse(Number(workspaceDaemonPort))
-            if (workspaceDaemonStarted) {
-              workspaceDaemonStarting = false
-              return
-            }
-
-            if (running) {
-              const healthy = await hasHealthyWorkspaceDaemon()
-              if (healthy) {
-                workspaceDaemonStarting = false
-                console.log('[workspace-daemon] Reusing existing daemon')
-                return
-              }
-
-              try {
-                execSync(
-                  `lsof -ti:${workspaceDaemonPort} | xargs kill -9 2>/dev/null || true`,
-                )
-              } catch {
-                // ignore stale cleanup failures and continue with a fresh spawn
-              }
-            }
-
-            startWorkspaceDaemon()
-          })()
         },
       },
       // Client-only: replace process.env references in client bundles.
       // Server bundles must keep real process.env for Docker runtime env vars.
       // Exclusion rule: server-side code & tests are not browser bundles —
       // they need runtime process.env access (e.g. Docker secrets, CI env).
+      //
+      // Vitest runs modules under environment.name === 'client' (jsdom), so
+      // without the VITEST / mode===test guard this plugin turns
+      // `process.env.FOO` into `{}.FOO` in route helpers like swarm-dispatch —
+      // tests that mutate process.env then silently read undefined.
       {
         name: 'client-process-env',
         enforce: 'pre',
         transform(code, id) {
+          if (mode === 'test' || process.env.VITEST) return null
           const envName = this.environment?.name
           if (envName !== 'client') return null
-          // Skip server/runtime or test files; they must retain real
-          // process.env access instead of the client-side env stub.
-          if (id.includes('/src/server/') || id.includes('.test.')) return null
+          // Skip server/runtime, API routes (often import shared helpers that
+          // read process.env at runtime), and test files.
+          if (
+            id.includes('/src/server/') ||
+            id.includes('/src/routes/api/') ||
+            id.includes('.test.')
+          )
+            return null
           if (
             !code.includes('process.env') &&
             !code.includes('process.platform')

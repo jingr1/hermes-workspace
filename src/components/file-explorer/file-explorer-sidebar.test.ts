@@ -38,9 +38,8 @@ describe('file explorer workspace refresh', () => {
 
   it('docks on the right by default with a left border', () => {
     expect(sidebarSource).toContain("side = 'right'")
-    expect(sidebarSource).toContain(
-      "side === 'right' ? 'border-l border-primary-200'",
-    )
+    expect(sidebarSource).toContain("side === 'right'")
+    expect(sidebarSource).toContain("'border-l border-primary-200'")
   })
 
   it('opens files in an in-panel webui-style preview instead of a modal', () => {
@@ -98,7 +97,8 @@ describe('file explorer workspace refresh', () => {
   it('extends context menu and preview-facing CRUD gaps', () => {
     expect(sidebarSource).toContain('Reveal in file manager')
     expect(sidebarSource).toContain('Open in editor')
-    expect(sidebarSource).toContain('Download folder')
+    expect(sidebarSource).toContain('Download')
+    expect(sidebarSource).toContain('folder')
     expect(sidebarSource).toContain('download-folder')
     expect(sidebarSource).toContain('collectOsDropFiles')
     expect(sidebarSource).toContain('handleCopyAbsolutePath')

@@ -8,7 +8,6 @@ const FILES = [
   'src/components/mobile-hamburger-menu.tsx',
   'src/components/mobile-tab-bar.tsx',
   'src/components/inspector/inspector-panel.tsx',
-  'src/components/slash-command-menu.tsx',
   'src/components/search/search-modal.tsx',
   'src/components/workspace-shell.tsx',
 ] as const

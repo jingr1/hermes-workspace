@@ -117,7 +117,7 @@ Orchestrator at [timestamp]
 
 Preferred resume paths (unchanged):
 
-- Dashboard `/swarm2` Human Gate：**继续执行** / **中止**
+- Dashboard `/swarm` Human Gate：**继续执行** / **中止**
 - CLI: `python -m hermes_langgraph_orchestrator --execute --resume approved|abort --mission-id <id>`
 - API: `POST /api/orchestrator-resume` with `{ missionId, action }`
 

@@ -1,10 +1,15 @@
 /**
- * reconcile — P2a 启动对账 (plan «双存储与崩溃恢复» 行 454-463).
+ * reconcile — P2a boot reconciliation (plan «dual-storage & crash recovery»).
  *
- * Runs BEFORE the server listens. Repairs the split-brain window between
- * the mission store (swarm-missions.json, pipeline source of truth) and
- * collab.db task_runs (run source of truth). They are not transactional
- * with each other; this pass makes the known liability RECOVERABLE.
+ * Runs BEFORE the server listens. Reads mission / assignment state from the
+ * MissionRepository abstraction (SQLite source of truth when
+ * AGORAX_MISSION_SQLITE_SOT=1; otherwise the JSON-backed repository). The
+ * legacy direct JSON read has been removed; this module only talks to the
+ * repository facade.
+ *
+ * Repairs the split-brain window between the mission repository and
+ * collab.db task_runs (run source of truth). They are not transactional with
+ * each other; this pass makes the known liability RECOVERABLE.
  *
  * Disposition table (plan, verbatim):
  *
@@ -35,7 +40,6 @@ import {
   recordMissionAssignmentBlocked,
   requeueMissionAssignment,
 } from '../swarm-missions'
-import { publishChatEvent } from '../chat-event-bus'
 
 export type ReconcileFinding =
   | {

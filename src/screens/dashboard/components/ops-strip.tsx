@@ -225,7 +225,7 @@ export function OpsStrip({
         {kanban ? (
           <button
             type="button"
-            onClick={() => navigate({ to: '/swarm2' })}
+            onClick={() => navigate({ to: '/swarm' })}
             className="inline-flex items-center gap-2 rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] transition-colors hover:bg-[var(--theme-card)]/80"
             style={{
               borderColor:

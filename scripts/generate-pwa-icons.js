@@ -64,6 +64,11 @@ async function main() {
   await generateIcon(192, 'agorax-icon-192.png')
   await generateIcon(512, 'agorax-icon-512.png')
   await generateCover()
+  // Keep avatar fallbacks in sync with the 192 PWA mark.
+  const icon192 = readFileSync(join(outputDir, 'agorax-icon-192.png'))
+  writeFileSync(join(outputDir, 'agent-avatars/agorax-rounded.png'), icon192)
+  writeFileSync(join(outputDir, 'agent-avatars/fallback.png'), icon192)
+  console.log('✓ Synced agent-avatars/agorax-rounded.png + fallback.png')
   console.log('✓ All icons generated successfully!')
 }
 

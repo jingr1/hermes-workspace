@@ -387,7 +387,7 @@ export function ModelProviderPanel({
       }
 
       fetch(
-        `/api/claude-proxy/api/available-models?provider=${encodeURIComponent(providerId)}`,
+        `/api/hermes-proxy/api/available-models?provider=${encodeURIComponent(providerId)}`,
       )
         .then((r) => r.json())
         .then((d: { models?: Array<{ id: string }> }) => {

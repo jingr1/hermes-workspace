@@ -6,6 +6,10 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
+// Importing task-service pulls in the runtime subtree; first load can exceed
+// the default 5s timeout.
+vi.setConfig({ testTimeout: 30_000 })
+
 describe('createMission XOR', () => {
   let prevCwd: string
   let tmp: string
@@ -101,6 +105,7 @@ agents:
   it('pipeline create keeps roomId null and decomposes tasks', async () => {
     vi.doMock('../swarm-environment', () => ({
       SWARM_CANONICAL_REPO: tmp,
+    SWARM_MISSIONS_PATH: join(tmp, '.runtime', 'swarm-missions.json'),
       SWARM_MEMORY_HANDOFFS: join(tmp, 'memory'),
       SWARM_LEGACY_OUTPUT_ROOT: join(tmp, 'output'),
     }))
@@ -141,6 +146,7 @@ agents:
   it('assignee chat_group binds roomId without tasks', async () => {
     vi.doMock('../swarm-environment', () => ({
       SWARM_CANONICAL_REPO: tmp,
+    SWARM_MISSIONS_PATH: join(tmp, '.runtime', 'swarm-missions.json'),
       SWARM_MEMORY_HANDOFFS: join(tmp, 'memory'),
       SWARM_LEGACY_OUTPUT_ROOT: join(tmp, 'output'),
     }))

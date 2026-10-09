@@ -37,7 +37,6 @@ function writeRuntime(workerId: string, runtime: Record<string, unknown>) {
 beforeEach(() => {
   tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'swarm-runtime-reset-'))
   setEnv('HERMES_HOME', tmpHome)
-  setEnv('HERMES_HOME', undefined)
   vi.resetModules()
 })
 
@@ -57,16 +56,16 @@ async function loadHandlers() {
 
 describe('/api/swarm-runtime/reset', () => {
   it('resets the selected semantic worker runtimes', async () => {
-    writeRuntime('augur', {
-      workerId: 'augur',
+    writeRuntime('orchestrator', {
+      workerId: 'orchestrator',
       state: 'blocked',
       phase: 'stalled',
       currentTask: 'Need operator input',
       currentMissionId: 'mission-1',
       extraField: 'keep-me',
     })
-    writeRuntime('consul', {
-      workerId: 'consul',
+    writeRuntime('researcher', {
+      workerId: 'researcher',
       state: 'executing',
       phase: 'running',
       currentTask: 'still working',
@@ -78,7 +77,7 @@ describe('/api/swarm-runtime/reset', () => {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          workerIds: ['augur'],
+          workerIds: ['orchestrator'],
           actor: 'test-suite',
           reason: 'manual cleanup',
         }),
@@ -88,39 +87,39 @@ describe('/api/swarm-runtime/reset', () => {
 
     expect(res.status).toBe(200)
     expect(body.ok).toBe(true)
-    expect(body.workerIds).toEqual(['augur'])
+    expect(body.workerIds).toEqual(['orchestrator'])
     expect(body.resetCount).toBe(1)
 
-    const augurRuntime = JSON.parse(
+    const orchestratorRuntime = JSON.parse(
       fs.readFileSync(
-        path.join(tmpHome, 'profiles', 'augur', 'runtime.json'),
+        path.join(tmpHome, 'profiles', 'orchestrator', 'runtime.json'),
         'utf-8',
       ),
     )
-    const consulRuntime = JSON.parse(
+    const researcherRuntime = JSON.parse(
       fs.readFileSync(
-        path.join(tmpHome, 'profiles', 'consul', 'runtime.json'),
+        path.join(tmpHome, 'profiles', 'researcher', 'runtime.json'),
         'utf-8',
       ),
     )
 
-    expect(augurRuntime.state).toBe('idle')
-    expect(augurRuntime.phase).toBe('cancelled')
-    expect(augurRuntime.currentTask).toBeNull()
-    expect(augurRuntime.currentMissionId).toBeNull()
-    expect(augurRuntime.extraField).toBe('keep-me')
-    expect(augurRuntime.cancelledBy).toBe('test-suite')
-    expect(consulRuntime.state).toBe('executing')
+    expect(orchestratorRuntime.state).toBe('idle')
+    expect(orchestratorRuntime.phase).toBe('cancelled')
+    expect(orchestratorRuntime.currentTask).toBeNull()
+    expect(orchestratorRuntime.currentMissionId).toBeNull()
+    expect(orchestratorRuntime.extraField).toBe('keep-me')
+    expect(orchestratorRuntime.cancelledBy).toBe('test-suite')
+    expect(researcherRuntime.state).toBe('executing')
   })
 
   it('resets all worker profiles but skips the synthetic workspace profile', async () => {
-    writeRuntime('builder', {
-      workerId: 'builder',
+    writeRuntime('developer', {
+      workerId: 'developer',
       state: 'blocked',
       phase: 'stalled',
     })
-    writeRuntime('reviewer', {
-      workerId: 'reviewer',
+    writeRuntime('architect', {
+      workerId: 'architect',
       state: 'executing',
       phase: 'running',
     })
@@ -141,17 +140,20 @@ describe('/api/swarm-runtime/reset', () => {
     const body = await res.json()
 
     expect(res.status).toBe(200)
-    expect(body.workerIds).toEqual(['builder', 'reviewer'])
+    expect(body.workerIds).toEqual(
+      expect.arrayContaining(['developer', 'architect']),
+    )
+    expect(body.workerIds).not.toContain('workspace')
 
-    const builderRuntime = JSON.parse(
+    const developerRuntime = JSON.parse(
       fs.readFileSync(
-        path.join(tmpHome, 'profiles', 'builder', 'runtime.json'),
+        path.join(tmpHome, 'profiles', 'developer', 'runtime.json'),
         'utf-8',
       ),
     )
-    const reviewerRuntime = JSON.parse(
+    const architectRuntime = JSON.parse(
       fs.readFileSync(
-        path.join(tmpHome, 'profiles', 'reviewer', 'runtime.json'),
+        path.join(tmpHome, 'profiles', 'architect', 'runtime.json'),
         'utf-8',
       ),
     )
@@ -162,14 +164,14 @@ describe('/api/swarm-runtime/reset', () => {
       ),
     )
 
-    expect(builderRuntime.state).toBe('idle')
-    expect(reviewerRuntime.state).toBe('idle')
+    expect(developerRuntime.state).toBe('idle')
+    expect(architectRuntime.state).toBe('idle')
     expect(workspaceRuntime.state).toBe('blocked')
   })
 
   it('rejects unknown worker ids', async () => {
-    writeRuntime('builder', {
-      workerId: 'builder',
+    writeRuntime('developer', {
+      workerId: 'developer',
       state: 'blocked',
       phase: 'stalled',
     })

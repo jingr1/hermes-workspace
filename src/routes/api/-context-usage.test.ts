@@ -6,6 +6,7 @@ vi.mock('../../server/gateway-capabilities', () => ({
   dashboardFetch: vi.fn(),
   ensureGatewayProbed: vi.fn(async () => ({ dashboard: { available: false } })),
   getCapabilities: vi.fn(() => ({ dashboard: { available: false } })),
+  shouldUseDashboard: vi.fn(() => false),
 }))
 
 vi.mock('../../server/hermes-api', () => ({
@@ -25,6 +26,7 @@ import {
   dashboardFetch,
   ensureGatewayProbed,
   getCapabilities,
+  shouldUseDashboard,
 } from '../../server/gateway-capabilities'
 import { listSessions } from '../../server/hermes-api'
 import {
@@ -162,10 +164,7 @@ describe('context usage estimation', () => {
     expect(snapshot.cacheHitPercent).toBeNull()
   })
 
-  it('reads /api/model/info via dashboardFetch even when dashboard.available is false (zero-fork)', async () => {
-    // Local control plane marks dashboard.available=false while :9119 still
-    // serves model/info. Previously we only hit CLAUDE_API and got maxTokens=0,
-    // which hid the context indicator entirely.
+  it('reads /api/model/info from the gateway without Dashboard :9119', async () => {
     vi.mocked(getLocalSession).mockReturnValue(null as any)
     vi.mocked(getLocalMessages).mockReturnValue([] as any)
     vi.mocked(getCapabilities).mockReturnValue({
@@ -174,26 +173,19 @@ describe('context usage estimation', () => {
     vi.mocked(ensureGatewayProbed).mockResolvedValue({
       dashboard: { available: false },
     } as any)
+    vi.mocked(shouldUseDashboard).mockReturnValue(false)
 
-    vi.mocked(dashboardFetch).mockImplementation(async (path: string) => {
-      if (path.includes('/api/model/info')) {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/model/info')) {
         return jsonResponse({
           model: 'Kimi-K2.7-Code',
           effective_context_length: 262_144,
           auto_context_length: 262_144,
-        }) as any
+        })
       }
-      if (path.includes('/api/config')) {
-        return jsonResponse({ compression: { threshold: 0.5 } }) as any
-      }
-      return new Response('not found', { status: 404 }) as any
-    })
-
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input)
-      // Gateway has no /api/model/info — this used to be the only attempt.
-      if (url.includes('/api/model/info')) {
-        return new Response('not found', { status: 404 })
+      if (url.includes('/api/config')) {
+        return jsonResponse({ compression: { threshold: 0.5 } })
       }
       if (url.includes('/runtime')) {
         return new Response('not found', { status: 404 })
@@ -212,10 +204,7 @@ describe('context usage estimation', () => {
       contextPercent: 0,
       thresholdTokens: 131_072,
     })
-    expect(dashboardFetch).toHaveBeenCalledWith(
-      '/api/model/info',
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-    )
+    expect(dashboardFetch).not.toHaveBeenCalled()
   })
 
   it('resolves main to the canonical Hermes session id before reading runtime usage', async () => {
@@ -267,7 +256,7 @@ describe('context usage estimation', () => {
     })
   })
 
-  it('prefers configured dashboard context length for local Workspace-only chats', async () => {
+  it('prefers gateway context length for local Workspace-only chats', async () => {
     vi.mocked(getLocalSession).mockReturnValue({
       id: 'local-1',
       model: null,
@@ -275,34 +264,26 @@ describe('context usage estimation', () => {
     vi.mocked(getLocalMessages).mockReturnValue([
       { content: 'x'.repeat(700) },
     ] as any)
-    vi.mocked(getCapabilities).mockReturnValue({
-      dashboard: { available: true },
-    } as any)
-    vi.mocked(ensureGatewayProbed).mockResolvedValue({
-      dashboard: { available: true },
-    } as any)
+    vi.mocked(shouldUseDashboard).mockReturnValue(false)
 
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url.includes('/api/sessions/local-1/runtime')) {
         return new Response('not found', { status: 404 })
       }
-      return new Response('unexpected', { status: 500 })
-    })
-    vi.stubGlobal('fetch', fetchMock)
-    vi.mocked(dashboardFetch).mockImplementation(async (path: string) => {
-      if (path.includes('/api/config')) {
-        return jsonResponse({ compression: { threshold: 0.5 } }) as any
+      if (url.includes('/api/config')) {
+        return jsonResponse({ compression: { threshold: 0.5 } })
       }
-      if (path.includes('/api/model/info')) {
+      if (url.includes('/api/model/info')) {
         return jsonResponse({
           model: 'gpt-5.4',
           effective_context_length: 512000,
           config_context_length: 512000,
-        }) as any
+        })
       }
-      return new Response('not found', { status: 404 }) as any
+      return new Response('unexpected', { status: 500 })
     })
+    vi.stubGlobal('fetch', fetchMock)
 
     const snapshot = await readContextUsage('local-1')
 
@@ -314,10 +295,7 @@ describe('context usage estimation', () => {
       contextPercent: 0,
       thresholdTokens: 256000,
     })
-    expect(dashboardFetch).toHaveBeenCalledWith(
-      '/api/model/info',
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-    )
+    expect(dashboardFetch).not.toHaveBeenCalled()
   })
 
   it('uses gateway effective_context_length for Kimi-K3 instead of the 200k hardcoded fallback', async () => {
@@ -464,30 +442,23 @@ describe('context usage estimation', () => {
   it('keeps configured context length visible for unresolved synthetic sessions like new', async () => {
     vi.mocked(getLocalSession).mockReturnValue(null as any)
     vi.mocked(getLocalMessages).mockReturnValue([] as any)
-    vi.mocked(getCapabilities).mockReturnValue({
-      dashboard: { available: true },
-    } as any)
-    vi.mocked(ensureGatewayProbed).mockResolvedValue({
-      dashboard: { available: true },
-    } as any)
+    vi.mocked(shouldUseDashboard).mockReturnValue(false)
 
-    const fetchMock = vi.fn(
-      async () => new Response('not found', { status: 404 }),
-    )
-    vi.stubGlobal('fetch', fetchMock)
-    vi.mocked(dashboardFetch).mockImplementation(async (path: string) => {
-      if (path.includes('/api/config')) {
-        return jsonResponse({ compression: { threshold: 0.5 } }) as any
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/config')) {
+        return jsonResponse({ compression: { threshold: 0.5 } })
       }
-      if (path.includes('/api/model/info')) {
+      if (url.includes('/api/model/info')) {
         return jsonResponse({
           model: 'gpt-5.4',
           effective_context_length: 512000,
           config_context_length: 512000,
-        }) as any
+        })
       }
-      return new Response('not found', { status: 404 }) as any
+      return new Response('not found', { status: 404 })
     })
+    vi.stubGlobal('fetch', fetchMock)
 
     const snapshot = await readContextUsage('new')
 
@@ -529,30 +500,23 @@ describe('context usage estimation', () => {
         content: [{ type: 'tool_result', text: 'x'.repeat(400) }],
       },
     ] as any)
-    vi.mocked(getCapabilities).mockReturnValue({
-      dashboard: { available: true },
-    } as any)
-    vi.mocked(ensureGatewayProbed).mockResolvedValue({
-      dashboard: { available: true },
-    } as any)
+    vi.mocked(shouldUseDashboard).mockReturnValue(false)
 
-    const fetchMock = vi.fn(
-      async () => new Response('not found', { status: 404 }),
-    )
-    vi.stubGlobal('fetch', fetchMock)
-    vi.mocked(dashboardFetch).mockImplementation(async (path: string) => {
-      if (path.includes('/api/config')) {
-        return jsonResponse({ compression: { threshold: 0.5 } }) as any
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/config')) {
+        return jsonResponse({ compression: { threshold: 0.5 } })
       }
-      if (path.includes('/api/model/info')) {
+      if (url.includes('/api/model/info')) {
         return jsonResponse({
           model: 'gpt-5.4',
           effective_context_length: 512000,
           config_context_length: 512000,
-        }) as any
+        })
       }
-      return new Response('not found', { status: 404 }) as any
+      return new Response('not found', { status: 404 })
     })
+    vi.stubGlobal('fetch', fetchMock)
 
     const snapshot = await readContextUsage('local-structured')
 

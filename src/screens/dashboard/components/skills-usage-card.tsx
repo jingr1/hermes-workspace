@@ -10,8 +10,8 @@ import { formatSkillName } from '@/screens/dashboard/lib/formatters'
  * agent-confirmed shape) so we no longer enumerate the full installed
  * list either.
  *
- * Falls back to the Skills installed count when usage data isn't
- * present (e.g. fresh install).
+ * Local Agorax reads `skills/.usage.json` (lifetime counters). Falls
+ * back to installed count when no usage file yet.
  */
 export function SkillsUsageCard({
   usage,

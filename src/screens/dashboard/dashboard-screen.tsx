@@ -21,17 +21,14 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { AchievementsCard } from './components/achievements-card'
-import { ActiveModelKpi } from './components/active-model-kpi'
+import { TopModelKpi } from './components/top-model-kpi'
 import { AnalyticsChartCard } from './components/analytics-chart-card'
-import { UsageStatsCard } from './components/usage-stats-card'
 import { UsageTablesCard } from './components/usage-tables-card'
 import {
   type UsageFilters,
   type UsageRange,
 } from './hooks/use-usage-data'
 import { AttentionMarquee } from './components/attention-marquee'
-import { CacheEfficiencyCard } from './components/cache-efficiency-card'
 import { CostLedgerCard } from './components/cost-ledger-card'
 import { EditModePanel } from './components/edit-mode-panel'
 import { HeroMetrics } from './components/hero-metrics'
@@ -845,18 +842,12 @@ export function DashboardScreen() {
     }))
   }, [period])
 
-  // Aggregate dashboard overview — surfaces the data the native
-  // Hermes dashboard exposes (status, platforms, cron, achievements,
-  // model info, analytics) in a single round trip with per-section
-  // graceful fallbacks. Each card renders only when its slice resolves.
+  // Aggregate dashboard overview from local profile FS + gateway
+  // (status, cron, model info, analytics) in a single round trip.
   const overviewQuery = useQuery<DashboardOverview>({
     queryKey: ['dashboard', 'overview', period],
     queryFn: async () => {
-      // achievements=5 (instead of 3) gives the Achievements rail
-      // card enough vertical mass to fill the gap below Top Models.
-      const res = await fetch(
-        `/api/dashboard/overview?days=${period}&achievements=5`,
-      )
+      const res = await fetch(`/api/dashboard/overview?days=${period}`)
       if (!res.ok) throw new Error(`overview ${res.status}`)
       return (await res.json()) as DashboardOverview
     },
@@ -1111,9 +1102,10 @@ export function DashboardScreen() {
           platforms={overview?.platforms ?? []}
         />
 
-        {/* ── Hero Metrics: 3 analytics tiles + Active Model KPI in slot 4 ── */}
+        {/* ── Hero Metrics: 3 usage tiles + top model in slot 4 ── */}
         <HeroMetrics
           analytics={overview?.analytics ?? null}
+          usageFilters={usageFilters}
           fallback={{
             sessions: stats.totalSessions,
             messages: stats.totalMessages,
@@ -1121,8 +1113,8 @@ export function DashboardScreen() {
             tokens: stats.totalTokens,
           }}
           extraTile={
-            <ActiveModelKpi
-              modelInfo={overview?.modelInfo ?? null}
+            <TopModelKpi
+              filters={usageFilters}
               analytics={overview?.analytics ?? null}
             />
           }
@@ -1130,13 +1122,6 @@ export function DashboardScreen() {
 
         {/* ── Edit-mode banner (only renders when toggled). ── */}
         <EditModePanel layout={layout} />
-
-        {/* ── Usage stats (full width) for the selected analytics window. */}
-        {layout.isVisible('usage_stats') ? (
-          <WidgetShell id="usage_stats" layout={layout}>
-            <UsageStatsCard filters={usageFilters} />
-          </WidgetShell>
-        ) : null}
 
         {/* ── Analytics chart (left) + Top models / Provider mix / Cache
            efficiency stacked on the right. The right-side stack now
@@ -1157,7 +1142,6 @@ export function DashboardScreen() {
           ) : null}
           {layout.isVisible('top_models') ||
           layout.isVisible('provider_mix') ||
-          layout.isVisible('cache_efficiency') ||
           layout.isVisible('velocity') ||
           layout.isVisible('cost_ledger') ? (
             <div
@@ -1170,13 +1154,6 @@ export function DashboardScreen() {
               {layout.isVisible('top_models') ? (
                 <WidgetShell id="top_models" layout={layout}>
                   <TopModelsCard analytics={overview?.analytics ?? null} />
-                </WidgetShell>
-              ) : null}
-              {layout.isVisible('cache_efficiency') ? (
-                <WidgetShell id="cache_efficiency" layout={layout}>
-                  <CacheEfficiencyCard
-                    analytics={overview?.analytics ?? null}
-                  />
                 </WidgetShell>
               ) : null}
               {layout.isVisible('provider_mix') ? (
@@ -1205,13 +1182,9 @@ export function DashboardScreen() {
           ) : null}
         </div>
 
-        {/* ── Primary content: Sessions Intelligence (replaces 14d Activity) + side rail ──
-           Iteration 006 layout per Eric:
-           - Attention now rides the OpsStrip marquee, not the rail.
-           - Achievements moved up to sit beside Top Models would push the chart out
-             of place; instead it now lives at the *top* of the side rail since the
-             rail itself is right of the chart, which produces the same visual order.
-           - Logs default off; still toggleable from edit mode for power users. */}
+        {/* ── Primary content: Sessions Intelligence + side rail ──
+           Attention rides the OpsStrip marquee, not the rail.
+           Logs default off; still toggleable from edit mode for power users. */}
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
           {/* Iter 013 main column order: Operator Tip first (compact),
             then Sessions Intelligence (the bottom anchor that grows
@@ -1249,17 +1222,10 @@ export function DashboardScreen() {
               </WidgetShell>
             ) : null}
           </div>
-          {/* Side rail. Achievements is now first (sits beside Top Models
-            visually since the rail is right of the chart row + sessions),
-            then Skills, then the rhythm card. Mix & rhythm is the unique
-            chart in this column — keeping it.
+          {/* Side rail: Skills + Mix & rhythm.
             `min-h-full` + the trailing `flex-1` rhythm card together
-            stretch the rail to match Sessions Intelligence height so
-            we don't get the dangling gap Eric flagged in iter 007. */}
+            stretch the rail to match Sessions Intelligence height. */}
           <div className="flex min-h-full flex-col gap-3 lg:col-span-4">
-            <WidgetShell id="achievements" layout={layout}>
-              <AchievementsCard achievements={overview?.achievements ?? null} />
-            </WidgetShell>
             <WidgetShell id="skills_usage" layout={layout}>
               <SkillsUsageCard
                 usage={overview?.skillsUsage ?? null}

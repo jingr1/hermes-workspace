@@ -15,8 +15,8 @@ import {
   getSwarmMission,
   markMissionAssignmentReviewed,
   requeueAssignmentForRework,
-  setOnCheckpointReviewHook,
 } from '../swarm-missions'
+import { setOnCheckpointReviewHook } from './mission-hooks'
 import {
   getPipelineTemplate,
 } from './pipeline-templates'

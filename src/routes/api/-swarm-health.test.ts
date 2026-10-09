@@ -22,7 +22,9 @@ describe('swarm-health model/auth readiness', () => {
 2026-05-04 18:37:56,771 WARNING provider: resolve_provider_client: openai-codex requested but no Codex OAuth token found
 `)
 
-    expect(events.authErrorCount).toBe(2)
+    // Second line matches resolve_provider_client and is filtered as
+    // auxiliary noise (vision/compression clients), not primary auth.
+    expect(events.authErrorCount).toBe(1)
     expect(events.fallbackCount).toBe(1)
     expect(events.fallbackProvider).toBe('minimax')
     expect(events.fallbackModel).toBe('MiniMax-M2.7')

@@ -62,11 +62,15 @@ async function loadKanbanBackend(options?: {
     existsSync: vi.fn((path: string) => options?.existsSync?.(path) ?? false),
   }))
 
-  vi.doMock('node:child_process', () => ({
+  const mockCp = {
     execFileSync: vi.fn(
       (command: string, args?: string[]) =>
         options?.execFileSync?.(command, args) ?? '',
     ),
+  }
+  vi.doMock('node:child_process', () => ({
+    ...mockCp,
+    default: mockCp,
   }))
 
   return import('./kanban-backend')

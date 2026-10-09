@@ -10,9 +10,21 @@
 #   docker pull ghcr.io/outsourc-e/agorax:latest
 #
 FROM tianon/gosu:1.17-bookworm AS gosu_source
-# ─── build stage ─────────────────────────────────────────────────────────
+
+# ─── managed-agent daemon build stage ─────────────────────────────────────
+FROM golang:1.25-bookworm AS daemon-build
+WORKDIR /build
+COPY agorax-agent-daemon/go.work agorax-agent-daemon/go.work.sum ./
+COPY agorax-agent-daemon/packages ./packages
+RUN CGO_ENABLED=0 go build -o /usr/local/bin/agorax-agentd ./packages/agent/daemon/cmd/agorax-agentd
+
+# ─── node build stage ─────────────────────────────────────────────────────
 FROM node:22-slim AS build
-RUN corepack enable && apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+# python3/make/g++/gcc are required when better-sqlite3 (or other native deps)
+# falls back to node-gyp source compilation.
+RUN corepack enable && apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates python3 make g++ gcc \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 # Install deps (cache-friendly: copy only manifests first)
@@ -36,6 +48,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && groupadd -r workspace && useradd -r -g workspace -u 10010 -m workspace
 
 COPY --from=gosu_source /gosu /usr/local/bin/gosu
+COPY --from=daemon-build --chown=workspace:workspace /usr/local/bin/agorax-agentd /usr/local/bin/agorax-agentd
 
 WORKDIR /app
 
@@ -54,7 +67,8 @@ COPY --chown=workspace:workspace docker/entrypoint.sh /usr/local/bin/docker-entr
 ENV NODE_ENV=production \
     PORT=6734 \
     HOST=0.0.0.0 \
-    HERMES_API_URL=http://hermes-agent:8642
+    HERMES_API_URL=http://hermes-agent:8642 \
+    AGORAX_MANAGED_AGENT_URL=http://agorax-managed-agent:8788
 
 EXPOSE 6734
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

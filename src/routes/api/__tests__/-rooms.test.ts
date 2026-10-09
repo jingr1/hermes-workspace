@@ -14,14 +14,20 @@ vi.mock('../../server/auth-middleware', () => ({
 
 let tmpHome = ''
 
-function writeSwarmMissions(missions: Array<Record<string, unknown>>) {
-  const runtimePath = path.join(tmpHome, '.runtime')
-  fs.mkdirSync(runtimePath, { recursive: true })
-  fs.writeFileSync(
-    path.join(runtimePath, 'swarm-missions.json'),
-    JSON.stringify({ version: 1, missions }, null, 2) + '\n',
-    'utf-8',
+/** Seed missions into collab.db (JSON file store is legacy). */
+async function seedMissions(
+  missions: Array<{ id: string; title: string }>,
+): Promise<void> {
+  const { createOrUpdateMission } = await import(
+    '../../../server/swarm-missions'
   )
+  for (const mission of missions) {
+    createOrUpdateMission({
+      missionId: mission.id,
+      title: mission.title,
+      assignments: [],
+    })
+  }
 }
 
 async function makePostHandlers() {
@@ -36,8 +42,11 @@ async function makeRoomIdHandlers() {
 
 beforeEach(() => {
   tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'rooms-route-test-'))
+  const collabDb = path.join(tmpHome, 'collab.db')
   vi.stubEnv('HERMES_HOME', tmpHome)
-  vi.stubEnv('HERMES_HOME', '')
+  // Keep collab.db off the live ~/.hermes path (readonly under the
+  // running gateway / sandbox).
+  vi.stubEnv('HERMES_COLLAB_DB', collabDb)
   vi.resetModules()
 })
 
@@ -48,17 +57,7 @@ afterEach(() => {
 
 describe('POST /api/rooms taskId -> missionId backfill', () => {
   it('writes taskId into missionId when taskId is an existing mission id', async () => {
-    writeSwarmMissions([
-      {
-        id: 'mission-123',
-        title: 'Existing mission',
-        state: 'executing',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        assignments: [],
-        events: [],
-      },
-    ])
+    await seedMissions([{ id: 'mission-123', title: 'Existing mission' }])
 
     const handlers = await makePostHandlers()
     const res = await handlers.POST({
@@ -80,8 +79,6 @@ describe('POST /api/rooms taskId -> missionId backfill', () => {
   })
 
   it('does NOT overwrite missionId when taskId is not a known mission id', async () => {
-    writeSwarmMissions([])
-
     const handlers = await makePostHandlers()
     const res = await handlers.POST({
       request: new Request('http://localhost/api/rooms', {
@@ -103,8 +100,6 @@ describe('POST /api/rooms taskId -> missionId backfill', () => {
   })
 
   it('falls back to null missionId when no taskId or missionId is supplied', async () => {
-    writeSwarmMissions([])
-
     const handlers = await makePostHandlers()
     const res = await handlers.POST({
       request: new Request('http://localhost/api/rooms', {
@@ -124,17 +119,7 @@ describe('POST /api/rooms taskId -> missionId backfill', () => {
 
 describe('PATCH /api/rooms/$roomId taskId -> missionId backfill', () => {
   it('backfills missionId when taskId is updated to an existing mission id', async () => {
-    writeSwarmMissions([
-      {
-        id: 'mission-abc',
-        title: 'Another mission',
-        state: 'dispatching',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        assignments: [],
-        events: [],
-      },
-    ])
+    await seedMissions([{ id: 'mission-abc', title: 'Another mission' }])
 
     const postHandlers = await makePostHandlers()
     const createRes = await postHandlers.POST({
@@ -164,8 +149,6 @@ describe('PATCH /api/rooms/$roomId taskId -> missionId backfill', () => {
   })
 
   it('leaves missionId alone when taskId is not a known mission id', async () => {
-    writeSwarmMissions([])
-
     const postHandlers = await makePostHandlers()
     const createRes = await postHandlers.POST({
       request: new Request('http://localhost/api/rooms', {
@@ -197,8 +180,6 @@ describe('PATCH /api/rooms/$roomId taskId -> missionId backfill', () => {
   })
 
   it('clears missionId when taskId is set to null', async () => {
-    writeSwarmMissions([])
-
     const postHandlers = await makePostHandlers()
     const createRes = await postHandlers.POST({
       request: new Request('http://localhost/api/rooms', {
@@ -255,17 +236,7 @@ describe('POST/PATCH workspacePath', () => {
   })
 
   it('rejects workspacePath changes on mission-bound rooms', async () => {
-    writeSwarmMissions([
-      {
-        id: 'mission-lock',
-        title: 'Locked',
-        state: 'executing',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        assignments: [],
-        events: [],
-      },
-    ])
+    await seedMissions([{ id: 'mission-lock', title: 'Locked' }])
     const postHandlers = await makePostHandlers()
     const createRes = await postHandlers.POST({
       request: new Request('http://localhost/api/rooms', {

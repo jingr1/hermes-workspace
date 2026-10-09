@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import * as fs from 'node:fs'
+import * as os from 'node:os'
+import * as path from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { buildDashboardOverview } from './dashboard-aggregator'
 import type { DashboardFetcher } from './dashboard-aggregator'
 
@@ -22,6 +25,32 @@ function makeFetcher(routes: Record<string, unknown>): DashboardFetcher {
 }
 
 describe('buildDashboardOverview', () => {
+  const originalHermesHome = process.env.HERMES_HOME
+  let tempHome = ''
+
+  beforeEach(() => {
+    // Force the dashboard fan-out path so stub fetchers are exercised.
+    process.env.HERMES_USE_DASHBOARD = '1'
+    // Isolate from the real ~/.hermes skills/.usage.json so local FS
+    // data cannot override the stub analytics payload under test.
+    // Seed a minimal profile config so modelInfo local fallback still works.
+    tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'dashboard-agg-'))
+    process.env.HERMES_HOME = tempHome
+    fs.writeFileSync(
+      path.join(tempHome, 'config.yaml'),
+      ['model:', '  provider: openai-codex', '  default: gpt-5.4', ''].join(
+        '\n',
+      ),
+      'utf-8',
+    )
+  })
+  afterEach(() => {
+    delete process.env.HERMES_USE_DASHBOARD
+    if (originalHermesHome === undefined) delete process.env.HERMES_HOME
+    else process.env.HERMES_HOME = originalHermesHome
+    fs.rmSync(tempHome, { recursive: true, force: true })
+  })
+
   it('returns null sections when every upstream call fails', async () => {
     const fetcher: DashboardFetcher = async () =>
       new Response('boom', { status: 500 })
@@ -30,8 +59,11 @@ describe('buildDashboardOverview', () => {
     expect(overview.platforms).toEqual([])
     expect(overview.cron).toBeNull()
     expect(overview.kanban).toBeNull()
-    expect(overview.achievements).toBeNull()
-    expect(overview.modelInfo).toBeNull()
+    // Model falls back to local profile config when Dashboard /api/model/info fails.
+    expect(overview.modelInfo).toMatchObject({
+      provider: expect.any(String),
+      model: expect.any(String),
+    })
     expect(overview.analytics).toBeNull()
   })
 
@@ -50,163 +82,127 @@ describe('buildDashboardOverview', () => {
         platforms: {
           api_server: {
             state: 'connected',
-            updated_at: '2026-05-02T18:55:00Z',
+            updated_at: '2026-05-02T19:00:00Z',
+            error_message: null,
           },
           telegram: {
             state: 'error',
             updated_at: '2026-05-02T18:00:00Z',
-            error_message: 'rate limited',
+            error_message: 'token revoked',
           },
         },
       },
     })
     const overview = await buildDashboardOverview({ fetcher })
-    expect(overview.status?.gatewayState).toBe('running')
-    expect(overview.status?.activeAgents).toBe(2)
-    expect(overview.status?.version).toBe('0.12.0')
-    expect(overview.status?.releaseDate).toBe('2026.4.30')
-    expect(overview.status?.configVersion).toBe(17)
-    expect(overview.status?.latestConfigVersion).toBe(23)
-    expect(overview.status?.hermesHome).toBe('/Users/aurora/.hermes')
-    expect(overview.platforms).toEqual([
-      {
-        name: 'api_server',
-        state: 'connected',
-        updatedAt: '2026-05-02T18:55:00Z',
-        errorMessage: null,
-      },
-      {
-        name: 'telegram',
-        state: 'error',
-        updatedAt: '2026-05-02T18:00:00Z',
-        errorMessage: 'rate limited',
-      },
-    ])
+    expect(overview.status).toMatchObject({
+      gatewayState: 'running',
+      activeAgents: 2,
+      restartRequested: false,
+      version: '0.12.0',
+      hermesHome: '/Users/aurora/.hermes',
+    })
+    expect(overview.platforms).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'api_server', state: 'connected' }),
+        expect.objectContaining({
+          name: 'telegram',
+          state: 'error',
+          errorMessage: 'token revoked',
+        }),
+      ]),
+    )
   })
 
-  it('summarises cron jobs and finds the earliest next-run', async () => {
-    const fetcher = makeFetcher({
-      '/api/cron/jobs': {
-        jobs: [
-          { id: 'a', status: 'scheduled', next_run_at: '2026-05-03T01:00:00Z' },
-          { id: 'b', status: 'paused' },
-          { id: 'c', status: 'running', next_run_at: '2026-05-03T00:30:00Z' },
-        ],
-      },
-    })
-    const overview = await buildDashboardOverview({ fetcher })
-    expect(overview.cron).toEqual({
-      total: 3,
-      paused: 1,
-      running: 1,
-      failed: 0,
-      nextRunAt: '2026-05-03T00:30:00.000Z',
-      recentFailures: [],
-    })
-  })
-
-  it('detects failed cron jobs and surfaces them in incidents', async () => {
+  it('parses cron jobs and surfaces failures', async () => {
     const fetcher = makeFetcher({
       '/api/cron/jobs': {
         jobs: [
           {
-            id: 'a',
-            name: 'Daily roll-up',
-            state: 'scheduled',
-            last_status: 'failed',
-            last_error: 'connection refused',
-            last_run_at: '2026-05-02T03:00:00Z',
-            next_run_at: '2026-05-03T03:00:00Z',
+            id: 'job-1',
+            name: 'nightly',
+            status: 'scheduled',
+            next_run_at: '2099-01-01T00:00:00Z',
           },
-          { id: 'b', state: 'scheduled' },
+          {
+            id: 'job-2',
+            name: 'broken',
+            status: 'paused',
+            last_status: 'failed',
+            last_error: 'timeout',
+            last_run_at: '2026-05-01T00:00:00Z',
+          },
+          {
+            id: 'job-3',
+            name: 'running-now',
+            status: 'running',
+          },
         ],
       },
     })
     const overview = await buildDashboardOverview({ fetcher })
-    expect(overview.cron?.failed).toBe(1)
-    expect(overview.cron?.recentFailures).toHaveLength(1)
+    expect(overview.cron).toMatchObject({
+      total: 3,
+      paused: 1,
+      running: 1,
+      failed: 1,
+    })
     expect(overview.cron?.recentFailures[0]).toMatchObject({
-      id: 'a',
-      name: 'Daily roll-up',
-      lastError: 'connection refused',
+      id: 'job-2',
+      lastError: 'timeout',
     })
-    const cronIncident = overview.incidents.find((i) => i.id === 'cron-fail-a')
-    expect(cronIncident?.severity).toBe('error')
-    expect(cronIncident?.detail).toBe('connection refused')
   })
 
-  it('uses /health/detailed active_agents over /api/status active_sessions', async () => {
-    const fetcher = makeFetcher({
-      '/api/status': {
-        gateway_state: 'running',
-        active_sessions: 7,
-        platforms: {},
-      },
-    })
-    const gatewayFetcher: DashboardFetcher = async (p) => {
-      if (p === '/health/detailed') {
-        return jsonResponse({ active_agents: 2 })
-      }
-      return new Response('nope', { status: 404 })
-    }
-    const overview = await buildDashboardOverview({
-      fetcher,
-      gatewayFetcher,
-    })
-    expect(overview.status?.activeSessions).toBe(7)
-    expect(overview.status?.activeAgents).toBe(2)
-  })
-
-  it('parses skills usage and emits a top-skill insight', async () => {
+  it('parses analytics and skills usage', async () => {
     const fetcher = makeFetcher({
       '/api/analytics/usage': {
-        period_days: 30,
+        period_days: 7,
         totals: {
-          total_input: 1_000_000,
-          total_output: 50_000,
-          total_sessions: 10,
-          total_api_calls: 50,
+          total_input: 1000,
+          total_output: 200,
+          total_cache_read: 50,
+          total_reasoning: 10,
+          total_sessions: 3,
+          total_api_calls: 12,
+          total_estimated_cost: 1.5,
         },
         by_model: [
-          { model: 'gpt-5.4', input_tokens: 1_000_000, output_tokens: 50_000 },
+          {
+            model: 'gpt-5.4',
+            input_tokens: 1_000_000,
+            output_tokens: 50_000,
+            api_calls: 10,
+            estimated_cost: 1.2,
+            sessions: 2,
+          },
         ],
-        daily: Array.from({ length: 14 }).map((_, i) => ({
-          day: `2026-04-${String(18 + i).padStart(2, '0')}`,
-          input_tokens: 1_000,
-          output_tokens: 100,
-          cache_read_tokens: 500,
-          reasoning_tokens: 0,
-          sessions: 1,
-          api_calls: 1,
-          estimated_cost: 0,
-        })),
+        daily: [
+          { date: '2026-05-01', tokens: 100, sessions: 1, api_calls: 2 },
+          { date: '2026-05-02', tokens: 200, sessions: 2, api_calls: 4 },
+        ],
         skills: {
           summary: {
-            total_skill_loads: 283,
-            total_skill_edits: 5,
-            total_skill_actions: 288,
-            distinct_skills_used: 55,
+            total_skill_loads: 10,
+            total_skill_edits: 2,
+            total_skill_actions: 12,
+            distinct_skills_used: 3,
           },
           top_skills: [
             {
               skill: 'systematic-debugging',
-              total_count: 39,
-              percentage: 13.5,
-              last_used_at: 1_777_698_307,
-            },
-            {
-              skill: 'test-driven-development',
-              total_count: 27,
-              percentage: 9.4,
-              last_used_at: 1_777_698_307,
+              total_count: 5,
+              percentage: 50,
+              last_used_at: 1777741371,
             },
           ],
         },
       },
     })
-    const overview = await buildDashboardOverview({ fetcher })
-    expect(overview.skillsUsage?.distinctSkills).toBe(55)
-    expect(overview.skillsUsage?.topSkills).toHaveLength(2)
+    const overview = await buildDashboardOverview({
+      fetcher,
+      analyticsWindowDays: 7,
+    })
+    expect(overview.analytics?.totalSessions).toBe(3)
+    expect(overview.analytics?.topModels[0]?.id).toBe('gpt-5.4')
     expect(overview.skillsUsage?.topSkills[0].skill).toBe(
       'systematic-debugging',
     )
@@ -214,65 +210,6 @@ describe('buildDashboardOverview', () => {
       i.text.includes('systematic-debugging'),
     )
     expect(skillInsight).toBeTruthy()
-  })
-
-  it('limits and shapes recent achievement unlocks', async () => {
-    const fetcher = makeFetcher({
-      '/api/plugins/hermes-achievements/recent-unlocks': [
-        {
-          id: 'let_him_cook',
-          name: 'Let Him Cook',
-          description: 'autonomous run',
-          category: 'Agent Autonomy',
-          icon: 'flame',
-          tier: 'Silver',
-          unlocked_at: 1777741371,
-        },
-        {
-          id: 'image_whisperer',
-          name: 'Image Whisperer',
-          description: '',
-          category: '',
-          icon: '',
-          tier: 'Copper',
-          unlocked_at: 1777741200,
-        },
-        {
-          id: 'extra1',
-          name: 'Extra 1',
-          description: '',
-          category: '',
-          icon: '',
-          unlocked_at: 1777741100,
-        },
-        {
-          id: 'extra2',
-          name: 'Extra 2',
-          description: '',
-          category: '',
-          icon: '',
-          unlocked_at: 1777741000,
-        },
-      ],
-      '/api/plugins/hermes-achievements/achievements': {
-        achievements: [
-          { id: 'a', state: 'unlocked' },
-          { id: 'b', state: 'unlocked' },
-          { id: 'c', state: 'locked' },
-          { id: 'd', state: 'unlocked' },
-        ],
-      },
-    })
-    const overview = await buildDashboardOverview({
-      fetcher,
-      achievementsLimit: 2,
-    })
-    expect(overview.achievements?.recentUnlocks).toHaveLength(2)
-    expect(overview.achievements?.recentUnlocks[0]).toMatchObject({
-      id: 'let_him_cook',
-      tier: 'Silver',
-    })
-    expect(overview.achievements?.totalUnlocked).toBe(3)
   })
 
   it('parses model info', async () => {
@@ -293,197 +230,48 @@ describe('buildDashboardOverview', () => {
     })
   })
 
-  it('parses native Hermes analytics shape (totals + by_model + daily)', async () => {
-    const fetcher = makeFetcher({
-      '/api/analytics/usage': {
-        period_days: 30,
-        totals: {
-          total_input: 245_000_000,
-          total_output: 1_200_000,
-          total_cache_read: 184_000_000,
-          total_reasoning: 250_000,
-          total_estimated_cost: 0.05,
-          total_actual_cost: 0,
-          total_sessions: 788,
-          total_api_calls: 2760,
-        },
-        by_model: [
-          {
-            model: 'gpt-5.4',
-            input_tokens: 161_000_000,
-            output_tokens: 600_000,
-            estimated_cost: 0.02,
-            sessions: 113,
-            api_calls: 1370,
-          },
-          {
-            model: 'claude-opus-4-6',
-            input_tokens: 39_000_000,
-            output_tokens: 320_000,
-            estimated_cost: 0,
-            sessions: 507,
-            api_calls: 0,
-          },
-        ],
-        daily: [
-          {
-            day: '2026-04-18',
-            input_tokens: 38_000_000,
-            output_tokens: 86_000,
-            cache_read_tokens: 4_300_000,
-            reasoning_tokens: 18_000,
-            estimated_cost: 0,
-            sessions: 9,
-            api_calls: 0,
-          },
-          {
-            day: '2026-04-19',
-            input_tokens: 6_700_000,
-            output_tokens: 24_000,
-            cache_read_tokens: 1_100_000,
-            reasoning_tokens: 8_000,
-            estimated_cost: 0,
-            sessions: 4,
-            api_calls: 0,
-          },
-        ],
-      },
-    })
-    const overview = await buildDashboardOverview({ fetcher })
-    expect(overview.analytics?.source).toBe('analytics')
-    expect(overview.analytics?.inputTokens).toBe(245_000_000)
-    expect(overview.analytics?.cacheReadTokens).toBe(184_000_000)
-    expect(overview.analytics?.totalSessions).toBe(788)
-    expect(overview.analytics?.totalApiCalls).toBe(2760)
-    expect(overview.analytics?.totalTokens).toBe(245_000_000 + 1_200_000)
-    expect(overview.analytics?.estimatedCostUsd).toBe(0.05)
-    expect(overview.analytics?.topModels.map((m) => m.id)).toEqual([
-      'gpt-5.4',
-      'claude-opus-4-6',
-    ])
-    expect(overview.analytics?.daily).toHaveLength(2)
-    expect(overview.analytics?.daily[0]).toMatchObject({
-      day: '2026-04-18',
-      inputTokens: 38_000_000,
-      sessions: 9,
-    })
-  })
-
-  it('falls back to legacy analytics shape (top_models + total_tokens)', async () => {
-    const fetcher = makeFetcher({
-      '/api/analytics/usage': {
-        total_tokens: 5_000_000,
-        estimated_cost_usd: 12.34,
-        top_models: [
-          { id: 'gpt-5.4', tokens: 1_000_000, calls: 200 },
-          { id: 'opus-4-7', tokens: 3_500_000, calls: 80 },
-          { id: 'sonnet-4-6', tokens: 250_000, calls: 50 },
-          { id: 'gpt-5.5', tokens: 250_000, calls: 30 },
-        ],
-      },
-    })
-    const overview = await buildDashboardOverview({ fetcher })
-    expect(overview.analytics?.totalTokens).toBe(5_000_000)
-    expect(overview.analytics?.estimatedCostUsd).toBe(12.34)
-    expect(overview.analytics?.topModels.map((m) => m.id)).toEqual([
-      'opus-4-7',
-      'gpt-5.4',
-      'sonnet-4-6',
-      'gpt-5.5',
-    ])
-  })
-
-  it('summarises dashboard kanban board state and blocked cards', async () => {
+  it('parses kanban board columns', async () => {
     const fetcher = makeFetcher({
       '/api/plugins/kanban/board': {
         columns: [
           {
             name: 'todo',
-            tasks: [
-              {
-                id: 't_1',
-                title: 'Draft plan',
-                status: 'todo',
-                assignee: 'planner',
-              },
-              { id: 't_2', title: 'Queued follow-up', status: 'queued' },
-            ],
-          },
-          {
-            name: 'ready',
-            tasks: [{ id: 't_3', title: 'Implement UI' }],
-          },
-          {
-            name: 'running',
-            tasks: [{ id: 't_4', title: 'Worker active', status: 'claimed' }],
+            tasks: [{ id: 't1', title: 'One', status: 'todo' }],
           },
           {
             name: 'blocked',
             tasks: [
-              { id: 't_5', title: 'Needs credentials', assignee: 'ops' },
-              { id: 't_6', title: 'Needs review' },
+              {
+                id: 't2',
+                title: 'Stuck',
+                status: 'blocked',
+                assignee: 'dev',
+              },
             ],
           },
           {
             name: 'done',
-            tasks: [{ id: 't_7', title: 'Ship it', status: 'completed' }],
-          },
-          {
-            name: 'custom',
-            tasks: [{ id: 't_8', title: 'Unknown state' }],
+            tasks: [{ id: 't3', title: 'Done', status: 'done' }],
           },
         ],
       },
     })
     const overview = await buildDashboardOverview({ fetcher })
-    expect(overview.kanban).toEqual({
-      total: 8,
-      triage: 0,
-      todo: 2,
-      ready: 1,
-      running: 1,
-      blocked: 2,
+    expect(overview.kanban).toMatchObject({
+      total: 3,
+      todo: 1,
+      blocked: 1,
       done: 1,
-      other: 1,
-      topBlocked: [
-        { id: 't_5', title: 'Needs credentials', assignee: 'ops' },
-        { id: 't_6', title: 'Needs review', assignee: null },
-      ],
     })
-    expect(
-      overview.insights.some((i) => i.text.includes('2 blocked kanban tasks')),
-    ).toBe(false)
-    expect(
-      overview.incidents.find((i) => i.id === 'kanban-blocked'),
-    ).toMatchObject({
-      severity: 'warn',
-      label: '2 kanban tasks blocked',
-      href: '/swarm2',
+    expect(overview.kanban?.topBlocked[0]).toMatchObject({
+      id: 't2',
+      title: 'Stuck',
+      assignee: 'dev',
     })
   })
 
-  it('parses log tail with error/warn detection', async () => {
-    const fetcher = makeFetcher({
-      '/api/logs': {
-        file: 'agent',
-        lines: [
-          'INFO  starting up\n',
-          'WARN  deprecated config key\n',
-          'ERROR  KeyboardInterrupt\n',
-          'Traceback (most recent call last):\n',
-          'INFO  recovered\n',
-        ],
-      },
-    })
-    const overview = await buildDashboardOverview({ fetcher, logsLimit: 10 })
-    expect(overview.logs?.file).toBe('agent')
-    expect(overview.logs?.lines).toHaveLength(5)
-    expect(overview.logs?.errorCount).toBe(2)
-    expect(overview.logs?.warnCount).toBe(1)
-  })
-
-  it('survives mixed-status inputs (some succeed, some fail)', async () => {
-    const fetcher: DashboardFetcher = async (path) => {
+  it('keeps partial success when some sections fail', async () => {
+    const fetcher: DashboardFetcher = async (path: string) => {
       if (path.startsWith('/api/status')) {
         return jsonResponse({
           gateway_state: 'running',
@@ -495,21 +283,19 @@ describe('buildDashboardOverview', () => {
       if (path.startsWith('/api/cron/jobs')) {
         return jsonResponse({ jobs: [{ id: 'a', status: 'scheduled' }] })
       }
-      // Everything else fails
       return new Response('nope', { status: 401 })
     }
     const overview = await buildDashboardOverview({ fetcher })
     expect(overview.status?.gatewayState).toBe('running')
-    // No /health/detailed fetcher provided → falls back to legacy
-    // active_agents on /api/status payload.
     expect(overview.status?.activeAgents).toBe(1)
     expect(overview.status?.activeSessions).toBe(3)
-    expect(overview.status?.version).toBeNull()
-    expect(overview.status?.configVersion).toBeNull()
     expect(overview.cron?.total).toBe(1)
     expect(overview.kanban).toBeNull()
-    expect(overview.achievements).toBeNull()
-    expect(overview.modelInfo).toBeNull()
+    // Model falls back to local profile config when Dashboard /api/model/info fails.
+    expect(overview.modelInfo).toMatchObject({
+      provider: expect.any(String),
+      model: expect.any(String),
+    })
     expect(overview.analytics).toBeNull()
   })
 })

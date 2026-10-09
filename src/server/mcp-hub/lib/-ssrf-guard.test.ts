@@ -1,7 +1,15 @@
 /**
  * Tests for ssrf-guard helpers.
  */
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
+
+// Hoist before importing ssrf-guard (it binds `lookup` at module load).
+// Vitest also expects a `default` export on node: built-in mocks.
+vi.mock('node:dns/promises', () => {
+  const lookup = vi.fn()
+  return { lookup, default: { lookup } }
+})
+
 import { isPrivateAddress, assertNotPrivate } from './ssrf-guard'
 
 // ---------------------------------------------------------------------------
@@ -83,10 +91,6 @@ describe('isPrivateAddress', () => {
 // ---------------------------------------------------------------------------
 // assertNotPrivate — mock dns/promises
 // ---------------------------------------------------------------------------
-
-vi.mock('node:dns/promises', () => ({
-  lookup: vi.fn(),
-}))
 
 import { lookup } from 'node:dns/promises'
 const mockLookup = vi.mocked(lookup)

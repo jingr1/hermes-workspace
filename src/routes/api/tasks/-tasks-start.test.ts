@@ -4,6 +4,10 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+// Route handlers import task-service, which pulls in the runtime subtree;
+// first load can exceed the default 5s timeout.
+vi.setConfig({ testTimeout: 30_000 })
+
 vi.mock('@tanstack/react-router', () => ({
   createFileRoute: (_path: string) => (opts: unknown) => opts,
 }))
@@ -44,7 +48,6 @@ beforeEach(() => {
   tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'tasks-start-route-test-'))
   process.chdir(tmpHome)
   vi.stubEnv('HERMES_HOME', tmpHome)
-  vi.stubEnv('HERMES_HOME', '')
   vi.stubEnv('CLAUDE_KANBAN_BACKEND', 'local')
   vi.resetModules()
 })

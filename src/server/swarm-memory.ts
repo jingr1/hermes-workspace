@@ -8,13 +8,13 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs'
-import { homedir } from 'node:os'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 import YAML from 'yaml'
 import {
   SWARM_CANONICAL_REPO,
   SWARM_MEMORY_HANDOFFS,
 } from './swarm-environment'
+import { getHermesRoot } from './hermes-paths'
 import type { ParsedSwarmCheckpoint } from './swarm-checkpoints'
 
 export type SwarmMemoryKind =
@@ -81,7 +81,7 @@ export const SWARM_PROJECT_CONTEXT_PATH = join(
 )
 
 function profileRoot(workerId: string): string {
-  return join(homedir(), '.hermes', 'profiles', workerId)
+  return join(getHermesRoot(), 'profiles', workerId)
 }
 
 function profileFile(workerId: string, name: string): string {
@@ -194,7 +194,7 @@ export function ensureWorkerMemoryScaffold(input: {
     throw new Error(`Invalid workerId: ${workerId}`)
   // Respect Hermes profile tombstones — scaffolding must not recreate a
   // deleted named profile under ~/.hermes/profiles/<id>.
-  const tombstone = join(homedir(), '.hermes', 'profiles', '.deleted', workerId)
+  const tombstone = join(getHermesRoot(), 'profiles', '.deleted', workerId)
   if (existsSync(tombstone)) {
     throw new Error(
       `Worker profile "${workerId}" was deleted (tombstone at ${tombstone}); recreate it explicitly before scaffolding memory`,

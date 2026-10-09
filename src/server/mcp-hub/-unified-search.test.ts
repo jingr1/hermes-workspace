@@ -1,6 +1,6 @@
 /**
  * Tests for unifiedSearch.
- * Mocks source adapters and hermes-dashboard-api to avoid I/O.
+ * Mocks source adapters and profile MCP lookup to avoid I/O.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
@@ -10,19 +10,24 @@ vi.mock('./sources/local-file', () => ({
 vi.mock('./sources/mcp-get', () => ({
   fetchMcpGet: vi.fn(),
 }))
-vi.mock('../hermes-dashboard-api', () => ({
-  getConfig: vi.fn(),
+vi.mock('../mcp-profile-config', () => ({
+  listProfileMcpServers: vi.fn(),
+}))
+vi.mock('../profiles-browser', () => ({
+  getActiveProfileName: vi.fn(() => 'default'),
 }))
 
 import { fetchLocalFile } from './sources/local-file'
 import { fetchMcpGet } from './sources/mcp-get'
-import { getConfig } from '../hermes-dashboard-api'
+import { listProfileMcpServers } from '../mcp-profile-config'
+import { getActiveProfileName } from '../profiles-browser'
 import { unifiedSearch } from './index'
 import type { HubMcpEntry } from './types'
 
 const mockFetchLocalFile = vi.mocked(fetchLocalFile)
 const mockFetchMcpGet = vi.mocked(fetchMcpGet)
-const mockGetConfig = vi.mocked(getConfig)
+const mockListProfileMcpServers = vi.mocked(listProfileMcpServers)
+const mockGetActiveProfileName = vi.mocked(getActiveProfileName)
 
 function makeEntry(
   name: string,
@@ -43,7 +48,8 @@ function makeEntry(
 
 beforeEach(() => {
   vi.resetAllMocks()
-  mockGetConfig.mockResolvedValue({})
+  mockGetActiveProfileName.mockReturnValue('default')
+  mockListProfileMcpServers.mockReturnValue([])
 })
 
 describe('unifiedSearch — basic', () => {
@@ -94,10 +100,11 @@ describe('unifiedSearch — basic', () => {
 })
 
 describe('unifiedSearch — installed flag', () => {
-  it('marks installed=true when name matches config.yaml mcp_servers key', async () => {
-    mockGetConfig.mockResolvedValue({
-      mcp_servers: { github: {}, slack: {} },
-    })
+  it('marks installed=true when name matches profile mcp_servers', async () => {
+    mockListProfileMcpServers.mockReturnValue([
+      { name: 'github' },
+      { name: 'slack' },
+    ] as ReturnType<typeof listProfileMcpServers>)
     mockFetchMcpGet.mockResolvedValue({
       entries: [makeEntry('github', 'mcp-get'), makeEntry('notion', 'mcp-get')],
     })
@@ -110,21 +117,10 @@ describe('unifiedSearch — installed flag', () => {
     expect(notion?.installed).toBe(false)
   })
 
-  it('handles config wrapped in { config: {...} } shape', async () => {
-    mockGetConfig.mockResolvedValue({
-      config: { mcp_servers: { github: {} } },
+  it('defaults installed=false when listProfileMcpServers throws', async () => {
+    mockListProfileMcpServers.mockImplementation(() => {
+      throw new Error('profile missing')
     })
-    mockFetchMcpGet.mockResolvedValue({
-      entries: [makeEntry('github', 'mcp-get')],
-    })
-    mockFetchLocalFile.mockResolvedValue({ entries: [] })
-
-    const result = await unifiedSearch('', 'all', 20)
-    expect(result.results[0].installed).toBe(true)
-  })
-
-  it('defaults installed=false when getConfig throws', async () => {
-    mockGetConfig.mockRejectedValue(new Error('gateway down'))
     mockFetchMcpGet.mockResolvedValue({
       entries: [makeEntry('github', 'mcp-get')],
     })

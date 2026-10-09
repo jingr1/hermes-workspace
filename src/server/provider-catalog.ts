@@ -542,6 +542,7 @@ export function __resetProviderCatalogCacheForTests(): void {
 }
 
 function buildProviderCatalog(): ProviderCatalog {
+  pruneAllRedundantBuiltinProvidersFromProfiles()
   return {
     providers: mergeCatalog()
       .providers.filter(
@@ -727,6 +728,7 @@ export function removeCatalogProvider(providerId: string): ProviderCatalog {
     removeKeyFromAllEnvs(keyEnv)
   }
 
+  providerCatalogCache = undefined
   return getProviderCatalog()
 }
 
@@ -748,6 +750,7 @@ export function upsertCatalogProvider(input: {
     }
     writeKeyToAllEnvs(next.key_env, input.key_value)
   }
+  providerCatalogCache = undefined
   return getProviderCatalog()
 }
 
@@ -769,6 +772,7 @@ export function upsertCatalogKey(
     const next = mergeProviderCatalogEntry({ id: builtinId, key_env: trimmed })
     syncProviderToAllProfiles(next)
   }
+  providerCatalogCache = undefined
   return getProviderCatalog()
 }
 

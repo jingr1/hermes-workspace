@@ -1,27 +1,38 @@
 /**
  * Aggregator for the Workspace dashboard overview.
  *
- * The Workspace `/dashboard` route used to fetch a couple of pieces in
- * parallel and stitch them together client-side. As the dashboard grew
- * to include cron, achievements, platforms, and analytics, the client
- * was making 5-6 round trips on every load. Worse, each surface had to
- * implement its own capability gate.
+ * Local Agorax (profile FS control plane) builds every section from local
+ * profile files + gateway `/health/detailed` — Hermes Dashboard :9119 is
+ * never required. Remote deployments may still fan out to dashboard APIs.
  *
- * `buildDashboardOverview` is the server-side aggregator that fans out
- * the fetches in parallel, applies per-section graceful fallbacks, and
- * returns a single normalised payload the client can render in one shot.
- *
- * Each section is independent: a failure in one (auth missing, plugin
- * not installed, dashboard down) leaves the corresponding field at
- * `null` so the UI can hide just that card.
+ * Each section is independent: a failure leaves the field at `null` so the
+ * UI can hide just that card.
  */
+
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { listProfileCronJobs } from './hermes-cron-profiles'
+import { shouldUseDashboard } from './gateway-capabilities'
+import { listKanbanCards } from './kanban-backend'
+import {
+  getActiveProfileName,
+  readModelProviderFromConfig,
+  readProfile,
+} from './profiles-browser'
+import { fetchGatewayAnalytics } from './usage/gateway-analytics-client'
+import { readLocalSkillsUsage } from './skill-usage-local'
+import {
+  canonicalModelAnalyticsKey,
+  mergeTopModelRows,
+  preferModelDisplayId,
+} from '../lib/model-analytics'
 
 export type DashboardOverview = {
   status: DashboardStatusSection | null
   platforms: Array<DashboardPlatformEntry>
   cron: DashboardCronSection | null
   kanban: DashboardKanbanSection | null
-  achievements: DashboardAchievementsSection | null
   modelInfo: DashboardModelInfoSection | null
   analytics: DashboardAnalyticsSection | null
   logs: DashboardLogsSection | null
@@ -137,21 +148,6 @@ export type DashboardKanbanSection = {
   }>
 }
 
-export type DashboardAchievementUnlock = {
-  id: string
-  name: string
-  description: string
-  category: string
-  icon: string
-  tier: string | null
-  unlockedAt: number | null
-}
-
-export type DashboardAchievementsSection = {
-  totalUnlocked: number
-  recentUnlocks: Array<DashboardAchievementUnlock>
-}
-
 export type DashboardModelInfoSection = {
   provider: string
   model: string
@@ -229,8 +225,6 @@ export type BuildOverviewOptions = {
   fetcher: DashboardFetcher
   /** How many days of analytics to roll up. Default 30 (matches native). */
   analyticsWindowDays?: number
-  /** How many recent achievement unlocks to surface. Default 3. */
-  achievementsLimit?: number
   /** How many log tail lines to surface. Default 24. */
   logsLimit?: number
 }
@@ -239,7 +233,6 @@ const DEFAULT_OPTIONS = {
   // 30 days matches the native Hermes dashboard's default analytics
   // window and gives the sparkline enough breathing room.
   analyticsWindowDays: 30,
-  achievementsLimit: 3,
   logsLimit: 24,
 }
 
@@ -463,52 +456,6 @@ function normalizeKanban(raw: unknown): DashboardKanbanSection | null {
   return out
 }
 
-function normalizeAchievementUnlock(
-  raw: unknown,
-): DashboardAchievementUnlock | null {
-  if (!raw || typeof raw !== 'object') return null
-  const r = raw as Record<string, unknown>
-  const id = readString(r.id)
-  const name = readString(r.name)
-  if (!id || !name) return null
-  return {
-    id,
-    name,
-    description: readString(r.description),
-    category: readString(r.category) || 'General',
-    icon: readString(r.icon) || 'Star',
-    tier: typeof r.tier === 'string' ? r.tier : null,
-    unlockedAt: typeof r.unlocked_at === 'number' ? r.unlocked_at : null,
-  }
-}
-
-function normalizeAchievements(
-  recent: unknown,
-  all: unknown,
-  limit: number,
-): DashboardAchievementsSection | null {
-  const recentArr = Array.isArray(recent) ? recent : []
-  if (recentArr.length === 0 && (!all || typeof all !== 'object')) return null
-  const recentUnlocks = recentArr
-    .map(normalizeAchievementUnlock)
-    .filter((entry): entry is DashboardAchievementUnlock => entry !== null)
-    .slice(0, limit)
-
-  let totalUnlocked = 0
-  if (all && typeof all === 'object') {
-    const ach = (all as Record<string, unknown>).achievements
-    if (Array.isArray(ach)) {
-      for (const item of ach) {
-        if (!item || typeof item !== 'object') continue
-        const state = readString((item as Record<string, unknown>).state)
-        if (state === 'unlocked') totalUnlocked += 1
-      }
-    }
-  }
-
-  return { totalUnlocked, recentUnlocks }
-}
-
 function normalizeModelInfo(raw: unknown): DashboardModelInfoSection | null {
   if (!raw || typeof raw !== 'object') return null
   const r = raw as Record<string, unknown>
@@ -634,7 +581,7 @@ function normalizeAnalytics(
       : Array.isArray(r.models)
         ? r.models
         : []
-  const topModels = modelsRaw
+  const topModelsRaw = modelsRaw
     .map((entry) => {
       if (!entry || typeof entry !== 'object') return null
       const e = entry as Record<string, unknown>
@@ -664,8 +611,7 @@ function normalizeAnalytics(
         sessions: number
       } => entry !== null,
     )
-    .sort((a, b) => b.tokens - a.tokens)
-    .slice(0, 5)
+  const topModels = mergeTopModelRows(topModelsRaw).slice(0, 5)
 
   const dailyRaw = Array.isArray(r.daily) ? r.daily : []
   const daily = dailyRaw
@@ -977,7 +923,7 @@ function computeIncidents(
       detail:
         kanban.topBlocked.map((t) => t.title).join(' · ') ||
         'blocked cards need attention',
-      href: '/swarm2',
+      href: '/swarm',
     })
   }
   // Platform errors
@@ -1022,7 +968,7 @@ function computeIncidents(
       href: null,
     })
   }
-  // Log-tail errors
+  // Log-tail errors — open Dashboard (Logs Tail), not /jobs.
   if (logs && logs.errorCount > 0) {
     out.push({
       id: 'log-errors',
@@ -1030,7 +976,7 @@ function computeIncidents(
       source: 'log',
       label: `${logs.errorCount} log error${logs.errorCount === 1 ? '' : 's'} in tail`,
       detail: 'recent agent log shows tracebacks or fatal errors',
-      href: null,
+      href: '/dashboard',
     })
   } else if (logs && logs.warnCount > 0) {
     out.push({
@@ -1039,7 +985,7 @@ function computeIncidents(
       source: 'log',
       label: `${logs.warnCount} log warning${logs.warnCount === 1 ? '' : 's'}`,
       detail: 'recent agent log emitted warnings',
-      href: null,
+      href: '/dashboard',
     })
   }
   return out
@@ -1087,18 +1033,212 @@ export type BuildOverviewExtraFetchers = {
   gatewayFetcher?: DashboardFetcher
 }
 
+function readLocalModelInfo(): DashboardModelInfoSection | null {
+  try {
+    const name = getActiveProfileName() || 'default'
+    const profile = readProfile(name)
+    const { model, provider } = readModelProviderFromConfig(profile.config)
+    if (!model) return null
+    return {
+      provider: provider || 'unknown',
+      model,
+      effectiveContextLength: 0,
+      capabilities: null,
+    }
+  } catch {
+    return null
+  }
+}
+
+function readLocalLogs(limit: number): unknown {
+  const home =
+    process.env.HERMES_HOME?.trim() || path.join(os.homedir(), '.hermes')
+  const candidates = [
+    path.join(home, 'logs', 'gateway.log'),
+    path.join(home, 'logs', 'agent.log'),
+    path.join(home, 'profiles', getActiveProfileName() || 'default', 'logs', 'gateway.log'),
+    path.join(home, 'profiles', getActiveProfileName() || 'default', 'logs', 'agent.log'),
+  ]
+  for (const filePath of candidates) {
+    try {
+      if (!fs.existsSync(filePath)) continue
+      const text = fs.readFileSync(filePath, 'utf-8')
+      const lines = text.split('\n')
+      const tail = lines.slice(Math.max(0, lines.length - limit))
+      return {
+        file: path.basename(filePath, path.extname(filePath)),
+        lines: tail,
+      }
+    } catch {
+      /* try next */
+    }
+  }
+  return null
+}
+
+function analyticsRawFromGatewayRecords(
+  records: Array<{
+    model?: string
+    input_tokens?: number
+    output_tokens?: number
+    cache_read_tokens?: number
+    reasoning_tokens?: number
+    total_cost_usd?: number
+    created_at?: number
+  }>,
+  windowDays: number,
+): Record<string, unknown> {
+  const byModel = new Map<
+    string,
+    { model: string; input_tokens: number; output_tokens: number; api_calls: number; estimated_cost: number; sessions: number }
+  >()
+  let totalInput = 0
+  let totalOutput = 0
+  let totalCache = 0
+  let totalReasoning = 0
+  let totalCost = 0
+  const dayBuckets = new Map<string, { date: string; tokens: number; sessions: number; api_calls: number }>()
+
+  for (const r of records) {
+    const modelRaw = r.model || 'unknown'
+    const modelKey = canonicalModelAnalyticsKey(modelRaw)
+    const input = Number(r.input_tokens) || 0
+    const output = Number(r.output_tokens) || 0
+    const cache = Number(r.cache_read_tokens) || 0
+    const reasoning = Number(r.reasoning_tokens) || 0
+    const cost = Number(r.total_cost_usd) || 0
+    totalInput += input
+    totalOutput += output
+    totalCache += cache
+    totalReasoning += reasoning
+    totalCost += cost
+    const existing = byModel.get(modelKey)
+    const entry = existing || {
+      model: modelRaw,
+      input_tokens: 0,
+      output_tokens: 0,
+      api_calls: 0,
+      estimated_cost: 0,
+      sessions: 0,
+    }
+    entry.model = preferModelDisplayId(entry.model, modelRaw)
+    entry.input_tokens += input
+    entry.output_tokens += output
+    entry.api_calls += 1
+    entry.estimated_cost += cost
+    entry.sessions += 1
+    byModel.set(modelKey, entry)
+
+    const created = Number(r.created_at) || 0
+    const ms = created > 1e11 ? created : created * 1000
+    if (ms > 0) {
+      const date = new Date(ms).toISOString().slice(0, 10)
+      const day = dayBuckets.get(date) || {
+        date,
+        tokens: 0,
+        sessions: 0,
+        api_calls: 0,
+      }
+      day.tokens += input + output
+      day.sessions += 1
+      day.api_calls += 1
+      dayBuckets.set(date, day)
+    }
+  }
+
+  return {
+    period_days: windowDays,
+    totals: {
+      total_input: totalInput,
+      total_output: totalOutput,
+      total_cache_read: totalCache,
+      total_reasoning: totalReasoning,
+      total_sessions: records.length,
+      total_api_calls: records.length,
+      total_estimated_cost: totalCost,
+    },
+    by_model: [...byModel.values()].sort(
+      (a, b) => b.input_tokens + b.output_tokens - (a.input_tokens + a.output_tokens),
+    ),
+    daily: [...dayBuckets.values()].sort((a, b) => a.date.localeCompare(b.date)),
+  }
+}
+
+function kanbanRawFromCards(
+  cards: Array<{ id: string; title: string; status: string; assignee?: string | null }>,
+): unknown {
+  const columns = new Map<string, Array<Record<string, unknown>>>()
+  for (const card of cards) {
+    const status = card.status || 'todo'
+    const list = columns.get(status) || []
+    list.push({
+      id: card.id,
+      title: card.title,
+      status,
+      assignee: card.assignee ?? null,
+    })
+    columns.set(status, list)
+  }
+  return {
+    columns: [...columns.entries()].map(([name, tasks]) => ({ name, tasks })),
+  }
+}
+
 export async function buildDashboardOverview(
   options: BuildOverviewOptions & BuildOverviewExtraFetchers,
 ): Promise<DashboardOverview> {
   const opts = { ...DEFAULT_OPTIONS, ...options }
-  const { fetcher, analyticsWindowDays, achievementsLimit, logsLimit } = opts
+  const { fetcher, analyticsWindowDays, logsLimit } = opts
+  const useDashboard = shouldUseDashboard()
+
+  if (!useDashboard) {
+    const [healthRaw, analyticsResp, kanbanCards] = await Promise.all([
+      options.gatewayFetcher
+        ? safeJson<unknown>(options.gatewayFetcher, '/health/detailed')
+        : Promise.resolve(null),
+      fetchGatewayAnalytics(analyticsWindowDays).catch(() => ({
+        ok: false as const,
+        days: analyticsWindowDays,
+        records: [] as Array<never>,
+      })),
+      listKanbanCards().catch(() => []),
+    ])
+
+    const status = normalizeStatus(null, healthRaw)
+    const cron = normalizeCron({ jobs: listProfileCronJobs() })
+    const analyticsRaw = analyticsRawFromGatewayRecords(
+      analyticsResp.records ?? [],
+      analyticsWindowDays,
+    )
+    const analytics = normalizeAnalytics(analyticsRaw, analyticsWindowDays)
+    const kanban = normalizeKanban(kanbanRawFromCards(kanbanCards))
+    const logs = normalizeLogs(readLocalLogs(logsLimit), logsLimit)
+    const skillsUsage =
+      readLocalSkillsUsage(analyticsWindowDays) ??
+      normalizeSkillsUsage(analyticsRaw)
+    const platforms: Array<DashboardPlatformEntry> = []
+    const modelInfo = readLocalModelInfo()
+    const insights = computeInsights(analytics, cron, status, skillsUsage, kanban)
+    const incidents = computeIncidents(status, platforms, cron, logs, kanban)
+
+    return {
+      status,
+      platforms,
+      cron,
+      kanban,
+      modelInfo,
+      analytics,
+      logs,
+      skillsUsage,
+      insights,
+      incidents,
+    }
+  }
 
   const [
     statusRaw,
     healthRaw,
     cronRaw,
-    achRecentRaw,
-    achAllRaw,
     modelInfoRaw,
     analyticsRaw,
     kanbanRaw,
@@ -1109,11 +1249,6 @@ export async function buildDashboardOverview(
       ? safeJson<unknown>(options.gatewayFetcher, '/health/detailed')
       : Promise.resolve(null),
     safeJson<unknown>(fetcher, '/api/cron/jobs'),
-    safeJson<unknown>(
-      fetcher,
-      `/api/plugins/hermes-achievements/recent-unlocks?limit=${achievementsLimit}`,
-    ),
-    safeJson<unknown>(fetcher, '/api/plugins/hermes-achievements/achievements'),
     safeJson<unknown>(fetcher, '/api/model/info'),
     safeJson<unknown>(
       fetcher,
@@ -1129,7 +1264,9 @@ export async function buildDashboardOverview(
   const analytics = normalizeAnalytics(analyticsRaw, analyticsWindowDays)
   const kanban = normalizeKanban(kanbanRaw)
   const logs = normalizeLogs(logsRaw, logsLimit)
-  const skillsUsage = normalizeSkillsUsage(analyticsRaw)
+  const skillsUsage =
+    readLocalSkillsUsage(analyticsWindowDays) ??
+    normalizeSkillsUsage(analyticsRaw)
   const insights = computeInsights(analytics, cron, status, skillsUsage, kanban)
   const incidents = computeIncidents(status, platforms, cron, logs, kanban)
 
@@ -1138,12 +1275,7 @@ export async function buildDashboardOverview(
     platforms,
     cron,
     kanban,
-    achievements: normalizeAchievements(
-      achRecentRaw,
-      achAllRaw,
-      achievementsLimit,
-    ),
-    modelInfo: normalizeModelInfo(modelInfoRaw),
+    modelInfo: normalizeModelInfo(modelInfoRaw) ?? readLocalModelInfo(),
     analytics,
     logs,
     skillsUsage,

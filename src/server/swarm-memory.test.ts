@@ -4,24 +4,23 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempHome: string
+let originalHermesHome: string | undefined
 
 async function loadModule() {
   vi.resetModules()
-  vi.doMock('node:os', async () => {
-    const actual = await vi.importActual<typeof import('node:os')>('node:os')
-    return { ...actual, homedir: () => tempHome }
-  })
   return await import('./swarm-memory')
 }
 
 describe('swarm-memory module', () => {
   beforeEach(() => {
     tempHome = mkdtempSync(join(tmpdir(), 'swarm-memory-test-'))
+    originalHermesHome = process.env.HERMES_HOME
+    process.env.HERMES_HOME = tempHome
   })
 
   afterEach(() => {
     vi.resetModules()
-    vi.doUnmock('node:os')
+    process.env.HERMES_HOME = originalHermesHome
     try {
       rmSync(tempHome, { recursive: true, force: true })
     } catch {

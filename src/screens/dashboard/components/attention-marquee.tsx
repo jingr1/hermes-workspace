@@ -30,7 +30,8 @@ const SEVERITY_COLOR: Record<DashboardIncident['severity'], string> = {
  * - Clones the list once so the loop animation stitches seamlessly.
  * - Pauses on hover so the operator can read a long item.
  * - Each item is a button that routes to the most context-appropriate
- *   page (cron → /jobs, config → /settings, log/gateway → /logs).
+ *   page (cron → /jobs, config/platform → /settings, kanban → /swarm,
+ *   log/gateway → /dashboard where Logs Tail lives).
  */
 export function AttentionMarquee({
   overview,
@@ -92,10 +93,14 @@ export function AttentionMarquee({
                 window.location.assign(item.href)
                 return
               }
+              // Never dump unrelated sources onto /jobs — that was a
+              // leftover fallback and made log/platform incidents look
+              // like cron problems.
               if (item.source === 'cron') navigate({ to: '/jobs' })
-              else if (item.source === 'config')
+              else if (item.source === 'config' || item.source === 'platform')
                 navigate({ to: '/settings', search: {} })
-              else navigate({ to: '/jobs' })
+              else if (item.source === 'kanban') navigate({ to: '/swarm' })
+              else navigate({ to: '/dashboard' })
             }
             return (
               <button

@@ -11,6 +11,7 @@ import {
   BEARER_TOKEN,
   CLAUDE_API,
   CLAUDE_DASHBOARD_URL,
+  shouldUseDashboard,
 } from '../../server/gateway-capabilities'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -151,13 +152,14 @@ export const Route = createFileRoute('/api/hermes-tasks-assignees')({
         const tasksConfig = (config.tasks ?? {}) as Record<string, unknown>
         const humanReviewer = (tasksConfig.human_reviewer as string) || null
 
-        // Prefer the dashboard plugin endpoint: it is the source used by the
-        // Hermes kanban CLI and includes ~/.hermes/profiles plus assignees
-        // already present on the board.
+        // Prefer gateway assignees; only hit Dashboard :9119 when explicitly
+        // opted in (remote / HERMES_USE_DASHBOARD=1).
         const remotePayload =
-          (await fetchJson(
-            `${CLAUDE_DASHBOARD_URL}/api/plugins/kanban/assignees`,
-          )) ?? (await fetchJson(`${CLAUDE_API}/api/tasks/assignees`))
+          (shouldUseDashboard()
+            ? await fetchJson(
+                `${CLAUDE_DASHBOARD_URL}/api/plugins/kanban/assignees`,
+              )
+            : null) ?? (await fetchJson(`${CLAUDE_API}/api/tasks/assignees`))
         const remoteAssignees = remotePayload
           ? normalizeAssigneePayload(remotePayload, humanReviewer)
           : []

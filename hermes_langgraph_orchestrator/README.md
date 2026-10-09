@@ -345,7 +345,7 @@ curl -s -X POST http://127.0.0.1:6734/api/swarm-langgraph/run \
   }' | python3 -m json.tool
 ```
 
-**Dashboard**：`/swarm2` → **LangGraph** 面板可填可选 **Workflow**（如 `radw` / `research_only`）；留空则用默认 `radw.yaml`。
+**Dashboard**：`/swarm` → **LangGraph** 面板可填可选 **Workflow**（如 `radw` / `research_only`）；留空则用默认 `radw.yaml`。
 
 ### `mission-id` 规则
 
@@ -447,7 +447,7 @@ resume approved → developer DONE → architect approved(+harden) → finalize
 
 ### 从 human gate 恢复
 
-**Dashboard（推荐）：** 打开 `/swarm2`，Human Gate 面板提供两个预设选项 + 自定义说明框，点 **确认并继续** 或 **中止**。
+**Dashboard（推荐）：** 打开 `/swarm`，Human Gate 面板提供两个预设选项 + 自定义说明框，点 **确认并继续** 或 **中止**。
 
 **CLI：**
 

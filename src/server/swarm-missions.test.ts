@@ -17,6 +17,7 @@ async function loadModule() {
   tempRoot = mkdtempSync(join(tmpdir(), 'swarm-missions-test-'))
   vi.doMock('./swarm-environment', () => ({
     SWARM_CANONICAL_REPO: tempRoot,
+    SWARM_MISSIONS_PATH: join(tempRoot, '.runtime', 'swarm-missions.json'),
     SWARM_MEMORY_HANDOFFS: join(tempRoot, 'memory'),
     SWARM_LEGACY_OUTPUT_ROOT: join(tempRoot, 'output'),
   }))

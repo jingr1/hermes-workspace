@@ -5,6 +5,7 @@ import { resetCollabDbForTests } from '../room-store'
 
 vi.mock('../../swarm-missions', () => ({
   getSwarmMission: vi.fn(),
+  updateMissionRoomId: vi.fn(),
 }))
 
 vi.mock('../../task-pipeline/projects', () => ({

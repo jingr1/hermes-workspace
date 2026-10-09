@@ -23,7 +23,7 @@ function setEnv(key: string, value: string | undefined) {
 beforeEach(() => {
   tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-config-store-'))
   setEnv('HERMES_HOME', tmpHome)
-  setEnv('HERMES_HOME', undefined)
+  setEnv('HOME', tmpHome)
 })
 
 afterEach(() => {

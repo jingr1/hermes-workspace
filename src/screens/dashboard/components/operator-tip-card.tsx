@@ -110,21 +110,6 @@ const TIPS: ReadonlyArray<Tip> = [
     score: (o) => (o?.status?.restartRequested ? 75 : 0),
   },
   {
-    id: 'achievements-momentum',
-    title: 'Achievement momentum',
-    body: 'You unlocked something recently — keep going. The Hermes achievements track real workflows, so the next tier usually drops out of normal usage rather than grinding.',
-    tone: 'positive',
-    cta: 'View all',
-    score: (o) => {
-      const ach = o?.achievements
-      if (!ach || ach.recentUnlocks.length === 0) return 0
-      const last = ach.recentUnlocks[0]?.unlockedAt
-      if (!last) return 0
-      const ageH = (Date.now() / 1000 - last) / 3600
-      return ageH < 12 ? 40 : 0
-    },
-  },
-  {
     id: 'sessions-low',
     title: 'Things have been quiet',
     body: 'Session count is below the prior period — could be intentional, could be silent breakage. Worth scanning recent logs and reviewing your cron / heartbeat schedule.',

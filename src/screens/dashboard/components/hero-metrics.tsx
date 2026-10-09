@@ -1,6 +1,11 @@
 import { useMemo } from 'react'
 import type { ReactNode } from 'react'
 import type { DashboardOverview } from '@/server/dashboard-aggregator'
+import { formatTokenCount, formatUsd } from '@/lib/format'
+import {
+  useUsageSummary,
+  type UsageFilters,
+} from '../hooks/use-usage-data'
 
 function formatTokens(n: number): string {
   if (!n || n <= 0) return '0'
@@ -95,6 +100,7 @@ type HeroTileProps = {
   label: string
   value: string
   sub?: string
+  subLines?: Array<string>
   delta?: number | null
   spark?: Array<number>
   tone: string
@@ -105,6 +111,7 @@ function HeroTile({
   label,
   value,
   sub,
+  subLines,
   delta,
   spark,
   tone,
@@ -169,8 +176,20 @@ function HeroTile({
         </span>
         {spark ? <Spark values={spark} tone={tone} /> : null}
       </div>
-      <div className="flex items-center justify-between gap-2 text-[10px]">
-        {sub ? (
+      <div className="flex items-end justify-between gap-2 text-[10px]">
+        {subLines && subLines.length > 0 ? (
+          <div className="min-w-0 space-y-0.5">
+            {subLines.map((line) => (
+              <div
+                key={line}
+                className="truncate font-mono tracking-[0.06em]"
+                style={{ color: 'var(--theme-muted)' }}
+              >
+                {line}
+              </div>
+            ))}
+          </div>
+        ) : sub ? (
           <span
             className="truncate font-mono uppercase tracking-[0.12em]"
             style={{ color: 'var(--theme-muted)' }}
@@ -200,13 +219,14 @@ function HeroTile({
  * Hero metrics band — the 10-second read across the top of the
  * dashboard. Replaces the legacy 4 small tiles with bigger numbers,
  * inline sparklines, and period-over-period deltas for sessions and
- * tokens. Pulls real values from the analytics aggregator (input +
- * output tokens, totalSessions, totalApiCalls, estimatedCost). When
- * analytics is unavailable, falls back to session-derived totals.
+ * tokens. Pulls real values from the analytics aggregator and usage
+ * summary (tokens, sessions, estimated cost). When analytics is
+ * unavailable, falls back to session-derived totals.
  */
 export function HeroMetrics({
   analytics,
   fallback,
+  usageFilters,
   extraTile,
 }: {
   analytics: DashboardOverview['analytics']
@@ -216,13 +236,16 @@ export function HeroMetrics({
     toolCalls: number
     tokens: number
   }
+  /** Same window as Usage summary / analytics chart filters. */
+  usageFilters?: UsageFilters
   /**
-   * Optional 4th tile slot. Iteration 005 swaps the legacy Cost tile
-   * for the live Active Model KPI; passing it as a slot keeps the
-   * hero row composable without coupling HeroMetrics to model data.
+   * Optional 4th tile slot (e.g. top model KPI).
    */
   extraTile?: ReactNode
 }) {
+  const { data: usageSummary } = useUsageSummary(
+    usageFilters ?? { range: '30d', dataSource: 'all' },
+  )
   // Decide source: analytics is canonical when it has any usage; otherwise fall back.
   const useAnalytics = !!analytics && analytics.source === 'analytics'
 
@@ -232,8 +255,6 @@ export function HeroMetrics({
   const dailySessions = useAnalytics
     ? analytics!.daily.map((d) => d.sessions)
     : []
-  const dailyCalls = useAnalytics ? analytics!.daily.map((d) => d.apiCalls) : []
-
   // Period-over-period deltas: split daily into the latter half vs the prior half.
   const splitSum = (arr: Array<number>): [number, number] => {
     if (arr.length < 2) return [arr.reduce((a, b) => a + b, 0), 0]
@@ -246,13 +267,72 @@ export function HeroMetrics({
   const [sessCurr, sessPrev] = splitSum(dailySessions)
   const [tokCurr, tokPrev] = splitSum(dailyTokens)
 
-  const tokensTotal = useAnalytics ? analytics!.totalTokens : fallback.tokens
+  const analyticsTokensTotal = useAnalytics
+    ? analytics!.totalTokens
+    : fallback.tokens
+  const usageRealTotal =
+    usageSummary?.realTotalTokens ?? usageSummary?.totalTokens ?? 0
+  const tokensTotal =
+    usageRealTotal > 0 ? usageRealTotal : analyticsTokensTotal
+  const cacheHitPct = usageSummary
+    ? (usageSummary.cacheHitRate ?? 0) * 100
+    : null
+  const usageInput = usageSummary?.totalInputTokens ?? 0
+  const usageOutput = usageSummary?.totalOutputTokens ?? 0
+  const usageCacheRead = usageSummary?.totalCacheReadTokens ?? 0
+  const usageCacheWrite =
+    usageSummary?.totalCacheCreationTokens ??
+    usageSummary?.totalCacheWriteTokens ??
+    0
+
+  const tokenSubLines = ((): Array<string> | undefined => {
+    if (usageRealTotal > 0 && (usageInput > 0 || usageOutput > 0)) {
+      const lines = [
+        `In ${formatTokenCount(usageInput)} / Out ${formatTokenCount(usageOutput)}`,
+      ]
+      if (cacheHitPct !== null) {
+        lines.push(
+          `${cacheHitPct.toFixed(1)}% cache · Rd ${formatTokenCount(usageCacheRead)} / Wr ${formatTokenCount(usageCacheWrite)}`,
+        )
+      }
+      return lines
+    }
+    if (useAnalytics && analytics!.cacheReadTokens > 0) {
+      return [
+        `${formatTokens(analytics!.cacheReadTokens)} cached reads`,
+        `In ${formatTokens(analytics!.inputTokens)} / Out ${formatTokens(analytics!.outputTokens)}`,
+      ]
+    }
+    return undefined
+  })()
+
   const sessionsTotal = useAnalytics
     ? analytics!.totalSessions
     : fallback.sessions
-  const apiCalls = useAnalytics ? analytics!.totalApiCalls : fallback.toolCalls
+  const usageRequests =
+    usageSummary?.totalRequests ?? usageSummary?.requestCount ?? 0
+  const estCostUsd =
+    usageSummary?.totalCost ??
+    usageSummary?.estimatedCost ??
+    (useAnalytics && analytics!.estimatedCostUsd != null
+      ? String(analytics!.estimatedCostUsd)
+      : '0')
 
   const window = useAnalytics ? `${analytics!.windowDays}d` : 'all time'
+  const costSubLines = ((): Array<string> | undefined => {
+    const lines: Array<string> = []
+    if (usageRequests > 0) {
+      lines.push(`${formatCount(usageRequests)} requests`)
+    }
+    if (usageFilters) {
+      lines.push(
+        `${usageFilters.range} / ${usageFilters.dataSource ?? 'all'}`,
+      )
+    } else {
+      lines.push(window)
+    }
+    return lines.length > 0 ? lines : undefined
+  })()
 
   const tiles: Array<HeroTileProps> = useMemo(
     () => [
@@ -268,37 +348,37 @@ export function HeroMetrics({
       {
         label: 'Tokens',
         value: formatTokens(tokensTotal),
-        sub: useAnalytics
-          ? `${formatTokens(analytics!.cacheReadTokens)} cached`
-          : 'Hermes ledger',
+        sub: tokenSubLines ? undefined : useAnalytics ? undefined : 'Hermes ledger',
+        subLines: tokenSubLines,
         delta: useAnalytics ? deltaPct(tokCurr, tokPrev) : null,
         spark: useAnalytics ? dailyTokens : undefined,
         tone: 'var(--theme-accent-secondary)',
         icon: '⚡',
       },
       {
-        label: 'API Calls',
-        value: formatCount(apiCalls),
-        sub: useAnalytics ? `${window} window` : 'tool calls',
+        label: 'Est. cost',
+        value: formatUsd(estCostUsd),
+        subLines: costSubLines,
         delta: null,
-        spark: useAnalytics ? dailyCalls : undefined,
         tone: 'var(--theme-success)',
-        icon: '🔧',
+        icon: '💵',
       },
     ],
     [
       analytics,
-      apiCalls,
-      dailyCalls,
+      costSubLines,
       dailySessions,
       dailyTokens,
+      estCostUsd,
       sessCurr,
       sessPrev,
       sessionsTotal,
       tokCurr,
       tokPrev,
+      tokenSubLines,
       tokensTotal,
       useAnalytics,
+      usageFilters,
       window,
     ],
   )

@@ -32,29 +32,13 @@ const PER_SOURCE_TIMEOUT_MS = 8_000
 // Installed-name lookup
 // -----------------------------------------------------------------------
 
-/** Read installed mcp server names from config via server-side getConfig. */
+/** Read installed mcp server names from local profile config.yaml. */
 async function getInstalledNames(): Promise<Set<string>> {
   try {
-    // Lazy import to avoid circular deps and keep server-only
-    const { getConfig } = await import('../hermes-dashboard-api')
-    const config = await getConfig()
-
-    // Config may be wrapped in { config: {...} } shape
-    const root =
-      config && typeof config === 'object' && 'config' in config
-        ? config.config
-        : config
-
-    const mcp =
-      root && typeof root === 'object'
-        ? (root as Record<string, unknown>).mcp_servers
-        : undefined
-
-    if (!mcp || typeof mcp !== 'object' || Array.isArray(mcp)) {
-      return new Set()
-    }
-
-    return new Set(Object.keys(mcp as Record<string, unknown>))
+    const { listProfileMcpServers } = await import('../mcp-profile-config')
+    const { getActiveProfileName } = await import('../profiles-browser')
+    const servers = listProfileMcpServers(getActiveProfileName() || 'default')
+    return new Set(servers.map((s) => s.name))
   } catch {
     return new Set()
   }
