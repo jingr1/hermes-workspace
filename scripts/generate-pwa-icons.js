@@ -1,75 +1,94 @@
 #!/usr/bin/env node
-import { chromium } from 'playwright'
-import { readFileSync, writeFileSync } from 'fs'
+/**
+ * Generate PWA / avatar marks from public/agorax-image.png.
+ *
+ * Source art is a circular mark on a transparent square. We crop to opaque
+ * content, cover-scale to the canvas, then apply a circular alpha mask so
+ * corners stay transparent (no white square halo under UI `rounded-full`).
+ *
+ * Uses Pillow (Python) — no Playwright browser download required for icons.
+ */
+import { spawnSync } from 'child_process'
+import { readFileSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
+const root = join(__dirname, '..')
+const outputDir = join(root, 'public')
 
-const iconSourcePath = join(__dirname, '../public/agorax-image.png')
-const logoSourcePath = join(__dirname, '../public/agorax.png')
-const outputDir = join(__dirname, '../public')
+const py = `
+from pathlib import Path
+from PIL import Image, ImageDraw
 
-function imageDataUri(path) {
-  return `data:image/png;base64,${readFileSync(path).toString('base64')}`
+root = Path(${JSON.stringify(outputDir)})
+src = Image.open(root / 'agorax-image.png').convert('RGBA')
+bbox = src.split()[-1].getbbox() or (0, 0, src.width, src.height)
+cropped = src.crop(bbox)
+
+def make_icon(size: int) -> Image.Image:
+    scale = max(size / cropped.width, size / cropped.height)
+    dw = max(1, int(round(cropped.width * scale)))
+    dh = max(1, int(round(cropped.height * scale)))
+    resized = cropped.resize((dw, dh), Image.Resampling.LANCZOS)
+    canvas = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    canvas.paste(resized, ((size - dw) // 2, (size - dh) // 2), resized)
+    mask = Image.new('L', (size, size), 0)
+    ImageDraw.Draw(mask).ellipse((0, 0, size - 1, size - 1), fill=255)
+    out = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    out.paste(canvas, (0, 0), mask)
+    return out
+
+for size, name in [
+    (32, 'agorax-favicon.png'),
+    (180, 'agorax-apple-touch-icon.png'),
+    (192, 'agorax-icon-192.png'),
+    (512, 'agorax-icon-512.png'),
+]:
+    make_icon(size).save(root / name, optimize=True)
+    print(f'✓ Generated {size}x{size} {name} (circular alpha)')
+
+icon192 = Image.open(root / 'agorax-icon-192.png')
+icon192.save(root / 'agent-avatars/agorax-rounded.png', optimize=True)
+icon192.save(root / 'agent-avatars/fallback.png', optimize=True)
+print('✓ Synced agent-avatars/agorax-rounded.png + fallback.png')
+
+# OG cover from wordmark (letterbox on brand paper).
+logo = Image.open(root / 'agorax.png').convert('RGBA')
+cover = Image.new('RGB', (1200, 630), (247, 248, 246))
+max_w, max_h = int(1200 * 0.92), int(630 * 0.92)
+scale = min(max_w / logo.width, max_h / logo.height)
+dw, dh = max(1, int(logo.width * scale)), max(1, int(logo.height * scale))
+resized = logo.resize((dw, dh), Image.Resampling.LANCZOS)
+cover.paste(resized, ((1200 - dw) // 2, (630 - dh) // 2), resized)
+cover.save(root / 'cover.png', optimize=True)
+print('✓ Generated 1200x630 cover')
+print('✓ All icons generated successfully!')
+`
+
+const result = spawnSync('python3', ['-c', py], {
+  cwd: root,
+  encoding: 'utf8',
+})
+if (result.stdout) process.stdout.write(result.stdout)
+if (result.stderr) process.stderr.write(result.stderr)
+if (result.status !== 0) {
+  console.error(
+    'Icon generation failed. Install Pillow: python3 -m pip install Pillow',
+  )
+  process.exit(result.status ?? 1)
 }
 
-async function generateIcon(size, filename) {
-  const browser = await chromium.launch()
-  const page = await browser.newPage({
-    viewport: { width: size, height: size },
-  })
-
-  const iconDataUri = imageDataUri(iconSourcePath)
-  const html = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <style>
-          body { margin: 0; padding: 0; }
-          img { width: 100%; height: 100%; object-fit: contain; }
-        </style>
-      </head>
-      <body><img src="${iconDataUri}" alt="Agorax" /></body>
-    </html>
-  `
-
-  await page.setContent(html)
-  const screenshot = await page.screenshot({ type: 'png' })
-  await browser.close()
-
-  const outputPath = join(outputDir, filename)
-  writeFileSync(outputPath, screenshot)
-  console.log(`✓ Generated ${size}x${size} icon`)
+// Touch package entry so CI can assert outputs exist.
+for (const f of [
+  'agorax-favicon.png',
+  'agorax-apple-touch-icon.png',
+  'agorax-icon-192.png',
+  'agorax-icon-512.png',
+  'agent-avatars/agorax-rounded.png',
+  'agent-avatars/fallback.png',
+  'cover.png',
+]) {
+  readFileSync(join(outputDir, f))
 }
-
-async function generateCover() {
-  const browser = await chromium.launch()
-  const page = await browser.newPage({
-    viewport: { width: 1200, height: 630 },
-  })
-  const logoDataUri = imageDataUri(logoSourcePath)
-  await page.setContent(`<!DOCTYPE html><html><head><style>html,body{margin:0;width:100%;height:100%;background:#F7F8F6}body{display:flex;align-items:center;justify-content:center}img{width:92%;height:92%;object-fit:contain}</style></head><body><img src="${logoDataUri}" alt="Agorax" /></body></html>`)
-  const screenshot = await page.screenshot({ type: 'png' })
-  await browser.close()
-  writeFileSync(join(outputDir, 'cover.png'), screenshot)
-  console.log('Generated 1200x630 cover')
-}
-
-async function main() {
-  console.log('Generating PWA icons...')
-  await generateIcon(32, 'agorax-favicon.png')
-  await generateIcon(180, 'agorax-apple-touch-icon.png')
-  await generateIcon(192, 'agorax-icon-192.png')
-  await generateIcon(512, 'agorax-icon-512.png')
-  await generateCover()
-  // Keep avatar fallbacks in sync with the 192 PWA mark.
-  const icon192 = readFileSync(join(outputDir, 'agorax-icon-192.png'))
-  writeFileSync(join(outputDir, 'agent-avatars/agorax-rounded.png'), icon192)
-  writeFileSync(join(outputDir, 'agent-avatars/fallback.png'), icon192)
-  console.log('✓ Synced agent-avatars/agorax-rounded.png + fallback.png')
-  console.log('✓ All icons generated successfully!')
-}
-
-main().catch(console.error)

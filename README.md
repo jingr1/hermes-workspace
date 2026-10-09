@@ -129,7 +129,18 @@ cd ~/agorax && pnpm dev:managed-agent   # terminal 2 · :8788 (only if you use m
 cd ~/agorax && pnpm dev                 # terminal 3 · :6734
 ```
 
-Already built? Production mode is `pnpm build && pnpm start` (same `:6734`).
+Production mode (same `:6734`):
+
+```bash
+pnpm install   # required after clone, pull, or switching a worktree/branch
+pnpm build && pnpm start
+```
+
+`node_modules` is not shared across git worktrees — after updating `release/*` (or any separate checkout), run `pnpm install` there before `pnpm build`. If start fails with `Could not locate the bindings file` for `better-sqlite3`, compile it with the same Node major you use to run (`node -v`):
+
+```bash
+npm run install --prefix "$(node -p "require('path').dirname(require.resolve('better-sqlite3/package.json'))")"
+```
 
 ---
 
