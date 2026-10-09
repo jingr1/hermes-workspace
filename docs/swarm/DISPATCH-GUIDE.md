@@ -66,7 +66,7 @@ Hermes Kanban 链（规划用，和上面不是同一条路）
 
 ## 4. 按「你在哪跑 orchestrator」选方法
 
-### A. Workspace 已启动（`pnpm dev`，:6734）
+### A. Workspace 已启动（`pnpm dev:ui`，:6734）
 
 **首选 ① Swarm API**
 

@@ -353,7 +353,7 @@ export function ConnectionStartupScreen({ onConnected }: Props) {
                   at any OpenAI-compatible backend:
                 </p>
                 <pre className="mt-2 overflow-x-auto font-mono text-xs text-white/60">
-                  HERMES_API_URL=http://your-server:8642 pnpm dev
+                  HERMES_API_URL=http://your-server:8642 pnpm dev:ui
                 </pre>
               </div>
             </div>

@@ -69,7 +69,7 @@ if ($sessionExists -and $Restart) {
   Assert-WslOk -Command "tmux kill-session -t '$SessionName'" -ErrorMessage "Failed to stop existing tmux session '$SessionName'."
 }
 
-Assert-WslOk -Command "tmux new-session -d -s '$SessionName' -c '$WorkspacePath' 'pnpm start:all'" -ErrorMessage "Failed to start tmux session '$SessionName'."
+Assert-WslOk -Command "tmux new-session -d -s '$SessionName' -c '$WorkspacePath' 'pnpm dev'" -ErrorMessage "Failed to start tmux session '$SessionName'."
 
 Start-Sleep -Seconds 2
 $postStart = Invoke-WslBash -Command "tmux has-session -t '$SessionName' 2>/dev/null"

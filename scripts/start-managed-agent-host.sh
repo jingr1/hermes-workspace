@@ -3,7 +3,7 @@
 #
 # Prefer a prebuilt binary under .agorax/ (fast, durable). Fall back to
 # scripts/dev-managed-agent.sh --force (go run). Always detach so
-# `pnpm start:all`'s concurrently task can exit without killing the daemon.
+# `pnpm dev:ui`'s concurrently task can exit without killing the daemon.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LOG="${AGORAX_AGENT_LOG:-/tmp/agorax-daemon.log}"

@@ -11,7 +11,7 @@
 ┌─────────────────┐       HTTP :8642        ┌──────────────────┐
 │  Claude Gateway  │◄──────────────────────►│ Agorax │
 │  (Python, FastAPI)│  /health, /v1/chat,   │  (Node, Vite)     │
-│  hermes gateway   │  /api/sessions, etc.  │  pnpm dev         │
+│  hermes gateway   │  /api/sessions, etc.  │  pnpm dev:ui         │
 │  run              │                       │  port 6734        │
 └─────────────────┘                        └──────────────────┘
 ```
@@ -214,7 +214,7 @@ cp .env.example .env
 
 ```bash
 cd ~/hermes-workspace   # or wherever it's installed
-pnpm dev
+pnpm dev:ui
 ```
 
 **Look for this in the startup output:**
@@ -284,7 +284,7 @@ grep -q '^HERMES_API_URL=' .env 2>/dev/null && \
   sed -i.bak 's|^HERMES_API_URL=.*|HERMES_API_URL=http://127.0.0.1:8642|' .env || \
   echo 'HERMES_API_URL=http://127.0.0.1:8642' >> .env
 
-echo "✅ Done. Run: pnpm dev"
+echo "✅ Done. Run: pnpm dev:ui"
 ```
 
 ---

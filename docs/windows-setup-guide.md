@@ -68,7 +68,7 @@ hermes gateway run
 
 # Terminal 2 — Dashboard
 cd C:\Users\<you>\hermes-workspace
-pnpm dev
+pnpm dev:ui
 
 # Open http://127.0.0.1:6734
 ```
@@ -90,7 +90,7 @@ Stop-Process -Id <PID> -Force
 2. Click install icon (⊕) in address bar
 3. Gets own window + taskbar icon
 
-**Note:** PWA only works while `pnpm dev` is running.
+**Note:** PWA only works while `pnpm dev:ui` is running.
 
 ## Common errors
 

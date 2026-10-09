@@ -69,7 +69,7 @@ Changed:
 3002 was restarted multiple times after:
 - backend URL switch
 - Vite cache wipe (`node_modules/.vite` removed)
-- clean `pnpm dev` restarts
+- clean `pnpm dev:ui` restarts
 
 ### 4. Verified health endpoints
 After the restart, 3002 reported healthy:

@@ -1,6 +1,6 @@
 /** Build argv for attaching to an existing tmux session from a web PTY. */
 export function buildTmuxAttachCommand(sessionName: string): Array<string> {
-  // When pnpm dev runs inside tmux, inherited TMUX blocks nested attach and the
+  // When pnpm dev:ui runs inside tmux, inherited TMUX blocks nested attach and the
   // subprocess exits immediately — Runtime shows "session closed" while `tmux ls`
   // still lists the worker session.
   return [

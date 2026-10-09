@@ -28,7 +28,7 @@ Workspace UI 启动 LangGraph mission 时默认调用：
 
 `hermes_langgraph_orchestrator/.venv/bin/python`
 
-缺 venv 会 spawn 失败（严重时拖垮 `pnpm dev`）。换机或新 clone 后务必先跑：
+缺 venv 会 spawn 失败（严重时拖垮 `pnpm dev` / `pnpm dev:ui`）。换机或新 clone 后务必先跑：
 
 ```bash
 cd ~/hermes-workspace/hermes_langgraph_orchestrator
@@ -179,7 +179,7 @@ node    1990100 ramon.jing   37u  IPv4 ...    0t0      TCP *:6734 (LISTEN)
 
 **方法 A：在原终端里操作**
 
-找到你之前运行 `pnpm dev` 的窗口，按 `Ctrl + C`，然后：
+找到你之前运行 `pnpm dev`（或 `pnpm dev:ui`）的窗口，按 `Ctrl + C`，然后：
 
 ```bash
 cd ~/hermes-workspace
@@ -607,8 +607,8 @@ curl -s "http://localhost:6734/api/swarm-missions?id=radw-real-001" | python3 -m
 
 Phase 2 真实执行依赖 **Agorax**（`:6734`）。常见根因：
 
-1. **`pnpm dev` 刚启动**：Vite 首次编译 SSR API 路由可能 **>5s**，旧版 preflight 会误报 timeout。现已自动重试最多 6 次（读超时 12s/次）。
-2. **Workspace 未运行**：先 `pnpm dev`，等 Vite ready 后再跑 LangGraph。
+1. **`pnpm dev` / `pnpm dev:ui` 刚启动**：Vite 首次编译 SSR API 路由可能 **>5s**，旧版 preflight 会误报 timeout。现已自动重试最多 6 次（读超时 12s/次）。
+2. **Workspace 未运行**：先 `pnpm dev`（或已单独启动 gateway/daemon 时用 `pnpm dev:ui`），等 Vite ready 后再跑 LangGraph。
 
 ```bash
 cd agorax && pnpm dev

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Start agorax-agentd for local Agorax development.
 #
-# Idempotent (safe under `pnpm start:all` restarts):
+# Idempotent (safe under `pnpm dev:ui` restarts):
 #   - /health OK            → skip
 #   - our process on :PORT  → skip (do not kill; avoids bind races)
 #   - foreign process       → fail with a clear message

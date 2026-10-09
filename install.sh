@@ -285,11 +285,11 @@ cat <<EOF
 Next steps:
 
   Recommended (one command — gateway + managed-agent + UI):
-       cd $INSTALL_DIR && pnpm start:all
+       cd $INSTALL_DIR && pnpm dev
 
   Or split terminals:
        hermes gateway run                  # :8642 (optional on localhost — pool can lazy-start)
-       cd $INSTALL_DIR && pnpm dev         # :6734 UI
+       cd $INSTALL_DIR && pnpm dev:ui         # :6734 UI
 
   Open http://localhost:6734
 

@@ -11,6 +11,7 @@ You need:
 - git
 - tmux for persistent TUI-backed workers
 - a configured Hermes Agent profile under `~/.hermes/profiles/`
+- Python ≥ 3.10 (recommended 3.11+) and `hermes_langgraph_orchestrator/.venv` if you plan to run LangGraph missions from the UI
 
 The workspace can still render without tmux, but tmux is what makes the worker sessions feel alive instead of one-shot and disposable.
 
@@ -29,8 +30,16 @@ pnpm install
 
 ## 3. Start the workspace
 
+For the full Swarm stack (Hermes gateway + managed-agent daemon + UI):
+
 ```bash
 pnpm dev
+```
+
+If you already have the gateway and managed-agent daemon running separately, you can start just the UI:
+
+```bash
+pnpm dev:ui
 ```
 
 Open the local URL printed by Vite/TanStack Start. In most local setups that is:
@@ -183,6 +192,8 @@ The Add Swarm dialog includes these presets:
 - Custom
 
 Pick the closest role first, then tune. Avoid starting from Custom unless you are intentionally creating a new lane. Presets encode the operating contract so the worker knows whether it is allowed to build, review, triage, research, or just report.
+
+> These presets are Swarm UI convenience templates. They are **not** the canonical LangGraph worker ids. The LangGraph roster ids are defined in `agents.yaml`: `orchestrator`, `researcher`, `architect`, `developer`, `writer`, and `learning`.
 
 ## 10. First-task checklist
 

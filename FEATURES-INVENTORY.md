@@ -660,7 +660,7 @@ Web Audio API synthesized sounds (no audio files):
 ### 10.1 Local Development
 
 ```bash
-pnpm dev  # Vite dev server with HMR on port 3002
+pnpm dev:ui  # Vite dev server with HMR on port 3002
 ```
 
 ### 10.2 Production Build

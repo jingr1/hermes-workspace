@@ -21,7 +21,7 @@
 
 **Agent 列表读路径：** UI 统一用 `GET /api/agents`（`agents.yaml` + status）。单 agent 能力用 `GET /api/agents/:id/capabilities`（**Hermes + managed**）：Hermes 读 profile FS；managed 读平台绑定 + runtime settings（如 Claude/Codex model）。`GET /api/profiles/capabilities` 仍仅 Hermes profile。声明增删改用 `/api/agent-registry`。
 
-当前版本：`2.5.0`。本地开发：`pnpm start:all`（gateway + managed-agent `:8788` + Vite UI）或 `pnpm build && pnpm start`（同栈 + 生产 UI）；仅 UI 用 `pnpm start:ui` / `pnpm dev`（默认 `PORT=6734`；localhost 下 gateway pool 可 lazy-start）。
+当前版本：`2.5.0`。本地开发：`pnpm dev`（gateway + managed-agent `:8788` + Vite UI）或 `pnpm build && pnpm start`（同栈 + 生产 UI）；仅 UI 用 `pnpm start:ui` / `pnpm dev:ui`（默认 `PORT=6734`；localhost 下 gateway pool 可 lazy-start）。
 
 ---
 
@@ -126,7 +126,7 @@ API 要点：
 - **知识分层：** `~/wiki` = 长期领域知识；`memory/swarm/missions/<missionId>/` = 归档任务产物；`memory/swarm/<worker>/` = 进行中草稿；`memory/handoffs/swarm/` = 最新 checkpoint；任务结束后由 `learning` 把可复用结论 ingest 进 wiki（见 `docs/swarm/LEARNING-WIKI-INGEST.md`）。
 - **职责边界：** Researcher 只立事实；Architect 可质疑并握方向/规格/选道/评审/harden；Developer / Writer 只执行本道规格，缺口升给 architect（writer 事实缺口经 architect 回 researcher）；Learning 文档化与 wiki ingest；Orchestrator 路由与放行。质疑往返最多 3 轮，再按 `docs/swarm/ESCALATION-GUIDE.md` 升级。
 - 除非任务明确需要，不要全局启用可选 Hermes plugin；先在 `agents.yaml` 记录 plugin/toolset 对齐。
-- 本地 Workspace 配对/调试时，**一个 gateway 为规范实例**：`hermes gateway run` 监听 `:8642`。Dashboard（`:9119`）可选，仅分析。再起 gateway 前先 `curl http://127.0.0.1:<workspace-port>/api/sessions`（本机 `pnpm dev` 多为 `6734`）。Sessions 已有数据则刷新/重探测 UI，不要再起第二个 gateway。
+- 本地 Workspace 配对/调试时，**一个 gateway 为规范实例**：`hermes gateway run` 监听 `:8642`。Dashboard（`:9119`）可选，仅分析。再起 gateway 前先 `curl http://127.0.0.1:<workspace-port>/api/sessions`（本机 `pnpm dev:ui` 多为 `6734`）。Sessions 已有数据则刷新/重探测 UI，不要再起第二个 gateway。
 - 若默认模型走 `openai-codex` / Codex 族，聊天依赖本机 Codex CLI 已登录（`codex login`）。
 
 ---
@@ -184,9 +184,9 @@ set -g exit-unattached off
 
 ## 七、Windows 备注
 
-- **两个必需服务**：Gateway（:8642）+ Workspace（`pnpm dev` 默认 :6734）。Dashboard（:9119）可选。
+- **两个必需服务**：Gateway（:8642）+ Workspace（`pnpm dev:ui` 默认 :6734）。Dashboard（:9119）可选。
   - Gateway：`hermes gateway run`
-  - Workspace：`pnpm dev`
+  - Workspace：`pnpm dev:ui`
   - 可选：`hermes dashboard --port 9119 --host 127.0.0.1 --no-open`
   - 或 Electron：`pnpm electron:dev`（自动起 gateway + workspace）
 - **桌面端**：`electron/main.cjs`；`electron:build:win` 产出 NSIS 到 `release/`。

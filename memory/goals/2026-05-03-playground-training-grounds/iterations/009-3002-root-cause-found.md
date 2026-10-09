@@ -42,7 +42,7 @@ problem — the page was being yanked out from under itself by HMR every few hun
 ## Fix applied
 
 1. Killed the three duplicate hermes-workspace vite processes.
-2. Started a single fresh `pnpm dev` on 3002.
+2. Started a single fresh `pnpm dev:ui` on 3002.
 3. Renamed `src/routes/api/send-stream-live-tools.ts` →
    `src/routes/api/-send-stream-live-tools.ts` so TanStack's ignore prefix skips
    it cleanly. (Updated `send-stream.ts` and the test file's imports.) This silences

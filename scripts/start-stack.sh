@@ -3,7 +3,7 @@
 #
 # Usage:
 #   scripts/start-stack.sh prod   # production UI (node server-entry.js) — used by `pnpm start`
-#   scripts/start-stack.sh dev    # Vite UI — used by `pnpm start:all`
+#   scripts/start-stack.sh dev    # Vite UI — used by `pnpm dev`
 #
 # Gateway is skipped when already running. Daemon is idempotent (:8788 /health).
 set -euo pipefail
@@ -19,7 +19,7 @@ case "$MODE" in
     UI_CMD='node server-entry.js'
     ;;
   dev)
-    UI_CMD='pnpm dev'
+    UI_CMD='pnpm dev:ui'
     ;;
   *)
     echo "usage: $0 <prod|dev>" >&2

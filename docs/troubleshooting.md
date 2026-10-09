@@ -47,7 +47,7 @@ After fixing, restart the gateway: `hermes gateway run --replace`
 2. Is port 8642 bound? `curl -sf http://127.0.0.1:8642/health`
 3. Is Workspace `.env` correct? `grep HERMES_API_URL ~/hermes-workspace/.env`
    - Should be: `HERMES_API_URL=http://127.0.0.1:8642`
-4. Restart Workspace: `pnpm dev`
+4. Restart Workspace: `pnpm dev:ui`
 
 If the gateway is running and healthy but Workspace still disconnects, check for port conflicts (another process on 8642) or firewall rules.
 
@@ -135,14 +135,14 @@ hermes gateway run
 # Wait until you see "Uvicorn running on http://127.0.0.1:8642"
 
 # Terminal 2 — then start workspace
-cd ~/hermes-workspace && pnpm dev
+cd ~/hermes-workspace && pnpm dev:ui
 ```
 
 ---
 
 ## 7. Dev server crashes immediately after boot
 
-**Symptom:** `pnpm dev` starts, shows the Vite banner, then crashes with ELIFECYCLE or a stack trace.
+**Symptom:** `pnpm dev:ui` starts, shows the Vite banner, then crashes with ELIFECYCLE or a stack trace.
 
 **Common causes:**
 

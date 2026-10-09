@@ -403,7 +403,7 @@ export function PipelineView({
         /aborted|timeout/i.test(error.message)
       toast(
         timedOut
-          ? 'Delete timed out — workspace may be stuck; restart pnpm start:all'
+          ? 'Delete timed out — workspace may be stuck; restart pnpm dev'
           : error.message || 'Failed to delete',
         { type: 'error' },
       )

@@ -224,8 +224,8 @@ import { Route as ApiSessionsSessionKeyTruncateRouteImport } from './routes/api/
 import { Route as ApiSessionsSessionKeyStatusRouteImport } from './routes/api/sessions/$sessionKey.status'
 import { Route as ApiSessionsSessionKeyCompressRouteImport } from './routes/api/sessions/$sessionKey.compress'
 import { Route as ApiSessionsSessionKeyActiveRunRouteImport } from './routes/api/sessions/$sessionKey.active-run'
-import { Route as ApiRunsRunIdSteerRouteImport } from './routes/api/runs/$runId.steer'
 import { Route as ApiRunsRunIdStopRouteImport } from './routes/api/runs/$runId.stop'
+import { Route as ApiRunsRunIdSteerRouteImport } from './routes/api/runs/$runId.steer'
 import { Route as ApiRoomsRoomIdPendingTurnsRouteImport } from './routes/api/rooms/$roomId/pending-turns'
 import { Route as ApiRoomsRoomIdParticipantsRouteImport } from './routes/api/rooms/$roomId/participants'
 import { Route as ApiRoomsRoomIdMessagesRouteImport } from './routes/api/rooms/$roomId/messages'
@@ -1360,14 +1360,14 @@ const ApiSessionsSessionKeyActiveRunRoute =
     path: '/$sessionKey/active-run',
     getParentRoute: () => ApiSessionsRoute,
   } as any)
-const ApiRunsRunIdSteerRoute = ApiRunsRunIdSteerRouteImport.update({
-  id: '/api/runs/$runId/steer',
-  path: '/api/runs/$runId/steer',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiRunsRunIdStopRoute = ApiRunsRunIdStopRouteImport.update({
   id: '/api/runs/$runId/stop',
   path: '/api/runs/$runId/stop',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiRunsRunIdSteerRoute = ApiRunsRunIdSteerRouteImport.update({
+  id: '/api/runs/$runId/steer',
+  path: '/api/runs/$runId/steer',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiRoomsRoomIdPendingTurnsRoute =
@@ -2649,6 +2649,7 @@ export interface FileRouteTypes {
     | '/api/rooms/$roomId/participants'
     | '/api/rooms/$roomId/pending-turns'
     | '/api/runs/$runId/steer'
+    | '/api/runs/$runId/stop'
     | '/api/sessions/$sessionKey/active-run'
     | '/api/sessions/$sessionKey/compress'
     | '/api/sessions/$sessionKey/status'
@@ -2908,6 +2909,7 @@ export interface FileRouteTypes {
     | '/api/rooms/$roomId/participants'
     | '/api/rooms/$roomId/pending-turns'
     | '/api/runs/$runId/steer'
+    | '/api/runs/$runId/stop'
     | '/api/sessions/$sessionKey/active-run'
     | '/api/sessions/$sessionKey/compress'
     | '/api/sessions/$sessionKey/status'
@@ -3170,6 +3172,7 @@ export interface FileRouteTypes {
     | '/api/rooms/$roomId/participants'
     | '/api/rooms/$roomId/pending-turns'
     | '/api/runs/$runId/steer'
+    | '/api/runs/$runId/stop'
     | '/api/sessions/$sessionKey/active-run'
     | '/api/sessions/$sessionKey/compress'
     | '/api/sessions/$sessionKey/status'
@@ -4906,18 +4909,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSessionsSessionKeyActiveRunRouteImport
       parentRoute: typeof ApiSessionsRoute
     }
-    '/api/runs/$runId/steer': {
-      id: '/api/runs/$runId/steer'
-      path: '/api/runs/$runId/steer'
-      fullPath: '/api/runs/$runId/steer'
-      preLoaderRoute: typeof ApiRunsRunIdSteerRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/runs/$runId/stop': {
       id: '/api/runs/$runId/stop'
       path: '/api/runs/$runId/stop'
       fullPath: '/api/runs/$runId/stop'
       preLoaderRoute: typeof ApiRunsRunIdStopRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/runs/$runId/steer': {
+      id: '/api/runs/$runId/steer'
+      path: '/api/runs/$runId/steer'
+      fullPath: '/api/runs/$runId/steer'
+      preLoaderRoute: typeof ApiRunsRunIdSteerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/rooms/$roomId/pending-turns': {

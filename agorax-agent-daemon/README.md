@@ -38,7 +38,7 @@ The development composition is available from the Agorax repository root:
 pnpm dev:managed-agent
 ```
 
-`pnpm start:all` starts the Hermes gateway, Agorax WebUI, and this embedded
+`pnpm dev` starts the Hermes gateway, Agorax WebUI, and this embedded
 daemon together. The WebUI uses `AGORAX_MANAGED_AGENT_URL` and
 `AGORAX_WORKSPACE_ID` to route Claude Code, Codex, Cursor, OpenCode, and Kimi
 through the embedded Managed Agent bridge.

@@ -13,7 +13,7 @@ We will acknowledge your report within 48 hours and aim to provide a fix within 
 ## Scope
 
 - Agorax web application code
-- API routes and Claude communication
+- API routes and agent runtime communication
 - Authentication and session management
 - Client-side data handling and rendering
 - Exec approval and human-in-the-loop controls
@@ -25,11 +25,11 @@ We will acknowledge your report within 48 hours and aim to provide a fix within 
 - Third-party dependencies (report to the respective maintainer)
 - Social engineering attacks
 
-## Security Measures (v3.0.0+)
+## Security Measures
 
 **Authentication**
 
-- All API routes require authentication as of v3.0.0
+- All API routes require authentication
 - Session tokens use timing-safe comparison to prevent timing attacks
 - httpOnly + SameSite=Strict cookies
 - Token revocation on logout
@@ -45,12 +45,12 @@ We will acknowledge your report within 48 hours and aim to provide a fix within 
 - Path traversal prevention on all file and memory routes (`ensureWorkspacePath()`)
 - `.md`-only restriction on memory write routes
 - No API keys or secrets ever exposed to client-side code
-- Claude tokens are server-side only
+- Gateway / provider tokens are server-side only
 - Diagnostic output scrubbed of sensitive data
 
 **Agent Safety**
 
-- Exec approval workflow — sensitive Claude exec commands require explicit human approval via in-UI modal
+- Exec approval workflow — sensitive agent exec commands require explicit human approval via in-UI modal
 - Skills security scanning — every skill from the marketplace is scanned for suspicious patterns before install
 
 **Configuration**
@@ -61,21 +61,10 @@ We will acknowledge your report within 48 hours and aim to provide a fix within 
 
 ## Security Audit Passes
 
-### SEC-3 (2026-02-25)
-
-- Completed full API audit for auth coverage; no new private route auth gaps found (`/api/config-get`, `/api/debug-analyze`, `/api/context-usage`, `/api/paths` verified authenticated).
-- Added CSRF content-type enforcement (`requireJsonContentType`) to remaining POST handlers, including auth and terminal management endpoints.
-- Tightened rate limiting to 10 requests/minute per IP (sliding window) on high-risk endpoints:
-  - `/api/terminal-input`
-  - `/api/terminal-stream`
-  - `/api/restart`
-  - `/api/update-check` (POST)
-  - `/api/update-check` (POST)
+No formal third-party security audits have been performed yet. This section will be updated when audits are completed.
 
 ## Supported Versions
 
-| Version     | Supported              |
-| ----------- | ---------------------- |
-| v3.x (main) | ✅ Active              |
-| v2.x        | ⚠️ Security fixes only |
-| < v2.0      | ❌ Unsupported         |
+| Version | Supported |
+| ------- | --------- |
+| main    | ✅ Active |

@@ -558,6 +558,6 @@ src/routes/api/*.ts  →  src/server/<subsystem>/*.ts
 | 修改房间 DB schema | `src/server/collab-db.ts` |
 | 修改 skill / MCP catalog | `src/server/platform-skills/`、`src/server/platform-mcp/` |
 | 生产构建入口 | `server-entry.js` → `dist/server/server.js` |
-| 本地开发启动 | `pnpm start:all`（dev）/ `pnpm build && pnpm start`（prod；均含 gateway `:8642` + UI `:6734` + daemon `:8788`） |
+| 本地开发启动 | `pnpm dev`（dev）/ `pnpm build && pnpm start`（prod；均含 gateway `:8642` + UI `:6734` + daemon `:8788`） |
 | 查看架构总览 / 评审与优化路线 | [`docs/ARCHITECTURE.md`](ARCHITECTURE.md)（§9） |
 | 查看 Agent/Swarm 合同 | [`AGENTS.md`](../AGENTS.md)、[`agents.yaml`](../agents.yaml) |

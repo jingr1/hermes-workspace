@@ -30,7 +30,7 @@ Agorax 是 AI agent 的**公共广场 / 多智能体协作控制面**：把聊�
 
 | 端口       | 进程                              | 说明                                                                 |
 | -------- | ------------------------------- | ------------------------------------------------------------------ |
-| **6734** | Agorax（`pnpm dev` / `vite dev`） | 主应用；dev 默认 6734（`strictPort`）                                      |
+| **6734** | Agorax（`pnpm dev:ui` / `vite dev`） | 主应用；dev 默认 6734（`strictPort`）                                      |
 | **8642** | Hermes Gateway                  | 规范实例 `hermes gateway run`；worker profile 的 chat/models/MCP/job 运行时 |
 | 8643+    | 按 profile 分配                    | `src/server/gateway-ports.ts` 按 profile 名顺序分配并持久化                  |
 | 9119     | Hermes Dashboard                | **可选**外链，仅分析，不做能力门控                                                |
@@ -106,7 +106,7 @@ Agorax 是 AI agent 的**公共广场 / 多智能体协作控制面**：把聊�
 
 ### 4.1 运行时入口
 
-- **Dev**：`pnpm dev` = `PORT=6734 vite dev`。`vite.config.ts`（承载大量运维逻辑）插件链：`vite-tsconfig-paths` → `@tailwindcss/vite` → `tanstackStart()` → `@vitejs/plugin-react`，外加自写插件（dev no-cache、CSP/healthcheck/`agorax-dev-server`、客户端 env 替换、构建后拷贝 `pty-helper.py`）。
+- **Dev**：`pnpm dev:ui` = `PORT=6734 vite dev`。`vite.config.ts`（承载大量运维逻辑）插件链：`vite-tsconfig-paths` → `@tailwindcss/vite` → `tanstackStart()` → `@vitejs/plugin-react`，外加自写插件（dev no-cache、CSP/healthcheck/`agorax-dev-server`、客户端 env 替换、构建后拷贝 `pty-helper.py`）。
 - **生产**：`pnpm build`（Vite 产出 `dist/client` 静态资源 + `dist/server/server.js` Web 标准 handler）→ `node server-entry.js`（仓库根，原生 `node:http`）：强制加载 `.env`、静态资源优先、其余转 SSR handler、注入 CSP 等安全头；HOST 非回环时强制 `HERMES_PASSWORD`；同时监听 `127.0.0.1` 与 `::1`。
 - **Electron**：`pnpm electron:bundle-server` 用 esbuild 把 `dist/server/server.js` 打成单文件 CJS（`electron/server-bundle.cjs`），桌面壳内嵌运行。
 
