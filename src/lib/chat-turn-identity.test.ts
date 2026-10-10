@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   assistantMessageIdForRun,
+  foldOpenTurnIntoLiveHost,
+  preferLiveAssistantOnCollision,
   projectLiveAssistantMessage,
   readDurableMessageId,
   stableChatMessageKey,
@@ -63,5 +65,79 @@ describe('stableChatMessageKey', () => {
       () => 'growing text',
     )
     expect(key).toBe('assistant:r1')
+  })
+})
+
+describe('foldOpenTurnIntoLiveHost', () => {
+  it('collapses mid-turn text + tool-only orphans into one streaming host', () => {
+    const live = projectLiveAssistantMessage({
+      messageId: 'assistant:r1',
+      runId: 'r1',
+      text: '分析结论',
+      thinking: '',
+      toolCalls: [{ id: 't2', name: 'read_file', phase: 'complete' }],
+      streaming: true,
+      timestamp: 3,
+    })
+    const folded = foldOpenTurnIntoLiveHost(
+      [
+        {
+          role: 'user',
+          id: 'u1',
+          content: [{ type: 'text', text: 'fix' }],
+        },
+        {
+          role: 'assistant',
+          id: 'orphan-tool',
+          content: [
+            { type: 'toolCall', id: 't1', name: 'explore', arguments: {} },
+          ],
+        },
+        {
+          role: 'assistant',
+          id: 'hist-text',
+          content: [{ type: 'text', text: '分析结论' }],
+        },
+        live,
+      ],
+      {
+        liveMessageId: 'assistant:r1',
+        isStreaming: true,
+        streamingText: '分析结论',
+        toolCalls: [{ id: 't2', name: 'read_file', phase: 'complete' }],
+        runId: 'r1',
+      },
+    )
+
+    expect(folded).toHaveLength(2)
+    expect(folded[0]!.role).toBe('user')
+    expect(readDurableMessageId(folded[1]!)).toBe('assistant:r1')
+    expect(folded[1]!.__streamingStatus).toBe('streaming')
+    expect(folded[1]!.__streamToolCalls?.map((t) => t.id).sort()).toEqual([
+      't1',
+      't2',
+    ])
+  })
+})
+
+describe('preferLiveAssistantOnCollision', () => {
+  it('keeps the streaming durable row over a settled history echo', () => {
+    const history = {
+      role: 'assistant' as const,
+      id: 'msg-hist',
+      content: [{ type: 'text', text: 'same' }],
+    }
+    const live = projectLiveAssistantMessage({
+      messageId: 'assistant:r1',
+      runId: 'r1',
+      text: 'same',
+      thinking: '',
+      toolCalls: [],
+      streaming: true,
+      timestamp: 1,
+    })
+    expect(
+      preferLiveAssistantOnCollision(history, live, 'assistant:r1'),
+    ).toBe(live)
   })
 })

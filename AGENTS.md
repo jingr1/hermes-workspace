@@ -204,7 +204,7 @@ set -g exit-unattached off
 
 | 区域                         | 路径                                                                         |
 | ---------------------------- | ---------------------------------------------------------------------------- |
-| Chat turn 同源合同（Hermes↔managed） | `docs/chat-turn-identity-contract.md`、`src/lib/chat-turn-identity.ts` |
+| Chat 分层合同（运行时分叉·事件同源） | `docs/chat-turn-identity-contract.md`、`docs/hermes-native-bridge.md`、`src/lib/hermes-activity-adapter.ts` |
 | Agent / Swarm 合同与 roster  | `agents.yaml`、`AGENTS.md`、`docs/swarm/`                                    |
 | 运行时声明                   | `agents.yaml`、`src/server/agent-runtime/`                                   |
 | LangGraph                    | `hermes_langgraph_orchestrator/`                                             |

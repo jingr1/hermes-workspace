@@ -12,6 +12,10 @@ import { useFeatureCapability } from '@/hooks/use-feature-capability'
 
 import { assistantHasVisibleHostContent } from '@/lib/chat-message-parts'
 import {
+  foldOpenTurnIntoLiveHost,
+  preferLiveAssistantOnCollision,
+} from '@/lib/chat-turn-identity'
+import {
   deriveFriendlyIdFromKey,
   isMissingAuth,
   readError,
@@ -1697,9 +1701,19 @@ export function ChatScreen({
           existingTextMatch &&
           shouldCollapseTextDuplicate(existingTextMatch, msg)
         ) {
-          continue
-        }
-        if (!existingTextMatch) {
+          // Prefer the live durable host. Dropping it left history text in
+          // place, then the streaming branch appended a second bubble.
+          const preferred = preferLiveAssistantOnCollision(
+            existingTextMatch,
+            msg,
+            realtimeStreamingMessageId,
+          )
+          if (preferred === existingTextMatch) {
+            continue
+          }
+          dedupedSet.delete(existingTextMatch)
+          seenByText.set(textKey, msg)
+        } else if (!existingTextMatch) {
           seenByText.set(textKey, msg)
         }
       }
@@ -1722,48 +1736,14 @@ export function ChatScreen({
       return deduped
     }
 
-    const liveIdx = deduped.findIndex(
-      (message) =>
-        message.role === 'assistant' &&
-        (message.__streamingStatus === 'streaming' ||
-          (realtimeStreamingMessageId &&
-            (message.id === realtimeStreamingMessageId ||
-              message.messageId === realtimeStreamingMessageId))),
-    )
-    if (liveIdx >= 0) {
-      const live = deduped[liveIdx]!
-      const next = [...deduped]
-      next[liveIdx] = {
-        ...live,
-        __streamingStatus: 'streaming',
-        __streamingText: stableActiveStreamingText || live.__streamingText,
-        __streamingThinking:
-          realtimeStreamingThinking || live.__streamingThinking,
-        __streamToolCalls:
-          activeToolCalls.length > 0
-            ? activeToolCalls
-            : (live as any).__streamToolCalls,
-      } as ChatMessage
-      return next
-    }
-
-    // First paint before store upsert lands — temporary row with durable id.
-    if (realtimeStreamingMessageId) {
-      return [
-        ...deduped,
-        {
-          role: 'assistant',
-          id: realtimeStreamingMessageId,
-          messageId: realtimeStreamingMessageId,
-          content: [],
-          __streamingStatus: 'streaming',
-          __streamingText: stableActiveStreamingText,
-          __streamingThinking: realtimeStreamingThinking,
-          __streamToolCalls: activeToolCalls,
-        } as ChatMessage,
-      ]
-    }
-    return deduped
+    return foldOpenTurnIntoLiveHost(deduped, {
+      liveMessageId: realtimeStreamingMessageId,
+      isStreaming: true,
+      streamingText: stableActiveStreamingText,
+      streamingThinking: realtimeStreamingThinking,
+      toolCalls: activeToolCalls,
+      runId: streamingRunId ?? null,
+    })
   }, [
     activeToolCalls,
     activeIsRealtimeStreaming,
@@ -1771,6 +1751,7 @@ export function ChatScreen({
     realtimeStreamingMessageId,
     realtimeStreamingThinking,
     stableActiveStreamingText,
+    streamingRunId,
   ])
 
   const derivedStreamingInfo = useMemo(() => {
@@ -1820,24 +1801,23 @@ export function ChatScreen({
   ])
 
   const hermesShowProcessingIndicator = useMemo(() => {
-    // Match managed Tutti semantics: keep the empty-gap Thinking pill until the
-    // in-thread Activity / Working stub / reply row can actually host UI.
-    // Once send-stream is live, MessageItem mounts TuiActivityCard's Working
-    // stub — suppress the bottom pill so we do not flash Thinking then blank.
-    const streamingText = (stableActiveStreamingText || '').trim()
-    const liveThinking = (realtimeStreamingThinking || '').trim()
-    const streamBusy =
+    // Match managed Tutti: empty-gap pill only until the transcript hosts the
+    // open turn. finalDisplayMessages already folds to one live row while
+    // streaming — if that host exists, never keep the bottom pill on.
+    const hasInThreadHost = finalDisplayMessages.some(
+      (message) =>
+        message.role === 'assistant' && assistantHasVisibleHostContent(message),
+    )
+    if (hasInThreadHost) return false
+    if (
       localIsStreaming ||
       activeIsRealtimeStreaming ||
       derivedStreamingInfo.isStreaming
-    const hasVisibleInThreadHost =
-      streamingText.length > 0 ||
-      activeToolCalls.length > 0 ||
-      liveToolActivity.length > 0 ||
-      realtimeLifecycleEvents.length > 0 ||
-      liveThinking.length > 0 ||
-      streamBusy
-    if (hasVisibleInThreadHost) return false
+    ) {
+      // Stream is open but the first host row has not painted yet — keep the
+      // empty-gap pill (same pre-host window as managed).
+      return true
+    }
     return sending || waitingForResponse || hasPendingGeneration()
   }, [
     sending,
@@ -1845,11 +1825,7 @@ export function ChatScreen({
     localIsStreaming,
     activeIsRealtimeStreaming,
     derivedStreamingInfo.isStreaming,
-    stableActiveStreamingText,
-    realtimeStreamingThinking,
-    activeToolCalls,
-    liveToolActivity,
-    realtimeLifecycleEvents,
+    finalDisplayMessages,
   ])
 
   const responseWaitSnapshotRef = useRef<ResponseWaitSnapshot | null>(null)

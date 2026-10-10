@@ -1,36 +1,68 @@
-# Chat turn identity contract (Hermes ↔ managed 同源)
+# Chat turn 分层合同（运行时分叉 · 接口同源）
 
 > 状态：落地中  
-> 对齐：Agent Activity（稳定 `messageId` + delta write-through + settle 不换皮）  
-> 实现：`src/lib/chat-turn-identity.ts`、`src/stores/chat-store.ts`
+> 相关：[`hermes-native-bridge.md`](./hermes-native-bridge.md)、[`managed-agent-daemon-mapping.md`](./managed-agent-daemon-mapping.md)  
+> 代码：`src/lib/chat-turn-identity.ts`、`src/lib/hermes-activity-adapter.ts`、`packages/agent-activity-core`
 
-## 目标
+## 1. 分层
 
-Hermes 1:1 与 managed-agent **共用同一生命周期合同**，不再「流式一份、history 再换皮」。
+```text
+┌──────────────────────────────────────────────┐
+│ UI 投影（气泡 / Activity / Stop）              │  只认 Engine VM
+├──────────────────────────────────────────────┤
+│ AgentSessionEngine（权威消息桶 + reconcile）   │  统一接口
+├──────────────────────────────────────────────┤
+│ Turn / Message 合同                            │  messageId · delta · settle
+├──────────────────────────────────────────────┤
+│ Runtime Adapter                                │
+│   managed  → daemon activity WS                │
+│   Hermes   → hermes-activity-adapter ← SSE     │  厂商协议止步于此
+└──────────────────────────────────────────────┘
+```
 
+| 层 | 统一 | 可不统一 |
+| --- | --- | --- |
+| 合同 | `messageId` 生命周期、`message_delta` vs settle、禁止换皮 | — |
+| 事件 | `@agorax/agent-activity-core` 的 Activity 形态 | 厂商原始 SSE / CLI JSON |
+| 接口 | Engine apply / reconcile / 读消息 | — |
+| 运行时 | — | Gateway、Claude CLI、Codex… |
 
-| 原则             | 合同                                                                 |
-| -------------- | ------------------------------------------------------------------ |
-| Identity-first | 首包（`started` / 首 token）分配最终 `messageId`；流式、realtime、history 同一行    |
-| Write-through  | chunk / thinking / tool 只 upsert 该行；禁止另造 `streaming-current` 占位换行  |
-| Settle ≠ 换皮    | `done` 只把 `__streamingStatus` 置 complete；禁止用 history 页替换可见 content |
-| Reconcile      | 只 stamp 缺失 server id / 补缺口；正文以 live 累加为准                           |
-| 列表 key         | React key = durable `messageId`（或等价 id），不是正文 fingerprint           |
+**运行时可以不一样；身份、事件、settle 合同必须同源。**
 
+## 2. Identity
 
+| 角色 | id |
+| --- | --- |
+| Assistant 正文 | `assistant:<runId>`（无 runId → `assistant:pending:<sessionOrTurn>`） |
+| Reasoning | `assistant:<runId>:thinking` |
+| Tool | `toolcall:<toolCallId>` |
 
+首包分配，流式 / 落库 / 历史同一行。禁止结束后换 ID 换皮。
 
-## Hermes 映射
+## 3. Adapter 职责
 
-- `messageId = assistant:<runId>`（无 runId 时 `assistant:pending:<sessionKey>`）
-- `StreamingState.messageId` 与 realtime 行、UI `streamingMessageId` 三者相同
-- managed 路径保持 Tutti Engine；本仓库 Hermes 路径收敛到同一合同，而不是再抄一套 UI merge
+- **Managed**：daemon 已发 Activity；`event-bridge` 只转发。  
+- **Hermes**：`hermesSseToActivityEvents` 把 `started|chunk|thinking|tool|done` 译成同一套 `message_delta` / `turn_update`。  
+- UI **不**直接吃 Hermes SSE 业务语义；目标态只订 Engine（当前 Hermes 1:1 仍经过渡路径 `chat-store` write-through，与合同对齐，待 native bridge 接线后切 Engine）。
 
+## 4. Settle
 
+- `done` / `error` → `turn_update` `phase=settled`  
+- **禁止**用 history 页整段替换已投影正文  
+- Reconcile = 补洞 / stamp id / version，不是换皮  
+- **开 turn 期间**：`foldOpenTurnIntoLiveHost` 把 last-user 之后的工具/中间正文并进唯一 `assistant:<runId>`；有线程内 host 时底部 Thinking pill 必须关（禁止 `liveToolActivity` 单独点亮）
 
-## 明确不做
+## 5. 分阶段
 
-- 完成后立刻 `refetch history` 并用 server echo 覆盖已打印正文
-- 用 `content.toString()` / 正文 fingerprint 当 React key（长流式会 remount）
-- 把 provisional placeholder id 在 settle 时换成另一个 id 并换行
+| Phase | 内容 | 状态 |
+| --- | --- | --- |
+| A | Identity + Hermes write-through（不换皮） | ✅ |
+| B | Hermes SSE → Activity 纯 adapter | ✅ `hermes-activity-adapter.ts` |
+| C | Native bridge 真接线：send-stream → adapter → Engine | 下一迭代 |
+| D | Hermes 1:1 UI 只订 Engine（与 managed 同 hook 投影） | 待 C |
 
+## 6. 明确不做
+
+- 在 UI 里维护两套 merge（Hermes history cache vs managed Engine）作为终态  
+- 把 Swarm tmux 伪装成 managed child Session  
+- 用正文 fingerprint 当 React key

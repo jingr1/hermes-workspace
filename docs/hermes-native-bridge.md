@@ -63,7 +63,7 @@ Workspace 侧（或 collab.db）维护稳定映射，避免把 gateway id 直接
 | Phase | 范围 | 本文件状态 |
 | --- | --- | --- |
 | **0** | 映射类型 + 包边界；不改执行路径 | ✅ skeleton |
-| **1** | gateway 1:1：Create/Send/Cancel/stream → activity 事件 + reconcile | ✅ Create/Send stubs；真实流式另迭代 |
+| **1** | gateway 1:1：Create/Send/Cancel/stream → activity 事件 + reconcile | ✅ Create/Send stubs；✅ SSE→Activity 纯 adapter（`src/lib/hermes-activity-adapter.ts`）；Engine 真接线另迭代 |
 | **2** | 群聊 Hermes 成员 Turn 投影 + 精确 cancel/resume | 文档预留 |
 | **3** | Swarm assignment ↔ Turn；Human Gate 仍属 Hermes | 文档预留 |
 | **4+** | Interaction（仅当 gateway 有真实确认通道）；Goal/Fork 后置 | 文档预留 |

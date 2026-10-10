@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { mergeAssistantThinkingFromSource } from '../lib/chat-message-parts'
 import {
   assistantMessageIdForRun,
+  foldOpenTurnIntoLiveHost,
   projectLiveAssistantMessage,
   upsertMessageByDurableId,
 } from '../lib/chat-turn-identity'
@@ -1094,6 +1095,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
 
         if (duplicateIndex === -1) {
+          // Open turn already has a durable write-through host
+          // (`assistant:<runId>` via chunk/tool). Gateway message.started /
+          // mid-turn assistant echoes must not open a second bubble — that
+          // painted settled text beside the still-streaming parent.
+          const liveStreaming = state.streamingState.get(sessionKey)
+          if (
+            incomingMessage.role === 'assistant' &&
+            liveStreaming?.messageId
+          ) {
+            break
+          }
+
           // Multiple message.started events from the agent create distinct
           // realtime entries with empty content. Replace the previous empty
           // assistant message instead of appending — prevents "3 individual
@@ -1565,14 +1578,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ),
     )
 
-    if (newRealtimeMessages.length === 0) {
-      return sortMessagesChronologically(mergedHistoryMessages)
+    const merged =
+      newRealtimeMessages.length === 0
+        ? sortMessagesChronologically(mergedHistoryMessages)
+        : sortMessagesChronologically([
+            ...mergedHistoryMessages,
+            ...newRealtimeMessages,
+          ])
+
+    // Mid-poll history often surfaces tool-only / narration assistants while
+    // the parent turn is still open. Fold them into the durable live host so
+    // the transcript never paints settled fragments beside Working.
+    const liveStreaming = get().streamingState.get(sessionKey)
+    if (liveStreaming?.messageId) {
+      return foldOpenTurnIntoLiveHost(merged, {
+        liveMessageId: liveStreaming.messageId,
+        isStreaming: true,
+        streamingText: liveStreaming.text,
+        streamingThinking: liveStreaming.thinking,
+        toolCalls: liveStreaming.toolCalls,
+        runId: liveStreaming.runId,
+      })
     }
 
-    return sortMessagesChronologically([
-      ...mergedHistoryMessages,
-      ...newRealtimeMessages,
-    ])
+    return merged
   },
 }))
 

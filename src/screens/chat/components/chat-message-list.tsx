@@ -1303,14 +1303,33 @@ function ChatMessageListComponent({
     researchCard && researchCard.steps.length > 0,
   )
 
+  // Contract: once the open turn has an in-thread host (Working / Activity /
+  // reply), never light the bottom pill from liveToolActivity alone.
+  const hasInThreadTurnHost =
+    displayEntriesHaveAssistantHostSurface(visibleEntries) ||
+    (isStreaming &&
+      Boolean(streamingMessageId) &&
+      visibleEntries.some(({ message }) => {
+        if (message.role !== 'assistant') return false
+        if (message.__streamingStatus === 'streaming') return true
+        const id =
+          (message as { messageId?: unknown }).messageId ??
+          (message as { id?: unknown }).id
+        return id === streamingMessageId
+      }))
+
+  const showBottomLiveToolFallback =
+    !hasInThreadTurnHost &&
+    (liveToolActivity.length > 0 ||
+      (isStreaming && activeToolCalls.length > 0))
+
   // Compute visibility of the entire bottom thinking area — the same gate
   // used for rendering (lines below). Start / stop the elapsed timer here.
   const thinkingAreaVisible =
     showTypingIndicator ||
     showResearchCard ||
     isCompacting ||
-    liveToolActivity.length > 0 ||
-    (isStreaming && activeToolCalls.length > 0)
+    showBottomLiveToolFallback
 
   // Track how long the thinking area has been visible to gate the delayed
   // activity feed (10s threshold).
@@ -1373,8 +1392,7 @@ function ChatMessageListComponent({
     showToolOnlyNotice ||
     showResearchCard ||
     showTypingIndicator ||
-    liveToolActivity.length > 0 ||
-    (isStreaming && activeToolCalls.length > 0)
+    showBottomLiveToolFallback
 
   const normalizedStreamingToolCalls = useMemo<
     Array<{
@@ -1463,7 +1481,10 @@ function ChatMessageListComponent({
 
   function isMessageStreaming(message: ChatMessage, index: number) {
     if (!isStreaming || !streamingMessageId) return false
-    const messageId = message.__optimisticId || (message as any).id
+    const messageId =
+      message.__optimisticId ||
+      (message as { messageId?: unknown }).messageId ||
+      (message as { id?: unknown }).id
     if (messageId === streamingMessageId) return true
     // Fallback only while the streaming turn hasn't been assigned an id yet.
     // Once a message has a stable id, it must NOT match by index, otherwise
@@ -2131,12 +2152,12 @@ function ChatMessageListComponent({
             )}
             {/* Bottom thinking bubble — only for early/empty phases before the
                 per-message Activity card above the assistant bubble exists.
-                Once the card is rendering (thinking/tools present), it owns the
-                live surface and this bubble is suppressed by showTypingIndicator. */}
+                Once the in-thread host owns the turn, liveToolActivity must not
+                keep this pill lit (dual-host flash). */}
             {(showTypingIndicator ||
               showResearchCard ||
               isCompacting ||
-              liveToolActivity.length > 0) ? (
+              showBottomLiveToolFallback) ? (
               <div
                 className="flex flex-col gap-1 py-1.5 px-1 animate-in fade-in duration-300 md:gap-1.5 md:py-2"
                 role="status"
