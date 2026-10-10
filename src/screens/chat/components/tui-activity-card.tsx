@@ -407,11 +407,9 @@ function TuiActivityCardComponent({
     el.scrollTop = el.scrollHeight
   }, [isStreaming, visibleTools.length, toolSections.length, hasThinking])
 
-  // During streaming with nothing to show yet, render a minimal "working" stub
-  // so the transcript stays occupied while Hermes batches tool events until
-  // the end of the run (tool.completed often arrives only with the final turn).
-  const isWorkingStub = !hasThinking && !hasTools && isStreaming
-  if (!hasThinking && !hasTools && !isWorkingStub) return null
+  // No empty "Working" stub — pre-content gap belongs to the bottom
+  // ThinkingBubble. This card only mounts once thinking or tools exist.
+  if (!hasThinking && !hasTools) return null
 
   return (
     <div
@@ -497,21 +495,6 @@ function TuiActivityCardComponent({
               formatArg={formatArg}
             />
           ))}
-          {isWorkingStub ? (
-            <div
-              className="flex items-baseline gap-2 px-3 py-1 font-mono text-[12px] leading-relaxed"
-              style={{ color: 'var(--theme-muted)' }}
-            >
-              <span
-                className="size-1.5 rounded-full animate-pulse"
-                style={{ background: 'var(--theme-accent, #6366f1)' }}
-              />
-              <span className="opacity-80">working…</span>
-              <span className="opacity-50 text-[10px]">
-                tool activity will appear after the run
-              </span>
-            </div>
-          ) : null}
         </div>
     </div>
   )

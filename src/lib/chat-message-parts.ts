@@ -372,6 +372,10 @@ export function mergeAssistantThinkingFromSource<
 /**
  * Whether an assistant message should be kept in the transcript lane.
  * Matches managed ACP: text, thinking, or tool calls all count as host surface.
+ *
+ * Empty `__streamingStatus === 'streaming'` alone is NOT a host — that gap
+ * belongs to the bottom ThinkingBubble. Treating it as host cleared the
+ * processing indicator and left only a static Working stub (空窗).
  */
 export function assistantHasVisibleHostContent(message: {
   content?: unknown
@@ -379,7 +383,6 @@ export function assistantHasVisibleHostContent(message: {
   __optimisticId?: unknown
   __streamToolCalls?: unknown
 }): boolean {
-  if (message.__streamingStatus === 'streaming') return true
   if (message.__optimisticId && !Array.isArray(message.content)) return true
   if (
     Array.isArray(message.__streamToolCalls) &&

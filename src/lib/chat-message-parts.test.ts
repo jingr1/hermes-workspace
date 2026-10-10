@@ -132,6 +132,25 @@ describe('assistantHasVisibleHostContent', () => {
       }),
     ).toBe(false)
   })
+
+  it('rejects empty streaming status alone so ThinkingBubble keeps the gap', () => {
+    expect(
+      assistantHasVisibleHostContent({
+        content: [],
+        __streamingStatus: 'streaming',
+      }),
+    ).toBe(false)
+  })
+
+  it('keeps streaming rows once tool calls are attached', () => {
+    expect(
+      assistantHasVisibleHostContent({
+        content: [],
+        __streamingStatus: 'streaming',
+        __streamToolCalls: [{ id: 't1', name: 'Read' }],
+      }),
+    ).toBe(true)
+  })
 })
 
 describe('splitCompleteThinkingTags', () => {

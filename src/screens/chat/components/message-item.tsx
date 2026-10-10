@@ -2697,17 +2697,13 @@ function MessageItemComponent({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Activity panel pinned above the assistant bubble. Renders while
-          streaming (Working stub → live tools/thinking) and after completion
-          (Activity), so the trace always sits above the text it belongs to.
-          Empty streaming must still mount the card — Hermes often batches
-          tool.completed until the run ends; without the Working stub the
-          transcript stays blank while the composer shows Stop. */}
+      {/* Activity panel above the assistant bubble — only when there is real
+          thinking or tool content. Empty pre-content gap stays on the bottom
+          ThinkingBubble; do not mount a Working stub that replaces it. */}
       {!isUser &&
       !hideActivityCard &&
       (finalToolSections.length > 0 ||
-        (thinking && thinking.trim().length > 0) ||
-        effectiveIsStreaming) ? (
+        (thinking && thinking.trim().length > 0)) ? (
         <div className="w-full max-w-[var(--chat-content-max-width)] flex order-first">
           <div className="w-6 shrink-0" aria-hidden />
           <div className="min-w-0 flex-1">

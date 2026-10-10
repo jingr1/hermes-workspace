@@ -1304,20 +1304,17 @@ function ChatMessageListComponent({
     researchCard && researchCard.steps.length > 0,
   )
 
-  // Contract: once the open turn has an in-thread host (Working / Activity /
-  // reply), never light the bottom pill from liveToolActivity alone.
+  // Contract: once the open turn has real in-thread content (text / thinking /
+  // tools), never light the bottom pill from liveToolActivity alone.
+  // Empty streaming rows do NOT count — that would suppress ThinkingBubble
+  // and recreate the 空窗 that the Working stub failed to fix.
   const hasInThreadTurnHost =
     displayEntriesHaveAssistantHostSurface(visibleEntries) ||
     (isStreaming &&
-      Boolean(streamingMessageId) &&
-      visibleEntries.some(({ message }) => {
-        if (message.role !== 'assistant') return false
-        if (message.__streamingStatus === 'streaming') return true
-        const id =
-          (message as { messageId?: unknown }).messageId ??
-          (message as { id?: unknown }).id
-        return id === streamingMessageId
-      }))
+      (Boolean(streamingText && streamingText.trim().length > 0) ||
+        Boolean(streamingThinking && streamingThinking.trim().length > 0) ||
+        activeToolCalls.length > 0 ||
+        liveToolActivity.length > 0))
 
   const showBottomLiveToolFallback =
     !hasInThreadTurnHost &&
@@ -1539,13 +1536,31 @@ function ChatMessageListComponent({
     // Empty-gap ThinkingBubble stays visible via showProcessingIndicator
     // while this wrapper is invisible.
     if (messageIsStreaming) {
-      // Always reveal the live streaming row. Empty Hermes turns host the
-      // in-thread Working stub (TuiActivityCard); hiding the wrapper with
-      // display:none left a blank transcript while the composer showed Stop.
+      const hasStreamingActivity =
+        normalizedStreamingToolCalls.length > 0 ||
+        liveToolActivity.length > 0 ||
+        lifecycleEvents.length > 0 ||
+        Boolean(streamingThinking && streamingThinking.trim().length > 0)
+      // Hide empty streaming rows so the bottom ThinkingBubble owns the gap.
+      // Reveal once text / thinking / tools arrive on the live host.
+      const isEmptyPlaceholder = !streamingMessageHasVisibleContent(
+        chatMessage,
+        {
+          streamingText,
+          streamingThinking,
+          hasToolActivity: hasStreamingActivity,
+        },
+      )
       return (
         <div
           key={stableId}
-          style={{ transition: 'opacity 150ms ease' }}
+          style={{
+            display: isEmptyPlaceholder ? 'none' : undefined,
+            opacity: isEmptyPlaceholder ? 0 : 1,
+            pointerEvents: isEmptyPlaceholder ? 'none' : undefined,
+            transition: 'opacity 150ms ease',
+          }}
+          aria-hidden={isEmptyPlaceholder ? true : undefined}
         >
           <MessageItem
             message={chatMessage}
