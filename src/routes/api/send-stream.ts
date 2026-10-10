@@ -48,6 +48,7 @@ import {
 import { loadWorkspaceCatalog } from './workspace'
 import {
   collectSyntheticLiveToolEvents,
+  collectSyntheticLiveThinkingText,
   createSyntheticLiveToolTracker,
 } from './-send-stream-live-tools'
 import type {
@@ -1208,6 +1209,7 @@ export const Route = createFileRoute('/api/send-stream')({
               // chat-store dedupes by tool_call_id so this is safe alongside
               // any real live events that might arrive.
               const syntheticLiveToolTracker = createSyntheticLiveToolTracker()
+              let lastSyntheticThinkingEmitted = ''
               let liveRunActive = true
               const livePollIntervalMs = 800
               // Snapshot the session message count at run-start so the poller
@@ -1248,18 +1250,33 @@ export const Route = createFileRoute('/api/send-stream')({
                       )
                       continue
                     }
+                    const syntheticThinking =
+                      collectSyntheticLiveThinkingText(msgs)
+                    if (
+                      syntheticThinking.length >
+                      lastSyntheticThinkingEmitted.length
+                    ) {
+                      lastSyntheticThinkingEmitted = syntheticThinking
+                      persistActiveRun((runSessionKey, activeId) =>
+                        setRunThinking(
+                          runSessionKey,
+                          activeId,
+                          syntheticThinking,
+                        ),
+                      )
+                      sendEvent('thinking', {
+                        text: syntheticThinking,
+                        sessionKey,
+                        runId: activeRunId ?? undefined,
+                      })
+                    }
+
                     const syntheticEvents = collectSyntheticLiveToolEvents({
                       messages: msgs,
                       tracker: syntheticLiveToolTracker,
                       sessionKey,
                       runId: activeRunId ?? undefined,
                     })
-                    if (syntheticEvents.length === 0) {
-                      await new Promise((r) =>
-                        setTimeout(r, livePollIntervalMs),
-                      )
-                      continue
-                    }
                     for (const synthetic of syntheticEvents) {
                       sendEvent('tool', synthetic)
                     }

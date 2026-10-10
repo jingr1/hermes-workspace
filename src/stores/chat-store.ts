@@ -1,5 +1,8 @@
 import { create } from 'zustand'
-import { mergeAssistantThinkingFromSource } from '../lib/chat-message-parts'
+import {
+  mergeAssistantThinkingFromSource,
+  normalizeToolCallArgs,
+} from '../lib/chat-message-parts'
 import {
   assistantMessageIdForRun,
   foldOpenTurnIntoLiveHost,
@@ -1270,11 +1273,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
         const nextToolCalls = [...prev.toolCalls]
 
+        const normalizedArgs =
+          normalizeToolCallArgs(event.args) ??
+          normalizeToolCallArgs(
+            existingToolIndex >= 0
+              ? nextToolCalls[existingToolIndex]?.args
+              : undefined,
+          )
         if (existingToolIndex >= 0) {
           nextToolCalls[existingToolIndex] = {
             ...nextToolCalls[existingToolIndex],
             phase: event.phase,
-            args: event.args ?? nextToolCalls[existingToolIndex].args,
+            name:
+              event.name && event.name !== 'tool'
+                ? event.name
+                : nextToolCalls[existingToolIndex].name,
+            args: normalizedArgs ?? nextToolCalls[existingToolIndex].args,
             preview:
               (event as any).preview ??
               nextToolCalls[existingToolIndex].preview,
@@ -1288,7 +1302,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             id: toolCallId,
             name: event.name,
             phase: event.phase,
-            args: event.args,
+            args: normalizedArgs ?? event.args,
             preview: (event as any).preview,
             result: (event as any).result,
           })

@@ -208,6 +208,118 @@ export function thinkingTextFromContent(content: unknown): string {
   return chunks.join('\n\n')
 }
 
+/** Parse Hermes / OpenAI tool arguments (object or JSON string). */
+export function normalizeToolCallArgs(
+  args: unknown,
+): Record<string, unknown> | undefined {
+  if (args && typeof args === 'object' && !Array.isArray(args)) {
+    return args as Record<string, unknown>
+  }
+  if (typeof args !== 'string') return undefined
+  const trimmed = args.trim()
+  if (!trimmed) return undefined
+  if (
+    (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+    (trimmed.startsWith('[') && trimmed.endsWith(']'))
+  ) {
+    try {
+      const parsed = JSON.parse(trimmed) as unknown
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>
+      }
+    } catch {
+      return undefined
+    }
+  }
+  return undefined
+}
+
+export type StreamToolCallLike = {
+  id?: string
+  name?: string
+  phase?: string
+  args?: unknown
+  preview?: string
+  result?: string
+}
+
+function streamToolCallScore(entry: StreamToolCallLike): number {
+  let score = 0
+  const name = typeof entry.name === 'string' ? entry.name.trim() : ''
+  if (name && name !== 'tool') score += 4
+  const args = normalizeToolCallArgs(entry.args)
+  if (args && Object.keys(args).length > 0) score += 3
+  if (typeof entry.preview === 'string' && entry.preview.trim()) score += 2
+  if (typeof entry.result === 'string' && entry.result.trim()) score += 2
+  const phase = typeof entry.phase === 'string' ? entry.phase : ''
+  if (phase === 'calling' || phase === 'running' || phase === 'start') {
+    score += 1
+  }
+  return score
+}
+
+/** Merge live overlay + write-through tool rows without dropping args/name. */
+export function mergeStreamToolCallRecords<
+  T extends StreamToolCallLike,
+>(overlay: Array<T>, durable: Array<T>): Array<T> {
+  const byId = new Map<string, T>()
+
+  const upsert = (entry: T, index: number) => {
+    const rawId = typeof entry.id === 'string' ? entry.id.trim() : ''
+    const key =
+      rawId ||
+      `${typeof entry.name === 'string' ? entry.name : 'tool'}-${index}`
+    const prev = byId.get(key)
+    if (!prev) {
+      byId.set(key, {
+        ...entry,
+        id: rawId || key,
+        args: normalizeToolCallArgs(entry.args) ?? entry.args,
+      })
+      return
+    }
+    const pick =
+      streamToolCallScore(entry) >= streamToolCallScore(prev) ? entry : prev
+    const other = pick === entry ? prev : entry
+    byId.set(key, {
+      ...other,
+      ...pick,
+      id: rawId || key,
+      name:
+        pick.name && pick.name !== 'tool'
+          ? pick.name
+          : other.name || pick.name || 'tool',
+      args:
+        normalizeToolCallArgs(pick.args) ??
+        normalizeToolCallArgs(other.args) ??
+        pick.args ??
+        other.args,
+      preview: pick.preview ?? other.preview,
+      result: pick.result ?? other.result,
+      phase: pick.phase ?? other.phase,
+    })
+  }
+
+  durable.forEach(upsert)
+  overlay.forEach(upsert)
+  return Array.from(byId.values())
+}
+
+/** Read durable thinking already materialized on a ChatMessage row. */
+export function thinkingTextFromMessage(message: {
+  content?: unknown
+  __streamingThinking?: unknown
+}): string {
+  const fromField =
+    typeof message.__streamingThinking === 'string'
+      ? message.__streamingThinking.trim()
+      : ''
+  const fromContent = thinkingTextFromContent(message.content).trim()
+  if (!fromField) return fromContent
+  if (!fromContent) return fromField
+  return fromField.length >= fromContent.length ? fromField : fromContent
+}
+
 /**
  * Prefer source thinking when the target assistant row is missing it (or has a
  * shorter trace). Used when Hermes history refetch / mid-stream poll would

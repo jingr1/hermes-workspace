@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   assistantHasVisibleHostContent,
   mergeAssistantThinkingFromSource,
+  mergeStreamToolCallRecords,
   normalizeChatContentParts,
+  normalizeToolCallArgs,
+  thinkingTextFromMessage,
   parseStoredMessageContent,
   splitCompleteThinkingTags,
   storedMessageContentToText,
@@ -179,6 +182,43 @@ describe('mergeAssistantThinkingFromSource', () => {
         { type: 'text', text: 'partial' },
       ],
     })
+  })
+
+  it('normalizeToolCallArgs parses JSON string arguments', () => {
+    expect(normalizeToolCallArgs('{"path":"/tmp/a.md"}')).toEqual({
+      path: '/tmp/a.md',
+    })
+  })
+
+  it('mergeStreamToolCallRecords keeps tool name/args from the write-through row', () => {
+    expect(
+      mergeStreamToolCallRecords(
+        [{ id: 't1', name: 'tool', phase: 'complete', args: undefined }],
+        [
+          {
+            id: 't1',
+            name: 'read_file',
+            phase: 'calling',
+            args: '{"path":"README.md"}',
+          },
+        ],
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        id: 't1',
+        name: 'read_file',
+        args: { path: 'README.md' },
+      }),
+    ])
+  })
+
+  it('thinkingTextFromMessage prefers the longer durable field', () => {
+    expect(
+      thinkingTextFromMessage({
+        content: [{ type: 'thinking', thinking: 'from content' }],
+        __streamingThinking: 'from content with more detail',
+      }),
+    ).toBe('from content with more detail')
   })
 
   it('does not shrink an existing longer thinking trace', () => {

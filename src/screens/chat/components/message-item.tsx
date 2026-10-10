@@ -40,7 +40,11 @@ import {
   selectChatProfileDisplayName,
   useChatSettingsStore,
 } from '@/hooks/use-chat-settings'
-import { thinkingTextFromContent } from '@/lib/chat-message-parts'
+import {
+  mergeStreamToolCallRecords,
+  normalizeToolCallArgs,
+  thinkingTextFromMessage,
+} from '@/lib/chat-message-parts'
 import { cn } from '@/lib/utils'
 import { CHAT_SUBMIT_SELECTION_EVENT } from '@/screens/chat/chat-events'
 
@@ -475,7 +479,7 @@ function rawTimestamp(message: ChatMessage): number | null {
 }
 
 function thinkingFromMessage(msg: ChatMessage): string | null {
-  const thinking = thinkingTextFromContent(msg.content)
+  const thinking = thinkingTextFromMessage(msg)
   return thinking || null
 }
 
@@ -2340,13 +2344,10 @@ function MessageItemComponent({
     remoteStreamingActive,
   ])
 
-  const thinking =
-    remoteStreamingActive && remoteStreamingThinking !== undefined
-      ? remoteStreamingThinking
-      : thinkingFromMessage(message) ||
-        (typeof message.__streamingThinking === 'string'
-          ? message.__streamingThinking
-          : null)
+  // Tutti contract: write-through stamps thinking on the durable assistant row.
+  // Do not merge a parallel streamingThinking overlay — that fork caused empty
+  // overlay to hide reasoning already on the message (see chat-turn-identity).
+  const thinking = thinkingFromMessage(message)
   const isUser = role === 'user'
   const execNotification = isUser ? readExecNotification(message) : null
   const timestamp = getMessageTimestamp(message)
@@ -2397,29 +2398,39 @@ function MessageItemComponent({
   const embeddedStreamToolCalls = useMemo(() => {
     const value = (message as any).__streamToolCalls
     if (!Array.isArray(value)) return []
-    return value
-      .map((entry: any) => ({
-        id: typeof entry?.id === 'string' ? entry.id : '',
-        name: typeof entry?.name === 'string' ? entry.name : 'tool',
-        phase: normalizeStreamToolPhase(entry?.phase),
-        args: entry?.args,
-        preview: typeof entry?.preview === 'string' ? entry.preview : undefined,
-        result: typeof entry?.result === 'string' ? entry.result : undefined,
-      }))
-      .filter((entry: any) => entry.id.length > 0)
+    return value.map((entry: any, index: number) => ({
+      id:
+        (typeof entry?.id === 'string' && entry.id.trim()) ||
+        `${typeof entry?.name === 'string' ? entry.name : 'tool'}-${index}`,
+      name: typeof entry?.name === 'string' ? entry.name : 'tool',
+      phase: normalizeStreamToolPhase(entry?.phase),
+      args: normalizeToolCallArgs(entry?.args) ?? entry?.args,
+      preview: typeof entry?.preview === 'string' ? entry.preview : undefined,
+      result: typeof entry?.result === 'string' ? entry.result : undefined,
+    }))
   }, [message])
-  // Combine live stream tool calls with embedded tool calls from the final
-  // message. Hermes Agent surfaces tools as content toolCall blocks rather than
-  // standalone SSE tool events, so the message itself is the authoritative source.
+  const contentStreamToolCalls = useMemo(
+    () =>
+      toolCalls.map((toolCall, index) => ({
+        id:
+          (typeof toolCall.id === 'string' && toolCall.id.trim()) ||
+          `${toolCall.name || 'tool'}-${index}`,
+        name: toolCall.name || 'tool',
+        phase: 'complete' as const,
+        args:
+          normalizeToolCallArgs(toolCall.arguments) ?? toolCall.arguments,
+        result: undefined as string | undefined,
+      })),
+    [toolCalls],
+  )
+  // Write-through row is authoritative; overlay only enriches phase/result.
   const effectiveStreamToolCalls = useMemo(
-    () => [
-      ...streamToolCalls,
-      ...embeddedStreamToolCalls.filter(
-        (embedded) =>
-          !streamToolCalls.some((live) => live.id && live.id === embedded.id),
-      ),
-    ],
-    [streamToolCalls, embeddedStreamToolCalls],
+    () =>
+      mergeStreamToolCallRecords(streamToolCalls, [
+        ...embeddedStreamToolCalls,
+        ...contentStreamToolCalls,
+      ]),
+    [streamToolCalls, embeddedStreamToolCalls, contentStreamToolCalls],
   )
   const hasStreamToolCalls = effectiveStreamToolCalls.length > 0
   const effectiveLifecycleEvents = lifecycleEvents
@@ -2516,10 +2527,7 @@ function MessageItemComponent({
         return {
           key: toolCall.id || `${toolCall.name}-${index}`,
           type: toolCall.name,
-          input:
-            toolCall.args && typeof toolCall.args === 'object'
-              ? (toolCall.args as Record<string, unknown>)
-              : undefined,
+          input: normalizeToolCallArgs(toolCall.args),
           preview: toolCall.preview,
           outputText,
           errorText: isError ? outputText || 'Tool failed' : undefined,

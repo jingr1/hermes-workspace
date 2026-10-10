@@ -12,6 +12,7 @@ import {
 } from '../utils'
 import { collapseRecentDuplicateUserMessages } from '../chat-queries'
 import { MessageItem } from './message-item'
+import { normalizeToolCallArgs } from '@/lib/chat-message-parts'
 import { TuiActivityCard } from './tui-activity-card'
 import { ScrollToBottomButton } from './scroll-to-bottom-button'
 import { ResearchCard } from './research-card'
@@ -1427,7 +1428,7 @@ function ChatMessageListComponent({
                       ? 'calling'
                       : 'running'
                     : 'calling',
-          args: tcAny.args,
+          args: normalizeToolCallArgs(tcAny.args) ?? tcAny.args,
           preview:
             typeof tcAny.preview === 'string' ? tcAny.preview : undefined,
           result: typeof tcAny.result === 'string' ? tcAny.result : undefined,

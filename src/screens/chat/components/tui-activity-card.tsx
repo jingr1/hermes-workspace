@@ -142,16 +142,21 @@ function ToolRow({
     argLabel && argLabel.length > 60 ? `${argLabel.slice(0, 57)}…` : argLabel
 
   const outputText = section.outputText || section.errorText || ''
+  const hasInputData = section.input && Object.keys(section.input).length > 0
+  const inputSummary =
+    argTruncated ||
+    (hasInputData
+      ? summarizeOutput(JSON.stringify(section.input, null, 0))
+      : '')
   const outputSummary = isPending
     ? isStreamingActive
       ? 'running…'
       : 'pending'
-    : summarizeOutput(outputText) || (isDone ? 'done' : 'failed')
+    : summarizeOutput(outputText) ||
+      (isDone ? inputSummary || 'done' : 'failed')
 
   const dot = statusDot(section.state, isStreamingActive)
   const color = statusColor(section.state, isStreamingActive)
-
-  const hasInputData = section.input && Object.keys(section.input).length > 0
   const hasOutputData = !!(section.outputText || section.errorText)
 
   return (

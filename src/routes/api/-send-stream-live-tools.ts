@@ -122,26 +122,86 @@ export function collectSyntheticLiveToolEvents({
         : 'complete'
       : 'calling'
     const previousPhase = tracker.emittedPhaseByToolCallId.get(toolCallId)
-
-    if (previousPhase === nextPhase) continue
-    if (
-      previousPhase &&
-      (previousPhase === 'complete' || previousPhase === 'error')
-    ) {
-      continue
-    }
-
-    tracker.emittedPhaseByToolCallId.set(toolCallId, nextPhase)
-    events.push({
-      phase: nextPhase,
+    const baseEvent = {
       name,
       toolCallId,
       args,
-      result: resultEntry?.text || undefined,
       sessionKey,
       runId,
+    }
+
+    if (!previousPhase) {
+      events.push({
+        ...baseEvent,
+        phase: 'calling',
+        result: undefined,
+      })
+      tracker.emittedPhaseByToolCallId.set(toolCallId, 'calling')
+    }
+
+    if (nextPhase === 'calling') continue
+
+    const currentPhase = tracker.emittedPhaseByToolCallId.get(toolCallId)
+    if (currentPhase === nextPhase) continue
+    if (currentPhase === 'complete' || currentPhase === 'error') continue
+
+    tracker.emittedPhaseByToolCallId.set(toolCallId, nextPhase)
+    events.push({
+      ...baseEvent,
+      phase: nextPhase,
+      result: resultEntry?.text || undefined,
     })
   }
 
   return events
+}
+
+/**
+ * Best-effort reasoning text from agent session messages while a run is open.
+ * Mirrors {@link collectSyntheticLiveToolEvents}: vanilla Hermes often persists
+ * thinking on the session transcript before it emits live reasoning SSE.
+ */
+export function collectSyntheticLiveThinkingText(
+  messages: Array<Record<string, unknown>>,
+): string {
+  const chunks: Array<string> = []
+
+  for (const message of messages) {
+    if (readString(message.role) !== 'assistant') continue
+
+    for (const key of [
+      'reasoning_content',
+      'reasoning',
+      'thinking',
+    ] as const) {
+      const topLevel = readString(message[key])
+      if (topLevel) chunks.push(topLevel)
+    }
+
+    const content = message.content
+    if (Array.isArray(content)) {
+      for (const part of content) {
+        const record = readRecord(part)
+        if (!record) continue
+        const type = readString(record.type)
+        if (
+          type !== 'thinking' &&
+          type !== 'redacted_thinking' &&
+          type !== 'reasoning' &&
+          type !== 'reasoning_content'
+        ) {
+          continue
+        }
+        const text =
+          readString(record.thinking) ||
+          readString(record.text) ||
+          readString(record.reasoning) ||
+          readString(record.reasoning_content)
+        if (text) chunks.push(text)
+      }
+    }
+  }
+
+  if (chunks.length === 0) return ''
+  return chunks.reduce((best, next) => (next.length > best.length ? next : best))
 }

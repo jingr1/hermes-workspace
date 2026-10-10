@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  collectSyntheticLiveThinkingText,
   collectSyntheticLiveToolEvents,
   createSyntheticLiveToolTracker,
 } from './-send-stream-live-tools'
@@ -73,6 +74,36 @@ describe('extractReasoningFromGatewayEvent', () => {
   })
 })
 
+describe('collectSyntheticLiveThinkingText', () => {
+  it('extracts reasoning blocks from assistant session messages', () => {
+    expect(
+      collectSyntheticLiveThinkingText([
+        {
+          role: 'assistant',
+          content: [
+            { type: 'thinking', thinking: 'Inspect the redeploy sample first.' },
+          ],
+        },
+      ]),
+    ).toBe('Inspect the redeploy sample first.')
+  })
+
+  it('prefers the longest reasoning trace across assistant rows', () => {
+    expect(
+      collectSyntheticLiveThinkingText([
+        {
+          role: 'assistant',
+          content: [{ type: 'thinking', thinking: 'short' }],
+        },
+        {
+          role: 'assistant',
+          reasoning_content: 'longer reasoning trace from gateway persistence',
+        },
+      ]),
+    ).toBe('longer reasoning trace from gateway persistence')
+  })
+})
+
 describe('collectSyntheticLiveToolEvents', () => {
   it('emits a live calling event as soon as an assistant tool call appears, before any tool result exists', () => {
     const tracker = createSyntheticLiveToolTracker()
@@ -104,6 +135,56 @@ describe('collectSyntheticLiveToolEvents', () => {
         toolCallId: 'toolu_1',
         args: { path: '/tmp/AGENTS.md' },
         result: undefined,
+        sessionKey: 'session-1',
+        runId: 'run-1',
+      },
+    ])
+  })
+
+  it('emits calling before complete when the tool result is already persisted', () => {
+    const tracker = createSyntheticLiveToolTracker()
+
+    const events = collectSyntheticLiveToolEvents({
+      messages: [
+        {
+          role: 'assistant',
+          tool_calls: [
+            {
+              id: 'toolu_1',
+              function: {
+                name: 'read_file',
+                arguments: '{"path":"/tmp/AGENTS.md"}',
+              },
+            },
+          ],
+        },
+        {
+          role: 'tool',
+          tool_call_id: 'toolu_1',
+          content: [{ type: 'text', text: 'file contents here' }],
+        },
+      ],
+      tracker,
+      sessionKey: 'session-1',
+      runId: 'run-1',
+    })
+
+    expect(events).toEqual([
+      {
+        phase: 'calling',
+        name: 'read_file',
+        toolCallId: 'toolu_1',
+        args: { path: '/tmp/AGENTS.md' },
+        result: undefined,
+        sessionKey: 'session-1',
+        runId: 'run-1',
+      },
+      {
+        phase: 'complete',
+        name: 'read_file',
+        toolCallId: 'toolu_1',
+        args: { path: '/tmp/AGENTS.md' },
+        result: 'file contents here',
         sessionKey: 'session-1',
         runId: 'run-1',
       },

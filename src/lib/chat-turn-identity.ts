@@ -5,6 +5,8 @@
  * See docs/chat-turn-identity-contract.md.
  */
 
+import { normalizeToolCallArgs } from './chat-message-parts'
+
 export function assistantMessageIdForRun(
   runId: string | null | undefined,
   sessionKey: string,
@@ -114,14 +116,12 @@ export function projectLiveAssistantMessage(
     content.push({ type: 'thinking', thinking })
   }
   for (const toolCall of projection.toolCalls) {
+    const args = normalizeToolCallArgs(toolCall.args)
     content.push({
       type: 'toolCall',
       id: toolCall.id,
       name: toolCall.name,
-      arguments:
-        toolCall.args && typeof toolCall.args === 'object'
-          ? (toolCall.args as Record<string, unknown>)
-          : undefined,
+      arguments: args,
     })
   }
   const text = projection.text.trim()
