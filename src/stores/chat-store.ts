@@ -1,4 +1,10 @@
 import { create } from 'zustand'
+import { mergeAssistantThinkingFromSource } from '../lib/chat-message-parts'
+import {
+  assistantMessageIdForRun,
+  projectLiveAssistantMessage,
+  upsertMessageByDurableId,
+} from '../lib/chat-turn-identity'
 import type {
   ChatMessage,
   MessageContent,
@@ -76,6 +82,8 @@ export type ConnectionState =
   | 'error'
 
 export type StreamingState = {
+  /** Durable Tutti-style identity for the live assistant row. */
+  messageId: string | null
   runId: string | null
   text: string
   thinking: string
@@ -148,12 +156,60 @@ type ChatState = {
 }
 
 const createEmptyStreamingState = (): StreamingState => ({
+  messageId: null,
   runId: null,
   text: '',
   thinking: '',
   lifecycleEvents: [],
   toolCalls: [],
 })
+
+function withDurableStreamingIdentity(
+  prev: StreamingState,
+  sessionKey: string,
+  runId?: string,
+): StreamingState {
+  const nextRunId = runId ?? prev.runId
+  const messageId =
+    prev.messageId ?? assistantMessageIdForRun(nextRunId, sessionKey)
+  return {
+    ...prev,
+    runId: nextRunId,
+    messageId,
+  }
+}
+
+/**
+ * Write-through: mirror streamingState onto one realtime assistant row with a
+ * stable messageId (Tutti contract). UI and history merge read this same row.
+ */
+function syncLiveAssistantRow(
+  realtimeMessages: Map<string, Array<ChatMessage>>,
+  sessionKey: string,
+  streaming: StreamingState,
+  options: { streaming: boolean; timestamp: number },
+): Map<string, Array<ChatMessage>> {
+  if (!streaming.messageId) return realtimeMessages
+  const projected = projectLiveAssistantMessage({
+    messageId: streaming.messageId,
+    runId: streaming.runId,
+    text: streaming.text,
+    thinking: streaming.thinking,
+    toolCalls: streaming.toolCalls,
+    streaming: options.streaming,
+    timestamp: options.timestamp,
+  })
+  const messages = new Map(realtimeMessages)
+  const sessionMessages = messages.get(sessionKey) ?? []
+  messages.set(
+    sessionKey,
+    upsertMessageByDurableId(
+      sessionMessages,
+      projected as unknown as ChatMessage,
+    ),
+  )
+  return messages
+}
 
 function persistStreamingState(
   sessionKey: string,
@@ -1074,7 +1130,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       case 'chunk': {
         const streamingMap = new Map(state.streamingState)
-        const prev = streamingMap.get(sessionKey) ?? createEmptyStreamingState()
+        const prev = withDurableStreamingIdentity(
+          streamingMap.get(sessionKey) ?? createEmptyStreamingState(),
+          sessionKey,
+          event.runId,
+        )
 
         // Server usually strips thinking into dedicated events; still run a
         // client-side split so leaked <think>/<thinking> never prints in the
@@ -1101,11 +1161,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ...prev,
           text: stripFinalTags(split.content),
           thinking: mergedThinking,
-          runId: event.runId ?? prev.runId,
         }
 
         streamingMap.set(sessionKey, next)
-        set({ streamingState: streamingMap, lastEventAt: now })
+        const realtimeMessages = syncLiveAssistantRow(
+          state.realtimeMessages,
+          sessionKey,
+          next,
+          { streaming: true, timestamp: now },
+        )
+        set({
+          streamingState: streamingMap,
+          realtimeMessages,
+          lastEventAt: now,
+        })
         persistStreamingState(sessionKey, next)
 
         break
@@ -1113,15 +1182,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       case 'thinking': {
         const streamingMap = new Map(state.streamingState)
-        const prev = streamingMap.get(sessionKey) ?? createEmptyStreamingState()
+        const prev = withDurableStreamingIdentity(
+          streamingMap.get(sessionKey) ?? createEmptyStreamingState(),
+          sessionKey,
+          event.runId,
+        )
         const next: StreamingState = {
           ...prev,
           thinking: event.text,
-          runId: event.runId ?? prev.runId,
         }
 
         streamingMap.set(sessionKey, next)
-        set({ streamingState: streamingMap, lastEventAt: now })
+        const realtimeMessages = syncLiveAssistantRow(
+          state.realtimeMessages,
+          sessionKey,
+          next,
+          { streaming: true, timestamp: now },
+        )
+        set({
+          streamingState: streamingMap,
+          realtimeMessages,
+          lastEventAt: now,
+        })
         persistStreamingState(sessionKey, next)
         break
       }
@@ -1129,10 +1211,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       case 'status':
       case 'lifecycle': {
         const streamingMap = new Map(state.streamingState)
-        const prev = streamingMap.get(sessionKey) ?? createEmptyStreamingState()
+        const prev = withDurableStreamingIdentity(
+          streamingMap.get(sessionKey) ?? createEmptyStreamingState(),
+          sessionKey,
+          event.runId,
+        )
         const next: StreamingState = {
           ...prev,
-          runId: event.runId ?? prev.runId,
           lifecycleEvents: [
             ...prev.lifecycleEvents,
             parseLifecycleEvent(event.text, now),
@@ -1140,14 +1225,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
 
         streamingMap.set(sessionKey, next)
-        set({ streamingState: streamingMap, lastEventAt: now })
+        const realtimeMessages = syncLiveAssistantRow(
+          state.realtimeMessages,
+          sessionKey,
+          next,
+          { streaming: true, timestamp: now },
+        )
+        set({
+          streamingState: streamingMap,
+          realtimeMessages,
+          lastEventAt: now,
+        })
         persistStreamingState(sessionKey, next)
         break
       }
 
       case 'tool': {
         const streamingMap = new Map(state.streamingState)
-        const prev = streamingMap.get(sessionKey) ?? createEmptyStreamingState()
+        const prev = withDurableStreamingIdentity(
+          streamingMap.get(sessionKey) ?? createEmptyStreamingState(),
+          sessionKey,
+          event.runId,
+        )
 
         const toolCallId =
           event.toolCallId ??
@@ -1184,158 +1283,123 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
         const next: StreamingState = {
           ...prev,
-          runId: event.runId ?? prev.runId,
           toolCalls: nextToolCalls,
         }
 
         streamingMap.set(sessionKey, next)
-        set({ streamingState: streamingMap, lastEventAt: now })
+        const realtimeMessages = syncLiveAssistantRow(
+          state.realtimeMessages,
+          sessionKey,
+          next,
+          { streaming: true, timestamp: now },
+        )
+        set({
+          streamingState: streamingMap,
+          realtimeMessages,
+          lastEventAt: now,
+        })
         persistStreamingState(sessionKey, next)
         break
       }
 
       case 'done': {
+        // Tutti settle: same durable row flips to complete. Do not replace
+        // live content with a differently shaped done.message echo.
         const streamingMap = new Map(state.streamingState)
-        const streaming = streamingMap.get(sessionKey)
+        const prev =
+          streamingMap.get(sessionKey) ?? createEmptyStreamingState()
+        const streaming = withDurableStreamingIdentity(
+          prev,
+          sessionKey,
+          event.runId,
+        )
 
-        // Build the complete message — prefer authoritative final payload (bug #8 fix)
-        let completeMessage: ChatMessage | null = null
-
+        // Fold any late text from done.message without dropping live thinking.
+        let settledStreaming = streaming
         if (event.message) {
-          // Prefer done event's message payload — it's the authoritative final response.
-          // Strip <final>…</final> sentinel tags: the `done` message may still carry
-          // them if the server serialises the final state from its streaming buffer.
-          const cleanedMessage = ensureAssistantTextContent(
+          const cleaned = ensureAssistantTextContent(
             stripFinalTagsFromMessage(event.message),
           )
-          // Preserve tool calls from streaming state on the final message so
-          // ToolCallPill can render them even after streaming state is cleared.
-          // Fast tool runs clear streaming state before React renders — embedding
-          // __streamToolCalls ensures pills survive in the history message.
-          const streamToolCallsToEmbed = streaming?.toolCalls?.length
-            ? streaming.toolCalls
-            : undefined
-          completeMessage = {
-            ...cleanedMessage,
-            timestamp: getMessageEventTime(cleanedMessage) ?? now,
-            __receiveTime: now,
-            __realtimeSequence: realtimeMessageSequence++,
-            __streamingStatus: (event.state === 'interrupted'
-              ? 'interrupted'
-              : 'complete') as any,
-            ...(streamToolCallsToEmbed
-              ? { __streamToolCalls: streamToolCallsToEmbed }
-              : {}),
-          }
-        } else if (streaming && streaming.text) {
-          // Fallback: build from streaming state if no final payload.
-          // Strip any <final> tags that may have accumulated in the stream buffer.
-          const split = splitInlineThinking(streaming.text, {
-            streaming: false,
-          })
-          const cleanStreamText = stripFinalTags(split.content)
-          const content: Array<MessageContent> = []
-          const finalThinking = [streaming.thinking, split.reasoning]
-            .map((part) => part.trim())
-            .filter(Boolean)
-            .join('\n\n')
-
-          if (finalThinking) {
-            content.push({
-              type: 'thinking',
-              thinking: finalThinking,
-            } as ThinkingContent)
-          }
-
-          if (cleanStreamText) {
-            content.push({
-              type: 'text',
-              text: cleanStreamText,
-            } as TextContent)
-          }
-
-          for (const toolCall of streaming.toolCalls) {
-            content.push({
-              type: 'toolCall',
-              id: toolCall.id,
-              name: toolCall.name,
-              arguments: toolCall.args as Record<string, unknown> | undefined,
-            } as ToolCallContent)
-          }
-
-          completeMessage = {
-            role: 'assistant',
-            content,
-            timestamp: now,
-            __receiveTime: now,
-            __realtimeSequence: realtimeMessageSequence++,
-            __streamingStatus: 'complete',
-          }
-        }
-
-        if (completeMessage) {
-          const messages = new Map(state.realtimeMessages)
-          const sessionMessages = [...(messages.get(sessionKey) ?? [])]
-
-          // Deduplicate: by ID or exact content (bug #7 fix).
-          // extractMessageText handles both content-array and legacy top-level
-          // text/body/message payloads, and strips <final> tags for both.
-          const completeText = extractMessageText(completeMessage)
-          const completeId = getMessageId(completeMessage)
-          const isDuplicate = sessionMessages.some((existing) => {
-            if (existing.role !== 'assistant') return false
-            const existingId = getMessageId(existing)
-            if (completeId && existingId && completeId === existingId)
-              return true
-            if (completeText && completeText === extractMessageText(existing))
-              return true
-            return false
-          })
-
-          if (!isDuplicate) {
-            sessionMessages.push(completeMessage)
-            messages.set(
-              sessionKey,
-              sortMessagesChronologically(sessionMessages),
-            )
-            set({ realtimeMessages: messages })
-          } else {
-            // If there IS a duplicate (e.g. a tagged pre-final message was stored),
-            // replace it with the clean final version so the UI shows clean text.
-            const existingIdx = sessionMessages.findIndex((existing) => {
-              if (existing.role !== 'assistant') return false
-              const existingId = getMessageId(existing)
-              if (completeId && existingId && completeId === existingId)
-                return true
-              if (completeText && completeText === extractMessageText(existing))
-                return true
-              return false
-            })
-            if (existingIdx >= 0) {
-              sessionMessages[existingIdx] = {
-                ...sessionMessages[existingIdx],
-                ...completeMessage,
-              }
-              messages.set(
-                sessionKey,
-                sortMessagesChronologically(sessionMessages),
-              )
-              set({ realtimeMessages: messages })
+          const doneText = extractMessageText(cleaned)
+          if (doneText && doneText.length > settledStreaming.text.trim().length) {
+            settledStreaming = {
+              ...settledStreaming,
+              text: stripFinalTags(doneText),
             }
           }
-
-          // Persist the final assistant message to sessionStorage so it survives
-          // dev refresh / tab navigation until backend history catches up.
-          persistRecoveryMessage(sessionKey, completeMessage)
+          if (!settledStreaming.thinking.trim()) {
+            const doneThinking = mergeAssistantThinkingFromSource(
+              { role: 'assistant', content: [] },
+              cleaned,
+            )
+            const thinkingFromDone =
+              typeof doneThinking.content === 'object' &&
+              Array.isArray(doneThinking.content)
+                ? (
+                    doneThinking.content.find(
+                      (part) =>
+                        part &&
+                        typeof part === 'object' &&
+                        (part as { type?: string }).type === 'thinking',
+                    ) as { thinking?: string } | undefined
+                  )?.thinking
+                : ''
+            if (thinkingFromDone?.trim()) {
+              settledStreaming = {
+                ...settledStreaming,
+                thinking: thinkingFromDone.trim(),
+              }
+            }
+          }
         }
 
-        // Clear streaming state immediately — tool calls are preserved via
-        // __streamToolCalls embedded on completeMessage above, so pills survive
-        // in the history message without needing streaming state alive.
-        // DO NOT keep a stub here — it keeps isRealtimeStreaming=true which
-        // injects an invisible streaming placeholder that causes a blank gap.
+        const hasLiveContent =
+          settledStreaming.text.trim().length > 0 ||
+          settledStreaming.thinking.trim().length > 0 ||
+          settledStreaming.toolCalls.length > 0
+
+        let realtimeMessages = state.realtimeMessages
+        if (hasLiveContent || settledStreaming.messageId) {
+          realtimeMessages = syncLiveAssistantRow(
+            state.realtimeMessages,
+            sessionKey,
+            settledStreaming,
+            { streaming: false, timestamp: now },
+          )
+          const settledRow = realtimeMessages
+            .get(sessionKey)
+            ?.find(
+              (message) =>
+                getMessageId(message) === settledStreaming.messageId,
+            )
+          if (settledRow) {
+            const settled: ChatMessage =
+              event.state === 'interrupted'
+                ? ({
+                    ...settledRow,
+                    __streamingStatus: 'error',
+                  } as unknown as ChatMessage)
+                : settledRow
+            if (settled !== settledRow) {
+              realtimeMessages = new Map(realtimeMessages)
+              realtimeMessages.set(
+                sessionKey,
+                upsertMessageByDurableId(
+                  realtimeMessages.get(sessionKey) ?? [],
+                  settled,
+                ),
+              )
+            }
+            persistRecoveryMessage(sessionKey, settled)
+          }
+        }
+
         streamingMap.delete(sessionKey)
-        set({ streamingState: streamingMap, lastEventAt: now })
+        set({
+          streamingState: streamingMap,
+          realtimeMessages,
+          lastEventAt: now,
+        })
         if (typeof sessionStorage !== 'undefined') {
           sessionStorage.removeItem(`claude_streaming_${sessionKey}`)
         }
@@ -1394,7 +1458,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const rtNonce = getClientNonce(rtMsg)
       const rtSignature = messageMultipartSignature(rtMsg)
       const histId = getMessageId(histMsg)
+      // Durable Tutti identity — same row across stream and history echo.
       if (rtId && histId && rtId === histId) {
+        return true
+      }
+      // Hermes history often uses msg-N while live used assistant:<runId>.
+      // Match by shared runId when both carry it.
+      const rtRun =
+        typeof (rtMsg as { runId?: unknown }).runId === 'string'
+          ? (rtMsg as { runId: string }).runId.trim()
+          : ''
+      const histRun =
+        typeof (histMsg as { runId?: unknown }).runId === 'string'
+          ? (histMsg as { runId: string }).runId.trim()
+          : ''
+      if (
+        rtRun &&
+        histRun &&
+        rtRun === histRun &&
+        histMsg.role === 'assistant' &&
+        rtMsg.role === 'assistant'
+      ) {
         return true
       }
 
@@ -1571,17 +1655,22 @@ function mergeRealtimeAssistantMetadata(
     ? (historyMessage as any).streamToolCalls
     : []
 
+  let merged: ChatMessage = historyMessage
+
+  // Preserve live tool pills when history has text but not stream tool metadata.
   if (
-    realtimeToolCalls.length === 0 ||
-    historyToolCalls.length > 0 ||
-    historyStreamToolCalls.length > 0
+    realtimeToolCalls.length > 0 &&
+    historyToolCalls.length === 0 &&
+    historyStreamToolCalls.length === 0
   ) {
-    return historyMessage
+    merged = {
+      ...merged,
+      __streamToolCalls: realtimeToolCalls,
+      streamToolCalls: realtimeToolCalls,
+    }
   }
 
-  return {
-    ...historyMessage,
-    __streamToolCalls: realtimeToolCalls,
-    streamToolCalls: realtimeToolCalls,
-  }
+  // Preserve thinking the same way managed ACP keeps reasoning on the row —
+  // history refetch often returns text-only assistant content.
+  return mergeAssistantThinkingFromSource(merged, realtimeMessage)
 }

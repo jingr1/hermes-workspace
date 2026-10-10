@@ -527,7 +527,15 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
             setState((prev) =>
               prev.streamingRunId === runId
                 ? prev
-                : { ...prev, streamingRunId: runId },
+                : {
+                    ...prev,
+                    streamingRunId: runId,
+                    streamingMessageId:
+                      typeof payload.messageId === 'string' &&
+                      payload.messageId.trim()
+                        ? payload.messageId.trim()
+                        : prev.streamingMessageId || `assistant:${runId}`,
+                  },
             )
           }
           markActivity()
@@ -536,6 +544,7 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
             time: new Date().toLocaleTimeString(),
             text: 'Assistant started',
           })
+          // Allocate the durable assistant row immediately (Tutti write-through).
           processStoreEvent({
             type: 'chunk',
             text: '',

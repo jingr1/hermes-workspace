@@ -149,9 +149,10 @@ type providerStatusDTO struct {
 	TargetID   string `json:"targetId"`
 	Registered bool   `json:"registered"`
 	Installed  bool   `json:"installed"`
-	// InstallInProgress is true while a managed npm install for this provider
-	// holds the in-process lock. UI clients should show "installing" and refuse
-	// another click instead of treating concurrent POSTs as hard failures.
+	// InstallInProgress is true while a managed npm install *or update* for
+	// this provider is the active action. UI clients should show
+	// installing/upgrading and refuse another click instead of treating
+	// concurrent POSTs as hard failures.
 	InstallInProgress bool `json:"installInProgress"`
 	// LoginInProgress is true while an interactive login process started by the
 	// daemon is still being watched for auth readiness.

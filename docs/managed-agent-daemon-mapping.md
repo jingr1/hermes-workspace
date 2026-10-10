@@ -128,11 +128,16 @@ submitInteractive / cancelTurn`），是该接口的 daemon 方言 typed client�
 1. **daemon host** 是 Session / Turn / Interaction 生命周期 owner（其 SQLite 为真相源）。
 2. **activity-core engine** 是前端 canonical state owner（不可变 snapshot + selectors）；
    事件流只是提示，一切终态以 canonical 读为准。
-3. **群聊 / mission / Swarm / sidebar（managed-chat-store）** 只投影：room 卡片、assignment
-   推进、会话列表都不复制生命周期事实，不写第二套 pending/turn 状态机。
-4. Hermes runtime 完全不动：仍走 gateway / swarm-dispatch 路径，managed 合同仅覆盖
+3. **1:1 managed sidebar**：列表 / rename / delete 只认 daemon
+   （`GET|PATCH|DELETE /api/agents/:id/sessions` → `agent-sessions-service`）。
+   新建会话 `displaySessionId === agentSessionId`（单一 UUID）；`engine/activate`
+   **不再**写入 collab.db `managed_chat_*`。delete 成功后仅 best-effort 清 collab 残留。
+   daemon 未配置时才回退 collab（legacy spawn）。
+4. **群聊 / mission / Swarm**：room 卡片、assignment 推进仍可投影；不写第二套
+   pending/turn 状态机。群聊 `turn-executor` 等路径可继续碰 collab，与 1:1 sidebar 分离。
+5. Hermes runtime 完全不动：仍走 gateway / swarm-dispatch 路径，managed 合同仅覆盖
    claude-code / codex / cursor / kimi / opencode。
-5. Legacy `AgentStreamEvent` 路径（router → bridge → transport →
+6. Legacy `AgentStreamEvent` 路径（router → bridge → transport →
    `agorax-managed-agent-events.ts` 转换）保留：群聊 managed turn 与旧
    `POST /api/agents/:id/chat` 路由仍消费它；daemon transport 未配置
    （无 `AGORAX_MANAGED_AGENT_URL`）时 router 回退 spawn adapter。
@@ -142,7 +147,7 @@ submitInteractive / cancelTurn`），是该接口的 daemon 方言 typed client�
 | 偏差 | 现状 | 后续 |
 | --- | --- | --- |
 | composer options | daemon 从本地 Claude settings / Codex config.toml 填充模型目录（`LoadLocalProviderModels`）；无配置时仍空（fail-closed）；未做 AppServer live `model/list` 探测 | 需要时再接 Codex AppServer / OpenCode CLI list |
-| client 生成 agentSessionId | 前端 `crypto.randomUUID()` 生成 canonical session id，activate 时提交给 daemon（部分上游实现由 host 侧生成） | 如需与 host 生成策略对齐再调 |
+| client 生成 agentSessionId | 前端生成**一个** UUID，同时作为 display 与 canonical（`displaySessionId === agentSessionId`）提交 activate | 如需与 host 生成策略对齐再调 |
 | plan decision | daemon / engine / UI 已接 plan-decision（Codex `implement_prompt`）；非 Codex Host 可能拒绝 | 扩 provider 矩阵 |
 | goal control | GET goal 只读已接；goalControl 写路径仍 throw | 单独立项 |
 | session fork 未接 | engine 支持，agorax 未暴露 fork saga | 单独立项 |
@@ -232,8 +237,8 @@ chat 路径的既有行为，非本次引入）。settled 工具卡片的输出�
 | noticeCommand 语义（compact/review/undo/goal） | daemon 写入 message Semantics（`runtime/reporter.go:330-390`）；adapter 已映射（`mappers.ts:158-164`） | `toChatMessage` 忽略 `semantics`，进行中/完成无渲染 | mapper 识别 `semantics.noticeCommand(+Status)` 输出轻量系统行（如 "Compacting context…"） | P1 |
 | 消息增量 toolOutput 流式展示 | daemon WS 发 `message_delta`（`toolOutput set/append_text`）；core coordinator 应用到 optimistic overlay（`workspaceEventCoordinator.ts:319-366`） | hook 直读 `engine.getSnapshot()`，从不调用 `coordinator.project()`，optimistic 增量被丢弃，要等 reconcile 折叠 | hook 订阅 coordinator 投影（或把 optimistic message dispatch 进 engine） | P1 |
 | session usage / token 用量 | daemon `SessionMetadata.usage`；adapter 映射 `session.usage`；core `resolveAgentActivityUsage`（`usage.ts`）现成 | 聊天视图无用量展示（现有 usage-meter 是 Hermes gateway 形状，非 canonical） | composer/hint 区挂 context 百分比 + quota 条 | P1 |
-| session 列表 / resumable | `/api/agents/:id/engine/sessions` 路由已返回 canonical sessions 但**无前端调用方**；Go `Resumable`（`runtime/types.go:399`）未投影，adapter 硬编码 `resumable:false`（`mappers.ts:85`，有 TODO） | sidebar 只走 collab.db display 会话（`use-external-agent-sessions.ts`），canonical 独有会话不可见 | 短期 sidebar 合并 canonical 列表；daemon 投影 `Resumable` 后做真 resume 标识 | P1 |
-| session rename/delete（canonical 侧，数据一致性） | daemon 无端点；server adapter 显式 throw（`agorax-managed-agent-activity-adapter.ts:166-180`）；engine effect unavailable | sidebar rename/delete 只改 collab.db display 行（`agent-sessions-service.ts:81-99`），canonical 会话两侧漂移 | daemon 补 DELETE/PATCH 端点接 engine effect；或 UI 明示仅本地 | P1 |
+| session 列表 / resumable | **已终态**：`GET /api/agents/:id/sessions` 对 managed 只读 daemon `listSessions`（按 `agentTargetId` 过滤）。`engine/sessions` 仍可用作调试。Go `Resumable` 投影与 UI 徽章可再补 | sidebar 不再读 collab 列表 | daemon 投影真 `Resumable` + UI 标识 | P2 |
+| session rename/delete | **已终态**：sidebar `PATCH`/`DELETE /sessions/:id` → daemon `updateTitle` / `deleteSession`；成功后顺带清 collab 残留。engine title/delete 路由并存 | — | pin UI 等仍待接 | done |
 | session pin | daemon JSON 有 `PinnedAtUnixMS`（`daemonDtos.ts:102`），adapter 已映射（`mappers.ts:90`） | 无 pin UI、effect unavailable | daemon 补 pin 端点 + sidebar 置顶排序 | P2 |
 | composerOptions（模型目录/reasoning 选项/权限模式） | adapter 保留完整映射等 daemon 端点（`composerOptions.ts`）；Go `modelcatalog.ProjectComposerCatalog` 无 REST 出口；`permissionConfig` 恒 `{configurable:false}` | 前端用 legacy `/models` 路由 + 本地存储；`loadComposerOptions` 无人调用 | daemon 加 composer-options 端点 → engine `loadComposerOptions` → composer 换 canonical 数据源（可拆分） | P2 |
 | goal 控制 | codex adapter 维护 goal（`codex_appserver_event_info.go:257`）；session `goal` 已映射；core engine 有全套 goalControl reducer/selector | 前端从不调用 `engine.goalControl`，无 goal UI；server adapter throw；daemon 无 goal 路由 | 可先消费 `session.goal` 做只读展示（成本低）；控制面等 daemon 端点 | P2 |

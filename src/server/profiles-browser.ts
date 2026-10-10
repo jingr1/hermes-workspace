@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import YAML from 'yaml'
+import { parseStoredMessageContent } from '../lib/chat-message-parts'
 import { getStateDir } from './workspace-state-dir'
 
 // createRequire is the canonical ESM→CJS bridge. We need it because
@@ -594,36 +595,6 @@ export function listSessionsForProfile(name: string): Array<{
   }
 }
 
-function sqliteContentToText(raw: unknown): string {
-  if (typeof raw !== 'string') return raw == null ? '' : String(raw)
-  const trimmed = raw.trim()
-  if (!trimmed.startsWith('[') && !trimmed.startsWith('{')) return raw
-  try {
-    const parsed = JSON.parse(trimmed) as unknown
-    if (Array.isArray(parsed)) {
-      return parsed
-        .map((block) => {
-          if (!block || typeof block !== 'object') return ''
-          const rec = block as Record<string, unknown>
-          if (rec.type === 'text' || rec.type == null) {
-            return typeof rec.text === 'string' ? rec.text : ''
-          }
-          return ''
-        })
-        .filter(Boolean)
-        .join('\n')
-    }
-    if (parsed && typeof parsed === 'object') {
-      const rec = parsed as Record<string, unknown>
-      if (typeof rec.text === 'string') return rec.text
-      if (typeof rec.content === 'string') return rec.content
-    }
-  } catch {
-    // keep raw
-  }
-  return raw
-}
-
 /** Read session messages from a profile's local state.db — no gateway probe. */
 export function getMessagesForProfile(
   name: string,
@@ -633,7 +604,8 @@ export function getMessagesForProfile(
   id: string
   session_id: string
   role: string
-  content: string
+  /** Preserves structured content blocks (incl. thinking) for toChatMessage. */
+  content: string | Array<Record<string, unknown>>
   timestamp: number
   tool_calls?: unknown
   tool_call_id?: string
@@ -657,7 +629,8 @@ export function getMessagesForProfile(
       id: String(r.id ?? ''),
       session_id: String(r.session_id ?? sid),
       role: String(r.role ?? 'assistant'),
-      content: sqliteContentToText(r.content),
+      // Keep thinking blocks; toChatMessage normalizes via chat-message-parts.
+      content: parseStoredMessageContent(r.content),
       timestamp:
         typeof r.timestamp === 'number'
           ? r.timestamp

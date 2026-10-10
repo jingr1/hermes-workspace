@@ -1,16 +1,16 @@
 'use client'
 
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import {
   deleteManagedSession,
   fetchSessionsForAgent,
   renameManagedSession,
 } from '@/lib/agent-api'
-import type { AgentSession } from '@/lib/agent-types'
 import { useAgentStore } from '@/stores/agent-store'
 import { writeLastSession } from '../last-session'
 import type { SessionController } from '../session-controller'
 import type { SessionMeta } from '../types'
+import type { AgentSession } from '@/lib/agent-types'
 
 function toSessionMeta(sessions: Array<AgentSession>): Array<SessionMeta> {
   return sessions.map(
@@ -25,7 +25,8 @@ function toSessionMeta(sessions: Array<AgentSession>): Array<SessionMeta> {
 }
 
 /**
- * Session controller backed by collab.db managed_chat_sessions (server API).
+ * Session controller for managed agents. List/rename/delete go through
+ * `/api/agents/:id/sessions`, which reads/writes the daemon Host (end-state).
  */
 export function useExternalAgentSessions(
   agentId: string | null,
@@ -41,6 +42,7 @@ export function useExternalAgentSessions(
     agentId ? s.sessionsLoading.has(agentId) : false,
   )
   const sessionsError = useAgentStore((s) => s.agentsError)
+  const loadGenerationRef = useRef(0)
 
   const storeSessions = agentId
     ? (sessionsByAgentId.get(agentId) ?? [])
@@ -53,51 +55,21 @@ export function useExternalAgentSessions(
 
   const reload = useCallback(() => {
     if (!agentId) return
+    const generation = ++loadGenerationRef.current
     setSessionsLoading(agentId, true)
-    void Promise.all([
-      fetchSessionsForAgent(agentId).catch(() => ({ sessions: [] as Array<AgentSession> })),
-      fetch(`/api/agents/${encodeURIComponent(agentId)}/engine/sessions`)
-        .then(async (response) => {
-          if (!response.ok) return { sessions: [] as Array<{ agentSessionId: string; title?: string; updatedAtUnixMs?: number; resumable?: boolean }> }
-          return (await response.json()) as {
-            sessions?: Array<{
-              agentSessionId: string
-              title?: string
-              updatedAtUnixMs?: number
-              resumable?: boolean
-            }>
-          }
-        })
-        .catch(() => ({ sessions: [] as Array<{ agentSessionId: string; title?: string; updatedAtUnixMs?: number; resumable?: boolean }> })),
-    ])
-      .then(([display, canonical]) => {
-        const byId = new Map<string, AgentSession>()
-        for (const session of display.sessions) {
-          byId.set(session.sessionId, session)
-        }
-        for (const session of canonical.sessions ?? []) {
-          const id = session.agentSessionId?.trim()
-          if (!id) continue
-          const existing = byId.get(id)
-          byId.set(id, {
-            sessionId: id,
-            agentId,
-            state: existing?.state ?? 'idle',
-            title:
-              session.title?.trim() ||
-              existing?.title ||
-              (session.resumable ? 'Resumable chat' : 'Chat'),
-            lastMessageAt:
-              typeof session.updatedAtUnixMs === 'number'
-                ? new Date(session.updatedAtUnixMs).toISOString()
-                : existing?.lastMessageAt ?? new Date().toISOString(),
-            ...(existing?.summary ? { summary: existing.summary } : {}),
-          })
-        }
-        setSessions(agentId, [...byId.values()])
+    void fetchSessionsForAgent(agentId)
+      .then((data) => {
+        if (generation !== loadGenerationRef.current) return
+        setSessions(agentId, data.sessions)
       })
-      .catch(() => setSessions(agentId, []))
-      .finally(() => setSessionsLoading(agentId, false))
+      .catch(() => {
+        if (generation !== loadGenerationRef.current) return
+        setSessions(agentId, [])
+      })
+      .finally(() => {
+        if (generation !== loadGenerationRef.current) return
+        setSessionsLoading(agentId, false)
+      })
   }, [agentId, setSessions, setSessionsLoading])
 
   useEffect(() => {

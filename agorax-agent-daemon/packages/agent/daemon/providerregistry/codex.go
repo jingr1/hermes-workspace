@@ -78,7 +78,10 @@ func codexDescriptor() ProviderDescriptor {
 				BinaryName:      "codex",
 				IncludeOptional: true,
 			},
-			LoginArgs: []string{"login", "-c", `service_tier="fast"`},
+			// --device-auth avoids binding http://127.0.0.1:1455 for a browser
+			// redirect. Agorax is commonly used over SSH / remote browser where
+			// that callback is unreachable on the operator's laptop.
+			LoginArgs: []string{"login", "--device-auth", "-c", `service_tier="fast"`},
 			AuthWatch: AuthWatchDescriptor{
 				Sources: []AuthWatchSourceDescriptor{
 					{

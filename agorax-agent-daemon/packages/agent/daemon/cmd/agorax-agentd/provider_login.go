@@ -125,9 +125,18 @@ func (o *providerOps) startProviderLogin(ctx context.Context, providerID string,
 		return result, http.StatusConflict, fmt.Errorf("a login for %q is already in progress", providerID)
 	}
 
-	direct := append([]string{binary}, descriptor.Status.LoginArgs...)
+	loginArgs := append([]string{}, descriptor.Status.LoginArgs...)
+	// Agorax web PTY / SSH / headless hosts cannot complete Codex's default
+	// localhost:1455 OAuth callback — the browser runs on the operator's
+	// laptop while `codex login` listens on the remote. Prefer device-auth
+	// so the terminal shows a URL + user code instead of a dead 127.0.0.1 link.
+	useWebOrHeadless := preferWebTerminal || !loginPrefersTerminalEmulator(o.environ())
+	if useWebOrHeadless && normalizeProviderID(providerID) == "codex" {
+		loginArgs = withCodexDeviceAuthLoginArgs(loginArgs)
+	}
+	direct := append([]string{binary}, loginArgs...)
 	// Browser / remote Agorax clients open the built-in web PTY themselves.
-	if preferWebTerminal || !loginPrefersTerminalEmulator(o.environ()) {
+	if useWebOrHeadless {
 		result.Status = "started"
 		result.Mode = "command"
 		result.Command = direct
@@ -136,7 +145,7 @@ func (o *providerOps) startProviderLogin(ctx context.Context, providerID string,
 		return result, http.StatusOK, nil
 	}
 
-	mode, command, err := o.launchInteractiveLogin(binary, descriptor.Status.LoginArgs)
+	mode, command, err := o.launchInteractiveLogin(binary, loginArgs)
 	if err != nil {
 		o.releaseLogin(providerID, epoch)
 		return result, http.StatusInternalServerError, err
@@ -284,6 +293,33 @@ func (o *providerOps) launchInteractiveLogin(binary string, loginArgs []string) 
 	}
 	go func() { _ = cmd.Wait() }()
 	return "detached", direct, nil
+}
+
+// withCodexDeviceAuthLoginArgs inserts `--device-auth` after the `login`
+// subcommand when missing. Device auth prints a URL + code in the terminal
+// instead of binding http://127.0.0.1:1455 for a browser redirect.
+func withCodexDeviceAuthLoginArgs(args []string) []string {
+	if len(args) == 0 {
+		return []string{"login", "--device-auth"}
+	}
+	for _, arg := range args {
+		if arg == "--device-auth" {
+			return append([]string{}, args...)
+		}
+	}
+	out := make([]string, 0, len(args)+1)
+	inserted := false
+	for _, arg := range args {
+		out = append(out, arg)
+		if !inserted && arg == "login" {
+			out = append(out, "--device-auth")
+			inserted = true
+		}
+	}
+	if !inserted {
+		out = append([]string{"login", "--device-auth"}, args...)
+	}
+	return out
 }
 
 // loginPrefersTerminalEmulator is true only when this daemon process has a

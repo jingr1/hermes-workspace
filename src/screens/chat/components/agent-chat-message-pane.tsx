@@ -5,7 +5,11 @@ import { ChatMessageList } from './chat-message-list'
 import type { ChatMessage } from '../types'
 
 /**
- * Shared message pane for AgentChatFrame children.
+ * Shared message pane for Hermes and managed AgentChatFrame children.
+ * Forwards the same streaming / activity props so both runtimes render
+ * thinking through ChatMessageList identically (message content parts and/or
+ * streamingThinking overlay).
+ *
  * Always uses ChatMessageList's own scroll root — do not wrap in another
  * ChatContainer (nested viewports break wheel scrolling).
  */
@@ -14,20 +18,49 @@ export function AgentChatMessagePane({
   showProcessingIndicator,
   isStreaming = false,
   streamingMessageId = null,
+  streamingText,
+  streamingThinking,
   sessionKey,
   emptyState,
   headerHeight = 48,
   activeToolCalls,
+  lifecycleEvents,
+  hideSystemMessages,
+  onRetryMessage,
+  onEditMessage,
+  onRegenerateMessage,
+  onRefresh,
+  loading = false,
 }: {
   messages: Array<ChatMessage>
   showProcessingIndicator: boolean
   /** Turn-active: message-level live chrome / Stop, not the bottom pill. */
   isStreaming?: boolean
   streamingMessageId?: string | null
+  /** Hermes SSE overlay; managed usually embeds thinking on the message. */
+  streamingText?: string
+  streamingThinking?: string
   sessionKey: string
   emptyState?: ReactNode
   headerHeight?: number
-  activeToolCalls?: Array<{ id: string; name: string; phase: string; args?: unknown }>
+  activeToolCalls?: Array<{
+    id: string
+    name: string
+    phase: string
+    args?: unknown
+  }>
+  lifecycleEvents?: Array<{
+    text: string
+    emoji: string
+    timestamp: number
+    isError: boolean
+  }>
+  hideSystemMessages?: boolean
+  onRetryMessage?: (message: ChatMessage) => void
+  onEditMessage?: (message: ChatMessage) => void
+  onRegenerateMessage?: (message: ChatMessage) => void
+  onRefresh?: () => void
+  loading?: boolean
 }) {
   const empty = messages.length === 0
 
@@ -36,7 +69,7 @@ export function AgentChatMessagePane({
       messages={messages}
       showProcessingIndicator={showProcessingIndicator}
       researchCard={undefined}
-      loading={false}
+      loading={loading}
       empty={empty}
       emptyState={emptyState}
       pinToTop={false}
@@ -45,7 +78,15 @@ export function AgentChatMessagePane({
       sessionKey={sessionKey}
       isStreaming={isStreaming}
       streamingMessageId={streamingMessageId}
+      streamingText={streamingText}
+      streamingThinking={streamingThinking}
+      lifecycleEvents={lifecycleEvents}
+      hideSystemMessages={hideSystemMessages}
       activeToolCalls={activeToolCalls}
+      onRetryMessage={onRetryMessage}
+      onEditMessage={onEditMessage}
+      onRegenerateMessage={onRegenerateMessage}
+      onRefresh={onRefresh}
     />
   )
 }

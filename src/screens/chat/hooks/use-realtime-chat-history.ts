@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import {
+  foldTrailingAssistantThinking,
+  messagePlainText,
+  reconcileHistoryResponse,
+} from '@/lib/chat-history-reconcile'
 import { useChatStream } from '../../../hooks/use-chat-stream'
 import { useChatStore } from '../../../stores/chat-store'
-import { appendHistoryMessage, chatQueryKeys } from '../chat-queries'
+import { appendHistoryMessage, chatQueryKeys, fetchHistory } from '../chat-queries'
 import { toast } from '../../../components/ui/toast'
 import { textFromMessage } from '../utils'
 import { snapshotOptimisticUserMessages } from './optimistic-message-reinject'
-import type { ChatMessage } from '../types'
+import type { ChatMessage, HistoryResponse } from '../types'
 import type { StreamingState } from '../../../stores/chat-store'
 
 const PORTABLE_HISTORY_STORAGE_KEY = 'claude_portable_chat_main'
@@ -122,12 +127,17 @@ export function useRealtimeChatHistory({
         effectiveFriendlyId,
         effectiveSessionKey,
       )
-      await queryClient.invalidateQueries({ queryKey: key, exact: true })
-      await queryClient.refetchQueries({
-        queryKey: key,
-        exact: true,
-        type: 'active',
+      const serverData = await fetchHistory({
+        sessionKey: effectiveSessionKey,
+        friendlyId: effectiveFriendlyId,
       })
+      const current = queryClient.getQueryData<HistoryResponse>(key)
+      queryClient.setQueryData(
+        key,
+        reconcileHistoryResponse(current, serverData) ?? serverData,
+      )
+    } catch {
+      // Keep the current cache on backfill failure.
     } finally {
       isBackfillingRef.current = false
     }
@@ -309,64 +319,105 @@ export function useRealtimeChatHistory({
                   })()
                 : null
 
-            // Clear realtime buffer immediately — no more stale data in render
+            // Clear realtime buffer — cache already holds the merged transcript.
             store.clearRealtimeBuffer(effectiveSessionKey)
             clearCompletedStreaming()
 
-            // Background refetch for long-term consistency — doesn't block render
-            queryClient
-              .invalidateQueries({ queryKey: key, refetchType: 'all' })
-              .then(() => {
-                // Re-inject the completed assistant message if compaction dropped it
-                if (completedAssistant) {
-                  const refetchData =
-                    queryClient.getQueryData<Record<string, unknown>>(key)
-                  const refetchedMessages =
-                    (refetchData?.messages as Array<Record<string, unknown>>) ??
-                    []
-                  const assistantTail = (
-                    completedAssistant.content ??
-                    completedAssistant.text ??
-                    ''
+            const completedRow = completedAssistant as
+              | (Record<string, unknown> & {
+                  content?: unknown
+                  __streamingThinking?: unknown
+                })
+              | null
+            const thinkingSource = {
+              role: 'assistant' as const,
+              content: completedRow?.content,
+              __streamingThinking:
+                (typeof completedRow?.__streamingThinking === 'string'
+                  ? completedRow.__streamingThinking
+                  : '') ||
+                completedStreamingThinkingRef.current ||
+                '',
+            }
+
+            // If the live turn already painted a complete assistant row, do not
+            // immediately fetch history. That fetch used to swap the printed
+            // bubble for a differently shaped server echo (tools without
+            // thinking, rewritten text) — poor UX. Stamp server ids later via
+            // the normal poll / focus refetch, which now prefers live content.
+            const livePlain = completedAssistant
+              ? messagePlainText(completedAssistant)
+              : ''
+            const liveTurnComplete =
+              livePlain.length > 0 ||
+              thinkingSource.__streamingThinking.length > 0
+
+            if (liveTurnComplete) {
+              // Ensure thinking from the live snapshot is on the cached row.
+              if (thinkingSource.__streamingThinking) {
+                const current =
+                  queryClient.getQueryData<HistoryResponse>(key)
+                if (current?.messages) {
+                  const folded = foldTrailingAssistantThinking(
+                    current.messages,
+                    thinkingSource,
                   )
-                    .toString()
-                    .slice(-64)
-                  const alreadyPresent = refetchedMessages.some(
-                    (m) =>
-                      m.role === 'assistant' &&
-                      ((m.content ?? m.text ?? '') as string)
-                        .toString()
-                        .slice(-64) === assistantTail,
-                  )
-                  if (!alreadyPresent) {
-                    appendHistoryMessage(
-                      queryClient,
-                      effectiveFriendlyId,
-                      effectiveSessionKey,
-                      completedAssistant as unknown as import('../types').ChatMessage,
-                    )
+                  if (folded !== current.messages) {
+                    queryClient.setQueryData(key, {
+                      ...current,
+                      messages: folded,
+                    })
                   }
                 }
-                // Re-inject optimistic user messages that the server hasn't echoed yet
+              }
+              reInjectOptimistic()
+              return
+            }
+
+            // Empty settle (no visible live assistant) — quiet fetch for recovery.
+            void fetchHistory({
+              sessionKey: effectiveSessionKey,
+              friendlyId: effectiveFriendlyId,
+            })
+              .then((serverData) => {
+                const current =
+                  queryClient.getQueryData<HistoryResponse>(key)
+                let next =
+                  reconcileHistoryResponse(current, serverData) ?? serverData
+
+                if (thinkingSource.__streamingThinking) {
+                  next = {
+                    ...next,
+                    messages: foldTrailingAssistantThinking(
+                      next.messages ?? [],
+                      thinkingSource,
+                    ),
+                  }
+                }
+
+                queryClient.setQueryData(key, next)
+                reInjectOptimistic()
+
+                const newCount = next.messages?.length ?? 0
+                if (
+                  prevCount > 10 &&
+                  newCount > 0 &&
+                  newCount < prevCount * 0.6
+                ) {
+                  onCompactionEnd?.()
+                  toast(
+                    'Context compacted — older messages were summarized to free up space',
+                    {
+                      type: 'info',
+                      icon: '🗜️',
+                      duration: 8000,
+                    },
+                  )
+                }
+              })
+              .catch(() => {
                 reInjectOptimistic()
               })
-
-            // Check for compaction — significant message count drop
-            const newData =
-              queryClient.getQueryData<Record<string, unknown>>(key)
-            const newCount =
-              (newData?.messages as Array<unknown> | undefined)?.length ?? 0
-            if (prevCount > 10 && newCount > 0 && newCount < prevCount * 0.6) {
-              onCompactionEnd?.()
-              toast(
-                'Context compacted — older messages were summarized to free up space',
-                {
-                  type: 'info',
-                  icon: '🗜️',
-                  duration: 8000,
-                },
-              )
-            }
           }
         }
       },
@@ -563,6 +614,7 @@ export function useRealtimeChatHistory({
   const isRealtimeStreaming = streamingState !== null
   const realtimeStreamingText = streamingState?.text ?? ''
   const realtimeStreamingThinking = streamingState?.thinking ?? ''
+  const realtimeStreamingMessageId = streamingState?.messageId ?? null
   const realtimeLifecycleEvents =
     streamingState?.lifecycleEvents ?? EMPTY_LIFECYCLE_EVENTS
 
@@ -574,6 +626,7 @@ export function useRealtimeChatHistory({
     isRealtimeStreaming,
     realtimeStreamingText,
     realtimeStreamingThinking,
+    realtimeStreamingMessageId,
     realtimeLifecycleEvents,
     completedStreamingText: completedStreamingTextRef,
     completedStreamingThinking: completedStreamingThinkingRef,

@@ -4,7 +4,10 @@ import {
   collectSyntheticLiveToolEvents,
   createSyntheticLiveToolTracker,
 } from './-send-stream-live-tools'
-import { extractReasoningFromToolProgress } from './send-stream'
+import {
+  extractReasoningFromGatewayEvent,
+  extractReasoningFromToolProgress,
+} from './send-stream'
 
 describe('extractReasoningFromToolProgress', () => {
   it('extracts reasoning from event_type reasoning.available preview', () => {
@@ -39,6 +42,32 @@ describe('extractReasoningFromToolProgress', () => {
       extractReasoningFromToolProgress({
         tool: 'read_file',
         delta: '{"path":"/tmp/a"}',
+      }),
+    ).toBeNull()
+  })
+})
+
+describe('extractReasoningFromGatewayEvent', () => {
+  it('extracts reasoning.delta text for Activity thinking', () => {
+    expect(
+      extractReasoningFromGatewayEvent('reasoning.delta', {
+        delta: 'First I will inspect the repo.',
+      }),
+    ).toBe('First I will inspect the repo.')
+  })
+
+  it('extracts response.reasoning_text.delta nested content', () => {
+    expect(
+      extractReasoningFromGatewayEvent('response.reasoning_text.delta', {
+        delta: { text: 'nested reasoning' },
+      }),
+    ).toBe('nested reasoning')
+  })
+
+  it('returns null for unrelated events', () => {
+    expect(
+      extractReasoningFromGatewayEvent('tool.completed', {
+        delta: 'not reasoning',
       }),
     ).toBeNull()
   })

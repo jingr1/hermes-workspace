@@ -28,9 +28,7 @@ export const Route = createFileRoute('/api/agents/$agentId/engine/sessions')({
             agentId,
           )
           // Agorax-style: only surface sessions owned by this agent's target.
-          const sessions = (await client.listSessions()).filter(
-            (session) => session.agentTargetId === targetId,
-          )
+          const sessions = await client.listSessions({ agentTargetId: targetId })
           const cursors = Object.fromEntries(
             sessions.map((session) => [session.agentSessionId, session.messageVersion]),
           )

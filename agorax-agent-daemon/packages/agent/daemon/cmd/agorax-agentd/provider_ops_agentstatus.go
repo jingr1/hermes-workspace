@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -121,10 +122,17 @@ func (o *providerOps) handleProviderInstall(response http.ResponseWriter, reques
 		return
 	}
 
+	requestedVersion := strings.TrimSpace(body.Version)
+
+	// Detach from the HTTP request lifetime (same as login): npm install /
+	// update can take minutes; a closed browser tab must not cancel mid-write
+	// and leave a half-linked global package.
+	installCtx := context.WithoutCancel(request.Context())
+
 	// kimi-code is a host-only stub (not in agentstatus DefaultRegistry yet).
 	// Drive install through the descriptor-owned official_script path instead.
 	if normalizeProviderID(providerID) == "kimi-code" {
-		result, status, err := o.installProvider(request.Context(), providerID, body.Version)
+		result, status, err := o.installProvider(installCtx, providerID, requestedVersion)
 		if err != nil {
 			writeJSON(response, status, map[string]string{"error": err.Error()})
 			return
@@ -133,11 +141,18 @@ func (o *providerOps) handleProviderInstall(response http.ResponseWriter, reques
 		return
 	}
 
-	_ = body.Version // Agorax RunAction install follows descriptor version policy.
+	// Empty body → ActionInstall (ensure present). UI upgrade sends
+	// version=latest (or a pin); ActionInstall short-circuits when the CLI
+	// already probes ready, so those requests must use ActionUpdate or the
+	// wizard flashes「升级中」then exits without running npm.
+	actionID := agentstatus.ActionInstall
+	if wantsProviderUpgrade(requestedVersion) {
+		actionID = agentstatus.ActionUpdate
+	}
 
-	result, err := o.agentStatus().RunAction(request.Context(), agentstatus.RunActionInput{
+	result, err := o.agentStatus().RunAction(installCtx, agentstatus.RunActionInput{
 		Provider: providerID,
-		ActionID: agentstatus.ActionInstall,
+		ActionID: actionID,
 	})
 	if err != nil {
 		status := http.StatusInternalServerError
@@ -161,6 +176,9 @@ func (o *providerOps) handleProviderInstall(response http.ResponseWriter, reques
 		Status:   "installed",
 		Command:  splitCommand(result.Command),
 	}
+	if result.ReasonCode == "already_up_to_date" {
+		dto.Status = "already"
+	}
 	if result.Probe != nil {
 		if result.Probe.BinaryPath != "" {
 			dto.BinaryPath = stringPointer(result.Probe.BinaryPath)
@@ -170,6 +188,12 @@ func (o *providerOps) handleProviderInstall(response http.ResponseWriter, reques
 		}
 	}
 	writeJSON(response, http.StatusOK, dto)
+}
+
+// wantsProviderUpgrade is true when POST /install carries an explicit version
+// (UI upgrade uses "latest"). A bare ensure-install leaves version empty.
+func wantsProviderUpgrade(version string) bool {
+	return strings.TrimSpace(version) != ""
 }
 
 func mapAgentStatusToDTO(
@@ -182,7 +206,9 @@ func mapAgentStatusToDTO(
 		TargetID:          descriptor.Target.ID,
 		Registered:        o.isRegistered(descriptor),
 		Installed:         entry.CLI.Installed,
-		InstallInProgress: entry.ActiveAction != nil && entry.ActiveAction.ID == agentstatus.ActionInstall,
+		InstallInProgress: entry.ActiveAction != nil &&
+			(entry.ActiveAction.ID == agentstatus.ActionInstall ||
+				entry.ActiveAction.ID == agentstatus.ActionUpdate),
 		LoginInProgress:   o.isLoginInProgress(entry.Provider),
 		MinVersion:        entry.CLI.MinVersion,
 		Auth: providerAuthDTO{

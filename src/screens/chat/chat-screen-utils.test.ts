@@ -198,6 +198,32 @@ describe('response wait detection', () => {
     ).toBe(true)
   })
 
+  it('keeps waiting for thinking-only assistant rows so the empty-gap pill does not flash off', () => {
+    const snapshot = createResponseWaitSnapshot([
+      {
+        role: 'user',
+        content: [{ type: 'text', text: 'hello' }],
+      },
+    ])
+
+    expect(
+      shouldClearWaitingForAssistantMessage(
+        [
+          {
+            role: 'user',
+            content: [{ type: 'text', text: 'hello' }],
+          },
+          {
+            role: 'assistant',
+            content: [{ type: 'thinking', thinking: 'planning the reply' }],
+            id: 'assistant-thinking',
+          },
+        ],
+        snapshot,
+      ),
+    ).toBe(false)
+  })
+
   it('clears waiting when the same assistant row is rewritten with interrupt text', () => {
     const snapshot = createResponseWaitSnapshot([
       {

@@ -493,7 +493,32 @@ func managedNPMRepairInstallPrefix(existingCLIPath, packageName string) (string,
 	if prefix == "" {
 		return "", false
 	}
+	// Never repair-in-place into a root-owned / system prefix (e.g. /usr).
+	// After a user-local bin is briefly missing, PATH may resolve a system
+	// `codex` first; npm then fails with EACCES writing under /usr/.npm-cache.
+	if !managedNPMPrefixWritable(prefix) {
+		return "", false
+	}
 	return prefix, true
+}
+
+func managedNPMPrefixWritable(prefix string) bool {
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return false
+	}
+	info, err := os.Stat(prefix)
+	if err != nil || !info.IsDir() {
+		return false
+	}
+	probe, err := os.CreateTemp(prefix, ".agorax-npm-write-*")
+	if err != nil {
+		return false
+	}
+	name := probe.Name()
+	_ = probe.Close()
+	_ = os.Remove(name)
+	return true
 }
 
 func (s Service) resolveCodexManagedNodeRuntime(ctx context.Context) (managedruntime.ResolvedRuntime, error) {

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
+import { reconcileHistoryResponse } from '@/lib/chat-history-reconcile'
+import { assistantHasVisibleHostContent } from '@/lib/chat-message-parts'
 import { chatQueryKeys, fetchHistory } from '../chat-queries'
 import { getMessageTimestamp, textFromMessage } from '../utils'
 import {
@@ -410,7 +412,12 @@ export function useChatHistory({
     refetchInterval: historyRefetchInterval,
     staleTime: 10_000,
     gcTime: 1000 * 60 * 10,
-    structuralSharing: true,
+    // Keep message object identity across poll / post-turn refetch so the
+    // transcript does not remount (feels like a full page reload + rollback).
+    structuralSharing: (
+      oldData: HistoryResponse | undefined,
+      newData: HistoryResponse | undefined,
+    ) => reconcileHistoryResponse(oldData, newData) ?? newData,
     // Include pending/fetch flags so the skeleton can clear/update even when
     // data is still undefined (previous list omitted isPending/isFetching).
     notifyOnChangeProps: [
@@ -538,27 +545,9 @@ export function useChatHistory({
         return true
       }
 
-      // Show assistant messages only if they have displayable content
+      // Same host-surface rules as managed ACP: text, thinking, or tools.
       if (msg.role === 'assistant') {
-        // Keep streaming placeholders (they show typing indicator)
-        if (msg.__streamingStatus === 'streaming') return true
-        // Keep optimistic messages that are pending
-        if (msg.__optimisticId && !msg.content?.length) return true
-
-        const content = msg.content
-        if (!content || !Array.isArray(content)) return false
-        if (content.length === 0) return false
-
-        // Has at least one text block with actual content?
-        const hasText = content.some(
-          (c) =>
-            c.type === 'text' &&
-            typeof c.text === 'string' &&
-            c.text.trim().length > 0,
-        )
-        if (!hasText) return false
-
-        return true
+        return assistantHasVisibleHostContent(msg)
       }
 
       // Hide everything else (toolResult, tool, system messages)

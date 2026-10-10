@@ -6,7 +6,6 @@ import { isAgoraxManagedAgentBackend } from '../../../../../server/agent-runtime
 import { AgoraxManagedRunStore } from '../../../../../server/agent-runtime/agorax-managed-run-store'
 import { startManagedChatRun } from '../../../../../server/agent-runtime/run-managed-turn'
 import { getAgentRuntimeRouter } from '../../../../../server/agent-runtime/router'
-import { ensureManagedChatSession } from '../../../../../server/agent-runtime/managed-chat-store'
 import { resolveManagedChatWorkspaceCwd } from '../../../../../server/agent-runtime/managed-chat-workspace'
 import { buildWorkspaceScopedTextMessage } from '../../../../../lib/workspace-message-scope'
 import { loadWorkspaceCatalog } from '../../../workspace'
@@ -107,14 +106,8 @@ export const Route = createFileRoute('/api/agents/$agentId/engine/activate')({
         })
         if (!started.ok)
           return json({ error: started.error }, { status: started.status })
-        // Persist the display row only after daemon create succeeds — otherwise
-        // failed activates leave orphan sessions that 404 on detail hydrate.
-        ensureManagedChatSession({
-          id: displaySessionId,
-          agentId,
-          runtime: declaration.runtime,
-          ...(model ? { model } : {}),
-        })
+        // Session list/title/delete are owned by the daemon Host. Do not write
+        // collab.db managed_chat_* projection rows for 1:1 activate.
         const runStore = new AgoraxManagedRunStore()
         const binding = await runStore.get(agentSessionId)
         const baseUrl = process.env.AGORAX_MANAGED_AGENT_URL?.trim()

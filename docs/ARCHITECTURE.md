@@ -236,7 +236,7 @@ Python 包 `hermes_langgraph_orchestrator/`，把 mission 执行建模为**声�
 - **Host REST 出口（daemon）**：session title/delete/pin/settings、composer-options（诚实空目录）、plan-decision、goal 只读已挂到 `agorax-agentd`；Workspace engine 路由与 activity adapter 已接线 rename/delete/pin。
 - **回合执行**（`run-managed-turn.ts`）：群聊 managed turn 与 legacy chat 共用；issueRunToken → startRun → drain 事件（软截止顺延、硬顶 interrupt）；pending interaction 阻塞时软截止顺延。
 - **汇合推进**（`advance.ts`）：MCP `task_complete` → assignment 状态推进 → 派发下一 stage；内存 promise-chain 串行化（mission 状态在 JSON 文件，无 SQLite 事务保护）。
-- **进程治理**：`pid-registry.ts`（spawn 路径的崩溃重挂、SIGKILL interrupt）；`managed-chat-store.ts`（collab.db managed 会话/消息 + claude native session id `--resume` 配对，sidebar 列表投影；daemon 路径下消息真相源在 daemon，store 只做关联/展示）。
+- **进程治理**：`pid-registry.ts`（spawn 路径的崩溃重挂、SIGKILL interrupt）；`managed-chat-store.ts`（legacy spawn / 群聊仍可写 collab.db managed 会话；**1:1 daemon sidebar 列表与 rename/delete 只认 daemon**，activate 不再写 collab 投影）。
 
 
 

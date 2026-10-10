@@ -29,6 +29,7 @@ import {
   type DaemonSessionActivityResponse,
   type DaemonSubmitInteractiveResponse,
 } from '@agorax/agent-activity-daemon-adapter'
+import { compactDaemonActivityForClient } from './compact-activity-payload'
 
 /**
  * Fallback user identity for canonical session mapping. The daemon owns real
@@ -347,10 +348,14 @@ export class AgoraxManagedAgentHttpClient {
       { method: 'GET' },
       options?.signal,
     )
+    // Drop injected skill bodies from the UI wire (displayPrompt stays).
+    const compact = compactDaemonActivityForClient(
+      activity as unknown as Record<string, unknown>,
+    ) as unknown as DaemonSessionActivityResponse
     return agentActivitySessionDetailFromDaemon(
       this.workspaceId,
       agentSessionId,
-      activity,
+      compact,
       { currentUserId: AGORAX_MANAGED_AGENT_USER_ID },
     )
   }
@@ -362,6 +367,8 @@ export class AgoraxManagedAgentHttpClient {
    */
   async listSessions(options?: {
     signal?: AbortSignal
+    /** When set, only map sessions for this daemon target (avoids O(workspace) map cost). */
+    agentTargetId?: string
   }): Promise<AgentActivitySession[]> {
     const response = await this.requestJson<DaemonAgentSessionsListResponse>(
       `/v1/workspaces/${encodeURIComponent(this.workspaceId)}/agent-sessions`,
@@ -369,7 +376,11 @@ export class AgoraxManagedAgentHttpClient {
       options?.signal,
     )
     const sessions = Array.isArray(response.sessions) ? response.sessions : []
-    return sessions.map((session) =>
+    const target = options?.agentTargetId?.trim()
+    const filtered = target
+      ? sessions.filter((session) => session.AgentTargetID === target)
+      : sessions
+    return filtered.map((session) =>
       agentActivitySessionFromDaemonSession(this.workspaceId, session, {
         currentUserId: AGORAX_MANAGED_AGENT_USER_ID,
       }),
@@ -395,11 +406,14 @@ export class AgoraxManagedAgentHttpClient {
     }
     if (options?.limit !== undefined) query.set('limit', String(options.limit))
     const suffix = query.size > 0 ? `?${query.toString()}` : ''
-    const activity = await this.requestJson<DaemonSessionActivityResponse>(
+    const activityRaw = await this.requestJson<DaemonSessionActivityResponse>(
       `/v1/workspaces/${encodeURIComponent(this.workspaceId)}/agent-sessions/${encodeURIComponent(agentSessionId)}/activity${suffix}`,
       { method: 'GET' },
       options?.signal,
     )
+    const activity = compactDaemonActivityForClient(
+      activityRaw as unknown as Record<string, unknown>,
+    ) as unknown as DaemonSessionActivityResponse
     if (
       typeof activity.messageVersion !== 'number' ||
       !Number.isSafeInteger(activity.messageVersion) ||
@@ -420,10 +434,13 @@ export class AgoraxManagedAgentHttpClient {
     }
   }
 
-  getActivitySnapshot(agentSessionId: string): Promise<unknown> {
-    return this.requestJson(
+  async getActivitySnapshot(agentSessionId: string): Promise<unknown> {
+    const activity = await this.requestJson(
       `/v1/workspaces/${encodeURIComponent(this.workspaceId)}/agent-sessions/${encodeURIComponent(agentSessionId)}/activity`,
       { method: 'GET' },
+    )
+    return compactDaemonActivityForClient(
+      activity as Record<string, unknown>,
     )
   }
 

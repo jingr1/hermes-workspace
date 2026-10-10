@@ -393,7 +393,9 @@ func routesWithOps(runtime *agentdaemon.Runtime, host *agenthost.Host, db *sql.D
 			"workspaceId":     workspaceID,
 			"session":         session.Canonical,
 			"turns":           nonNilSlice(turns),
-			"messages":        nonNilSlice(messages.Messages),
+			// Prefer displayPrompt over injected skill bodies on the wire so
+			// sidebar hydrate is not multi-MB for a single user turn.
+			"messages":        nonNilSlice(compactActivityMessagesForWire(messages.Messages)),
 			"interactions":    nonNilSlice(interactions.Interactions),
 			"messageVersion":  messages.LatestVersion,
 			"hasMoreMessages": messages.HasMore,
@@ -717,6 +719,32 @@ const (
 	defaultActivityMessageLimit = 500
 	maxActivityMessageLimit     = 1000
 )
+
+// compactActivityMessagesForWire replaces bulky provider `content` / `text`
+// with `displayPrompt` when present (skills injection stays in durable storage
+// for the model path, but list/detail hydrate must stay small).
+func compactActivityMessagesForWire(messages []storesqlite.Message) []storesqlite.Message {
+	if len(messages) == 0 {
+		return messages
+	}
+	out := make([]storesqlite.Message, len(messages))
+	for i, message := range messages {
+		out[i] = message
+		display, _ := message.Payload["displayPrompt"].(string)
+		display = strings.TrimSpace(display)
+		if display == "" {
+			continue
+		}
+		payload := make(map[string]any, len(message.Payload))
+		for key, value := range message.Payload {
+			payload[key] = value
+		}
+		payload["content"] = []map[string]any{{"type": "text", "text": display}}
+		payload["text"] = display
+		out[i].Payload = payload
+	}
+	return out
+}
 
 // activityMessagePageQuery parses the version-cursor pagination contract for
 // the activity read surface: ascending pages keyed by afterVersion with a

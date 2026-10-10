@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { assistantMessageIdForRun } from '../../lib/chat-turn-identity'
 import { buildResolvedSessionHeaders } from '../../lib/send-stream-session-headers'
 import { buildWorkspaceScopedTextMessage } from '../../lib/workspace-message-scope'
 import { resolveSessionKey } from '../../server/session-utils'
@@ -316,12 +317,51 @@ export function extractReasoningFromToolProgress(
     toolName === '_thinking' ||
     toolName === 'reasoning.available' ||
     eventType === 'reasoning.available' ||
-    eventType === '_thinking'
+    eventType === '_thinking' ||
+    eventType === 'reasoning.delta'
   if (!isReasoning) return null
   return (
     readString(data.preview) ||
-    (eventType === 'reasoning.available' ? '' : readString(data.name)) ||
+    (eventType === 'reasoning.available' || eventType === 'reasoning.delta'
+      ? ''
+      : readString(data.name)) ||
     delta ||
+    null
+  )
+}
+
+/**
+ * Extract reasoning text from a top-level Hermes SSE event
+ * (`reasoning.delta`, `reasoning.available`, Responses-style
+ * `response.reasoning_text.delta`). Newer gateways stream these instead of
+ * synthetic `_thinking` tool.progress — without this, Activity shows tools
+ * only.
+ */
+export function extractReasoningFromGatewayEvent(
+  event: string,
+  data: Record<string, unknown>,
+): string | null {
+  const normalized = event.trim().toLowerCase()
+  const isReasoningEvent =
+    normalized === 'reasoning.delta' ||
+    normalized === 'reasoning.available' ||
+    normalized === 'response.reasoning_text.delta' ||
+    normalized === 'reasoning'
+  if (!isReasoningEvent) return null
+
+  const nestedDelta = readRecord(data.delta)
+  return (
+    readString(data.delta) ||
+    readString(data.text) ||
+    readString(data.preview) ||
+    readString(data.reasoning_content) ||
+    readString(data.reasoning) ||
+    readString(data.content) ||
+    (nestedDelta
+      ? readString(nestedDelta.text) ||
+        readString(nestedDelta.content) ||
+        readString(nestedDelta.reasoning_content)
+      : null) ||
     null
   )
 }
@@ -718,6 +758,7 @@ export const Route = createFileRoute('/api/send-stream')({
 
                 sendEvent('started', {
                   runId,
+                  messageId: assistantMessageIdForRun(runId, portableSessionKey),
                   sessionKey: portableSessionKey,
                   friendlyId: portableFriendlyId,
                 })
@@ -1152,6 +1193,7 @@ export const Route = createFileRoute('/api/send-stream')({
               startedSent = true
               sendEvent('started', {
                 runId: workspaceRunId,
+                messageId: assistantMessageIdForRun(workspaceRunId, sessionKey),
                 sessionKey,
                 friendlyId: resolvedFriendlyId || sessionKey,
               })
@@ -1262,6 +1304,10 @@ export const Route = createFileRoute('/api/send-stream')({
                         startedSent = true
                         sendEvent('started', {
                           runId,
+                          messageId: assistantMessageIdForRun(
+                            runId,
+                            sessionKeyFromEvent,
+                          ),
                           sessionKey: sessionKeyFromEvent,
                           friendlyId: sessionKeyFromEvent,
                         })
@@ -1362,6 +1408,39 @@ export const Route = createFileRoute('/api/send-stream')({
                           }
                         }
                         return
+                      }
+
+                      // Top-level reasoning SSE (newer Hermes gateways). Must
+                      // run before tool handlers so Activity gets thinking, not
+                      // a fake tool row.
+                      {
+                        const reasonDelta = extractReasoningFromGatewayEvent(
+                          event,
+                          data,
+                        )
+                        if (reasonDelta) {
+                          thinkingAccumulated += reasonDelta
+                          persistActiveRun((runSessionKey, activeId) =>
+                            setRunThinking(
+                              runSessionKey,
+                              activeId,
+                              thinkingAccumulated,
+                            ),
+                          )
+                          const translated = {
+                            text: thinkingAccumulated,
+                            sessionKey: sessionKeyFromEvent,
+                            runId,
+                          }
+                          sendEvent('thinking', translated)
+                          skipPublish ||
+                            publishChatEvent('thinking', translated)
+                          lastActivity =
+                            thinkingAccumulated.length > 60
+                              ? thinkingAccumulated.slice(0, 60) + '...'
+                              : thinkingAccumulated
+                          return
+                        }
                       }
 
                       if (event === 'assistant.delta') {
@@ -1801,6 +1880,21 @@ export const Route = createFileRoute('/api/send-stream')({
                           state: 'complete',
                           sessionKey: sessionKeyFromEvent,
                           runId,
+                          // Carry accumulated reasoning so the client can settle
+                          // Activity with thinking even when history omits it.
+                          ...(thinkingAccumulated.trim()
+                            ? {
+                                message: {
+                                  role: 'assistant',
+                                  content: [
+                                    {
+                                      type: 'thinking',
+                                      thinking: thinkingAccumulated.trim(),
+                                    },
+                                  ],
+                                },
+                              }
+                            : {}),
                         }
                         persistActiveRun((runSessionKey, activeId) =>
                           markRunStatus(runSessionKey, activeId, 'complete'),

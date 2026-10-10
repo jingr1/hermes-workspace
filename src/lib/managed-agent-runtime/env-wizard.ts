@@ -71,7 +71,9 @@ const STAGE_LABELS: Record<EnvSetupStageId, string> = {
 /** Provider CLI login commands shown when auth is required (copy fallback). */
 export const PROVIDER_LOGIN_COMMANDS: Record<string, string> = {
   'claude-code': 'claude auth login',
-  codex: 'codex login',
+  // Device auth avoids localhost:1455 OAuth callbacks that break on SSH /
+  // remote browser clients (listener is on the server, browser is local).
+  codex: 'codex login --device-auth',
   cursor: 'agent login',
   opencode: 'opencode auth login',
   'kimi-code': 'kimi login',

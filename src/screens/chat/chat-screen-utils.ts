@@ -71,6 +71,20 @@ export function shouldClearWaitingForAssistantMessage(
   if (!last || last.role !== 'assistant') return false
   if (last.__streamingStatus === 'streaming') return false
 
+  // Thinking-only / empty assistant rows are still in-flight. Clearing waiting
+  // here hides the empty-gap Thinking pill before Activity/Working mounts —
+  // the flash-then-gap users see after send.
+  const currentText = assistantPlainText(last).trim()
+  const hasToolHost =
+    Array.isArray(last.content) &&
+    last.content.some(
+      (part) =>
+        !!part &&
+        typeof part === 'object' &&
+        (part as { type?: string }).type === 'toolCall',
+    )
+  if (!currentText && !hasToolHost) return false
+
   if (messages.length > snapshot.messageCount) return true
 
   const currentId = assistantMessageIdentity(last)
@@ -80,7 +94,6 @@ export function shouldClearWaitingForAssistantMessage(
 
   // Same assistant row can be rewritten in place (e.g. "Operation interrupted…")
   // after SSE disconnect — identity/count stay equal but waiting must clear.
-  const currentText = assistantPlainText(last)
   if (
     snapshot.lastAssistantText !== null &&
     currentText.length > 0 &&

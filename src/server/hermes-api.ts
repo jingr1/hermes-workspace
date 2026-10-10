@@ -27,6 +27,10 @@ import {
   searchSessions as searchDashboardSessions,
   updateSession as updateDashboardSession,
 } from './hermes-dashboard-api'
+import {
+  normalizeChatContentParts,
+  storedMessageContentToText,
+} from '../lib/chat-message-parts'
 
 const _authHeaders = (): Record<string, string> => {
   const token = getGatewayBearerToken()
@@ -59,7 +63,8 @@ export type HermesMessage = {
   id: number
   session_id: string
   role: string
-  content: string | null
+  /** Plain text, JSON content-block array, or already-parsed blocks. */
+  content: string | Array<unknown> | null
   tool_call_id?: string | null
   tool_calls?: Array<unknown> | string | null
   tool_name?: string | null
@@ -363,7 +368,8 @@ export function toChatMessage(
     }
   }
 
-  // Build content array
+  // Build content array — shared normalizer keeps Hermes thinking parts in the
+  // same shape managed ACP uses (`{ type: 'thinking', thinking }`).
   const content: Array<Record<string, unknown>> = []
 
   // Build streamToolCalls array for separate pill rendering and content blocks
@@ -396,47 +402,36 @@ export function toChatMessage(
   }
 
   if (msg.role === 'tool') {
+    const toolText =
+      typeof msg.content === 'string'
+        ? msg.content
+        : storedMessageContentToText(msg.content)
     content.push({
       type: 'tool_result',
       toolCallId: msg.tool_call_id,
       toolName: msg.tool_name,
-      text: msg.content || '',
+      text: toolText || '',
     })
+  } else if (msg.content != null && msg.content !== '') {
+    content.push(
+      ...normalizeChatContentParts(msg.content, {
+        role: msg.role,
+        extractInlineThinkingTags: msg.role === 'assistant',
+      }),
+    )
   }
 
-  if (msg.content && msg.role !== 'tool') {
-    content.push({ type: 'text', text: msg.content })
-  }
-
-  // Preserve any thinking / redacted_thinking blocks the gateway returned in
-  // the content array. Without this, assistant reasoning content is silently
-  // dropped when history is loaded from the server.
-  if (Array.isArray(msg.content) && msg.role === 'assistant') {
-    for (const block of msg.content) {
-      const record = block as Record<string, unknown>
-      const blockType = record.type
-      if (
-        blockType === 'thinking' ||
-        blockType === 'redacted_thinking'
-      ) {
-        content.push({
-          type: blockType,
-          thinking:
-            typeof record.thinking === 'string'
-              ? record.thinking
-              : typeof record.text === 'string'
-                ? record.text
-                : '',
-        })
-      }
-    }
-  }
+  const visibleText = content
+    .filter((part) => part.type === 'text')
+    .map((part) => (typeof part.text === 'string' ? part.text : ''))
+    .filter(Boolean)
+    .join('\n')
 
   return {
     id: `msg-${msg.id}`,
     role: msg.role,
     content,
-    text: msg.content || '',
+    text: visibleText,
     timestamp: msg.timestamp ? msg.timestamp * 1000 : Date.now(),
     createdAt: msg.timestamp
       ? new Date(msg.timestamp * 1000).toISOString()

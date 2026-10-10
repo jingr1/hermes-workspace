@@ -4,16 +4,30 @@
 import { listEnabledSkillsWithContent } from './store'
 import type { PlatformSkill } from './types'
 
+export type FormatSkillBundleOptions = {
+  selectedNames?: Array<string>
+  /**
+   * `bodies` (default for /skill triggers): full SKILL.md + files.
+   * `catalog`: names + descriptions only — used for session activate so we
+   * do not persist multi-MB skill dumps into every durable user message.
+   */
+  detail?: 'bodies' | 'catalog'
+}
+
 export function formatSkillBundleForPrompt(
   skills: Array<PlatformSkill>,
-  opts?: { selectedNames?: Array<string> },
+  opts?: FormatSkillBundleOptions,
 ): string {
   const selected = opts?.selectedNames?.map((n) => n.toLowerCase())
   const filtered = selected?.length
     ? skills.filter((s) => selected.includes(s.name.toLowerCase()))
     : skills
   if (filtered.length === 0) return ''
+  const detail = opts?.detail ?? 'bodies'
   const parts = filtered.map((skill) => {
+    if (detail === 'catalog') {
+      return `## Skill: ${skill.name}\n${skill.description?.trim() || '(no description)'} — invoke with \`/${skill.name}\` when needed.`
+    }
     const files =
       skill.files
         ?.map((f) => `\n\n### File: ${f.path}\n\`\`\`\n${f.content}\n\`\`\``)
@@ -22,7 +36,9 @@ export function formatSkillBundleForPrompt(
   })
   return [
     '<!-- agorax-platform-skills -->',
-    'The following workspace skills are bound and enabled for this agent. Follow them when relevant.',
+    detail === 'catalog'
+      ? 'Enabled workspace skills (catalog). Use /skill-name to load full instructions when needed.'
+      : 'The following workspace skills are bound and enabled for this agent. Follow them when relevant.',
     ...parts,
     '<!-- /agorax-platform-skills -->',
   ].join('\n\n')
@@ -60,7 +76,9 @@ export function extractLeadingSkillTriggers(text: string): {
 
 export function buildManagedSkillPromptPrefix(agentId: string): string {
   const skills = listEnabledSkillsWithContent(agentId)
-  return formatSkillBundleForPrompt(skills)
+  // Session activate: catalog only. Full bodies are reserved for /skill turns
+  // so durable history stays small enough to hydrate quickly.
+  return formatSkillBundleForPrompt(skills, { detail: 'catalog' })
 }
 
 export function buildTurnSkillInjection(

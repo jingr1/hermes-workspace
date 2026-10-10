@@ -59,7 +59,7 @@ export const Route = createFileRoute(
           })
         }
 
-        const sessions = listSessionsForAgent(agentId)
+        const sessions = await listSessionsForAgent(agentId)
         const session = sessions.find((s) => s.sessionId === sessionId)
         if (!session) {
           return json({ error: 'Session not found' }, { status: 404 })
@@ -88,11 +88,18 @@ export const Route = createFileRoute(
           return json({ cleared: true, sessionId })
         }
         const title = typeof body.title === 'string' ? body.title : ''
-        const updated = renameSessionForAgent(agentId, sessionId, title)
-        if (!updated) {
-          return json({ error: 'Session not found' }, { status: 404 })
+        try {
+          const updated = await renameSessionForAgent(agentId, sessionId, title)
+          if (!updated) {
+            return json({ error: 'Session not found' }, { status: 404 })
+          }
+          return json({ session: updated })
+        } catch (error) {
+          return json(
+            { error: error instanceof Error ? error.message : String(error) },
+            { status: 502 },
+          )
         }
-        return json({ session: updated })
       },
       DELETE: async ({ request, params }) => {
         if (!isAuthenticated(request)) {
@@ -107,14 +114,21 @@ export const Route = createFileRoute(
             { status: 400 },
           )
         }
-        const deleted = deleteSessionForAgent(agentId, sessionId)
-        if (!deleted) {
-          return json({
-            deleted: false,
-            reason: 'not implemented for this runtime',
-          })
+        try {
+          const deleted = await deleteSessionForAgent(agentId, sessionId)
+          if (!deleted) {
+            return json({
+              deleted: false,
+              reason: 'not implemented for this runtime',
+            })
+          }
+          return json({ deleted: true, sessionId })
+        } catch (error) {
+          return json(
+            { error: error instanceof Error ? error.message : String(error) },
+            { status: 502 },
+          )
         }
-        return json({ deleted: true, sessionId })
       },
     },
   },

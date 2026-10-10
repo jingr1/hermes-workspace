@@ -30,6 +30,10 @@ import {
   managedAgentInputResponseFromJson,
   managedAgentInteractionResponseFromJson,
 } from '@/lib/managed-agent-runtime/command-dtos'
+import {
+  thinkingContentFromText,
+  thinkingTextFromPayload,
+} from '@/lib/chat-message-parts'
 import type { ChatMessage } from '../types'
 
 /**
@@ -656,7 +660,7 @@ function isProcessingHostMessage(message: AgentActivityMessage): boolean {
   if (!isAssistantLaneRole(message.role)) return false
   if (isToolCallKind(message.kind)) return true
   if (message.kind === 'reasoning' || message.role === 'assistant_thinking') {
-    return reasoningTextFromPayload(message.payload).trim().length > 0
+    return thinkingTextFromPayload(message.payload).trim().length > 0
   }
   if (message.kind === 'text') {
     return visibleErrorText(message.payload).trim().length > 0
@@ -749,11 +753,14 @@ function toChatMessage(message: {
     }
   }
   if (message.kind === 'reasoning' || message.role === 'assistant_thinking') {
+    const thinkingPart = thinkingContentFromText(
+      thinkingTextFromPayload(message.payload),
+    )
     return {
       id: message.messageId,
       // Chat list / MessageItem only treat `assistant` as the bot lane.
       role: 'assistant',
-      content: [{ type: 'thinking', thinking: reasoningTextFromPayload(message.payload) }],
+      content: thinkingPart ? [thinkingPart] : [],
       timestamp: message.occurredAtUnixMs,
       ...(message.status === 'failed' ? { isError: true } : {}),
     }
@@ -798,17 +805,6 @@ function isTerminalToolStatus(status: string | null | undefined): boolean {
 function toolNameFromPayload(payload: Record<string, unknown>): string {
   const toolName = firstNonEmptyString(payload.toolName, payload.name)
   return toolName ?? 'Tool'
-}
-
-function reasoningTextFromPayload(payload: Record<string, unknown>): string {
-  return firstNonEmptyString(
-    payload.text,
-    payload.content,
-    payload.message,
-    payload.body,
-    payload.displayPrompt,
-    payload.title,
-  ) ?? ''
 }
 
 function firstNonEmptyString(...values: Array<unknown>): string | null {

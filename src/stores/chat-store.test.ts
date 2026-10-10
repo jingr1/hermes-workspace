@@ -106,6 +106,59 @@ describe('splitInlineThinking', () => {
   })
 })
 
+describe('chat-store history merge thinking preservation', () => {
+  it('keeps realtime thinking when history poll returns text-only assistant', () => {
+    const sessionKey = 'thinking-merge-session'
+    const store = useChatStore.getState()
+    store.clearSession(sessionKey)
+
+    store.processEvent({
+      type: 'thinking',
+      text: 'Inspect the files first.',
+      sessionKey,
+      transport: 'send-stream',
+    })
+    store.processEvent({
+      type: 'chunk',
+      text: 'All set.',
+      fullReplace: true,
+      sessionKey,
+      transport: 'send-stream',
+    })
+    store.processEvent({
+      type: 'done',
+      state: 'complete',
+      sessionKey,
+      transport: 'send-stream',
+    })
+
+    const historyOnlyText: Array<ChatMessage> = [
+      {
+        id: 'hist-user',
+        role: 'user',
+        content: [{ type: 'text', text: 'go' }],
+        timestamp: 1,
+      },
+      {
+        id: 'hist-assistant',
+        role: 'assistant',
+        content: [{ type: 'text', text: 'All set.' }],
+        timestamp: 2,
+      },
+    ]
+
+    const merged = useChatStore
+      .getState()
+      .mergeHistoryMessages(sessionKey, historyOnlyText)
+
+    const assistant = merged.find((message) => message.role === 'assistant')
+    expect(assistant?.content).toEqual([
+      { type: 'thinking', thinking: 'Inspect the files first.' },
+      { type: 'text', text: 'All set.' },
+    ])
+  })
+})
+
 describe('chat-store history merge ordering', () => {
   it('preserves persisted history order when messages share a timestamp', () => {
     const messages: Array<ChatMessage> = [
@@ -230,5 +283,102 @@ describe('thinking + visible content through the stream store', () => {
     ).find((p) => p.type === 'text')
     expect(thinkingPart?.thinking).toBe('reasoning trace')
     expect(textPart?.text).toBe('final answer text')
+  })
+
+  it('write-through keeps one durable messageId from first chunk through settle', () => {
+    const sessionKey = 'e2e-write-through'
+    resetStore(sessionKey)
+    const store = useChatStore.getState()
+
+    store.processEvent({
+      type: 'chunk',
+      text: '',
+      fullReplace: true,
+      sessionKey,
+      runId: 'run-42',
+      transport: 'send-stream',
+    })
+    store.processEvent({
+      type: 'thinking',
+      text: 'live plan',
+      sessionKey,
+      runId: 'run-42',
+      transport: 'send-stream',
+    })
+    store.processEvent({
+      type: 'chunk',
+      text: 'Answer',
+      fullReplace: true,
+      sessionKey,
+      runId: 'run-42',
+      transport: 'send-stream',
+    })
+    store.processEvent({
+      type: 'done',
+      state: 'complete',
+      sessionKey,
+      runId: 'run-42',
+      transport: 'send-stream',
+    })
+
+    const messages = store.getRealtimeMessages(sessionKey)
+    const assistants = messages.filter((m) => m.role === 'assistant')
+    expect(assistants).toHaveLength(1)
+    expect(assistants[0]?.id).toBe('assistant:run-42')
+    expect(assistants[0]?.messageId).toBe('assistant:run-42')
+    expect(assistants[0]?.__streamingStatus).toBe('complete')
+    const content = assistants[0]?.content as Array<{
+      type: string
+      thinking?: string
+      text?: string
+    }>
+    expect(content.find((p) => p.type === 'thinking')?.thinking).toBe(
+      'live plan',
+    )
+    expect(content.find((p) => p.type === 'text')?.text).toBe('Answer')
+  })
+
+  it('done.message without thinking still folds streaming thinking into Activity', () => {
+    const sessionKey = 'e2e-done-message-think'
+    resetStore(sessionKey)
+    const store = useChatStore.getState()
+
+    store.processEvent({
+      type: 'thinking',
+      text: 'live reasoning before tools',
+      sessionKey,
+      transport: 'send-stream',
+    })
+    store.processEvent({
+      type: 'tool',
+      phase: 'complete',
+      name: 'read_file',
+      toolCallId: 'tc-1',
+      sessionKey,
+      transport: 'send-stream',
+    })
+    store.processEvent({
+      type: 'done',
+      state: 'complete',
+      sessionKey,
+      transport: 'send-stream',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Done.' }],
+      },
+    })
+
+    const messages = store.getRealtimeMessages(sessionKey)
+    const assistant = messages.find((m) => m.role === 'assistant')
+    const content = assistant?.content as Array<{
+      type: string
+      thinking?: string
+      text?: string
+    }>
+    expect(content.find((p) => p.type === 'thinking')?.thinking).toBe(
+      'live reasoning before tools',
+    )
+    expect(content.find((p) => p.type === 'text')?.text).toBe('Done.')
+    expect((assistant as any).__streamToolCalls?.length).toBe(1)
   })
 })

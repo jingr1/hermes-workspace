@@ -270,15 +270,27 @@ describe('getMessagesForProfile', () => {
         VALUES ('sess-1', 'user', 'hi', 1700000001);
       INSERT INTO messages (session_id, role, content, timestamp)
         VALUES ('sess-1', 'assistant', 'hello there', 1700000002);
+      INSERT INTO messages (session_id, role, content, timestamp)
+        VALUES (
+          'sess-1',
+          'assistant',
+          '[{"type":"thinking","thinking":"Plan A"},{"type":"text","text":"Done"}]',
+          1700000003
+        );
     `)
     db.close()
 
     const messages = getMessagesForProfile('writer', 'sess-1')
-    expect(messages).toHaveLength(2)
+    expect(messages).toHaveLength(3)
     expect(messages?.[0]?.role).toBe('user')
     expect(messages?.[0]?.content).toBe('hi')
     expect(messages?.[1]?.role).toBe('assistant')
     expect(messages?.[1]?.content).toBe('hello there')
+    // Structured content keeps thinking for toChatMessage (same shape as managed).
+    expect(messages?.[2]?.content).toEqual([
+      { type: 'thinking', thinking: 'Plan A' },
+      { type: 'text', text: 'Done' },
+    ])
   })
 
   it('returns an empty array when the db exists but the session has no messages', () => {

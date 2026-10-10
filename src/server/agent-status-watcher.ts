@@ -56,19 +56,16 @@ function hermesProfilePath(agentId: string): string {
 
 function readRuntime(agentId: string): SwarmRuntime | null {
   const profilePath = hermesProfilePath(agentId)
-  console.log('readRuntime profilePath', profilePath)
   try {
     const { source, runtime } = readSwarmRuntimeFile(profilePath, agentId, {
       workspaceRoot: process.cwd(),
     })
-    console.log('readSwarmRuntimeFile source', source)
     // Missing runtime.json yields an in-memory fallback with no lastOutputAt.
     // Treating that as a live snapshot + `Date.now()` made probe-down agents
     // look "unstable" forever (especially `default`, which often has no file).
     if (source === 'fallback') return null
     return runtime
-  } catch (err) {
-    console.log('readRuntime error', err)
+  } catch {
     return null
   }
 }
@@ -97,22 +94,18 @@ export function publishAgentStatus(snapshot: AgentStatusSnapshot): void {
 }
 
 function flushAgent(agentId: string): void {
-  console.log('flushAgent', agentId)
   const runtime = readRuntime(agentId)
-  console.log('runtime', runtime)
   if (!runtime) return
   publishAgentStatus(buildSnapshot(agentId, runtime))
 }
 
 function scheduleFlush(agentId: string): void {
-  console.log('scheduleFlush', agentId)
   const state = getState()
   const existing = state.pending.get(agentId)
   if (existing) clearTimeout(existing)
   state.pending.set(
     agentId,
     setTimeout(() => {
-      console.log('timeout fired', agentId)
       state.pending.delete(agentId)
       flushAgent(agentId)
     }, DEBOUNCE_MS),

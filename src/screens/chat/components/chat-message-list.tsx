@@ -24,6 +24,7 @@ import {
   ChatContainerScrollAnchor,
 } from '@/components/prompt-kit/chat-container'
 import { AssistantAvatar } from '@/components/avatars'
+import { thinkingTextFromContent } from '@/lib/chat-message-parts'
 import { cn } from '@/lib/utils'
 import { hapticTap } from '@/lib/haptics'
 import { CHAT_OPEN_MESSAGE_SEARCH_EVENT } from '@/screens/chat/chat-events'
@@ -508,18 +509,7 @@ function displayEntriesHaveAssistantHostSurface(
     if (message.role !== 'assistant') continue
     if (textFromMessage(message).trim().length > 0) return true
     if (getToolCallsFromMessage(message).length > 0) return true
-    const parts = Array.isArray(message.content) ? message.content : []
-    if (
-      parts.some(
-        (part) =>
-          part.type === 'thinking' &&
-          String(
-            'thinking' in part ? (part as { thinking?: unknown }).thinking : '',
-          ).trim().length > 0,
-      )
-    ) {
-      return true
-    }
+    if (thinkingTextFromContent(message.content).trim().length > 0) return true
   }
   return false
 }
@@ -530,6 +520,9 @@ function displayEntriesHaveAssistantHostSurface(
  * wrapper must treat that content as visible — otherwise the streaming target
  * stays `display:none` until the turn settles, which looks like Activity ended
  * long before the reply bubble appears.
+ *
+ * Thinking detection uses the shared content helper so Hermes history parts and
+ * managed reasoning rows stay equivalent.
  */
 export function streamingMessageHasVisibleContent(
   message: ChatMessage,
@@ -544,14 +537,7 @@ export function streamingMessageHasVisibleContent(
   if (options?.streamingThinking?.trim()) return true
   if (textFromMessage(message).trim().length > 0) return true
   if (getToolCallsFromMessage(message).length > 0) return true
-  const parts = Array.isArray(message.content) ? message.content : []
-  return parts.some(
-    (part) =>
-      part.type === 'thinking' &&
-      String(
-        'thinking' in part ? (part as { thinking?: unknown }).thinking : '',
-      ).trim().length > 0,
-  )
+  return thinkingTextFromContent(message.content).trim().length > 0
 }
 
 export function buildDisplayEntries(
@@ -1531,31 +1517,13 @@ function ChatMessageListComponent({
     // Empty-gap ThinkingBubble stays visible via showProcessingIndicator
     // while this wrapper is invisible.
     if (messageIsStreaming) {
-      const hasStreamingActivity =
-        normalizedStreamingToolCalls.length > 0 ||
-        liveToolActivity.length > 0 ||
-        lifecycleEvents.length > 0 ||
-        Boolean(streamingThinking && streamingThinking.trim().length > 0)
-      // Props-only empty check hid managed ACP replies: thinking/text live on
-      // the message row, while Hermes streaming* props stay unset.
-      const isEmptyPlaceholder = !streamingMessageHasVisibleContent(
-        chatMessage,
-        {
-          streamingText,
-          streamingThinking,
-          hasToolActivity: hasStreamingActivity,
-        },
-      )
+      // Always reveal the live streaming row. Empty Hermes turns host the
+      // in-thread Working stub (TuiActivityCard); hiding the wrapper with
+      // display:none left a blank transcript while the composer showed Stop.
       return (
         <div
           key={stableId}
-          style={{
-            display: isEmptyPlaceholder ? 'none' : undefined,
-            opacity: isEmptyPlaceholder ? 0 : 1,
-            pointerEvents: isEmptyPlaceholder ? 'none' : undefined,
-            transition: 'opacity 150ms ease',
-          }}
-          aria-hidden={isEmptyPlaceholder ? true : undefined}
+          style={{ transition: 'opacity 150ms ease' }}
         >
           <MessageItem
             message={chatMessage}
@@ -2244,26 +2212,31 @@ function getToolGroupClass(
 }
 
 function getStableMessageId(message: ChatMessage, index: number): string {
-  if (message.__optimisticId) return message.__optimisticId
-
-  const idCandidates = ['id', 'messageId', 'uuid', 'clientId'] as const
-  for (const key of idCandidates) {
+  // Tutti / managed contract: durable messageId first so growing stream text
+  // does not remount the bubble (fingerprint keys caused reload UX).
+  for (const key of ['messageId', 'id', 'uuid', 'clientId'] as const) {
     const value = (message as Record<string, unknown>)[key]
     if (typeof value === 'string' && value.trim().length > 0) {
-      return value
+      return value.trim()
     }
   }
 
-  const timestamp = getRawMessageTimestamp(message)
+  if (message.__optimisticId) return message.__optimisticId
+
+  const role = message.role || 'assistant'
   const text = textFromMessage(message)
-  // Content-based fingerprint: hash of text content + timestamp.
-  // This survives reordering because it doesn't depend on array position.
-  const fingerprint = djb2(text.slice(0, 120))
-  if (timestamp) {
-    return `${message.role ?? 'assistant'}-${timestamp}-${fingerprint}`
+  if (role === 'assistant' && text.trim().length > 0) {
+    const fingerprint = djb2(`${text.length}:${text.slice(0, 160)}`)
+    return `assistant-${fingerprint}`
   }
 
-  return `${message.role ?? 'assistant'}-${fingerprint}-${index}`
+  const timestamp = getRawMessageTimestamp(message)
+  const fingerprint = djb2(text.slice(0, 120))
+  if (timestamp) {
+    return `${role}-${timestamp}-${fingerprint}`
+  }
+
+  return `${role}-${fingerprint}-${index}`
 }
 
 /** djb2 string hash — fast, decent distribution, no deps */

@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import {
   clearManagedSessionMessages,
-  deleteManagedSession,
   fetchSessionsForAgent,
 } from '@/lib/agent-api'
 import { useAgentStore } from '@/stores/agent-store'
@@ -191,6 +190,7 @@ export function useManagedAgentChat({
   const preserveCanonicalForDisplaySessionRef = useRef<string | null>(null)
   const pendingDisplaySessionIdRef = useRef<string | null>(null)
   const activityGenerationRef = useRef(0)
+  const sessionListGenerationRef = useRef(0)
   displaySessionIdRef.current = activeSessionId
 
   const reconcileCurrentSession = useCallback(() => {
@@ -223,7 +223,14 @@ export function useManagedAgentChat({
   )
 
   const refreshSessionList = useCallback(async () => {
-    try { setSessions(agentId, (await fetchSessionsForAgent(agentId)).sessions) } catch { /* sidebar retries */ }
+    const generation = ++sessionListGenerationRef.current
+    try {
+      const data = await fetchSessionsForAgent(agentId)
+      if (generation !== sessionListGenerationRef.current) return
+      setSessions(agentId, data.sessions)
+    } catch {
+      /* sidebar retries via useExternalAgentSessions */
+    }
   }, [agentId, setSessions])
 
   const commandPortRef = useRef<EngineTypedCommandPort | null>(null)
@@ -387,17 +394,13 @@ export function useManagedAgentChat({
     try {
       detail = await fetchSessionDetail(displaySessionId)
     } catch (reason) {
-      // Daemon 404 = stale display binding / pruned session. Drop the orphan
-      // row and open a fresh composer instead of a permanent error banner.
+      // Daemon 404 = pruned / unknown session. Clear selection and refresh the
+      // daemon-owned sidebar list — do not auto-delete (click must not vanish).
       const status = reason && typeof reason === 'object' && 'status' in reason
         ? Number((reason as { status?: number }).status)
         : NaN
       if (status === 404) {
-        void deleteManagedSession(agentId, displaySessionId)
-          .catch(() => undefined)
-          .finally(() => {
-            void refreshSessionList()
-          })
+        void refreshSessionList()
         if (generation === activityGenerationRef.current) {
           setActiveSessionId(null)
         }
@@ -411,7 +414,6 @@ export function useManagedAgentChat({
     reconcileCurrentSession()
     void refreshSessionList()
   }, [
-    agentId,
     ensureRuntime,
     fetchSessionDetail,
     reconcileCurrentSession,
@@ -614,23 +616,25 @@ export function useManagedAgentChat({
       const generation = activityGenerationRef.current
       let chatRuntime = runtimeRef.current
       if (!canonicalSessionIdRef.current) {
-        const displaySessionId = activeSessionId.startsWith('new-') ? crypto.randomUUID() : activeSessionId
-        const canonicalSessionId = crypto.randomUUID()
+        // End-state identity: one UUID for sidebar + daemon agentSessionId.
+        const sessionId = activeSessionId.startsWith('new-')
+          ? crypto.randomUUID()
+          : activeSessionId
         if (activeSessionId.startsWith('new-')) {
-          transferModel(activeSessionId, displaySessionId)
-          if (!getStoredModel(displaySessionId)) {
-            transferModel(pendingSessionModelKey(agentId), displaySessionId)
+          transferModel(activeSessionId, sessionId)
+          if (!getStoredModel(sessionId)) {
+            transferModel(pendingSessionModelKey(agentId), sessionId)
           }
-          pendingDisplaySessionIdRef.current = displaySessionId
+          pendingDisplaySessionIdRef.current = sessionId
         }
-        displaySessionIdRef.current = displaySessionId
-        chatRuntime = await ensureRuntime(displaySessionId, generation)
+        displaySessionIdRef.current = sessionId
+        chatRuntime = await ensureRuntime(sessionId, generation)
         if (generation !== activityGenerationRef.current) {
           throw new Error('Managed Agent session changed before activation')
         }
         const accepted = chatRuntime.engine.activateSession({
           mode: 'new',
-          agentSessionId: canonicalSessionId,
+          agentSessionId: sessionId,
           agentTargetId: managedAgentTargetIdForRuntime(runtime, agentId),
           clientSubmitId: crypto.randomUUID(),
           requestId: crypto.randomUUID(),

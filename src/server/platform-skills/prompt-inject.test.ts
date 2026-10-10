@@ -36,6 +36,27 @@ describe('platform-skills prompt-inject', () => {
     expect(text).toContain('Be careful.')
   })
 
+  it('formats catalog bundles without full bodies', () => {
+    const text = formatSkillBundleForPrompt(
+      [
+        {
+          id: '1',
+          name: 'reviewer',
+          description: 'Review code',
+          content: 'Be careful. ' + 'x'.repeat(10_000),
+          origin: { kind: 'manual' },
+          createdAt: 0,
+          updatedAt: 0,
+        },
+      ],
+      { detail: 'catalog' },
+    )
+    expect(text).toContain('## Skill: reviewer')
+    expect(text).toContain('/reviewer')
+    expect(text).not.toContain('Be careful.')
+    expect(text.length).toBeLessThan(500)
+  })
+
   it('rewrites the first text block and keeps attachments', () => {
     const rewritten = rewritePromptContentText(
       [

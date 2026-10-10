@@ -114,7 +114,7 @@ curl -sf http://127.0.0.1:9119/ && echo "dashboard ok"
 **Fix:**
 
 ```bash
-codex login
+codex login --device-auth
 ```
 
 Then retry the chat. Do not restart the gateway unless auth still fails after re-login.

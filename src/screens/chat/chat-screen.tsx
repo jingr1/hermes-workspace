@@ -10,6 +10,7 @@ import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useFeatureCapability } from '@/hooks/use-feature-capability'
 
+import { assistantHasVisibleHostContent } from '@/lib/chat-message-parts'
 import {
   deriveFriendlyIdFromKey,
   isMissingAuth,
@@ -841,6 +842,7 @@ export function ChatScreen({
     isRealtimeStreaming,
     realtimeStreamingText,
     realtimeStreamingThinking,
+    realtimeStreamingMessageId,
     realtimeLifecycleEvents,
     completedStreamingText,
     completedStreamingThinking,
@@ -1122,7 +1124,9 @@ export function ChatScreen({
     let cancelled = false
 
     async function probeActiveRun() {
-      // Live send-stream tokens mean the run is still in progress.
+      // Live send-stream / store streaming means the run is still in progress.
+      // activeRealtimeStreamingRef includes localIsStreaming for Hermes so a
+      // quiet SSE gap cannot settle waiting and blank the transcript.
       if (activeRealtimeStreamingRef.current) {
         missingRunCount = 0
         return
@@ -1354,7 +1358,7 @@ export function ChatScreen({
   const { suggestion, dismiss, dismissForSession } = useModelSuggestions({
     currentModel, // Real model from session-status (fail closed if empty)
     sessionKey: resolvedSessionKey || 'main',
-    messages: historyMessages.map((m) => ({
+    messages: historyMessages.map((m: ChatMessage) => ({
       role: m.role as 'user' | 'assistant',
       content: textFromMessage(m),
     })) as any,
@@ -1454,7 +1458,11 @@ export function ChatScreen({
           clearPendingSendForSession(persistSessionKey, persistFriendlyId)
         }
         activeSendRef.current = null
-        refreshHistoryRef.current()
+        // Do NOT refetch history here. The streamed message is already in the
+        // cache; a post-turn refetch replaces it with a differently shaped
+        // server echo (often tools without thinking / rewritten text) and
+        // feels like a page reload. Durable sync is deferred/quiet in
+        // use-realtime-chat-history onDone + normal poll/focus refetch.
         setSending(false)
         // Clear waitingForResponse so ThinkingBubble hides and message renders
         streamFinish()
@@ -1595,9 +1603,13 @@ export function ChatScreen({
     workspaceProfileName,
   ])
 
+  // Hermes: keep send-stream liveness even when the chat-store streamingState
+  // has not received the first parsed SSE event yet (or only keepalives).
+  // Store-only made composer Stop stay busy while Thinking vanished after
+  // waiting was settled by the active-run probe.
   const activeIsRealtimeStreaming = isPortableMode
     ? localIsStreaming
-    : isRealtimeStreaming
+    : localIsStreaming || isRealtimeStreaming
   const activeRealtimeStreamingText = isPortableMode
     ? localStreamingText
     : realtimeStreamingText
@@ -1630,16 +1642,7 @@ export function ChatScreen({
         return true
       }
       if (msg.role === 'assistant') {
-        if (msg.__streamingStatus === 'streaming') return true
-        if ((msg as any).__optimisticId && !msg.content?.length) return true
-        if (textFromMessage(msg).trim().length > 0) return true
-        const content = Array.isArray(msg.content) ? msg.content : []
-        const hasToolCalls = content.some((part) => part.type === 'toolCall')
-        const hasStreamToolCalls =
-          Array.isArray((msg as any).__streamToolCalls) &&
-          (msg as any).__streamToolCalls.length > 0
-        const hasThinking = content.some((part) => part.type === 'thinking')
-        return hasToolCalls || hasStreamToolCalls || hasThinking
+        return assistantHasVisibleHostContent(msg)
       }
       return false
     })
@@ -1712,115 +1715,79 @@ export function ChatScreen({
       .filter((msg) => dedupedSet.has(msg))
       .map((msg) => stripQueuedWrapperFromUserMessage(msg))
 
+    // Tutti contract: chat-store write-through already upserts one durable
+    // assistant row (`assistant:<runId>`). Do not inject a second
+    // `streaming-current` placeholder — that was the Hermes/managed fork.
     if (!activeIsRealtimeStreaming) {
       return deduped
     }
 
-    let nextMessages = [...deduped]
-    const streamToolCalls = activeToolCalls.map((toolCall) => ({
-      ...toolCall,
-      phase: toolCall.phase,
-    }))
-
-    const streamingMsg = {
-      role: 'assistant',
-      content: [],
-      __optimisticId: 'streaming-current',
-      __streamingStatus: 'streaming',
-      __streamingText: stableActiveStreamingText,
-      __streamingThinking: realtimeStreamingThinking,
-      __streamToolCalls: streamToolCalls,
-    } as ChatMessage
-
-    // Check if the server has already returned a completed assistant message
-    // that overlaps with the streaming text. If so, drop the streaming
-    // placeholder to avoid showing the same response twice.
-    const streamingText = stableActiveStreamingText.trim()
-    const hasServerAssistantVersion = nextMessages.some((msg) => {
-      if (msg.role !== 'assistant') return false
-      if (msg.__streamingStatus === 'streaming') return false
-      // Any non-streaming assistant message that appears after the last user
-      // message is potentially the same response — match by text overlap
-      if (streamingText.length > 0) {
-        const msgText = textFromMessage(msg).trim()
-        if (
-          msgText.length > 0 &&
-          (msgText === streamingText ||
-            msgText.startsWith(streamingText) ||
-            streamingText.startsWith(msgText))
-        ) {
-          return true
-        }
-      }
-      // Also match by tool calls: if the server message has the same tool
-      // calls as the streaming placeholder, it's the same response
-      if (streamToolCalls.length > 0) {
-        const msgContent = Array.isArray(msg.content) ? msg.content : []
-        const msgToolCalls = msgContent.filter(
-          (p: any) => p.type === 'toolCall',
-        )
-        if (
-          msgToolCalls.length > 0 &&
-          msgToolCalls.length === streamToolCalls.length
-        ) {
-          return streamToolCalls.every((stc: any) =>
-            msgToolCalls.some((mtc: any) => mtc.name === stc.name),
-          )
-        }
-      }
-      return false
-    })
-    if (hasServerAssistantVersion) {
-      return nextMessages
-    }
-
-    const existingStreamIdx = nextMessages.findIndex(
-      (message) => message.__streamingStatus === 'streaming',
+    const liveIdx = deduped.findIndex(
+      (message) =>
+        message.role === 'assistant' &&
+        (message.__streamingStatus === 'streaming' ||
+          (realtimeStreamingMessageId &&
+            (message.id === realtimeStreamingMessageId ||
+              message.messageId === realtimeStreamingMessageId))),
     )
-
-    if (existingStreamIdx >= 0) {
-      nextMessages[existingStreamIdx] = {
-        ...nextMessages[existingStreamIdx],
-        ...streamingMsg,
-      }
-      // Remove any other streaming messages (e.g. from mergeHistoryMessages
-      // appending a realtime message after finalDisplayMessages already
-      // injected a placeholder). Keep only one streaming placeholder.
-      const keepIdx = existingStreamIdx
-      nextMessages = nextMessages.filter(
-        (m, i) => i === keepIdx || m.__streamingStatus !== 'streaming',
-      )
-      return nextMessages
+    if (liveIdx >= 0) {
+      const live = deduped[liveIdx]!
+      const next = [...deduped]
+      next[liveIdx] = {
+        ...live,
+        __streamingStatus: 'streaming',
+        __streamingText: stableActiveStreamingText || live.__streamingText,
+        __streamingThinking:
+          realtimeStreamingThinking || live.__streamingThinking,
+        __streamToolCalls:
+          activeToolCalls.length > 0
+            ? activeToolCalls
+            : (live as any).__streamToolCalls,
+      } as ChatMessage
+      return next
     }
 
-    const lastUserIdx = nextMessages.reduce(
-      (lastIdx, msg, idx) => (msg.role === 'user' ? idx : lastIdx),
-      -1,
-    )
-    if (lastUserIdx >= 0 && lastUserIdx === nextMessages.length - 1) {
-      nextMessages.push(streamingMsg)
-    } else if (lastUserIdx >= 0) {
-      nextMessages.splice(lastUserIdx + 1, 0, streamingMsg)
-    } else {
-      nextMessages.push(streamingMsg)
+    // First paint before store upsert lands — temporary row with durable id.
+    if (realtimeStreamingMessageId) {
+      return [
+        ...deduped,
+        {
+          role: 'assistant',
+          id: realtimeStreamingMessageId,
+          messageId: realtimeStreamingMessageId,
+          content: [],
+          __streamingStatus: 'streaming',
+          __streamingText: stableActiveStreamingText,
+          __streamingThinking: realtimeStreamingThinking,
+          __streamToolCalls: activeToolCalls,
+        } as ChatMessage,
+      ]
     }
-    return nextMessages
+    return deduped
   }, [
     activeToolCalls,
     activeIsRealtimeStreaming,
-    activeRealtimeStreamingText,
     realtimeMessages,
+    realtimeStreamingMessageId,
     realtimeStreamingThinking,
+    stableActiveStreamingText,
   ])
 
   const derivedStreamingInfo = useMemo(() => {
     if (activeIsRealtimeStreaming) {
-      const last = finalDisplayMessages[finalDisplayMessages.length - 1]
       const id = isPortableMode
         ? localStreamingMessageId
-        : last?.role === 'assistant'
-          ? (last as any).__optimisticId || (last as any).id || null
-          : null
+        : realtimeStreamingMessageId ||
+          (() => {
+            const last = finalDisplayMessages[finalDisplayMessages.length - 1]
+            if (last?.role !== 'assistant') return null
+            return (
+              (last as any).messageId ||
+              (last as any).id ||
+              (last as any).__optimisticId ||
+              null
+            )
+          })()
       return { isStreaming: true, streamingMessageId: id }
     }
     if (waitingForResponse && finalDisplayMessages.length > 0) {
@@ -1834,7 +1801,11 @@ export function ChatScreen({
             streamingMessageId: null as string | null,
           }
         }
-        const id = (last as any).__optimisticId || (last as any).id || null
+        const id =
+          (last as any).messageId ||
+          (last as any).id ||
+          (last as any).__optimisticId ||
+          null
         return { isStreaming: true, streamingMessageId: id }
       }
     }
@@ -1845,34 +1816,34 @@ export function ChatScreen({
     activeIsRealtimeStreaming,
     isPortableMode,
     localStreamingMessageId,
+    realtimeStreamingMessageId,
   ])
 
   const hermesShowProcessingIndicator = useMemo(() => {
-    const streamingText = (
-      stableActiveStreamingText ||
-      completedStreamingText.current ||
-      ''
-    ).trim()
-    const streamingThinking = (
-      realtimeStreamingThinking ||
-      completedStreamingThinking.current ||
-      ''
-    ).trim()
-    const hasInThreadLiveSurface =
+    // Match managed Tutti semantics: keep the empty-gap Thinking pill until the
+    // in-thread Activity / Working stub / reply row can actually host UI.
+    // Once send-stream is live, MessageItem mounts TuiActivityCard's Working
+    // stub — suppress the bottom pill so we do not flash Thinking then blank.
+    const streamingText = (stableActiveStreamingText || '').trim()
+    const liveThinking = (realtimeStreamingThinking || '').trim()
+    const streamBusy =
+      localIsStreaming ||
+      activeIsRealtimeStreaming ||
+      derivedStreamingInfo.isStreaming
+    const hasVisibleInThreadHost =
       streamingText.length > 0 ||
-      streamingThinking.length > 0 ||
       activeToolCalls.length > 0 ||
       liveToolActivity.length > 0 ||
-      realtimeLifecycleEvents.length > 0
-    if (hasInThreadLiveSurface) return false
-    return (
-      sending ||
-      waitingForResponse ||
-      derivedStreamingInfo.isStreaming
-    )
+      realtimeLifecycleEvents.length > 0 ||
+      liveThinking.length > 0 ||
+      streamBusy
+    if (hasVisibleInThreadHost) return false
+    return sending || waitingForResponse || hasPendingGeneration()
   }, [
     sending,
     waitingForResponse,
+    localIsStreaming,
+    activeIsRealtimeStreaming,
     derivedStreamingInfo.isStreaming,
     stableActiveStreamingText,
     realtimeStreamingThinking,
@@ -1882,7 +1853,6 @@ export function ChatScreen({
   ])
 
   const responseWaitSnapshotRef = useRef<ResponseWaitSnapshot | null>(null)
-  const prevIsRealtimeStreamingRef = useRef(activeIsRealtimeStreaming)
   const activeRealtimeStreamingRef = useRef(activeIsRealtimeStreaming)
 
   useEffect(() => {
@@ -1918,17 +1888,10 @@ export function ChatScreen({
     }
   }, [finalDisplayMessages, waitingForResponse, streamFinish])
 
-  useEffect(() => {
-    const wasStreaming = prevIsRealtimeStreamingRef.current
-    prevIsRealtimeStreamingRef.current = activeIsRealtimeStreaming
-    if (wasStreaming && !activeIsRealtimeStreaming && waitingForResponse) {
-      if (clearTimerRef.current) return
-      clearTimerRef.current = window.setTimeout(() => {
-        clearTimerRef.current = null
-        streamFinish()
-      }, 100)
-    }
-  }, [activeIsRealtimeStreaming, waitingForResponse, streamFinish])
+  // Note: do not streamFinish() merely because streamingState flickers off.
+  // That cleared waiting early and hid Thinking before Working/Activity
+  // appeared. Settlement stays on onComplete / shouldClearWaiting (visible
+  // host content) / active-run probe / failsafes.
 
   const handleSwitchModel = useCallback(async () => {
     if (!suggestion) return
@@ -3988,7 +3951,7 @@ export function ChatScreen({
   const headerStatusMode: 'idle' | 'sending' | 'streaming' | 'tool' =
     activeHeaderToolName
       ? 'tool'
-      : derivedStreamingInfo.isStreaming
+      : derivedStreamingInfo.isStreaming || localIsStreaming
         ? 'streaming'
         : sending || waitingForResponse
           ? 'sending'

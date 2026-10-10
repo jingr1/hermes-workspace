@@ -634,6 +634,37 @@ echo "2026.09.23-86fc751"
 	}
 }
 
+func TestWantsProviderUpgrade(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		version string
+		want    bool
+	}{
+		{version: "", want: false},
+		{version: "   ", want: false},
+		{version: "latest", want: true},
+		{version: "0.162.1", want: true},
+	}
+	for _, testCase := range cases {
+		if got := wantsProviderUpgrade(testCase.version); got != testCase.want {
+			t.Fatalf("wantsProviderUpgrade(%q) = %v, want %v", testCase.version, got, testCase.want)
+		}
+	}
+}
+
+func TestWithCodexDeviceAuthLoginArgs(t *testing.T) {
+	t.Parallel()
+	got := withCodexDeviceAuthLoginArgs([]string{"login", "-c", `service_tier="fast"`})
+	want := []string{"login", "--device-auth", "-c", `service_tier="fast"`}
+	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("got %#v want %#v", got, want)
+	}
+	idempotent := withCodexDeviceAuthLoginArgs(want)
+	if strings.Join(idempotent, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("idempotent got %#v", idempotent)
+	}
+}
+
 func findProviderTargetOrFatal(t *testing.T, providerID string) providerregistry.ProviderDescriptor {
 	t.Helper()
 	descriptor, ok := findProviderTarget(providerID)

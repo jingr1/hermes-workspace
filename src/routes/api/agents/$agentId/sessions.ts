@@ -24,8 +24,15 @@ export const Route = createFileRoute('/api/agents/$agentId/sessions')({
         if (!agentId) {
           return json({ error: 'agentId is required' }, { status: 400 })
         }
-        const sessions = listSessionsForAgent(agentId)
-        return json({ sessions, agentId })
+        try {
+          const sessions = await listSessionsForAgent(agentId)
+          return json({ sessions, agentId })
+        } catch (error) {
+          return json(
+            { error: error instanceof Error ? error.message : String(error) },
+            { status: 502 },
+          )
+        }
       },
       POST: async ({ request, params }) => {
         if (!isAuthenticated(request)) {

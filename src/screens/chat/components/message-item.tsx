@@ -40,6 +40,7 @@ import {
   selectChatProfileDisplayName,
   useChatSettingsStore,
 } from '@/hooks/use-chat-settings'
+import { thinkingTextFromContent } from '@/lib/chat-message-parts'
 import { cn } from '@/lib/utils'
 import { CHAT_SUBMIT_SELECTION_EVENT } from '@/screens/chat/chat-events'
 
@@ -474,12 +475,8 @@ function rawTimestamp(message: ChatMessage): number | null {
 }
 
 function thinkingFromMessage(msg: ChatMessage): string | null {
-  const parts = Array.isArray(msg.content) ? msg.content : []
-  const thinkingPart = parts.find((part) => part.type === 'thinking')
-  if (thinkingPart && 'thinking' in thinkingPart) {
-    return String(thinkingPart.thinking ?? '')
-  }
-  return null
+  const thinking = thinkingTextFromContent(msg.content)
+  return thinking || null
 }
 
 function normalizeStreamToolPhase(
@@ -2692,13 +2689,17 @@ function MessageItemComponent({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Activity panel pinned above the assistant bubble. Renders both while
-          streaming (⚡ Working) and after completion (Activity), so the thinking
-          and tool trace always sits directly above the text it belongs to. */}
+      {/* Activity panel pinned above the assistant bubble. Renders while
+          streaming (Working stub → live tools/thinking) and after completion
+          (Activity), so the trace always sits above the text it belongs to.
+          Empty streaming must still mount the card — Hermes often batches
+          tool.completed until the run ends; without the Working stub the
+          transcript stays blank while the composer shows Stop. */}
       {!isUser &&
       !hideActivityCard &&
       (finalToolSections.length > 0 ||
-        (thinking && thinking.trim().length > 0)) ? (
+        (thinking && thinking.trim().length > 0) ||
+        effectiveIsStreaming) ? (
         <div className="w-full max-w-[var(--chat-content-max-width)] flex order-first">
           <div className="w-6 shrink-0" aria-hidden />
           <div className="min-w-0 flex-1">
@@ -2963,7 +2964,6 @@ function MessageItemComponent({
           </div>
         </Message>
       )}
-      {/* Bottom thinking bubble handles empty streaming states; avoid duplicate in-thread working copy. */}
       {hasAssistantMetadata ? (
         <div className="flex flex-wrap justify-end gap-x-2 gap-y-0.5 pl-10 pr-1 mt-0.5 font-mono text-[10px] tabular-nums text-primary-400 leading-relaxed">
           {usageMetadata.inputTokens !== null && (
