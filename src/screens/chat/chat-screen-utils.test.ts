@@ -10,6 +10,7 @@ import {
   shouldClearWaitingForAssistantMessage,
   shouldHandoffStreamOnProfileNav,
   shouldSettleWaitingFromActiveRun,
+  shouldShowHermesProcessingIndicator,
 } from './chat-screen-utils'
 
 describe('advanceStickyStreamingText', () => {
@@ -258,5 +259,58 @@ describe('response wait detection', () => {
         snapshot,
       ),
     ).toBe(true)
+  })
+})
+
+describe('shouldShowHermesProcessingIndicator', () => {
+  const priorTurn = [
+    {
+      role: 'user' as const,
+      content: [{ type: 'text' as const, text: 'hi' }],
+    },
+    {
+      role: 'assistant' as const,
+      content: [{ type: 'text' as const, text: 'hello' }],
+    },
+  ]
+
+  it('keeps the empty-gap pill after a later send even when prior assistants exist', () => {
+    expect(
+      shouldShowHermesProcessingIndicator({
+        messages: [
+          ...priorTurn,
+          {
+            role: 'user',
+            content: [{ type: 'text', text: 'again' }],
+          },
+        ],
+        isStreaming: false,
+        sending: true,
+        waitingForResponse: true,
+        hasPendingGeneration: true,
+      }),
+    ).toBe(true)
+  })
+
+  it('suppresses the pill once the open turn hosts thinking or text', () => {
+    expect(
+      shouldShowHermesProcessingIndicator({
+        messages: [
+          ...priorTurn,
+          {
+            role: 'user',
+            content: [{ type: 'text', text: 'again' }],
+          },
+          {
+            role: 'assistant',
+            content: [{ type: 'thinking', thinking: 'planning' }],
+          },
+        ],
+        isStreaming: true,
+        sending: false,
+        waitingForResponse: true,
+        hasPendingGeneration: false,
+      }),
+    ).toBe(false)
   })
 })

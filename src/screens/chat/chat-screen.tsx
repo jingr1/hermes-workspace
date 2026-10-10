@@ -30,6 +30,7 @@ import {
   shouldClearWaitingForAssistantMessage,
   shouldHandoffStreamOnProfileNav,
   shouldSettleWaitingFromActiveRun,
+  shouldShowHermesProcessingIndicator,
 } from './chat-screen-utils'
 import {
   findLastUserMessage,
@@ -1800,33 +1801,27 @@ export function ChatScreen({
     realtimeStreamingMessageId,
   ])
 
-  const hermesShowProcessingIndicator = useMemo(() => {
-    // Match managed Tutti: empty-gap pill only until the transcript hosts the
-    // open turn. finalDisplayMessages already folds to one live row while
-    // streaming — if that host exists, never keep the bottom pill on.
-    const hasInThreadHost = finalDisplayMessages.some(
-      (message) =>
-        message.role === 'assistant' && assistantHasVisibleHostContent(message),
-    )
-    if (hasInThreadHost) return false
-    if (
-      localIsStreaming ||
-      activeIsRealtimeStreaming ||
-      derivedStreamingInfo.isStreaming
-    ) {
-      // Stream is open but the first host row has not painted yet — keep the
-      // empty-gap pill (same pre-host window as managed).
-      return true
-    }
-    return sending || waitingForResponse || hasPendingGeneration()
-  }, [
-    sending,
-    waitingForResponse,
-    localIsStreaming,
-    activeIsRealtimeStreaming,
-    derivedStreamingInfo.isStreaming,
-    finalDisplayMessages,
-  ])
+  const hermesShowProcessingIndicator = useMemo(
+    () =>
+      shouldShowHermesProcessingIndicator({
+        messages: finalDisplayMessages,
+        isStreaming:
+          localIsStreaming ||
+          activeIsRealtimeStreaming ||
+          derivedStreamingInfo.isStreaming,
+        sending,
+        waitingForResponse,
+        hasPendingGeneration: hasPendingGeneration(),
+      }),
+    [
+      sending,
+      waitingForResponse,
+      localIsStreaming,
+      activeIsRealtimeStreaming,
+      derivedStreamingInfo.isStreaming,
+      finalDisplayMessages,
+    ],
+  )
 
   const responseWaitSnapshotRef = useRef<ResponseWaitSnapshot | null>(null)
   const activeRealtimeStreamingRef = useRef(activeIsRealtimeStreaming)

@@ -506,8 +506,18 @@ function isAssistantToolCallOnlyMessage(message: ChatMessage): boolean {
 function displayEntriesHaveAssistantHostSurface(
   entries: Array<DisplayEntry>,
 ): boolean {
-  for (const { message } of entries) {
-    if (message.role !== 'assistant') continue
+  // Open turn only — prior settled assistants must not suppress ThinkingBubble
+  // grace / live-tool fallback on a later user send.
+  let lastUserIndex = -1
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    if (entries[index]?.message.role === 'user') {
+      lastUserIndex = index
+      break
+    }
+  }
+  for (let index = lastUserIndex + 1; index < entries.length; index += 1) {
+    const message = entries[index]?.message
+    if (!message || message.role !== 'assistant') continue
     if (textFromMessage(message).trim().length > 0) return true
     if (getToolCallsFromMessage(message).length > 0) return true
     if (thinkingTextFromContent(message.content).trim().length > 0) return true

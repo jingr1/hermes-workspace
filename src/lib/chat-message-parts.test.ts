@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   assistantHasVisibleHostContent,
+  openTurnHasAssistantHostContent,
   mergeAssistantThinkingFromSource,
   mergeStreamToolCallRecords,
   normalizeChatContentParts,
@@ -149,6 +150,50 @@ describe('assistantHasVisibleHostContent', () => {
         __streamingStatus: 'streaming',
         __streamToolCalls: [{ id: 't1', name: 'Read' }],
       }),
+    ).toBe(true)
+  })
+})
+
+describe('openTurnHasAssistantHostContent', () => {
+  it('ignores settled assistants from earlier turns', () => {
+    expect(
+      openTurnHasAssistantHostContent([
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'first' }],
+        },
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'prior reply' }],
+        },
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'second' }],
+        },
+      ]),
+    ).toBe(false)
+  })
+
+  it('detects host content only after the latest user message', () => {
+    expect(
+      openTurnHasAssistantHostContent([
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'first' }],
+        },
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'prior reply' }],
+        },
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'second' }],
+        },
+        {
+          role: 'assistant',
+          content: [{ type: 'thinking', thinking: 'planning' }],
+        },
+      ]),
     ).toBe(true)
   })
 })

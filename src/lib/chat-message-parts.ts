@@ -369,6 +369,14 @@ export function mergeAssistantThinkingFromSource<
   }
 }
 
+export type AssistantHostContentMessage = {
+  role?: string
+  content?: unknown
+  __streamingStatus?: string
+  __optimisticId?: unknown
+  __streamToolCalls?: unknown
+}
+
 /**
  * Whether an assistant message should be kept in the transcript lane.
  * Matches managed ACP: text, thinking, or tool calls all count as host surface.
@@ -377,12 +385,9 @@ export function mergeAssistantThinkingFromSource<
  * belongs to the bottom ThinkingBubble. Treating it as host cleared the
  * processing indicator and left only a static Working stub (空窗).
  */
-export function assistantHasVisibleHostContent(message: {
-  content?: unknown
-  __streamingStatus?: string
-  __optimisticId?: unknown
-  __streamToolCalls?: unknown
-}): boolean {
+export function assistantHasVisibleHostContent(
+  message: AssistantHostContentMessage,
+): boolean {
   if (message.__optimisticId && !Array.isArray(message.content)) return true
   if (
     Array.isArray(message.__streamToolCalls) &&
@@ -415,6 +420,33 @@ export function assistantHasVisibleHostContent(message: {
       rec.type === 'toolCall' ||
       rec.type === 'tool_use' ||
       rec.type === 'toolUse'
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Open-turn host only (after the last user message). Prior settled assistants
+ * must not suppress the empty-gap ThinkingBubble on a later send — matching
+ * managed `trailingAssistantHostContent`.
+ */
+export function openTurnHasAssistantHostContent(
+  messages: ReadonlyArray<AssistantHostContentMessage>,
+): boolean {
+  let lastUserIndex = -1
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === 'user') {
+      lastUserIndex = index
+      break
+    }
+  }
+  for (let index = lastUserIndex + 1; index < messages.length; index += 1) {
+    const message = messages[index]
+    if (
+      message?.role === 'assistant' &&
+      assistantHasVisibleHostContent(message)
     ) {
       return true
     }
