@@ -579,6 +579,8 @@ export function ChatScreen({
   const hasSeenDisconnectRef = useRef(false)
   const hadErrorRef = useRef(false)
   const abortActiveStreamRef = useRef<() => void>(() => {})
+  /** Live send-stream fetch only — not orphaned Zustand streamingState. */
+  const localIsStreamingRef = useRef(false)
   const wasBusyForQueueRef = useRef(false)
   const mountDrainKeyRef = useRef<string | null>(null)
   const [pendingApprovals, setPendingApprovals] = useState<
@@ -1111,7 +1113,9 @@ export function ChatScreen({
   useEffect(() => {
     if (!waitingForResponse) return
     const fallback = window.setTimeout(() => {
-      if (activeRealtimeStreamingRef.current) return
+      // Only skip while this tab still owns a live send-stream fetch.
+      // Orphaned chat-store streamingState must not block settlement.
+      if (localIsStreamingRef.current) return
       refreshHistoryRef.current()
     }, 5000)
     return () => window.clearTimeout(fallback)
@@ -1129,10 +1133,10 @@ export function ChatScreen({
     let cancelled = false
 
     async function probeActiveRun() {
-      // Live send-stream / store streaming means the run is still in progress.
-      // activeRealtimeStreamingRef includes localIsStreaming for Hermes so a
-      // quiet SSE gap cannot settle waiting and blank the transcript.
-      if (activeRealtimeStreamingRef.current) {
+      // Skip only while this tab's AbortController is still live. Do not treat
+      // leftover Zustand streamingState as "still running" — that deadlocks
+      // Stop after remount/handoff when the server run is already gone.
+      if (localIsStreamingRef.current) {
         missingRunCount = 0
         return
       }
@@ -1160,6 +1164,8 @@ export function ChatScreen({
           }
         }
 
+        useChatStore.getState().clearStreamingSession(resolvedSessionKey)
+        setLiveToolActivity([])
         streamFinish()
         refreshHistoryRef.current()
       } catch {
@@ -1827,8 +1833,56 @@ export function ChatScreen({
   const activeRealtimeStreamingRef = useRef(activeIsRealtimeStreaming)
 
   useEffect(() => {
+    localIsStreamingRef.current = localIsStreaming
+  }, [localIsStreaming])
+
+  useEffect(() => {
     activeRealtimeStreamingRef.current = activeIsRealtimeStreaming
   }, [activeIsRealtimeStreaming])
+
+  // Orphaned store streaming: waiting already cleared (or never restored) but
+  // streamingState still marks the composer busy. Reconcile against active-run
+  // so Stop / idle recover without a full reload.
+  useEffect(() => {
+    if (!resolvedSessionKey || resolvedSessionKey === 'new') return
+    if (localIsStreaming) return
+    if (!isRealtimeStreaming) return
+
+    let cancelled = false
+    async function clearOrphanedStreaming() {
+      try {
+        const res = await fetch(
+          `/api/sessions/${encodeURIComponent(resolvedSessionKey)}/active-run`,
+        )
+        if (cancelled || !res.ok) return
+        const data = await res.json()
+        if (cancelled || !data.ok) return
+        if (shouldSettleWaitingFromActiveRun(data.run) === 'keep') return
+        useChatStore.getState().clearStreamingSession(resolvedSessionKey)
+        setLiveToolActivity([])
+        streamFinish()
+      } catch {
+        // ignore network errors
+      }
+    }
+
+    const initial = window.setTimeout(() => {
+      void clearOrphanedStreaming()
+    }, 400)
+    const interval = window.setInterval(() => {
+      void clearOrphanedStreaming()
+    }, 4000)
+    return () => {
+      cancelled = true
+      window.clearTimeout(initial)
+      window.clearInterval(interval)
+    }
+  }, [
+    isRealtimeStreaming,
+    localIsStreaming,
+    resolvedSessionKey,
+    streamFinish,
+  ])
 
   useEffect(() => {
     if (!waitingForResponse) {
@@ -3483,15 +3537,27 @@ export function ChatScreen({
       )
     }
     activeSendRef.current = null
+    const stopSessionKey =
+      forcedSessionKey ||
+      resolvedSessionKey ||
+      activeSessionKey ||
+      activeFriendlyId ||
+      null
     cancelStreaming({
       userStop: true,
-      sessionKey:
-        forcedSessionKey ||
-        resolvedSessionKey ||
-        activeSessionKey ||
-        activeFriendlyId ||
-        null,
+      sessionKey: stopSessionKey,
     })
+    // Belt-and-suspenders: Stop must clear composer busy even when the hook
+    // remounted and activeSessionKeyRef no longer matches the store key.
+    if (stopSessionKey) {
+      useChatStore.getState().clearStreamingSession(stopSessionKey)
+      useChatStore.getState().clearSessionWaiting(stopSessionKey)
+    }
+    if (activeFriendlyId && activeFriendlyId !== stopSessionKey) {
+      useChatStore.getState().clearStreamingSession(activeFriendlyId)
+      useChatStore.getState().clearSessionWaiting(activeFriendlyId)
+    }
+    setLiveToolActivity([])
     clearCompletedStreaming()
     setSending(false)
     streamFinish()

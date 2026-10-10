@@ -22,7 +22,8 @@ describe('ChatComposer context controls', () => {
   it('surfaces workspace and reasoning controls next to the model picker', () => {
     const src = source()
 
-    expect(src).toContain("fetch('/api/workspace'")
+    expect(src).toContain('/api/workspace')
+    expect(src).toContain('agent=')
     expect(src).toContain('Workspace context')
     expect(src).toContain('workspaceSelectMutation')
     expect(src).toContain('WorkspaceFolderPicker')

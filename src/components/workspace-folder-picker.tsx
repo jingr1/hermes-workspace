@@ -71,7 +71,7 @@ async function fetchFolders(
   try {
     const params = new URLSearchParams()
     if (subPath) params.set('path', subPath)
-    if (profileName) params.set('profile', profileName)
+    if (profileName) params.set('agent', profileName)
     const query = params.size ? `?${params.toString()}` : ''
     const response = await fetch(`/api/workspace/folders${query}`, {
       signal: controller.signal,

@@ -24,7 +24,7 @@ import {
   remoteTerminalWorkspaceCandidate,
 } from '../../server/workspace-remote'
 import {
-  readProfileQueryParam,
+  readWorkspaceScopeQueryParam,
   remoteWorkspaceContextForScope,
   workspaceProfileScope,
   type WorkspaceProfileScope,
@@ -42,7 +42,10 @@ type WorkspaceDetectionResponse = {
   isValid: boolean
   workspaces: Array<WorkspaceEntry>
   last: string
+  /** Hermes profile name (legacy field; same as agent for most Hermes workers). */
   profile?: string
+  /** Agent registry id that owns this catalog. */
+  agent?: string
 }
 
 type WorkspaceState = {
@@ -79,7 +82,13 @@ function remoteWorkspaceContext(scope: WorkspaceProfileScope): {
 }
 
 function workspaceStateDir(scope: WorkspaceProfileScope): string {
-  return path.join(scope.profileHome, 'webui_state')
+  const home = scope.stateHome || scope.profileHome
+  if (!home) {
+    throw new Error(
+      `No workspace state home for scope ${scope.agentId || scope.profileName}`,
+    )
+  }
+  return path.join(home, 'webui_state')
 }
 
 function workspaceStateFile(scope: WorkspaceProfileScope): string {
@@ -314,6 +323,7 @@ async function loadWorkspaceCatalogUncached(
         workspaces,
         last: normalized,
         profile: scope.profileName,
+        agent: scope.agentId,
       }
     }
   }
@@ -345,6 +355,7 @@ async function loadWorkspaceCatalogUncached(
           workspaces,
           last: envWorkspace,
           profile: scope.profileName,
+          agent: scope.agentId,
         }
       }
     }
@@ -383,6 +394,7 @@ async function loadWorkspaceCatalogUncached(
     workspaces,
     last: activePath,
     profile: scope.profileName,
+    agent: scope.agentId,
   }
 }
 
@@ -431,6 +443,7 @@ export async function resolveActiveWorkspacePath(
         workspaces: [{ name: 'Home', path: normalized }],
         last: normalized,
         profile: scope.profileName,
+        agent: scope.agentId,
       },
     })
     return normalized
@@ -446,11 +459,17 @@ export async function resolveActiveWorkspacePath(
 export async function saveWorkspaceSelection(input: {
   path?: string
   name?: string
+  /** Agent registry id (preferred). */
+  agent?: string
+  /** Legacy Hermes profile / scope key. */
+  profile?: string
 }): Promise<WorkspaceDetectionResponse> {
   const rawPath = readString(input.path)
   if (!rawPath) throw new Error('path is required')
 
-  const scope = workspaceProfileScope()
+  const scope = workspaceProfileScope(
+    readString(input.agent) || readString(input.profile) || null,
+  )
   const remote = remoteWorkspaceContext(scope)
   let target: string
   if (remote) {
@@ -473,7 +492,7 @@ export async function saveWorkspaceSelection(input: {
     }
   }
 
-  const current = await loadWorkspaceCatalog(scope.profileName)
+  const current = await loadWorkspaceCatalog(scope.agentId)
   const next = dedupeWorkspaces([
     ...current.workspaces,
     {
@@ -484,8 +503,9 @@ export async function saveWorkspaceSelection(input: {
     },
   ])
   await writeWorkspaceState(scope, { workspaces: next, last: target })
+  invalidateWorkspaceCatalogCache(scope.agentId)
   invalidateWorkspaceCatalogCache(scope.profileName)
-  return loadWorkspaceCatalog(scope.profileName)
+  return loadWorkspaceCatalog(scope.agentId)
 }
 
 export const Route = createFileRoute('/api/workspace')({
@@ -496,8 +516,8 @@ export const Route = createFileRoute('/api/workspace')({
           return json({ ok: false, error: 'Unauthorized' }, { status: 401 })
         }
         try {
-          const profile = readProfileQueryParam(request)
-          return json(await loadWorkspaceCatalog(profile))
+          const scopeKey = readWorkspaceScopeQueryParam(request)
+          return json(await loadWorkspaceCatalog(scopeKey))
         } catch (err) {
           return json(
             {
@@ -523,8 +543,17 @@ export const Route = createFileRoute('/api/workspace')({
           const body = (await request.json()) as {
             path?: string
             name?: string
+            agent?: string
+            profile?: string
           }
-          return json(await saveWorkspaceSelection(body))
+          // Query-string agent wins over body when both are present.
+          const scopeFromQuery = readWorkspaceScopeQueryParam(request)
+          return json(
+            await saveWorkspaceSelection({
+              ...body,
+              agent: scopeFromQuery || body.agent,
+            }),
+          )
         } catch (err) {
           return json(
             {

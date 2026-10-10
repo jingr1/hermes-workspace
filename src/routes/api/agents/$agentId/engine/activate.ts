@@ -72,8 +72,8 @@ export const Route = createFileRoute('/api/agents/$agentId/engine/activate')({
             { status: 400 },
           )
         }
-        const workspace = await loadWorkspaceCatalog().catch(() => null)
-        const cwd = resolveManagedChatWorkspaceCwd(workspace)
+        const workspace = await loadWorkspaceCatalog(agentId).catch(() => null)
+        const cwd = resolveManagedChatWorkspaceCwd(workspace, agentId)
         const { runtimeText, displayPrompt } = buildManagedActivatePrompt(
           agentId,
           message,

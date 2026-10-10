@@ -109,9 +109,9 @@ export const Route = createFileRoute('/api/agents/$agentId/chat')({
 
         const native = resolveNativeSessionForRun({ sessionId })
 
-        // Same active workspace as the UI folder picker / Hermes send-stream.
-        const workspace = await loadWorkspaceCatalog().catch(() => null)
-        const workspaceCwd = resolveManagedChatWorkspaceCwd(workspace)
+        // Same catalog as the UI folder picker for this managed agent.
+        const workspace = await loadWorkspaceCatalog(agentId).catch(() => null)
+        const workspaceCwd = resolveManagedChatWorkspaceCwd(workspace, agentId)
 
         // With --resume, Claude already has history — only send the new turn.
         // First turn (--session-id) also stays single-message; no prompt replay.

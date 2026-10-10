@@ -942,7 +942,7 @@ async function fetchWorkspaceContext(
   profileName: string,
 ): Promise<WorkspaceDetectionResponse> {
   const response = await fetch(
-    `/api/workspace?profile=${encodeURIComponent(profileName)}`,
+    `/api/workspace?agent=${encodeURIComponent(profileName)}`,
   )
   if (!response.ok) {
     throw new Error(await readResponseError(response))
@@ -1251,11 +1251,17 @@ function ChatComposerComponent({
   })
   const workspaceSelectMutation = useMutation({
     mutationFn: async (workspace: { path: string; name?: string }) => {
-      const response = await fetch('/api/workspace', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(workspace),
-      })
+      const response = await fetch(
+        `/api/workspace?agent=${encodeURIComponent(workspaceProfileName)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...workspace,
+            agent: workspaceProfileName,
+          }),
+        },
+      )
       if (!response.ok) {
         throw new Error(await readResponseError(response))
       }

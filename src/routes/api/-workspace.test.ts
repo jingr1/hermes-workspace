@@ -282,6 +282,56 @@ describe('workspace API catalog semantics', () => {
     expect(sshCatalog.path).toBe('/home/ramonjing/vhl_dyn_sim')
     expect(sshCatalog.profile).toBe('gpussh')
   })
+
+  it('keeps managed-agent workspace state separate from Hermes profiles', async () => {
+    const hermesProject = await makeDir(tempRoot, 'hermes-app')
+    const managedProject = await makeDir(tempRoot, 'claude-app')
+    process.env.HERMES_WEBUI_DEFAULT_WORKSPACE = hermesProject
+
+    await saveWorkspaceSelection({
+      path: hermesProject,
+      name: 'Hermes App',
+      agent: 'default',
+    })
+    await saveWorkspaceSelection({
+      path: managedProject,
+      name: 'Claude App',
+      agent: 'cc-impl',
+    })
+
+    const hermesCatalog = await loadWorkspaceCatalog('default')
+    const managedCatalog = await loadWorkspaceCatalog('cc-impl')
+
+    expect(hermesCatalog.path).toBe(hermesProject)
+    expect(hermesCatalog.agent).toBe('default')
+    expect(managedCatalog.path).toBe(managedProject)
+    expect(managedCatalog.agent).toBe('cc-impl')
+    expect(managedCatalog.path).not.toBe(hermesCatalog.path)
+
+    await expect(
+      fs.readFile(
+        path.join(
+          process.env.HERMES_HOME!,
+          'workspace',
+          'agents',
+          'cc-impl',
+          'webui_state',
+          'last_workspace.txt',
+        ),
+        'utf-8',
+      ),
+    ).resolves.toBe(`${managedProject}\n`)
+    await expect(
+      fs.readFile(
+        path.join(
+          process.env.HERMES_HOME!,
+          'webui_state',
+          'last_workspace.txt',
+        ),
+        'utf-8',
+      ),
+    ).resolves.toBe(`${hermesProject}\n`)
+  })
 })
 
 describe('workspace folder listing', () => {

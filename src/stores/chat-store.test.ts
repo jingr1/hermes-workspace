@@ -216,6 +216,32 @@ function resetStore(sessionKey: string) {
   useChatStore.getState().clearAllStreaming()
 }
 
+describe('clearStreamingSession', () => {
+  it('drops orphaned streamingState and its sessionStorage mirror', () => {
+    const sessionKey = 'orphan-stream-session'
+    resetStore(sessionKey)
+    const store = useChatStore.getState()
+
+    store.processEvent({
+      type: 'chunk',
+      text: 'partial reply',
+      sessionKey,
+      transport: 'send-stream',
+      runId: 'run-orphan',
+    })
+    expect(store.getStreamingState(sessionKey)?.text).toContain('partial')
+
+    sessionStorage.setItem(
+      `claude_streaming_${sessionKey}`,
+      JSON.stringify({ text: 'stale', _savedAt: Date.now() }),
+    )
+
+    useChatStore.getState().clearStreamingSession(sessionKey)
+    expect(useChatStore.getState().getStreamingState(sessionKey)).toBeNull()
+    expect(sessionStorage.getItem(`claude_streaming_${sessionKey}`)).toBeNull()
+  })
+})
+
 // Simulates the full upstream flow exactly as send-stream.ts emits after
 // server-side thinking split + reasoning extraction:
 //   tool.progress(reasoning.available) -> 'thinking' event

@@ -1065,6 +1065,9 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
             schedulePostAcceptanceTimeout('handoff')
             return
           }
+          // User Stop / nav cancel: drop store streaming even if reset raced
+          // behind this AbortError microtask.
+          clearStreamingSession(activeSessionKeyRef.current)
           onAbort?.()
           return
         }
@@ -1073,6 +1076,7 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
       }
     },
     [
+      clearStreamingSession,
       finishStream,
       markAccepted,
       markFailed,
@@ -1093,6 +1097,7 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
         options?.sessionKey?.trim() ||
         activeSessionKeyRef.current?.trim() ||
         null
+      const refSessionKey = activeSessionKeyRef.current?.trim() || null
       if (
         !userStop &&
         (lifecyclePhaseRef.current === 'accepted' ||
@@ -1133,8 +1138,16 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
             },
           ).catch(() => {})
         }
-        if (sessionKey) {
-          useChatStore.getState().clearSessionWaiting(sessionKey)
+        // Remount resets activeSessionKeyRef to "main" while Zustand may still
+        // hold streamingState under the real session UUID — clear both keys or
+        // Stop leaves the composer stuck busy with a dead red button.
+        const store = useChatStore.getState()
+        const keysToClear = new Set<string>()
+        if (sessionKey) keysToClear.add(sessionKey)
+        if (refSessionKey) keysToClear.add(refSessionKey)
+        for (const key of keysToClear) {
+          store.clearSessionWaiting(key)
+          store.clearStreamingSession(key)
         }
         activeRunIdRef.current = null
       }

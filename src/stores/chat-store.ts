@@ -1458,14 +1458,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   clearStreamingSession: (sessionKey) => {
+    const key = sessionKey.trim()
+    if (!key) return
     const streaming = new Map(get().streamingState)
-    if (!streaming.has(sessionKey)) return
-    streaming.delete(sessionKey)
-    set({ streamingState: streaming })
+    const had = streaming.delete(key)
+    if (had) {
+      set({ streamingState: streaming })
+    }
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem(`claude_streaming_${key}`)
+    }
   },
 
   clearAllStreaming: () => {
     if (get().streamingState.size === 0) return
+    if (typeof sessionStorage !== 'undefined') {
+      for (const key of get().streamingState.keys()) {
+        sessionStorage.removeItem(`claude_streaming_${key}`)
+      }
+    }
     set({ streamingState: new Map() })
   },
 

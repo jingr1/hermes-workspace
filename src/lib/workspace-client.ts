@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query'
 
+/** React Query key for the active workspace scope id (agent registry id). */
 export const WORKSPACE_PROFILE_QUERY_KEY = [
   'profiles',
   'workspace-profile',
@@ -12,6 +13,8 @@ export type WorkspaceCatalog = {
   isValid: boolean
   workspaces: Array<{ name: string; path: string }>
   last: string
+  agent?: string
+  profile?: string
 }
 
 export type ActiveWorkspace = {
@@ -26,13 +29,18 @@ export type FileTreeEntry = {
   children?: Array<FileTreeEntry>
 }
 
+/**
+ * Attach workspace scope. Prefer `agent=` (registry id); Hermes workers use
+ * the same id as their profile so legacy `?profile=` callers still work via
+ * the server's agent-or-profile resolver.
+ */
 export function withProfileQuery(
   basePath: string,
   profileName: string,
 ): string {
   if (!profileName.trim()) return basePath
   const query = new URLSearchParams()
-  query.set('profile', profileName)
+  query.set('agent', profileName.trim())
   const join = basePath.includes('?') ? '&' : '?'
   return `${basePath}${join}${query.toString()}`
 }

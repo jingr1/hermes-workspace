@@ -38,7 +38,7 @@ import {
   zipLocalFolder,
 } from '../../server/workspace-zip'
 import {
-  readProfileQueryParam,
+  readWorkspaceScopeQueryParam,
   remoteWorkspaceContextForScope,
   workspaceProfileScope,
 } from '../../server/workspace-profile'
@@ -357,7 +357,7 @@ export const Route = createFileRoute('/api/files')({
           const maxEntriesParam = parseMaxEntries(
             url.searchParams.get('maxEntries'),
           )
-          const profile = readProfileQueryParam(request)
+          const profile = readWorkspaceScopeQueryParam(request)
 
           const workspaceRoot = await getWorkspaceRoot(profile)
           const remote = getRemoteSshContext(profile)
@@ -582,7 +582,7 @@ export const Route = createFileRoute('/api/files')({
         }
 
         try {
-          const profile = readProfileQueryParam(request)
+          const profile = readWorkspaceScopeQueryParam(request)
           const workspaceRoot = await getWorkspaceRoot(profile)
           const remote = getRemoteSshContext(profile)
           const contentType = request.headers.get('content-type') || ''

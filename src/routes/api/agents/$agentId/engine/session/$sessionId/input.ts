@@ -53,8 +53,13 @@ export const Route = createFileRoute(
         // Same active workspace as the composer folder picker / Hermes
         // send-stream. Engine sendInput previously omitted this, so mid-session
         // workspace switches never reached the managed agent prompt.
-        const workspace = await loadWorkspaceCatalog().catch(() => null)
-        const workspaceCwd = resolveManagedChatWorkspaceCwd(workspace)
+        const workspace = await loadWorkspaceCatalog(params.agentId).catch(
+          () => null,
+        )
+        const workspaceCwd = resolveManagedChatWorkspaceCwd(
+          workspace,
+          params.agentId,
+        )
         const scopedRuntimeText = buildWorkspaceScopedTextMessage(
           injected.text,
           workspace,

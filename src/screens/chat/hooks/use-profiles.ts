@@ -14,6 +14,7 @@ import {
 import { useEffect } from 'react'
 import { toast } from '@/components/ui/toast'
 import { sanitizeHttpErrorText } from '@/lib/http-error'
+import { useAgentStore } from '@/stores/agent-store'
 
 export type ChatProfileSummary = {
   name: string
@@ -110,6 +111,7 @@ async function activateProfile(name: string): Promise<ActivateProfileResponse> {
 
 export function useProfiles() {
   const queryClient = useQueryClient()
+  const activeAgentId = useAgentStore((state) => state.activeAgentId)
 
   const profilesQuery = useQuery({
     queryKey: ['profiles', 'chat'],
@@ -124,15 +126,11 @@ export function useProfiles() {
     readCachedActiveProfile() ||
     'default'
 
-  const workspaceProfileQuery = useQuery<string>({
-    queryKey: WORKSPACE_PROFILE_QUERY_KEY,
-    queryFn: async () => activeProfileName,
-    initialData: activeProfileName,
-    staleTime: Number.POSITIVE_INFINITY,
-    gcTime: Number.POSITIVE_INFINITY,
-  })
+  // Workspace catalog is agent-scoped (Hermes + managed). Prefer the chat
+  // sidebar's activeAgentId so switching to cc-impl / cursor-impl does not
+  // keep showing the previous Hermes profile's path.
   const workspaceProfileName =
-    workspaceProfileQuery.data ?? activeProfileName ?? 'default'
+    activeAgentId?.trim() || activeProfileName || 'default'
 
   const activateMutation = useMutation({
     mutationFn: activateProfile,
@@ -160,6 +158,7 @@ export function useProfiles() {
     onSuccess: async (data, profileName) => {
       writeCachedActiveProfile(profileName)
       toast(`Activated ${profileName}`)
+      // Hermes activate: keep query-key consumers warm when no agent id yet.
       queryClient.setQueryData(WORKSPACE_PROFILE_QUERY_KEY, profileName)
       preloadWorkspaceFolders(profileName)
       if (data.workspace) {
@@ -192,19 +191,17 @@ export function useProfiles() {
   useEffect(() => {
     if (!profilesQuery.isFetched || activateMutation.isPending) return
     writeCachedActiveProfile(activeProfileName)
-    queryClient.setQueryData(WORKSPACE_PROFILE_QUERY_KEY, activeProfileName)
-    preloadWorkspaceFolders(activeProfileName)
   }, [
     profilesQuery.isFetched,
     activeProfileName,
     activateMutation.isPending,
-    queryClient,
   ])
 
-  // Kick off workspace + files as soon as we know the profile (cached name is
-  // enough). Don't wait for activate / folders — that was starving the explorer.
+  // Prefetch + folder preload follow the agent (or Hermes profile fallback).
   useEffect(() => {
     if (!workspaceProfileName || activateMutation.isPending) return
+    queryClient.setQueryData(WORKSPACE_PROFILE_QUERY_KEY, workspaceProfileName)
+    preloadWorkspaceFolders(workspaceProfileName)
     void prefetchProfileWorkspace(queryClient, workspaceProfileName)
   }, [workspaceProfileName, activateMutation.isPending, queryClient])
 

@@ -15,6 +15,7 @@ import { SessionDeleteDialog } from './sidebar/session-delete-dialog'
 import { AgentList } from './agent-list'
 import type { SessionMeta } from '../types'
 import { preloadWorkspaceFolders } from '@/components/workspace-folder-picker'
+import { prefetchProfileWorkspace } from '@/lib/workspace-client'
 import { requestStreamHandoffIfActive } from '@/lib/stream-handoff-bridge'
 import { Button } from '@/components/ui/button'
 import {
@@ -284,6 +285,10 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
       useAgentStore
         .getState()
         .setActiveAgentId(agent.agentId, { sessionId })
+
+      // Managed agents own their own workspace catalog (not Hermes profile).
+      preloadWorkspaceFolders(agent.agentId)
+      void prefetchProfileWorkspace(queryClient, agent.agentId)
 
       navigate({
         to: '/chat/agent/$agentId',

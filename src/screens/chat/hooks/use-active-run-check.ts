@@ -69,11 +69,13 @@ export function useActiveRunCheck({
       } catch {
         /* ignore */
       }
-      // Clear stale waiting state — the run is almost certainly dead
+      // Clear stale waiting / streaming — the run is almost certainly dead
       const store = useChatStore.getState()
-      if (store.isSessionWaiting(sessionKeyRef.current)) {
-        store.clearSessionWaiting(sessionKeyRef.current)
+      const key = sessionKeyRef.current
+      if (store.isSessionWaiting(key)) {
+        store.clearSessionWaiting(key)
       }
+      store.clearStreamingSession(key)
     }, ACTIVE_RUN_CHECK_TIMEOUT_MS)
 
     async function check() {
@@ -96,9 +98,15 @@ export function useActiveRunCheck({
           )
         ) {
           store.setSessionWaiting(sessionKey, data.run.runId)
-        } else if (store.isSessionWaiting(sessionKey)) {
-          // Server says run is done but we still have stale waiting state
-          store.clearSessionWaiting(sessionKey)
+        } else {
+          // Server has no live run. Clear waiting AND orphaned streamingState —
+          // unmount handoff leaves Zustand streaming under the session UUID
+          // while the hook remounts with a fresh activeSessionKeyRef ("main"),
+          // which kept Stop busy with no working abort target.
+          if (store.isSessionWaiting(sessionKey)) {
+            store.clearSessionWaiting(sessionKey)
+          }
+          store.clearStreamingSession(sessionKey)
         }
       } catch {
         // Network error or abort — ignore, already handled by timeout
