@@ -95,7 +95,7 @@ export type ManagedAgentChat = {
   activeSessionId: string
   messages: Array<ChatMessage>
   isStreaming: boolean
-  showProcessingIndicator: boolean
+  turnBusy: boolean
   /** Message id that should render live streaming chrome for the active turn. */
   streamingMessageId: string | null
   activeToolCalls: Array<{ id: string; name: string; phase: string; args?: unknown }>
@@ -142,7 +142,7 @@ const EMPTY_CHAT_STATE = {
   usage: null as ReturnType<typeof selectManagedAgentChatState>['usage'],
   sessionTitle: null as string | null,
   isStreaming: false,
-  showProcessingIndicator: false,
+  turnBusy: false,
   streamingMessageId: null as string | null,
   error: null as string | null,
   interactions: [] as Array<AgentActivityInteraction>,
@@ -760,7 +760,7 @@ export function useManagedAgentChat({
     isStreaming: chatState.isStreaming,
     // Projected — isSubmitting only fills the pre-turn empty gap and cannot
     // override trailing assistant host content (sticky uncertain submits).
-    showProcessingIndicator: chatState.showProcessingIndicator,
+    turnBusy: chatState.turnBusy,
     streamingMessageId: chatState.streamingMessageId,
     activeToolCalls: chatState.activeToolCalls,
     interactions: [...chatState.interactions],

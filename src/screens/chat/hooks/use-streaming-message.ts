@@ -1,38 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChatAttachment, ChatMessage } from '../types'
-import { readResolvedSessionHeaders } from '@/lib/send-stream-session-headers'
 import { useChatStore } from '@/stores/chat-store'
-import { useHermesTurnStore } from '@/stores/hermes-turn-store'
+import {
+  getHermesChatRuntime,
+  notifyHermesSendCompleted,
+  waitForHermesSendCompleted,
+} from '@/stores/hermes-chat-runtime'
+import { assistantMessageIdForRun } from '@/lib/chat-turn-identity'
 import { pushActivity } from '@/components/inspector/activity-store'
 import { readCachedActiveProfile } from './use-profiles'
-
-function applyHermesTurnSse(
-  sessionKey: string,
-  event: string,
-  data: Record<string, unknown>,
-) {
-  if (!sessionKey) return
-  useHermesTurnStore.getState().applySse({
-    sessionKey,
-    event,
-    data,
-  })
-}
-
-function migrateHermesTurnSession(fromKey: string, toKey: string) {
-  if (!fromKey || !toKey || fromKey === toKey) return
-  const store = useHermesTurnStore.getState()
-  const snap = store.getSnapshot(fromKey)
-  if (!snap) return
-  store.beginTurn({ sessionKey: toKey, turnId: snap.turnId })
-  // Re-seed adapter/phase after beginTurn reset
-  useHermesTurnStore.setState((state) => {
-    const bySession = new Map(state.bySession)
-    bySession.set(toKey, { ...snap, pendingBusy: snap.pendingBusy })
-    bySession.delete(fromKey)
-    return { bySession }
-  })
-}
 
 /**
  * Determine whether a stream-resolved session key change should trigger
@@ -275,9 +251,6 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
       }))
       onError?.(message)
       useChatStore.getState().setHeartbeatActivity(null)
-      useHermesTurnStore
-        .getState()
-        .settleTurn(activeSessionKeyRef.current)
     },
     [
       clearHandoffTimer,
@@ -442,10 +415,18 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
         }, 5000)
       }
 
-      const finalText = fullTextRef.current
-      const thinking = thinkingRef.current
+      const sessionKey = activeSessionKeyRef.current
+      const liveStreaming = useChatStore.getState().getStreamingState(sessionKey)
+      // Prefer refs; fall back to store write-through (SSE may have filled the
+      // durable row while fullTextRef lagged after Engine port pump).
+      const finalText =
+        fullTextRef.current.trim() || liveStreaming?.text?.trim() || ''
+      const thinking =
+        thinkingRef.current.trim() || liveStreaming?.thinking?.trim() || ''
       renderedTextRef.current = finalText
       targetTextRef.current = finalText
+      fullTextRef.current = finalText
+      thinkingRef.current = thinking
 
       setState((prev) => ({
         ...prev,
@@ -454,6 +435,7 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
         streamingRunId: null,
       }))
 
+      const durableId = liveStreaming?.messageId?.trim() || null
       const message: ChatMessage = {
         role: 'assistant',
         content: [
@@ -462,29 +444,29 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
         ],
         timestamp: Date.now(),
         __streamingStatus: 'complete',
+        ...(durableId ? { id: durableId, messageId: durableId } : {}),
         ...stepUsageRef.current,
         ...(payload as Record<string, unknown>),
       }
 
-      // Ensure the chat-store has the final message with both thinking and
-      // text, even when the upstream 'done' event does not carry a message
-      // payload. Without this the realtime buffer may be cleared before the
-      // authoritative message lands in history, leaving the chat blank until
-      // the next history refetch.
-      processStoreEvent({
-        type: 'done',
-        state: 'complete',
-        message,
-        runId: completedRunId ?? undefined,
-        sessionKey: activeSessionKeyRef.current,
-        transport: 'send-stream',
-      })
+      // Single settle: SSE `done` already called processStoreEvent. Only settle
+      // here when the stream ended without a prior done (e.g. `complete` event
+      // or waitForHermesSendCompleted). Never re-upsert after streamingState
+      // was cleared — that minted blank assistant rows.
+      const stillLive = useChatStore.getState().getStreamingState(sessionKey)
+      if (stillLive) {
+        processStoreEvent({
+          type: 'done',
+          state: 'complete',
+          message,
+          runId: completedRunId ?? stillLive.runId ?? undefined,
+          sessionKey,
+          transport: 'send-stream',
+        })
+      }
 
       onComplete?.(message)
       useChatStore.getState().setHeartbeatActivity(null)
-      useHermesTurnStore
-        .getState()
-        .settleTurn(activeSessionKeyRef.current)
     },
     [
       clearHandoffTimer,
@@ -530,11 +512,6 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
         markActivity()
       }
 
-      // started applies after session promotion inside its case.
-      if (event !== 'started') {
-        applyHermesTurnSse(activeSessionKeyRef.current, event, payload)
-      }
-
       switch (event) {
         case 'started': {
           const resolvedSessionKey =
@@ -555,10 +532,6 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
                 resolvedSessionKey,
               })
             ) {
-              migrateHermesTurnSession(
-                activeSessionKeyRef.current,
-                resolvedSessionKey,
-              )
               activeSessionKeyRef.current = resolvedSessionKey
               onSessionResolved?.({
                 sessionKey: resolvedSessionKey,
@@ -566,8 +539,6 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
               })
             }
           }
-          // Apply turn SSE after session promotion so phase tracks the live key.
-          applyHermesTurnSse(activeSessionKeyRef.current, event, payload)
           // Register runId so chat-events skips duplicate chunks for this run
           const runId = payload.runId as string | undefined
           if (runId) {
@@ -579,11 +550,15 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
                 : {
                     ...prev,
                     streamingRunId: runId,
+                    // Keep the turn-scoped seed id. Switching to assistant:runId
+                    // mid-turn desynced list matching from chat-store write-through
+                    // and could paint text onto the previous settled bubble.
                     streamingMessageId:
-                      typeof payload.messageId === 'string' &&
+                      prev.streamingMessageId ||
+                      (typeof payload.messageId === 'string' &&
                       payload.messageId.trim()
                         ? payload.messageId.trim()
-                        : prev.streamingMessageId || `assistant:${runId}`,
+                        : `assistant:${runId}`),
                   },
             )
           }
@@ -939,9 +914,14 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
       // what this run will compare against. See #297.
       streamGenerationRef.current += 1
       const myGeneration = streamGenerationRef.current
-      const mySessionKey = params.sessionKey
+      const clientSubmitId = params.idempotencyKey ?? crypto.randomUUID()
 
-      const messageId = `streaming-${Date.now()}`
+      const turnKey = clientSubmitId
+      const messageId = assistantMessageIdForRun(
+        null,
+        params.sessionKey,
+        turnKey,
+      )
 
       setState({
         isStreaming: true,
@@ -951,160 +931,100 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
         error: null,
       })
       useChatStore.getState().setHeartbeatActivity(null)
-      // Engine-shaped turn phase: busy from send accept, before first SSE.
-      useHermesTurnStore.getState().beginTurn({
+      // Seed turn-scoped durable id before SSE — prevents chunk write-through
+      // from upserting into the previous settled `assistant:pending:<session>`.
+      useChatStore.getState().beginStreamingTurn({
         sessionKey: params.sessionKey,
-        turnId: `turn-${messageId}`,
+        messageId,
       })
 
-      try {
-        const response = await fetch('/api/send-stream', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sessionKey: params.sessionKey,
-            friendlyId: params.friendlyId,
-            message: params.message,
-            history: params.history,
-            thinking: params.thinking,
-            fastMode: params.fastMode,
-            attachments: params.attachments,
-            idempotencyKey: params.idempotencyKey ?? crypto.randomUUID(),
-            model: params.model || undefined,
-            profileName: params.profileName || undefined,
-            locale:
-              typeof window !== 'undefined'
-                ? localStorage.getItem('hermes-workspace-locale') || 'en'
-                : 'en',
-          }),
-          signal: abortController.signal,
-        })
-
-        if (!response.ok) {
-          const errorText = await response.text()
-          throw new Error(errorText || 'Stream request failed')
-        }
-
-        const resolvedHeaders = readResolvedSessionHeaders(response.headers, {
-          sessionKey: params.sessionKey,
-          friendlyId: params.friendlyId || params.sessionKey,
-        })
-        const resolvedSessionKey = resolvedHeaders.sessionKey
-        const resolvedFriendlyId = resolvedHeaders.friendlyId
-        if (resolvedSessionKey !== activeSessionKeyRef.current) {
-          // Only promote a backend-returned session ID when the original
-          // request was a bootstrap key ("new"/"main"). Concrete Workspace
-          // sessions must never be overridden — that causes splits (#297).
+      const workspaceId =
+        params.profileName?.trim() ||
+        readCachedActiveProfile() ||
+        'default'
+      const runtime = getHermesChatRuntime(workspaceId, {
+        profileName: params.profileName,
+        onSseFrame: ({ agentSessionId, event, data }) => {
+          if (streamGenerationRef.current !== myGeneration) return
+          if (agentSessionId !== activeSessionKeyRef.current) {
+            // Session promote may have remapped — still accept frames for the
+            // active key after onSessionResolved migration.
+            if (agentSessionId !== params.sessionKey) return
+          }
+          try {
+            processEvent(event, data)
+          } catch {
+            // Ignore display-side frame errors; Engine already ingested.
+          }
+        },
+        onSessionResolved: (payload) => {
           if (
             shouldResolveStreamSession({
               requestedSessionKey: params.sessionKey,
               currentSessionKey: activeSessionKeyRef.current,
-              resolvedSessionKey,
+              resolvedSessionKey: payload.sessionKey,
               pinMainSession,
             })
           ) {
-            migrateHermesTurnSession(params.sessionKey, resolvedSessionKey)
-            activeSessionKeyRef.current = resolvedSessionKey
-            onSessionResolved?.({
-              sessionKey: resolvedSessionKey,
-              friendlyId: resolvedFriendlyId,
-            })
+            activeSessionKeyRef.current = payload.sessionKey
+            onSessionResolved?.(payload)
           }
+        },
+      })
+
+      try {
+        runtime.ensureSessionHydrated(params.sessionKey)
+        runtime.setPendingSendOptions(clientSubmitId, {
+          friendlyId: params.friendlyId,
+          history: params.history,
+          thinking: params.thinking,
+          fastMode: params.fastMode,
+          attachments: params.attachments,
+          model: params.model,
+        })
+        // Register waiter before submitPrompt so fast sendInput cannot miss it.
+        const sendDone = waitForHermesSendCompleted(clientSubmitId, {
+          signal: abortController.signal,
+        })
+        const submitted = runtime.engine.submitPrompt({
+          agentSessionId: params.sessionKey,
+          clientSubmitId,
+          content: [{ type: 'text', text: params.message }],
+          displayPrompt: params.message,
+        })
+        if (!submitted.accepted) {
+          notifyHermesSendCompleted(
+            clientSubmitId,
+            new Error('Hermes Engine rejected submitPrompt'),
+          )
+          throw new Error('Hermes Engine rejected submitPrompt')
         }
 
         markAccepted()
         schedulePostAcceptanceTimeout('accepted')
 
-        // HTTP 200 — message accepted by Hermes Agent. Clear optimistic "sending"
-        // status so the Retry timer never fires. Hermes Agent does NOT echo
-        // user messages via SSE, so this is the only confirmation we get.
+        // Engine accepted the prompt — clear optimistic "sending" status.
+        // Hermes does not echo user messages via SSE.
         if (params.idempotencyKey && onMessageAccepted) {
           onMessageAccepted(
             activeSessionKeyRef.current,
-            resolvedFriendlyId,
+            params.friendlyId,
             params.idempotencyKey,
           )
         }
 
-        const reader = response.body?.getReader()
-        if (!reader) {
-          throw new Error('No response body')
-        }
+        // Await commandPort.sendInput completion (not Engine busy flicker).
+        // Busy-bit wait used to resolve early → empty fullText → false
+        // "Connection lost" toast while gateway already accepted the turn.
+        await sendDone
 
-        const decoder = new TextDecoder()
-        let buffer = ''
-
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime safety
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-
-          // Guard against stale streams writing into a newer session.
-          // If startStreaming was called again with a different sessionKey,
-          // streamGenerationRef has been bumped; this loop's reads are now
-          // for an aborted/superseded stream and must not dispatch events.
-          // See #297.
-          if (streamGenerationRef.current !== myGeneration) {
-            try {
-              await reader.cancel()
-            } catch {
-              // Reader may already be closed; safe to ignore.
-            }
-            break
-          }
-
-          buffer += decoder.decode(value, { stream: true })
-          const events = buffer.split('\n\n')
-          buffer = events.pop() ?? ''
-
-          for (const eventBlock of events) {
-            if (!eventBlock.trim()) continue
-
-            // Re-check between events as well — a single read() can yield a
-            // batch of buffered events; if a new stream started mid-batch,
-            // the rest of this batch must be dropped.
-            if (streamGenerationRef.current !== myGeneration) break
-
-            const lines = eventBlock.split('\n')
-            let currentEvent = ''
-            let currentData = ''
-
-            for (const line of lines) {
-              if (line.startsWith('event: ')) {
-                currentEvent = line.slice(7).trim()
-              } else if (line.startsWith('data: ')) {
-                currentData += line.slice(6)
-              } else if (line.startsWith('data:')) {
-                currentData += line.slice(5)
-              }
-            }
-
-            if (!currentEvent || !currentData) continue
-            try {
-              processEvent(currentEvent, JSON.parse(currentData))
-            } catch {
-              // Ignore invalid SSE data.
-            }
-          }
-        }
+        if (streamGenerationRef.current !== myGeneration) return
 
         const lifecyclePhase = lifecyclePhaseRef.current as StreamLifecyclePhase
         if (!finishedRef.current && lifecyclePhase !== 'handoff') {
-          // If the stream ended cleanly (no 'done' event) but we never received
-          // any response text, treat it as a failure rather than a successful
-          // empty completion. This happens when a proxy (e.g., Tailscale Serve)
-          // closes the connection after an idle timeout — the reader returns
-          // { done: true } but the model was still generating. Fixes #512.
-          if (
-            !fullTextRef.current &&
-            (lifecyclePhase === 'accepted' || lifecyclePhase === 'active')
-          ) {
-            markFailed(
-              'Connection closed before response was received. The backend may still be processing — check server logs or retry.',
-            )
-          } else {
-            finishStream()
-          }
+          // sendInput completed successfully. Empty assistant text is not a
+          // transport failure (tool-only / notice / overlay-only display).
+          finishStream()
         }
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
@@ -1120,8 +1040,6 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
             schedulePostAcceptanceTimeout('handoff')
             return
           }
-          // User Stop / nav cancel: drop store streaming even if reset raced
-          // behind this AbortError microtask.
           clearStreamingSession(activeSessionKeyRef.current)
           onAbort?.()
           return
@@ -1166,32 +1084,21 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
         eventSourceRef.current = null
       }
       if (userStop) {
+        const stopSessionKey = sessionKey || refSessionKey
+        if (stopSessionKey) {
+          const workspaceId = readCachedActiveProfile() || 'default'
+          const runtime = getHermesChatRuntime(workspaceId)
+          // Engine stop → commandPort.cancelTurn → /api/runs/:id/stop + settle.
+          // Never tmux C-c; never bypass Engine for gateway abort.
+          runtime.engine.stopSession({ agentSessionId: stopSessionKey })
+        }
         const waitingRunId = sessionKey
           ? (useChatStore.getState().waitingSessionMeta[sessionKey]?.runId ??
             null)
           : null
         const stopRunId = activeRunIdRef.current || waitingRunId
-        // Hard-stop on the server even when this tab lost its AbortController
-        // (handoff / remount). Browser abort alone is not enough after detach.
         if (stopRunId) {
-          void fetch(`/api/runs/${encodeURIComponent(stopRunId)}/stop`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(
-              sessionKey ? { sessionKey } : {},
-            ),
-          }).catch(() => {})
           unregisterSendStreamRun(stopRunId)
-        } else if (sessionKey) {
-          // Fall back: stop whatever live handles remain for this session.
-          void fetch(
-            `/api/runs/${encodeURIComponent(`session:${sessionKey}`)}/stop`,
-            {
-              method: 'POST',
-              headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ sessionKey }),
-            },
-          ).catch(() => {})
         }
         // Remount resets activeSessionKeyRef to "main" while Zustand may still
         // hold streamingState under the real session UUID — clear both keys or
@@ -1211,7 +1118,7 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
         resetActiveStreamState()
       }
     },
-    [resetActiveStreamState, transitionToHandoff],
+    [resetActiveStreamState, transitionToHandoff, unregisterSendStreamRun],
   )
 
   const handoffActiveStreamForProfileSwitch = useCallback(async () => {

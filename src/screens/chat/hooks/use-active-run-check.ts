@@ -19,17 +19,34 @@ type ActiveRunResponse = {
 const ACTIVE_RUN_CHECK_TIMEOUT_MS = 2000
 
 /**
- * On mount, checks whether the server has an active run for this session.
- * If so, marks the session as waiting in the persistent Zustand store.
- * If the server says the run is done, clears the stale waiting state.
+ * Remount reconcile against `/active-run`.
  *
- * This closes the gap where a user navigates away during streaming,
- * the component unmounts (losing local state), and on remount the UI
- * doesn't know a run was in progress.
+ * - Live run → leave waiting alone (send-path latch may already be set).
+ *   Do **not** `setSessionWaiting` — that was the old spinner entry and would
+ *   re-arm 5s poll / history refetch. Busy chrome is Engine `turnBusy` only.
+ * - No live run → clear orphan waiting + streamingState.
+ */
+export type ActiveRunRemountAction = 'leave' | 'clear-orphan'
+
+export function decideActiveRunRemountAction(
+  run: ActiveRunResponse['run'],
+): ActiveRunRemountAction {
+  if (
+    run &&
+    isActiveRunStatus(run.status, run.updatedAt ?? run.startedAt)
+  ) {
+    return 'leave'
+  }
+  return 'clear-orphan'
+}
+
+/**
+ * On mount, reconcile this session against the server active-run registry.
  *
- * A timeout (ACTIVE_RUN_CHECK_TIMEOUT_MS) ensures the check never blocks
- * the UI indefinitely — if the API is slow or unreachable, we assume the
- * run is dead and clear stale waiting state.
+ * Closes the remount gap where Zustand still has waiting/streaming after the
+ * server run is already gone (or Abort timed out the check). Does **not**
+ * promote a live run into `waitingForResponse` — that latch is send/recovery
+ * only; UI busy is Engine-owned.
  */
 export function useActiveRunCheck({
   sessionKey,
@@ -60,7 +77,16 @@ export function useActiveRunCheck({
       onCompleteRef.current?.()
     }
 
-    // Timeout: if the API check doesn't complete in time, assume the run is dead
+    const clearOrphan = (key: string) => {
+      const store = useChatStore.getState()
+      if (store.isSessionWaiting(key)) {
+        store.clearSessionWaiting(key)
+      }
+      store.clearStreamingSession(key)
+    }
+
+    // Timeout: if the API check doesn't complete in time, assume the run is
+    // dead and clear orphan waiting/streaming — never set waiting on Abort.
     const timeoutId = window.setTimeout(() => {
       if (settled) return
       settle()
@@ -69,13 +95,7 @@ export function useActiveRunCheck({
       } catch {
         /* ignore */
       }
-      // Clear stale waiting / streaming — the run is almost certainly dead
-      const store = useChatStore.getState()
-      const key = sessionKeyRef.current
-      if (store.isSessionWaiting(key)) {
-        store.clearSessionWaiting(key)
-      }
-      store.clearStreamingSession(key)
+      clearOrphan(sessionKeyRef.current)
     }, ACTIVE_RUN_CHECK_TIMEOUT_MS)
 
     async function check() {
@@ -89,27 +109,12 @@ export function useActiveRunCheck({
         const data = (await response.json()) as ActiveRunResponse
         if (!data.ok) return finishCheck()
 
-        const store = useChatStore.getState()
-        if (
-          data.run &&
-          isActiveRunStatus(
-            data.run.status,
-            data.run.updatedAt ?? data.run.startedAt,
-          )
-        ) {
-          store.setSessionWaiting(sessionKey, data.run.runId)
-        } else {
-          // Server has no live run. Clear waiting AND orphaned streamingState —
-          // unmount handoff leaves Zustand streaming under the session UUID
-          // while the hook remounts with a fresh activeSessionKeyRef ("main"),
-          // which kept Stop busy with no working abort target.
-          if (store.isSessionWaiting(sessionKey)) {
-            store.clearSessionWaiting(sessionKey)
-          }
-          store.clearStreamingSession(sessionKey)
+        if (decideActiveRunRemountAction(data.run) === 'clear-orphan') {
+          clearOrphan(sessionKey)
         }
+        // Live run: leave waiting as-is. Engine/SSE owns busy + settle.
       } catch {
-        // Network error or abort — ignore, already handled by timeout
+        // Network error or abort — ignore; timeout already clears orphans.
       } finally {
         finishCheck()
       }

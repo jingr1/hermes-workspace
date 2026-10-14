@@ -126,6 +126,7 @@ import { Route as ApiAvailableAgentsRouteImport } from './routes/api/available-a
 import { Route as ApiAuthCheckRouteImport } from './routes/api/auth-check'
 import { Route as ApiAuthRouteImport } from './routes/api/auth'
 import { Route as ApiArtifactsRouteImport } from './routes/api/artifacts'
+import { Route as ApiAgoraxRunMappingRouteImport } from './routes/api/agorax-run-mapping'
 import { Route as ApiAgentRegistryRouteImport } from './routes/api/agent-registry'
 import { Route as ApiAgentBusRouteImport } from './routes/api/agent-bus'
 import { Route as ApiTasksIndexRouteImport } from './routes/api/tasks/index'
@@ -858,6 +859,11 @@ const ApiAuthRoute = ApiAuthRouteImport.update({
 const ApiArtifactsRoute = ApiArtifactsRouteImport.update({
   id: '/api/artifacts',
   path: '/api/artifacts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAgoraxRunMappingRoute = ApiAgoraxRunMappingRouteImport.update({
+  id: '/api/agorax-run-mapping',
+  path: '/api/agorax-run-mapping',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAgentRegistryRoute = ApiAgentRegistryRouteImport.update({
@@ -1662,6 +1668,7 @@ export interface FileRoutesByFullPath {
   '/vt-capital': typeof VtCapitalRoute
   '/api/agent-bus': typeof ApiAgentBusRoute
   '/api/agent-registry': typeof ApiAgentRegistryRoute
+  '/api/agorax-run-mapping': typeof ApiAgoraxRunMappingRoute
   '/api/artifacts': typeof ApiArtifactsRouteWithChildren
   '/api/auth': typeof ApiAuthRouteWithChildren
   '/api/auth-check': typeof ApiAuthCheckRoute
@@ -1923,6 +1930,7 @@ export interface FileRoutesByTo {
   '/vt-capital': typeof VtCapitalRoute
   '/api/agent-bus': typeof ApiAgentBusRoute
   '/api/agent-registry': typeof ApiAgentRegistryRoute
+  '/api/agorax-run-mapping': typeof ApiAgoraxRunMappingRoute
   '/api/artifacts': typeof ApiArtifactsRouteWithChildren
   '/api/auth': typeof ApiAuthRouteWithChildren
   '/api/auth-check': typeof ApiAuthCheckRoute
@@ -2188,6 +2196,7 @@ export interface FileRoutesById {
   '/vt-capital': typeof VtCapitalRoute
   '/api/agent-bus': typeof ApiAgentBusRoute
   '/api/agent-registry': typeof ApiAgentRegistryRoute
+  '/api/agorax-run-mapping': typeof ApiAgoraxRunMappingRoute
   '/api/artifacts': typeof ApiArtifactsRouteWithChildren
   '/api/auth': typeof ApiAuthRouteWithChildren
   '/api/auth-check': typeof ApiAuthCheckRoute
@@ -2454,6 +2463,7 @@ export interface FileRouteTypes {
     | '/vt-capital'
     | '/api/agent-bus'
     | '/api/agent-registry'
+    | '/api/agorax-run-mapping'
     | '/api/artifacts'
     | '/api/auth'
     | '/api/auth-check'
@@ -2715,6 +2725,7 @@ export interface FileRouteTypes {
     | '/vt-capital'
     | '/api/agent-bus'
     | '/api/agent-registry'
+    | '/api/agorax-run-mapping'
     | '/api/artifacts'
     | '/api/auth'
     | '/api/auth-check'
@@ -2979,6 +2990,7 @@ export interface FileRouteTypes {
     | '/vt-capital'
     | '/api/agent-bus'
     | '/api/agent-registry'
+    | '/api/agorax-run-mapping'
     | '/api/artifacts'
     | '/api/auth'
     | '/api/auth-check'
@@ -3244,6 +3256,7 @@ export interface RootRouteChildren {
   VtCapitalRoute: typeof VtCapitalRoute
   ApiAgentBusRoute: typeof ApiAgentBusRoute
   ApiAgentRegistryRoute: typeof ApiAgentRegistryRoute
+  ApiAgoraxRunMappingRoute: typeof ApiAgoraxRunMappingRoute
   ApiArtifactsRoute: typeof ApiArtifactsRouteWithChildren
   ApiAuthRoute: typeof ApiAuthRouteWithChildren
   ApiAuthCheckRoute: typeof ApiAuthCheckRoute
@@ -4234,6 +4247,13 @@ declare module '@tanstack/react-router' {
       path: '/api/artifacts'
       fullPath: '/api/artifacts'
       preLoaderRoute: typeof ApiArtifactsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agorax-run-mapping': {
+      id: '/api/agorax-run-mapping'
+      path: '/api/agorax-run-mapping'
+      fullPath: '/api/agorax-run-mapping'
+      preLoaderRoute: typeof ApiAgoraxRunMappingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/agent-registry': {
@@ -5729,6 +5749,7 @@ const rootRouteChildren: RootRouteChildren = {
   VtCapitalRoute: VtCapitalRoute,
   ApiAgentBusRoute: ApiAgentBusRoute,
   ApiAgentRegistryRoute: ApiAgentRegistryRoute,
+  ApiAgoraxRunMappingRoute: ApiAgoraxRunMappingRoute,
   ApiArtifactsRoute: ApiArtifactsRouteWithChildren,
   ApiAuthRoute: ApiAuthRouteWithChildren,
   ApiAuthCheckRoute: ApiAuthCheckRoute,

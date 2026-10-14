@@ -1,4 +1,3 @@
-import { marked } from 'marked'
 import { createContext, memo, useContext, useId, useMemo, useRef } from 'react'
 import type { ComponentProps } from 'react'
 import ReactMarkdown from 'react-markdown'
@@ -118,11 +117,6 @@ export type MarkdownProps = {
    * blocks with memoized settled segments (only the open tail re-parses).
    */
   streaming?: boolean
-}
-
-function parseMarkdownIntoBlocks(markdown: string): Array<string> {
-  const tokens = marked.lexer(markdown)
-  return tokens.map((token) => token.raw)
 }
 
 type TableRenderContextValue = {
@@ -652,25 +646,18 @@ function MarkdownComponent({
     [streaming, visibleSource],
   )
 
-  const settledBlocks = useMemo(
-    () => (streaming ? null : parseMarkdownIntoBlocks(preparedSource)),
-    [preparedSource, streaming],
-  )
-
-  const streamingBlocks = useMemo(
-    () => (streaming ? splitStreamingMarkdownBlocks(stabilizedSource) : null),
-    [stabilizedSource, streaming],
-  )
-
-  const blocks = streaming
-    ? (streamingBlocks ?? []).map((block, index) => ({
-        key: `${blockId}-stream-${index}:${hashMarkdownBlockContent(block.initialKeyContent)}`,
-        content: block.content,
-      }))
-    : (settledBlocks ?? []).map((block, index) => ({
-        key: `${blockId}-block-${index}`,
-        content: block,
-      }))
+  // Same blank-line split + key scheme for live and settled. Flipping
+  // `streaming` used to switch `-stream-` keys → `-block-` keys (and
+  // marked.lexer boundaries), which remounted every markdown block and
+  // felt like a transcript refresh after the turn finished.
+  const sourceForBlocks = streaming ? stabilizedSource : preparedSource
+  const blocks = useMemo(() => {
+    const parts = splitStreamingMarkdownBlocks(sourceForBlocks)
+    return parts.map((block, index) => ({
+      key: `${blockId}-${index}:${hashMarkdownBlockContent(block.initialKeyContent)}`,
+      content: block.content,
+    }))
+  }, [blockId, sourceForBlocks])
 
   return (
     <div

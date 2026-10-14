@@ -32,33 +32,17 @@
 **落点：** `agents.yaml` roster + Hermes/managed adapters（原 `workspace-daemon` 已移除）  
 **模式来源：** Anthropic Skills — "Domain-specific intelligence" + App Factory
 
-### 4. Chat turn Phase C — Native bridge 真接线
+### 4. Chat turn Phase C — Native bridge 真接线 ✅
 
-**做什么：** `send-stream` → `hermes-activity-adapter` → `AgentSessionEngine`。Hermes SSE 不再直接驱动 `chat-store` 业务语义；厂商事件止步于 adapter，权威消息桶是 Engine（与 managed 同一套 apply / reconcile）。  
-**为什么：** 当前 Hermes 1:1 仍是 `chat-store` write-through 过渡轨。截图里的「工具/中间正文当已结束气泡 + 父 turn 还 Working」一类分裂，终态要靠 **一 turn 一 Engine 宿主**，而不是在 UI 再叠一层 fold/dedup。  
-**落点：**
+**已做：** `createHermesAgentEngine` + `createHermesCommandPort`：Send/Stop 经 Engine；`/api/send-stream` 与 `/api/runs/.../stop` 仅出现在 commandPort；SSE→`hermesSseToActivityEvents`→`coordinator.ingestEvent`；`agorax_run_mapping` 落 `collab.db`（刷新后可找回 `hermesRunId`）。  
+**落点：** `src/screens/chat/lib/hermes-agent-engine.ts`、`src/stores/hermes-chat-runtime.ts`、`src/server/agorax-run-mapping.ts`、`docs/hermes-native-bridge.md`  
+**仍缓：** Swarm/tmux；历史整桶改 Engine；portable 单独工程（同 port→send-stream 即可）。
 
-- 合同：`[docs/chat-turn-identity-contract.md](docs/chat-turn-identity-contract.md)` Phase C
-- Bridge：`[docs/hermes-native-bridge.md](docs/hermes-native-bridge.md)`、`src/server/agent-runtime/hermes-native-bridge.ts`（现状：skeleton）
-- Adapter：`src/lib/hermes-activity-adapter.ts`（Phase B 已有纯翻译；本项要接 Engine apply）
-- 映射：`agorax_run_mapping`（`agentSessionId` / `turnId` ↔ gateway session / `hermesRunId`）持久化；Cancel = gateway abort + settle，禁止对 tmux 发 C-c
+### 5. Chat turn Phase D — Hermes 1:1 UI 只订 Engine ✅（开 turn）
 
-**前置：** Phase A（identity write-through）✅、Phase B（SSE→Activity adapter）✅  
-**不做（本项）：** 不把 Swarm tmux 伪装成 managed child Session；不整包替换为外部 Agent GUI。
-
-### 5. Chat turn Phase D — Hermes 1:1 UI 只订 Engine
-
-**做什么：** Hermes 1:1 与 managed 共用同一套 UI 投影 hook（读 Engine VM：气泡 / Activity / Stop）。UI **只认 Engine** / `turnBusy`，不再分叉 Hermes/managed busy 谓词。  
-**已清（Tutti-feel 前置）：** 双轨 `shouldShowHermesProcessingIndicator` / `shouldShowManagedProcessingIndicator`、`thinkingGrace`、host-surface 互斥补丁已退役；两端统一 `selectTurnBusy` + `TurnActivityHost`。  
-**为什么：** 合同目标是「运行时可以分叉，身份/事件/settle 同源」；D 完成后底部 busy 与线程内 host 由同一套 selector 保证。  
-**落点：**
-
-- 合同：`[docs/chat-turn-identity-contract.md](docs/chat-turn-identity-contract.md)` Phase D
-- 对照实现：`src/screens/chat/hooks/use-managed-agent-chat.ts`、`src/screens/chat/lib/managed-agent-engine.ts`、`src/lib/turn-activity.ts`、`src/stores/hermes-turn-store.ts`
-- 迁移面：`chat-screen.tsx` Hermes 路径仍走 history/store merge；`chat-store` 流式缓冲逐步降级为兼容或删除；`showProcessingIndicator` prop 收口到只用 `turnBusy`
-
-**前置：** Phase C 部分已落地（`hermes-turn-store` + SSE→activity）；完整 Engine hydrate 仍待。  
-**风险：** Hermes 1:1 是主路径；未稳定完整 C 前切 D 会同时踩 streaming、Stop、history 回填、portable mode。
+**已做：** `useHermesEngineChatState` 双订 engine+coordinator；`turnBusy` ← `selectHermesChatState.showProcessingIndicator`，不再 OR `waitingForResponse` / `pendingGeneration`。  
+**落点：** `src/screens/chat/hooks/use-hermes-engine-chat.ts`、`chat-screen.tsx`  
+**仍缓：** 已 settle 历史整桶仍用 history query（禁止换皮）；portable 显式同轨降级。
 
 ---
 
@@ -122,8 +106,8 @@
 | 迭代精炼循环                        | 🔥 高 | 低   | 先做                   |
 | Agent Handoff                 | 🔥 高 | 中   | 其次                   |
 | 专用 Agent 角色                   | 🔥 高 | 高   | 第三                   |
-| Chat Phase C（bridge → Engine） | 🔥 高 | 高   | 与 Chat UX 同源；A/B 已完成 |
-| Chat Phase D（UI 只订 Engine）    | 🔥 高 | 中–高 | **阻塞于 C**            |
+| Chat Phase C（bridge → Engine） | ✅ 已落地（1:1） | — | Swarm/历史整桶仍缓 |
+| Chat Phase D（UI 只订 Engine）    | ✅ 开 turn busy | — | 历史整桶仍 history query |
 | 并行护栏                          | 中    | 中   | 角色之后                 |
 | 拒绝时回滚                         | 中    | 低   | 角色之后                 |
 | 上下文感知工具选择                     | 中    | 高   | 更晚                   |

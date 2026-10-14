@@ -32,8 +32,8 @@ import {
   shouldHandoffStreamOnProfileNav,
   shouldSettleWaitingFromActiveRun,
 } from './chat-screen-utils'
-import { selectTurnBusy } from '@/lib/turn-activity'
-import { useHermesTurnStore } from '@/stores/hermes-turn-store'
+import { useHermesEngineChatState } from './hooks/use-hermes-engine-chat'
+import { getHermesChatRuntime } from '@/stores/hermes-chat-runtime'
 import {
   findLastUserMessage,
   historyIndexOf,
@@ -859,8 +859,9 @@ export function ChatScreen({
     }
   }, [resolvedSessionKey, isNewChat])
 
-  // On remount, check if the server still has an active run for this session.
-  // If so, re-set waitingForResponse in the store so the UI shows the spinner.
+  // Remount reconcile: clear orphan waiting/streaming when server has no live
+  // run. Never setSessionWaiting here — busy is Engine turnBusy; waiting is
+  // send/recovery latch only (arms settle probes, not Working).
   useActiveRunCheck({
     sessionKey: resolvedSessionKey ?? '',
     enabled:
@@ -880,8 +881,6 @@ export function ChatScreen({
     realtimeStreamingThinking,
     realtimeStreamingMessageId,
     realtimeLifecycleEvents,
-    completedStreamingText,
-    completedStreamingThinking,
     clearCompletedStreaming,
     streamingRunId,
     activeToolCalls,
@@ -1151,23 +1150,28 @@ export function ChatScreen({
     }
   }, [lastCompletedRunAt, waitingForResponse, streamFinish])
 
-  // Hard failsafe: if waiting for 5s+ and SSE missed the done event, refetch history
+  // Hard failsafe: if waiting for 5s+ and SSE missed the done event, refetch
+  // history only when there is no live write-through row (empty settle recovery).
   useEffect(() => {
     if (!waitingForResponse) return
     const fallback = window.setTimeout(() => {
-      // Only skip while this tab still owns a live send-stream fetch.
-      // Orphaned chat-store streamingState must not block settlement.
       if (localIsStreamingRef.current) return
+      const key = resolvedSessionKey || sessionKeyForHistory
+      if (
+        key &&
+        (useChatStore.getState().realtimeMessages.get(key)?.length ?? 0) > 0
+      ) {
+        return
+      }
       refreshHistoryRef.current()
     }, 5000)
     return () => window.clearTimeout(fallback)
-  }, [waitingForResponse])
+  }, [waitingForResponse, resolvedSessionKey, sessionKeyForHistory])
 
-  // Issue #43 polling fallback: while waiting, probe active-run even if SSE
-  // reports connected. After gateway interrupt / client disconnect the run is
-  // often already gone (or terminal) and no `done` event will arrive — the old
-  // path skipped polling when connected and treated `!run` as "keep waiting",
-  // which left Thinking stuck until the 120s failsafe.
+  // Settle probe (recovery latch only): while send-path waiting is set, probe
+  // active-run even if SSE reports connected. After gateway interrupt the run
+  // is often already gone and no `done` arrives — without this, waiting stuck
+  // until the 120s failsafe. Does not drive Working (listTurnBusy = Engine).
   useEffect(() => {
     if (!waitingForResponse || !resolvedSessionKey) return
 
@@ -1191,17 +1195,21 @@ export function ChatScreen({
         if (cancelled || !data.ok) return
 
         const decision = shouldSettleWaitingFromActiveRun(data.run)
+        const hasLiveWriteThrough =
+          (useChatStore.getState().realtimeMessages.get(resolvedSessionKey)
+            ?.length ?? 0) > 0
         if (decision === 'keep') {
           missingRunCount = 0
-          // Still registered — refresh history in case an interrupt message landed.
-          refreshHistoryRef.current()
+          // Still registered — only poll history when live write-through is
+          // empty (interrupt echo recovery). Live turns own the bubble.
+          if (!hasLiveWriteThrough) refreshHistoryRef.current()
           return
         }
         if (decision === 'missing') {
           missingRunCount += 1
           // Allow ~one registration lag window (2 probes) before settling.
           if (missingRunCount < 2) {
-            refreshHistoryRef.current()
+            if (!hasLiveWriteThrough) refreshHistoryRef.current()
             return
           }
         }
@@ -1209,7 +1217,7 @@ export function ChatScreen({
         useChatStore.getState().clearStreamingSession(resolvedSessionKey)
         setLiveToolActivity([])
         streamFinish()
-        refreshHistoryRef.current()
+        if (!hasLiveWriteThrough) refreshHistoryRef.current()
       } catch {
         // ignore network errors
       }
@@ -1517,7 +1525,7 @@ export function ChatScreen({
         // feels like a page reload. Durable sync is deferred/quiet in
         // use-realtime-chat-history onDone + normal poll/focus refetch.
         setSending(false)
-        // Clear waitingForResponse so ThinkingBubble hides and message renders
+        // Clear recovery waiting — busy UI already follows Engine settle.
         streamFinish()
         // Play notification sound if the user opted in (Settings → Chat).
         // Read directly from the store to avoid re-creating this callback on every settings change.
@@ -1670,18 +1678,31 @@ export function ChatScreen({
     workspaceProfileName,
   ])
 
-  // Hermes: keep send-stream liveness even when the chat-store streamingState
-  // has not received the first parsed SSE event yet (or only keepalives).
-  // Store-only made composer Stop stay busy while Thinking vanished after
-  // waiting was settled by the active-run probe.
+  // Phase D: open-turn busy only from Engine (+ submitting overlay).
+  // waitingForResponse / pendingGeneration are recovery-only — never UI busy.
+  const { chatState: hermesEngineChat } = useHermesEngineChatState({
+    workspaceId: workspaceProfileName || activeProfileName || 'default',
+    agentSessionId: resolvedSessionKey,
+    profileName: workspaceProfileName || activeProfileName,
+    isSubmitting: sending,
+  })
+  const hermesTurnBusy = hermesEngineChat.turnBusy
+  // Composer / queue / edit: Engine busy + local AbortController + sending.
+  // waitingForResponse stays recovery-only.
+  const interactionBusy = hermesTurnBusy || localIsStreaming || sending
+  // Working / TurnActivityHost: Engine only (already includes isSubmitting).
+  // Do not OR local/store streaming — that was a second busy skin.
+  const listTurnBusy = hermesTurnBusy
+  // Fold / streamingText only — not busy authority.
   const activeIsRealtimeStreaming = isPortableMode
     ? localIsStreaming
-    : localIsStreaming || isRealtimeStreaming
+    : hermesTurnBusy || localIsStreaming || isRealtimeStreaming
   const activeRealtimeStreamingText = isPortableMode
     ? localStreamingText
     : realtimeStreamingText
-  // Reveal / block-memo live inside Markdown (`streaming`); keep sticky only
-  // so empty tool-phase frames do not clear the last visible assistant text.
+  // Sticky text only while the turn is live — bridges empty tool-phase frames.
+  // After settle, MessageItem reads write-through content (no completedStreaming
+  // overlay handoff).
   const stickyStreamingTextRef = useRef<{ runId: string | null; text: string }>(
     {
       runId: null,
@@ -1795,13 +1816,38 @@ export function ChatScreen({
     // Tutti contract: chat-store write-through already upserts one durable
     // assistant row (`assistant:<runId>`). Do not inject a second
     // `streaming-current` placeholder — that was the Hermes/managed fork.
-    if (!activeIsRealtimeStreaming) {
+    // Keep folding while a live durable id is known so settle does not
+    // suddenly re-expand mid-turn orphans beside the host.
+    // Only fold against an open-turn host. Using last `complete` row as liveId
+    // kept folding settled history into an empty pending host after empty done.
+    const liveId =
+      realtimeStreamingMessageId ||
+      (() => {
+        for (let i = deduped.length - 1; i >= 0; i -= 1) {
+          const row = deduped[i] as {
+            role?: string
+            __streamingStatus?: string
+            messageId?: string
+            id?: string
+          }
+          if (row?.role !== 'assistant') continue
+          if (row.__streamingStatus !== 'streaming') continue
+          return (
+            (typeof row.messageId === 'string' && row.messageId) ||
+            (typeof row.id === 'string' && row.id) ||
+            null
+          )
+        }
+        return null
+      })()
+
+    if (!liveId) {
       return deduped
     }
 
     return foldOpenTurnIntoLiveHost(deduped, {
-      liveMessageId: realtimeStreamingMessageId,
-      isStreaming: true,
+      liveMessageId: liveId,
+      isStreaming: activeIsRealtimeStreaming,
       streamingText: stableActiveStreamingText,
       streamingThinking: realtimeStreamingThinking,
       toolCalls: activeToolCalls,
@@ -1817,83 +1863,33 @@ export function ChatScreen({
     streamingRunId,
   ])
 
+  // Streaming chrome follows live Engine/SSE/local Abort only — never the
+  // waiting recovery latch (that used to keep isStreaming after settle).
   const derivedStreamingInfo = useMemo(() => {
-    if (activeIsRealtimeStreaming) {
-      const id = isPortableMode
-        ? localStreamingMessageId
-        : realtimeStreamingMessageId ||
-          (() => {
-            const last = finalDisplayMessages[finalDisplayMessages.length - 1]
-            if (last?.role !== 'assistant') return null
-            return (
-              (last as any).messageId ||
-              (last as any).id ||
-              (last as any).__optimisticId ||
-              null
-            )
-          })()
-      return { isStreaming: true, streamingMessageId: id }
+    if (!activeIsRealtimeStreaming) {
+      return { isStreaming: false, streamingMessageId: null as string | null }
     }
-    if (waitingForResponse && finalDisplayMessages.length > 0) {
-      const last = finalDisplayMessages[finalDisplayMessages.length - 1]
-      if (last && last.role === 'assistant') {
-        const isStreamingPlaceholder =
-          (last as any).__streamingStatus === 'streaming'
-        if (!isStreamingPlaceholder) {
-          return {
-            isStreaming: false,
-            streamingMessageId: null as string | null,
-          }
-        }
-        const id =
-          (last as any).messageId ||
-          (last as any).id ||
-          (last as any).__optimisticId ||
-          null
-        return { isStreaming: true, streamingMessageId: id }
-      }
-    }
-    return { isStreaming: false, streamingMessageId: null as string | null }
+    const id = isPortableMode
+      ? localStreamingMessageId
+      : realtimeStreamingMessageId ||
+        (() => {
+          const last = finalDisplayMessages[finalDisplayMessages.length - 1]
+          if (last?.role !== 'assistant') return null
+          return (
+            (last as any).messageId ||
+            (last as any).id ||
+            (last as any).__optimisticId ||
+            null
+          )
+        })()
+    return { isStreaming: true, streamingMessageId: id }
   }, [
-    waitingForResponse,
     finalDisplayMessages,
     activeIsRealtimeStreaming,
     isPortableMode,
     localStreamingMessageId,
     realtimeStreamingMessageId,
   ])
-
-  const hermesTurnSnapshot = useHermesTurnStore((state) =>
-    resolvedSessionKey
-      ? (state.bySession.get(resolvedSessionKey) ?? null)
-      : null,
-  )
-  const hermesTurnBusy = useMemo(
-    () =>
-      selectTurnBusy({
-        phase: hermesTurnSnapshot?.phase,
-        hasActiveTurn: hermesTurnSnapshot
-          ? hermesTurnSnapshot.phase !== 'settled' ||
-            hermesTurnSnapshot.pendingBusy
-          : false,
-        streaming:
-          localIsStreaming ||
-          activeIsRealtimeStreaming ||
-          derivedStreamingInfo.isStreaming,
-        sending,
-        waitingForResponse,
-        hasPendingGeneration: hasPendingGeneration(pendingSessionIdentity),
-      }),
-    [
-      hermesTurnSnapshot,
-      sending,
-      waitingForResponse,
-      localIsStreaming,
-      activeIsRealtimeStreaming,
-      derivedStreamingInfo.isStreaming,
-      pendingSessionIdentity,
-    ],
-  )
 
   const responseWaitSnapshotRef = useRef<ResponseWaitSnapshot | null>(null)
   const activeRealtimeStreamingRef = useRef(activeIsRealtimeStreaming)
@@ -2016,13 +2012,13 @@ export function ChatScreen({
       setLocalActivity('tool-use')
     } else if (activeIsRealtimeStreaming) {
       setLocalActivity('responding')
-    } else if (waitingForResponse) {
+    } else if (hermesTurnBusy) {
       setLocalActivity('thinking')
     } else {
       setLocalActivity('idle')
     }
   }, [
-    waitingForResponse,
+    hermesTurnBusy,
     activeIsRealtimeStreaming,
     liveToolActivity,
     setLocalActivity,
@@ -2079,22 +2075,23 @@ export function ChatScreen({
 
   useEffect(() => {
     function handleVisibility() {
-      if (document.visibilityState === 'visible') {
-        void historyQuery.refetch()
-      }
+      if (document.visibilityState !== 'visible') return
+      // Never refetch mid-stream — open-turn authority is write-through.
+      // After settle, quiet refetch may stamp server ids; merge prefers live text.
+      const key = resolvedSessionKey || sessionKeyForHistory
+      if (key && useChatStore.getState().streamingState.has(key)) return
+      void historyQuery.refetch()
     }
     document.addEventListener('visibilitychange', handleVisibility)
     return () =>
       document.removeEventListener('visibilitychange', handleVisibility)
-  }, [historyQuery])
+  }, [historyQuery, resolvedSessionKey, sessionKeyForHistory])
 
-  // Re-mount catch-up: when navigating back to chat from another tab (Skills,
-  // Memory, etc.), the component re-mounts. If a response finished while we
-  // were away, the initial refetch may hit stale data. A delayed re-refetch
-  // ensures we pick up responses that were persisted shortly after the first
-  // fetch. See: https://github.com/jingr1/agorax/issues/43
+  // Re-mount catch-up for responses finished while away. Skip mid-stream only.
   useEffect(() => {
     const timer = window.setTimeout(() => {
+      const key = resolvedSessionKey || sessionKeyForHistory
+      if (key && useChatStore.getState().streamingState.has(key)) return
       void historyQuery.refetch()
     }, 2000)
     return () => window.clearTimeout(timer)
@@ -2706,35 +2703,75 @@ export function ChatScreen({
     async (preferredFriendlyId?: string) => {
       setCreatingSession(true)
       try {
-        const res = await fetch('/api/sessions', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            ...(preferredFriendlyId && preferredFriendlyId.trim().length > 0
-              ? { friendlyId: preferredFriendlyId }
-              : {}),
-            profileName: workspaceProfileName || activeProfileName || undefined,
-          }),
+        const profile =
+          workspaceProfileName || activeProfileName || 'default'
+        const runtime = getHermesChatRuntime(profile, {
+          profileName: profile,
         })
-        if (!res.ok) throw new Error(await readError(res))
-
-        const data = (await res.json()) as {
-          sessionKey?: string
-          friendlyId?: string
+        // Engine activateSession → POST /api/sessions + agorax_run_mapping.
+        const activationId = `activate-${crypto.randomUUID()}`
+        const clientSubmitId = crypto.randomUUID()
+        const provisionalId = preferredFriendlyId?.trim() || clientSubmitId
+        const accepted = runtime.engine.activateSession({
+          mode: 'new',
+          activationId,
+          agentSessionId: provisionalId,
+          agentTargetId: 'hermes-native',
+          clientSubmitId,
+          workspaceId: profile,
+          ...(preferredFriendlyId?.trim()
+            ? { title: preferredFriendlyId.trim() }
+            : {}),
+        })
+        if (!accepted) {
+          throw new Error('Hermes Engine rejected activateSession')
         }
 
-        const sessionKey =
-          typeof data.sessionKey === 'string' ? data.sessionKey : ''
-        const friendlyId =
-          typeof data.friendlyId === 'string' &&
-          data.friendlyId.trim().length > 0
-            ? data.friendlyId.trim()
-            : (preferredFriendlyId?.trim() ?? '') ||
-              deriveFriendlyIdFromKey(sessionKey)
-
+        // Wait briefly for mapping / session to land (effect is async).
+        let sessionKey = ''
+        let friendlyId = preferredFriendlyId?.trim() || ''
+        for (let i = 0; i < 40; i += 1) {
+          const mapping = await runtime.getMapping(provisionalId)
+          if (mapping?.gatewaySessionId) {
+            sessionKey = mapping.gatewaySessionId
+            break
+          }
+          await new Promise((r) => setTimeout(r, 50))
+        }
+        if (!sessionKey) {
+          const snap = runtime.engine.getSnapshot()
+          const sessions = Object.values(
+            snap.sessionLifecycle.sessionsById ?? {},
+          ) as Array<{
+            agentSessionId?: string
+            providerSessionId?: string | null
+          }>
+          const found = sessions.find(
+            (s) => s.agentSessionId === provisionalId || s.providerSessionId,
+          )
+          sessionKey =
+            found?.providerSessionId?.trim() ||
+            found?.agentSessionId?.trim() ||
+            ''
+        }
+        if (!friendlyId) {
+          friendlyId = deriveFriendlyIdFromKey(sessionKey) || sessionKey
+        }
         if (!sessionKey || !friendlyId) {
           throw new Error('Invalid session response')
         }
+
+        // Re-key mapping to gateway session id for send/cancel lookup.
+        await runtime.putMapping({
+          agentSessionId: sessionKey,
+          turnId: null,
+          gatewaySessionId: sessionKey,
+          assignmentId: null,
+          hermesRunId: null,
+          bridgeKind: 'hermes-native',
+          updatedAtUnixMs: Date.now(),
+        })
+        runtime.ensureSessionHydrated(sessionKey)
 
         setRecentSession(friendlyId)
         queryClient.invalidateQueries({ queryKey: chatQueryKeys.sessions })
@@ -2743,7 +2780,7 @@ export function ChatScreen({
         setCreatingSession(false)
       }
     },
-    [queryClient],
+    [queryClient, workspaceProfileName, activeProfileName],
   )
 
   const upsertSessionInCache = useCallback(
@@ -2849,7 +2886,7 @@ export function ChatScreen({
         toast(UNAVAILABLE_TRUNCATE_MSG, { type: 'error' })
         return
       }
-      if (waitingForResponse || activeIsRealtimeStreaming) {
+      if (interactionBusy) {
         toast('Wait for the current reply to finish', { type: 'error' })
         return
       }
@@ -2876,12 +2913,7 @@ export function ChatScreen({
         }
       })()
     },
-    [
-      activeIsRealtimeStreaming,
-      canTruncateSession,
-      truncateCurrentSession,
-      waitingForResponse,
-    ],
+    [canTruncateSession, interactionBusy, truncateCurrentSession],
   )
 
   const handleRegenerateMessage = useCallback(
@@ -2890,7 +2922,7 @@ export function ChatScreen({
         toast(UNAVAILABLE_TRUNCATE_MSG, { type: 'error' })
         return
       }
-      if (waitingForResponse || activeIsRealtimeStreaming) {
+      if (interactionBusy) {
         toast('Wait for the current reply to finish', { type: 'error' })
         return
       }
@@ -2934,10 +2966,10 @@ export function ChatScreen({
       canTruncateSession,
       finalDisplayMessages,
       forcedSessionKey,
+      interactionBusy,
       resolvedSessionKey,
       sendMessage,
       truncateCurrentSession,
-      waitingForResponse,
     ],
   )
 
@@ -2998,7 +3030,7 @@ export function ChatScreen({
           toast(UNAVAILABLE_TRUNCATE_MSG, { type: 'error' })
           return true
         }
-        if (waitingForResponse || activeIsRealtimeStreaming) {
+        if (interactionBusy) {
           toast('Wait for the current reply to finish', { type: 'error' })
           return true
         }
@@ -3038,7 +3070,7 @@ export function ChatScreen({
           toast(UNAVAILABLE_TRUNCATE_MSG, { type: 'error' })
           return true
         }
-        if (waitingForResponse || activeIsRealtimeStreaming) {
+        if (interactionBusy) {
           toast('Wait for the current reply to finish', { type: 'error' })
           return true
         }
@@ -3092,7 +3124,7 @@ export function ChatScreen({
           toast('Open a session first', { type: 'error' })
           return true
         }
-        const busy = waitingForResponse || activeIsRealtimeStreaming || sending
+        const busy = interactionBusy
         if (!busy) {
           sendMessage(
             sessionKey,
@@ -3126,7 +3158,7 @@ export function ChatScreen({
           resolvedSessionKey ||
           activeSessionKey ||
           activeFriendlyId
-        const busy = waitingForResponse || activeIsRealtimeStreaming || sending
+        const busy = interactionBusy
         if (!busy) {
           if (!rest) {
             toast('Nothing to interrupt', { type: 'info' })
@@ -3176,7 +3208,7 @@ export function ChatScreen({
           activeSessionKey ||
           activeFriendlyId
         const runId = localStreamingRunId || streamingRunId || null
-        const busy = waitingForResponse || activeIsRealtimeStreaming || sending
+        const busy = interactionBusy
         if (!busy || !runId) {
           if (!sessionKey || sessionKey === 'new') {
             toast('Open a session first', { type: 'error' })
@@ -3257,7 +3289,7 @@ export function ChatScreen({
           toast('Open a session first', { type: 'error' })
           return true
         }
-        if (waitingForResponse || activeIsRealtimeStreaming || sending) {
+        if (interactionBusy) {
           toast('Wait for the current reply to finish', { type: 'error' })
           return true
         }
@@ -3436,11 +3468,11 @@ export function ChatScreen({
       navigate,
       queryClient,
       resolvedSessionKey,
+      interactionBusy,
       sending,
       sendMessage,
       streamingRunId,
       truncateCurrentSession,
-      waitingForResponse,
       workspaceProfileName,
     ],
   )
@@ -3897,8 +3929,7 @@ export function ChatScreen({
 
   // Drain one queued follow-up when the current turn becomes idle.
   useEffect(() => {
-    const busy =
-      sending || waitingForResponse || activeIsRealtimeStreaming || isCompacting
+    const busy = interactionBusy || isCompacting
     if (busy) {
       wasBusyForQueueRef.current = true
       return
@@ -3936,12 +3967,10 @@ export function ChatScreen({
     )
   }, [
     activeFriendlyId,
-    activeIsRealtimeStreaming,
+    interactionBusy,
     isCompacting,
     queueSessionKey,
     sendMessage,
-    sending,
-    waitingForResponse,
   ])
 
   const runPaletteSlashCommand = useCallback(
@@ -4087,7 +4116,7 @@ export function ChatScreen({
       ? 'tool'
       : derivedStreamingInfo.isStreaming || localIsStreaming
         ? 'streaming'
-        : sending || waitingForResponse
+        : interactionBusy
           ? 'sending'
           : 'idle'
   const researchCard = useResearchCard({
@@ -4185,7 +4214,7 @@ export function ChatScreen({
             mainRef={mainRef}
             mainClassName={cn(
               'transition-[margin-bottom] duration-200',
-              (activeIsRealtimeStreaming ||
+              (hermesTurnBusy ||
                 hasPendingGeneration(pendingSessionIdentity)) &&
                 'chat-streaming-glow',
             )}
@@ -4368,8 +4397,7 @@ export function ChatScreen({
                 }
                 notice={null}
                 noticePosition="end"
-                showProcessingIndicator={hermesTurnBusy}
-                turnBusy={hermesTurnBusy}
+                turnBusy={listTurnBusy}
                 sessionKey={activeCanonicalKey}
                 pinToTop={false}
                 pinGroupMinHeight={pinGroupMinHeight}
@@ -4379,14 +4407,14 @@ export function ChatScreen({
                 isStreaming={derivedStreamingInfo.isStreaming}
                 streamingMessageId={derivedStreamingInfo.streamingMessageId}
                 streamingText={
-                  stableActiveStreamingText ||
-                  completedStreamingText.current ||
-                  undefined
+                  activeIsRealtimeStreaming
+                    ? stableActiveStreamingText || undefined
+                    : undefined
                 }
                 streamingThinking={
-                  realtimeStreamingThinking ||
-                  completedStreamingThinking.current ||
-                  undefined
+                  activeIsRealtimeStreaming
+                    ? realtimeStreamingThinking || undefined
+                    : undefined
                 }
                 lifecycleEvents={realtimeLifecycleEvents}
                 hideSystemMessages

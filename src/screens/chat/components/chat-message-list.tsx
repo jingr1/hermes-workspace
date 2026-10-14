@@ -324,10 +324,8 @@ function ThinkingBubble({
 
   return (
     <div className="flex items-end gap-2">
-      {/* Avatar with pulsing glow ring — must be circular to match the avatar */}
-      <div className="thinking-avatar-glow inline-flex size-7 shrink-0 items-center justify-center rounded-full">
-        <AssistantAvatar size={28} />
-      </div>
+      {/* Glow on the avatar box — wrapper size-* drifts from the image. */}
+      <AssistantAvatar size={28} className="thinking-avatar-glow" />
 
       {/* Chat bubble */}
       <div className="relative max-w-[36rem] overflow-hidden rounded-2xl rounded-bl-sm border border-primary-200 dark:border-primary-200/20 bg-primary-100 dark:bg-primary-100 thinking-shimmer-bubble">
@@ -571,15 +569,33 @@ export function streamingMessageHasVisibleContent(
     streamingText?: string
     streamingThinking?: string
     hasToolActivity?: boolean
+    /**
+     * When true, thinking/tools alone do not count as visible body — used so
+     * the MessageItem row stays hidden until reply text exists while
+     * TurnActivityHost owns activity chrome.
+     */
+    replyBodyOnly?: boolean
   },
 ): boolean {
-  if (options?.hasToolActivity) return true
   if (options?.streamingText?.trim()) return true
+  // MessageItem reads `__streamingText`; visibility must match or replyBodyOnly
+  // keeps the bubble display:none while the host already has reply text.
+  const sidecarText =
+    typeof (message as { __streamingText?: unknown }).__streamingText ===
+    'string'
+      ? (
+          (message as { __streamingText?: string }).__streamingText ?? ''
+        ).trim()
+      : ''
+  if (sidecarText.length > 0) return true
+  if (textFromMessage(message).trim().length > 0) return true
+  if (options?.replyBodyOnly) return false
+  if (options?.hasToolActivity) return true
   if (options?.streamingThinking?.trim()) return true
   // Sidecar thinking/tools count so the row is not display:none while
   // TurnActivityHost shows live activity from the same message.
   if (assistantHasWorkingSurface(message)) return true
-  return textFromMessage(message).trim().length > 0
+  return false
 }
 
 export function buildDisplayEntries(
@@ -729,11 +745,6 @@ type ChatMessageListProps = {
   notice?: React.ReactNode
   noticePosition?: 'start' | 'end'
   /**
-   * @deprecated Prefer `turnBusy`. Kept for managed/legacy call sites during
-   * the TurnActivityHost migration.
-   */
-  showProcessingIndicator: boolean
-  /**
    * Unique agorax busy authority for TurnActivityHost.
    */
   turnBusy?: boolean
@@ -772,8 +783,7 @@ function ChatMessageListComponent({
   emptyState,
   notice,
   noticePosition = 'start',
-  showProcessingIndicator,
-  turnBusy: turnBusyProp,
+  turnBusy = false,
   sessionKey,
   pinToTop,
   pinGroupMinHeight,
@@ -791,14 +801,15 @@ function ChatMessageListComponent({
   hideSystemMessages = false,
   isCompacting = false,
 }: ChatMessageListProps) {
-  // Single busy bit: owner `turnBusy` wins; legacy processing indicator is fallback.
-  const turnBusy = turnBusyProp ?? showProcessingIndicator
   const activityDisplayMode = useChatSettingsStore(
     (s) => s.settings.chatActivityDisplayMode ?? 'compact',
   )
   const showConversationOutline = useChatSettingsStore(
     (s) => s.settings.showConversationOutline === true,
   )
+  // Heartbeat fills empty-gap Working until thinking/tools arrive (TurnActivityHost).
+  // Research/compact ThinkingBubble still reads the same store field.
+  const heartbeatActivity = useChatStore((s) => s.heartbeatActivity)
   const hideActivityCards = activityDisplayMode === 'hidden'
   const streamActivityMode = activityDisplayMode === 'stream'
   const anchorRef = useRef<HTMLDivElement | null>(null)
@@ -1273,6 +1284,21 @@ function ChatMessageListComponent({
     researchCard && researchCard.steps.length > 0,
   )
 
+  // When the durable live row is already in the list, empty Working lives
+  // inside that MessageItem (same avatar). Footer host is only a fallback
+  // before beginStreamingTurn lands the row.
+  const hasLiveStreamingRow = Boolean(
+    isStreaming &&
+      streamingMessageId &&
+      visibleEntries.some(({ message }) => {
+        const messageId =
+          message.__optimisticId ||
+          (message as { messageId?: unknown }).messageId ||
+          (message as { id?: unknown }).id
+        return messageId === streamingMessageId
+      }),
+  )
+
   // Single host: turnBusy mounts TurnActivityHost (even with empty content).
   // Compacting / research still use the bottom status area.
   const thinkingAreaVisible =
@@ -1478,116 +1504,60 @@ function ChatMessageListComponent({
       visibleEntries[entryIndex + 1]?.message.role === 'assistant'
     const effectiveOnRetry = hasAssistantReply ? undefined : onRetryMessage
 
-    // For the live streaming placeholder: wrap in a stable div whose key never
-    // changes for the lifetime of the stream. The div's opacity toggles between
-    // 0 (no text yet) and 1 (text flowing) without unmounting the inner
-    // MessageItem — preserving its reveal-timer state so text streams word-by-word.
-    // Live activity lives on TurnActivityHost while turnBusy. Empty streaming
-    // rows stay hidden until reply text arrives; thinking/tools do not need
-    // the message row to mount the host.
-    if (messageIsStreaming) {
-      const hasStreamingActivity =
-        normalizedStreamingToolCalls.length > 0 ||
-        liveToolActivity.length > 0 ||
-        lifecycleEvents.length > 0 ||
-        Boolean(streamingThinking && streamingThinking.trim().length > 0)
-      const isEmptyPlaceholder = !streamingMessageHasVisibleContent(
-        chatMessage,
-        {
-          streamingText,
-          streamingThinking,
-          hasToolActivity: hasStreamingActivity,
-        },
-      )
-      return (
-        <div
-          key={stableId}
-          style={{
-            display: isEmptyPlaceholder ? 'none' : undefined,
-            opacity: isEmptyPlaceholder ? 0 : 1,
-            pointerEvents: isEmptyPlaceholder ? 'none' : undefined,
-            transition: 'opacity 150ms ease',
-          }}
-          aria-hidden={isEmptyPlaceholder ? true : undefined}
-        >
-          <MessageItem
-            message={chatMessage}
-            attachedToolMessages={entry.attachedToolMessages}
-            onRetryMessage={effectiveOnRetry}
-            onEditMessage={
-              entryIndex === lastUserIndex ? onEditMessage : undefined
-            }
-            onRegenerateMessage={
-              entryIndex === lastAssistantIndex
-                ? onRegenerateMessage
-                : undefined
-            }
-            toolResultsByCallId={hasToolCalls ? toolResultsByCallId : undefined}
-            forceActionsVisible={forceActionsVisible}
-            wrapperClassName={spacingClass}
-            wrapperDataMessageId={stableId}
-            bubbleClassName={
-              isActiveMatch
-                ? 'ring-2 ring-amber-400 bg-amber-50/50'
-                : isSearchMatch
-                  ? 'bg-amber-50/30'
-                  : undefined
-            }
-            toolCalls={
-              messageIsStreaming ? normalizedStreamingToolCalls : undefined
-            }
-            isStreaming={messageIsStreaming}
-            streamingText={streamingText}
-            streamingThinking={
-              messageIsStreaming ? streamingThinking : undefined
-            }
-            lifecycleEvents={messageIsStreaming ? lifecycleEvents : undefined}
-            simulateStreaming={simulateStreaming}
-            streamingKey={signature}
-            expandAllToolSections={expandAllToolSections || streamActivityMode}
-            hideActivityCard={
-              hideActivityCards || (turnBusy && messageIsStreaming)
-            }
-          />
-        </div>
-      )
-    }
+    // One durable MessageItem for the whole turn — including the empty
+    // pre-token frame. Do NOT mount a sibling TurnActivityHost (different
+    // avatar size) and later reveal MessageItem; that avatar handoff jumps.
+    // Empty Working lives beside MessageItem's own AssistantAvatar.
+    // Footer TurnActivityHost is only before this live row exists.
 
     return (
-      <MessageItem
+      <div
         key={stableId}
-        message={chatMessage}
-        attachedToolMessages={entry.attachedToolMessages}
-        onRetryMessage={effectiveOnRetry}
-        onEditMessage={entryIndex === lastUserIndex ? onEditMessage : undefined}
-        onRegenerateMessage={
-          entryIndex === lastAssistantIndex ? onRegenerateMessage : undefined
-        }
-        toolResultsByCallId={hasToolCalls ? toolResultsByCallId : undefined}
-        forceActionsVisible={forceActionsVisible}
-        wrapperClassName={spacingClass}
-        wrapperDataMessageId={stableId}
-        bubbleClassName={
-          isActiveMatch
-            ? 'ring-2 ring-amber-400 bg-amber-50/50'
-            : isSearchMatch
-              ? 'bg-amber-50/30'
+        className="flex flex-col gap-1 md:gap-1.5"
+        data-live-turn-group={messageIsStreaming ? '' : undefined}
+      >
+        <MessageItem
+          message={chatMessage}
+          attachedToolMessages={entry.attachedToolMessages}
+          onRetryMessage={effectiveOnRetry}
+          onEditMessage={
+            entryIndex === lastUserIndex ? onEditMessage : undefined
+          }
+          onRegenerateMessage={
+            entryIndex === lastAssistantIndex
+              ? onRegenerateMessage
               : undefined
-        }
-        toolCalls={
-          messageIsStreaming ? normalizedStreamingToolCalls : undefined
-        }
-        isStreaming={messageIsStreaming}
-        streamingText={messageIsStreaming ? streamingText : undefined}
-        streamingThinking={messageIsStreaming ? streamingThinking : undefined}
-        lifecycleEvents={messageIsStreaming ? lifecycleEvents : undefined}
-        simulateStreaming={simulateStreaming}
-        streamingKey={signature}
-        expandAllToolSections={expandAllToolSections || streamActivityMode}
-        hideActivityCard={
-          hideActivityCards || (turnBusy && messageIsStreaming)
-        }
-      />
+          }
+          toolResultsByCallId={
+            hasToolCalls ? toolResultsByCallId : undefined
+          }
+          forceActionsVisible={forceActionsVisible}
+          wrapperClassName={spacingClass}
+          wrapperDataMessageId={stableId}
+          bubbleClassName={
+            isActiveMatch
+              ? 'ring-2 ring-amber-400 bg-amber-50/50'
+              : isSearchMatch
+                ? 'bg-amber-50/30'
+                : undefined
+          }
+          toolCalls={
+            messageIsStreaming ? normalizedStreamingToolCalls : undefined
+          }
+          isStreaming={messageIsStreaming}
+          streamingText={messageIsStreaming ? streamingText : undefined}
+          streamingThinking={
+            messageIsStreaming ? streamingThinking : undefined
+          }
+          lifecycleEvents={
+            messageIsStreaming ? lifecycleEvents : undefined
+          }
+          simulateStreaming={simulateStreaming}
+          streamingKey={signature}
+          expandAllToolSections={expandAllToolSections || streamActivityMode}
+          hideActivityCard={hideActivityCards}
+        />
+      </div>
     )
   }
 
@@ -1618,13 +1588,12 @@ function ChatMessageListComponent({
       }
     }
 
-    // Scroll to bottom only if the user is already near the bottom
+    // Scroll to bottom only if the user is already near the bottom.
+    // Always `auto` here — switching to `smooth` on settle (isStreaming
+    // flip) was a visible jump after the stream finished. Smooth stays on
+    // the explicit scroll-to-bottom button.
     if (isNearBottomRef.current) {
-      // Use smooth scroll only when user is near bottom (<200px) and new messages arrive;
-      // use instant scroll during streaming to avoid choppiness.
-      const behavior: ScrollBehavior =
-        isNearBottomRef.current && !isStreaming ? 'smooth' : 'auto'
-      frameId = window.requestAnimationFrame(() => scrollToBottom(behavior))
+      frameId = window.requestAnimationFrame(() => scrollToBottom('auto'))
     }
 
     return () => {
@@ -2121,12 +2090,14 @@ function ChatMessageListComponent({
                 ) : null}
               </>
             )}
-            {/* Live turn host. Settled activity stays on MessageItem. */}
-            {turnBusy && !hideActivityCards ? (
+            {/* Fallback only before beginStreamingTurn inserts the durable row.
+                Busy bit = turnBusy only — never OR isStreaming. Once the live
+                row exists, Working is inside MessageItem (same avatar). */}
+            {turnBusy && !hideActivityCards && !hasLiveStreamingRow ? (
               <div className="flex flex-col gap-1 py-1.5 px-1 animate-in fade-in duration-300 md:gap-1.5 md:py-2">
                 <TurnActivityHost
                   turnBusy
-                  thinkingText={streamingThinking}
+                  thinkingText={streamingThinking || heartbeatActivity}
                   toolSections={liveTurnToolSections}
                   thinkingElapsedSeconds={thinkingElapsed}
                   expandAll={expandAllToolSections || streamActivityMode}
@@ -2283,7 +2254,6 @@ function areChatMessageListEqual(
     prev.emptyState === next.emptyState &&
     prev.notice === next.notice &&
     prev.noticePosition === next.noticePosition &&
-    prev.showProcessingIndicator === next.showProcessingIndicator &&
     prev.turnBusy === next.turnBusy &&
     prev.sessionKey === next.sessionKey &&
     prev.pinToTop === next.pinToTop &&

@@ -111,7 +111,7 @@ describe('Managed Agent Engine adapter', () => {
     expect(state.activeTurn?.turnId).toBe('turn-1')
     expect(state.isStreaming).toBe(true)
     // agorax: turn busy stays true even when reply text already hosts.
-    expect(state.showProcessingIndicator).toBe(true)
+    expect(state.turnBusy).toBe(true)
     expect(state.streamingMessageId).toBe('message-1')
     expect(state.interactions[0]?.requestId).toBe('request-1')
     engine.dispose()
@@ -133,7 +133,7 @@ describe('Managed Agent Engine adapter', () => {
 
     const emptyGap = selectManagedAgentChatState(engine.getSnapshot(), 'session-1')
     expect(emptyGap.isStreaming).toBe(true)
-    expect(emptyGap.showProcessingIndicator).toBe(true)
+    expect(emptyGap.turnBusy).toBe(true)
     expect(emptyGap.streamingMessageId).toBeNull()
 
     hydrateManagedAgentEngine(engine, {
@@ -158,7 +158,7 @@ describe('Managed Agent Engine adapter', () => {
 
     const withThinking = selectManagedAgentChatState(engine.getSnapshot(), 'session-1')
     expect(withThinking.isStreaming).toBe(true)
-    expect(withThinking.showProcessingIndicator).toBe(true)
+    expect(withThinking.turnBusy).toBe(true)
     expect(withThinking.streamingMessageId).toBe('reasoning-1')
     engine.dispose()
   })
@@ -192,7 +192,7 @@ describe('Managed Agent Engine adapter', () => {
     const projected = selectManagedAgentChatState(engine.getSnapshot(), 'session-1', {
       sessionMessages: liveThinking,
     })
-    expect(projected.showProcessingIndicator).toBe(true)
+    expect(projected.turnBusy).toBe(true)
     expect(projected.streamingMessageId).toBe('thought-1')
     expect(projected.messages[0]?.role).toBe('assistant')
     expect(projected.messages[0]?.content?.[0]).toMatchObject({

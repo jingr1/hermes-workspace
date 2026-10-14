@@ -133,6 +133,15 @@ type ChatState = {
   clearSession: (sessionKey: string) => void
   clearRealtimeBuffer: (sessionKey: string) => void
   clearStreamingSession: (sessionKey: string) => void
+  /**
+   * Seed a turn-scoped durable messageId before the first SSE frame so chunks
+   * never fall back to `assistant:pending:<session>` (cross-turn collision).
+   */
+  beginStreamingTurn: (input: {
+    sessionKey: string
+    messageId: string
+    runId?: string | null
+  }) => void
   clearAllStreaming: () => void
   mergeHistoryMessages: (
     sessionKey: string,
@@ -155,8 +164,8 @@ type ChatState = {
   /** Check if a session is waiting for a response */
   isSessionWaiting: (sessionKey: string) => boolean
 
-  /** Last activity description forwarded via heartbeat — used by ThinkingBubble
-   *  to show meaningful progress during long reasoning stretches */
+  /** Last activity description from heartbeat SSE — empty-gap TurnActivityHost
+   *  and research/compact ThinkingBubble. */
   heartbeatActivity: string | null
   setHeartbeatActivity: (activity: string | null) => void
 }
@@ -174,10 +183,15 @@ function withDurableStreamingIdentity(
   prev: StreamingState,
   sessionKey: string,
   runId?: string,
+  turnKey?: string | null,
 ): StreamingState {
   const nextRunId = runId ?? prev.runId
+  // Prefer an already-seeded turn-scoped messageId. Never invent a session-only
+  // pending id when a turnKey is available — that collided across turns and
+  // wrote the new reply into the previous settled bubble.
   const messageId =
-    prev.messageId ?? assistantMessageIdForRun(nextRunId, sessionKey)
+    prev.messageId ??
+    assistantMessageIdForRun(nextRunId, sessionKey, turnKey)
   return {
     ...prev,
     runId: nextRunId,
@@ -212,6 +226,7 @@ function syncLiveAssistantRow(
     upsertMessageByDurableId(
       sessionMessages,
       projected as unknown as ChatMessage,
+      { anchorAfterLastUser: true },
     ),
   )
   return messages
@@ -661,7 +676,8 @@ function toolCallsFromChatMessage(
 }
 
 /**
- * A second `done` (finishStream after the SSE done) runs after streaming
+ * A late `done` (only when streamingState still live — finishStream no longer
+ * always re-upserts after SSE settle) runs after streaming
  * state was deleted. Seed from the durable row so that settle cannot replace
  * a Working card's thinking/tools with an empty projection.
  */
@@ -1479,7 +1495,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
           settledStreaming.toolCalls.length > 0
 
         let realtimeMessages = state.realtimeMessages
-        if (hasLiveContent || settledStreaming.messageId) {
+        // Never materialize an empty durable row. A second `done` after the SSE
+        // settle (finishStream) used to upsert `assistant:<runId>` with no text
+        // — Working unmounted and left a bare avatar.
+        if (hasLiveContent) {
           realtimeMessages = syncLiveAssistantRow(
             state.realtimeMessages,
             sessionKey,
@@ -1511,6 +1530,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
               )
             }
             persistRecoveryMessage(sessionKey, settled)
+          }
+        } else if (settledStreaming.messageId) {
+          // beginStreamingTurn seeds an empty write-through host. Empty settle
+          // must remove it — leaving `__streamingStatus:'streaming'` ghosts the
+          // empty-gap avatar with MessageItem still display:none.
+          const seededId = settledStreaming.messageId
+          const existing = state.realtimeMessages.get(sessionKey) ?? []
+          const nextRows = existing.filter(
+            (message) => getMessageId(message) !== seededId,
+          )
+          if (nextRows.length !== existing.length) {
+            realtimeMessages = new Map(state.realtimeMessages)
+            if (nextRows.length === 0) {
+              realtimeMessages.delete(sessionKey)
+            } else {
+              realtimeMessages.set(sessionKey, nextRows)
+            }
           }
         }
 
@@ -1561,6 +1597,33 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.removeItem(`claude_streaming_${key}`)
     }
+  },
+
+  beginStreamingTurn: ({ sessionKey, messageId, runId }) => {
+    const key = sessionKey.trim()
+    const id = messageId.trim()
+    if (!key || !id) return
+    const now = Date.now()
+    const next: StreamingState = {
+      ...createEmptyStreamingState(),
+      messageId: id,
+      runId: typeof runId === 'string' && runId.trim() ? runId.trim() : null,
+    }
+    const streaming = new Map(get().streamingState)
+    streaming.set(key, next)
+    // Drop the previous turn's write-through (already mirrored into history
+    // cache on settle). Keep only this turn's seeded host so we do not leak
+    // stale realtime rows forever after skipping clear-on-done.
+    const clearedRealtime = new Map(get().realtimeMessages)
+    clearedRealtime.set(key, [])
+    const realtimeMessages = syncLiveAssistantRow(
+      clearedRealtime,
+      key,
+      next,
+      { streaming: true, timestamp: now },
+    )
+    // Bump lastEventAt so useRealtimeChatHistory re-merges (it keys off this).
+    set({ streamingState: streaming, realtimeMessages, lastEventAt: now })
   },
 
   clearAllStreaming: () => {

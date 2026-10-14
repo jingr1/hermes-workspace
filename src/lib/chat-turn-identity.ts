@@ -10,11 +10,20 @@ import { normalizeToolCallArgs } from './chat-message-parts'
 export function assistantMessageIdForRun(
   runId: string | null | undefined,
   sessionKey: string,
+  /**
+   * Open-turn nonce (clientSubmitId / turnId). Required when runId is absent —
+   * session-only `assistant:pending:<session>` collided across turns.
+   */
+  turnKey?: string | null,
 ): string {
   const trimmedRun = typeof runId === 'string' ? runId.trim() : ''
   if (trimmedRun) return `assistant:${trimmedRun}`
   const trimmedSession = sessionKey.trim() || 'session'
-  return `assistant:pending:${trimmedSession}`
+  const trimmedTurn = typeof turnKey === 'string' ? turnKey.trim() : ''
+  if (trimmedTurn) return `assistant:pending:${trimmedSession}:${trimmedTurn}`
+  throw new Error(
+    `assistantMessageIdForRun: turnKey required when runId is missing (session=${trimmedSession})`,
+  )
 }
 
 export function readDurableMessageId(message: {
@@ -146,24 +155,54 @@ export function projectLiveAssistantMessage(
 /**
  * Upsert by durable messageId. Replaces the same row in place — never appends
  * a second assistant for the same turn.
+ *
+ * When `anchorAfterLastUser` is set (live write-through), the row is always
+ * placed immediately after the latest user message so mid-turn narration cannot
+ * paint above the prompt that triggered it.
  */
 export function upsertMessageByDurableId<T extends { role?: string }>(
   messages: Array<T>,
   next: T & { id?: unknown; messageId?: unknown },
+  options?: { anchorAfterLastUser?: boolean },
 ): Array<T> {
   const nextId = readDurableMessageId(next)
-  if (!nextId) return [...messages, next]
-
-  const index = messages.findIndex(
-    (message) => readDurableMessageId(message as { id?: unknown; messageId?: unknown }) === nextId,
-  )
-  if (index < 0) return [...messages, next]
-  const copy = messages.slice()
-  copy[index] = {
-    ...messages[index],
-    ...next,
+  if (!options?.anchorAfterLastUser) {
+    if (!nextId) return [...messages, next]
+    const index = messages.findIndex(
+      (message) =>
+        readDurableMessageId(message as { id?: unknown; messageId?: unknown }) ===
+        nextId,
+    )
+    if (index < 0) return [...messages, next]
+    const copy = messages.slice()
+    copy[index] = {
+      ...messages[index],
+      ...next,
+    }
+    return copy
   }
-  return copy
+
+  const without = nextId
+    ? messages.filter(
+        (message) =>
+          readDurableMessageId(
+            message as { id?: unknown; messageId?: unknown },
+          ) !== nextId,
+      )
+    : messages.slice()
+  let lastUserIndex = -1
+  for (let i = without.length - 1; i >= 0; i -= 1) {
+    if (without[i]?.role === 'user') {
+      lastUserIndex = i
+      break
+    }
+  }
+  const insertAt = lastUserIndex >= 0 ? lastUserIndex + 1 : without.length
+  return [
+    ...without.slice(0, insertAt),
+    next,
+    ...without.slice(insertAt),
+  ]
 }
 
 type FoldableAssistant = {
@@ -300,7 +339,9 @@ export function foldOpenTurnIntoLiveHost<T extends FoldableAssistant>(
     timestamp?: number
   },
 ): Array<T> {
-  if (!options.isStreaming) return messages
+  // Fold whenever a durable live id is known — including the just-settled
+  // frame. Gating on `isStreaming` used to drop the fold on settle and
+  // re-expand mid-turn orphans beside the host (transcript jump).
   const liveId =
     typeof options.liveMessageId === 'string' && options.liveMessageId.trim()
       ? options.liveMessageId.trim()
@@ -315,18 +356,35 @@ export function foldOpenTurnIntoLiveHost<T extends FoldableAssistant>(
     }
   }
 
-  const head = lastUserIndex >= 0 ? messages.slice(0, lastUserIndex + 1) : []
+  // Pull a misplaced live host out of the pre-user head. Otherwise an early
+  // write-through row stays above the prompt and fold appends a second copy.
+  const head: Array<T> = []
+  const pulledFromHead: Array<T> = []
+  const headEnd = lastUserIndex >= 0 ? lastUserIndex + 1 : 0
+  for (let i = 0; i < headEnd; i += 1) {
+    const message = messages[i]!
+    const id = readDurableMessageId(message)
+    const isLive =
+      id === liveId || message.__streamingStatus === 'streaming'
+    if (isLive && message.role === 'assistant') {
+      pulledFromHead.push(message)
+      continue
+    }
+    head.push(message)
+  }
+
   const tail =
     lastUserIndex >= 0 ? messages.slice(lastUserIndex + 1) : messages.slice()
+  const openTurn = [...pulledFromHead, ...tail]
 
-  if (tail.length === 0) {
+  if (openTurn.length === 0) {
     const projected = projectLiveAssistantMessage({
       messageId: liveId,
       runId: options.runId ?? null,
       text: options.streamingText ?? '',
       thinking: options.streamingThinking ?? '',
       toolCalls: options.toolCalls ?? [],
-      streaming: true,
+      streaming: options.isStreaming,
       timestamp: options.timestamp ?? Date.now(),
     })
     return [...head, projected as unknown as T]
@@ -334,7 +392,7 @@ export function foldOpenTurnIntoLiveHost<T extends FoldableAssistant>(
 
   let live: T | null = null
   const orphans: Array<T> = []
-  for (const message of tail) {
+  for (const message of openTurn) {
     const id = readDurableMessageId(message)
     const isLive =
       id === liveId || message.__streamingStatus === 'streaming'
@@ -393,7 +451,7 @@ export function foldOpenTurnIntoLiveHost<T extends FoldableAssistant>(
     text,
     thinking,
     toolCalls: tools,
-    streaming: true,
+    streaming: options.isStreaming,
     timestamp:
       options.timestamp ??
       (live && typeof live.timestamp === 'number' ? live.timestamp : Date.now()),

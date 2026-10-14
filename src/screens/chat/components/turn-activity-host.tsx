@@ -1,8 +1,9 @@
 /**
- * Single Tutti-feel activity host for an open (or just-settled) turn.
+ * Single activity host for an open turn's thinking/tools chrome.
  *
- * On send: pulsing avatar + Working card immediately (no empty Thinking gap).
- * Once thinking/tools arrive: stop avatar pulse; Working card keeps content.
+ * Reply text stays on the durable MessageItem for the whole turn — settle only
+ * flips streaming→complete on that same row. Do not park narration on this host
+ * and remount it into MessageItem (that handoff jumps the transcript).
  */
 
 import { memo, useMemo } from 'react'
@@ -55,8 +56,9 @@ function TurnActivityHostComponent({
 
   const hasContent =
     vm.thinkingText.length > 0 || vm.toolSections.length > 0
-  // Pulse only before content; card is up from the first busy frame.
-  const showPulsingAvatar = vm.turnBusy && !hasContent
+  // Avatar stays for the whole open turn (same as ThinkingBubble). Only the
+  // glow pulse is reserved for the empty-gap frame before first content.
+  const pulseAvatar = vm.turnBusy && !hasContent
 
   return (
     <div
@@ -67,14 +69,11 @@ function TurnActivityHostComponent({
       data-turn-busy={vm.turnBusy ? 'true' : 'false'}
       data-status-label={vm.statusLabel}
     >
-      {showPulsingAvatar ? (
-        <div
-          className="thinking-avatar-glow inline-flex size-7 shrink-0 items-center justify-center rounded-full"
-          aria-label="Working"
-        >
-          <AssistantAvatar size={28} />
-        </div>
-      ) : null}
+      <AssistantAvatar
+        size={24}
+        className={pulseAvatar ? 'thinking-avatar-glow' : undefined}
+        alt={pulseAvatar ? 'Working' : undefined}
+      />
       <div className="min-w-0 flex-1">
         <TuiActivityCard
           toolSections={vm.toolSections}

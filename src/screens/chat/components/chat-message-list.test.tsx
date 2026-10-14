@@ -138,6 +138,38 @@ describe('streamingMessageHasVisibleContent', () => {
       ),
     ).toBe(true)
   })
+
+  it('replyBodyOnly ignores thinking/tools so MessageItem stays hidden until reply text', () => {
+    expect(
+      streamingMessageHasVisibleContent(textMessage('a1', 'assistant', ''), {
+        streamingThinking: 'planning',
+        hasToolActivity: true,
+        replyBodyOnly: true,
+      }),
+    ).toBe(false)
+    expect(
+      streamingMessageHasVisibleContent(textMessage('a1', 'assistant', ''), {
+        streamingText: '你好',
+        replyBodyOnly: true,
+      }),
+    ).toBe(true)
+  })
+
+  it('replyBodyOnly treats __streamingText as reply body (matches MessageItem)', () => {
+    expect(
+      streamingMessageHasVisibleContent(
+        {
+          id: 'a1',
+          role: 'assistant',
+          content: [],
+          __streamingText: '你好',
+          __streamingStatus: 'streaming',
+          timestamp: 1,
+        } as unknown as ChatMessage,
+        { replyBodyOnly: true },
+      ),
+    ).toBe(true)
+  })
 })
 
 describe('getTrailingToolOnlyTurnSummary', () => {

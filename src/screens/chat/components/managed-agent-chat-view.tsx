@@ -335,8 +335,7 @@ export function ManagedAgentChatView({
           >
             <AgentChatMessagePane
               messages={chat.messages}
-              showProcessingIndicator={chat.showProcessingIndicator}
-              turnBusy={chat.showProcessingIndicator}
+              turnBusy={chat.turnBusy}
               isStreaming={chat.isStreaming}
               streamingMessageId={chat.streamingMessageId}
               activeToolCalls={chat.activeToolCalls}

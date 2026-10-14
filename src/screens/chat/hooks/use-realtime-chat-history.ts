@@ -235,7 +235,11 @@ export function useRealtimeChatHistory({
           effectiveSessionKey === 'new'
         ) {
           setLastCompletedRunAt(Date.now())
-          // Refetch history after generation completes — keeps chat in sync
+          // Tutti settle contract: live write-through is the turn authority.
+          // Do NOT clear the realtime buffer or refetch history when the live
+          // assistant already has content — that swapped data sources and felt
+          // like a page refresh after stream. History is only a quiet recovery
+          // path for empty settle / focus / reconnect (stamp ids, not replace).
           if (effectiveSessionKey && effectiveSessionKey !== 'new') {
             const key = chatQueryKeys.history(
               effectiveFriendlyId,
@@ -246,22 +250,12 @@ export function useRealtimeChatHistory({
             const prevCount =
               (prevData?.messages as Array<unknown> | undefined)?.length ?? 0
 
-            // Snapshot optimistic user messages before refetch so they
-            // survive the cache replacement. Re-injected after refetch.
             const reInjectOptimistic = snapshotOptimisticUserMessages(
               queryClient,
               effectiveFriendlyId,
               effectiveSessionKey,
             )
 
-            // Issue #441 fix: Directly merge realtime buffer into history cache
-            // INSTEAD of invalidateQueries. The old approach caused a race:
-            // invalidateQueries → refetch (async) → merge runs with stale data
-            // → duplicates appear briefly → refetch completes → fixed.
-            //
-            // New approach: merge realtime messages into the cache synchronously,
-            // then clear the realtime buffer in the same tick. A background
-            // refetch runs after for consistency but doesn't block rendering.
             const store = useChatStore.getState()
             const realtimeMessages =
               store.realtimeMessages.get(effectiveSessionKey) ?? []
@@ -270,7 +264,6 @@ export function useRealtimeChatHistory({
               | undefined
 
             if (realtimeMessages.length > 0 && Array.isArray(historyMessages)) {
-              // Deduplicate: remove any realtime messages already in history
               const historyTexts = new Set(
                 historyMessages.map((m: unknown) => {
                   const raw = m as Record<string, unknown>
@@ -306,9 +299,6 @@ export function useRealtimeChatHistory({
               }
             }
 
-            // Capture the just-completed assistant message from the realtime
-            // buffer BEFORE clearing it. After compaction the refetched history
-            // may be shorter and miss this message entirely. Fixes #505.
             const completedAssistant =
               realtimeMessages.length > 0
                 ? (() => {
@@ -318,10 +308,6 @@ export function useRealtimeChatHistory({
                     return last?.role === 'assistant' ? last : null
                   })()
                 : null
-
-            // Clear realtime buffer — cache already holds the merged transcript.
-            store.clearRealtimeBuffer(effectiveSessionKey)
-            clearCompletedStreaming()
 
             const completedRow = completedAssistant as
               | (Record<string, unknown> & {
@@ -340,20 +326,17 @@ export function useRealtimeChatHistory({
                 '',
             }
 
-            // If the live turn already painted a complete assistant row, do not
-            // immediately fetch history. That fetch used to swap the printed
-            // bubble for a differently shaped server echo (tools without
-            // thinking, rewritten text) — poor UX. Stamp server ids later via
-            // the normal poll / focus refetch, which now prefers live content.
             const livePlain = completedAssistant
               ? messagePlainText(completedAssistant)
               : ''
             const liveTurnComplete =
               livePlain.length > 0 ||
-              thinkingSource.__streamingThinking.length > 0
+              thinkingSource.__streamingThinking.length > 0 ||
+              store.streamingState.has(effectiveSessionKey)
 
             if (liveTurnComplete) {
-              // Ensure thinking from the live snapshot is on the cached row.
+              // Keep realtime write-through mounted. Only mirror into the
+              // query cache so later quiet polls can stamp server ids.
               if (thinkingSource.__streamingThinking) {
                 const current =
                   queryClient.getQueryData<HistoryResponse>(key)
@@ -370,11 +353,14 @@ export function useRealtimeChatHistory({
                   }
                 }
               }
+              clearCompletedStreaming()
               reInjectOptimistic()
               return
             }
 
             // Empty settle (no visible live assistant) — quiet fetch for recovery.
+            store.clearRealtimeBuffer(effectiveSessionKey)
+            clearCompletedStreaming()
             void fetchHistory({
               sessionKey: effectiveSessionKey,
               friendlyId: effectiveFriendlyId,
@@ -453,7 +439,6 @@ export function useRealtimeChatHistory({
   const mergeHistoryMessages = useChatStore((s) => s.mergeHistoryMessages)
   const clearSession = useChatStore((s) => s.clearSession)
   const lastEventAt = useChatStore((s) => s.lastEventAt)
-  const clearRealtimeBuffer = useChatStore((s) => s.clearRealtimeBuffer)
   const realtimeMessages = useChatStore(
     (s) => s.realtimeMessages.get(effectiveSessionKey) ?? EMPTY_MESSAGES,
   )
@@ -506,25 +491,6 @@ export function useRealtimeChatHistory({
     if (mergedMessages.length === 0) return
     persistPortableHistory(mergedMessages)
   }, [mergedMessages, portableMode])
-
-  // History has caught up — cleanup realtime buffer outside render
-  // DISABLED: This was aggressively clearing realtime messages before history
-  // caught up, causing the "message appears then disappears" bug.
-  // TODO: Re-enable with smarter timing (e.g. only after history confirms the message)
-  useEffect(() => {
-    return // disabled
-    if (portableMode) return
-    if (!effectiveSessionKey || effectiveSessionKey === 'new') return
-    if (realtimeMessages.length === 0) return
-    if (mergedMessages.length !== historyMessages.length) return
-    clearRealtimeBuffer(effectiveSessionKey)
-  }, [
-    clearRealtimeBuffer,
-    effectiveSessionKey,
-    historyMessages.length,
-    mergedMessages.length,
-    realtimeMessages.length,
-  ])
 
   useEffect(() => {
     if (!onCompactionStart) return

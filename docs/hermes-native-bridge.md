@@ -1,7 +1,9 @@
 # Hermes Native Bridge（双桥合同）
 
-> 状态：Phase 0–1 skeleton（2026-09）  
+> 状态：Phase 1 已接线（Hermes 1:1 Engine + commandPort，2026-10）  
 > 实现起步：[`src/server/agent-runtime/hermes-native-bridge.ts`](../src/server/agent-runtime/hermes-native-bridge.ts)  
+> Engine 宿主：[`src/screens/chat/lib/hermes-agent-engine.ts`](../src/screens/chat/lib/hermes-agent-engine.ts) · runtime [`src/stores/hermes-chat-runtime.ts`](../src/stores/hermes-chat-runtime.ts)  
+> 映射表：`collab.db` `agorax_run_mapping`（[`src/server/agorax-run-mapping.ts`](../src/server/agorax-run-mapping.ts)）  
 > 对照：[`docs/managed-agent-daemon-mapping.md`](./managed-agent-daemon-mapping.md)
 
 ## 1. Dual-bridge 模型
@@ -63,14 +65,14 @@ Workspace 侧（或 collab.db）维护稳定映射，避免把 gateway id 直接
 | Phase | 范围 | 本文件状态 |
 | --- | --- | --- |
 | **0** | 映射类型 + 包边界；不改执行路径 | ✅ skeleton |
-| **1** | gateway 1:1：Create/Send/Cancel/stream → activity 事件 + reconcile | ✅ Create/Send stubs；✅ SSE→Activity 纯 adapter（`src/lib/hermes-activity-adapter.ts`）；Engine 真接线另迭代 |
+| **1** | gateway 1:1：Create/Send/Cancel/stream → activity 事件 + Engine | ✅ `createHermesCommandPort`：activate→`/api/sessions`；sendInput→`/api/send-stream` SSE→`hermesSseToActivityEvents`→ingest；cancelTurn→`/api/runs/:id/stop` + `phase=settled` `canceled`；映射落库 |
 | **2** | 群聊 Hermes 成员 Turn 投影 + 精确 cancel/resume | 文档预留 |
 | **3** | Swarm assignment ↔ Turn；Human Gate 仍属 Hermes | 文档预留 |
 | **4+** | Interaction（仅当 gateway 有真实确认通道）；Goal/Fork 后置 | 文档预留 |
 
 ## 6. 与 Runtimes 页的关系
 
-Hermes 在 Settings → Runtimes 的「就绪」= gateway probe（`probeHermesProfileGateway`），与 native bridge hydrate **解耦**：probe 失败不伪造 bridge Create 成功；bridge 未接线时 UI 仍走既有 `send-stream` / swarm 路径。
+Hermes 在 Settings → Runtimes 的「就绪」= gateway probe（`probeHermesProfileGateway`），与 native bridge hydrate **解耦**：probe 失败不伪造 bridge Create 成功。1:1 UI Send/Stop 已经 Engine commandPort（内部仍调既有 `send-stream` / `runs/stop`）；Swarm/tmux 路径不变。portable / local-model 仍是 Workspace `send-stream` 传输分叉，经同一 port 发出，不必单独 Engine 化。
 
 ## 7. 非目标（本阶段）
 

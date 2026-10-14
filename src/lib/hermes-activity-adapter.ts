@@ -65,7 +65,7 @@ function ensureIds(
     state.assistantMessageId ??
     (resolvedRun
       ? assistantMessageIdForRun(resolvedRun, ctx.agentSessionId)
-      : assistantMessageIdForRun(null, `${ctx.agentSessionId}:${ctx.turnId}`))
+      : assistantMessageIdForRun(null, ctx.agentSessionId, ctx.turnId))
   const thinkingMessageId =
     state.thinkingMessageId ?? `${assistantMessageId}:thinking`
   return {

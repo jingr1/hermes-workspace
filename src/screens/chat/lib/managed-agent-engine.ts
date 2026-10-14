@@ -530,8 +530,7 @@ export function selectManagedAgentChatState(
      * Unique agorax busy bit for TurnActivityHost.
      * Content only changes the host interior — never whether it mounts.
      */
-    showProcessingIndicator:
-      turnActive || options?.isSubmitting === true,
+    turnBusy: turnActive || options?.isSubmitting === true,
     /** Assistant message id that should receive live streaming chrome. */
     streamingMessageId: turnActive
       ? selectManagedStreamingMessageId(sessionMessages, activeTurn.turnId)

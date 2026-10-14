@@ -721,9 +721,9 @@ export const Route = createFileRoute('/api/send-stream')({
             let heartbeatTimer: ReturnType<typeof setInterval> | null = null
             let lastClientEventAt = Date.now()
             // Track the last human-readable activity so the heartbeat can
-            // forward it to the UI. Without this the ThinkingBubble shows a
-            // static "Thinking…" for minutes when the agent is reasoning
-            // without tool calls, making it look hung.
+            // forward it to the UI. Without this TurnActivityHost shows a
+            // static empty Working card for minutes when the agent is
+            // reasoning without tool calls, making it look hung.
             let lastActivity: string | null = null
             const enqueueRaw = (payload: string) => {
               if (streamClosed) return

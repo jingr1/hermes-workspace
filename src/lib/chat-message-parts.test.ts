@@ -134,13 +134,13 @@ describe('assistantHasVisibleHostContent', () => {
     ).toBe(false)
   })
 
-  it('rejects empty streaming status alone so TurnActivityHost keeps the gap', () => {
+  it('keeps empty streaming host so Working can anchor above the live row', () => {
     expect(
       assistantHasVisibleHostContent({
         content: [],
         __streamingStatus: 'streaming',
       }),
-    ).toBe(false)
+    ).toBe(true)
   })
 
   it('keeps streaming rows that only have sidecar thinking', () => {

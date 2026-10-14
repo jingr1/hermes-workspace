@@ -8,11 +8,9 @@ describe('selectTurnBusy', () => {
     expect(selectTurnBusy({ phase: 'settled' })).toBe(false)
   })
 
-  it('keeps settled phase busy while transitional waiting/streaming remains', () => {
-    expect(
-      selectTurnBusy({ phase: 'settled', waitingForResponse: true }),
-    ).toBe(true)
-    expect(selectTurnBusy({ phase: 'settled', streaming: true })).toBe(true)
+  it('treats settled phase as idle even if local streaming flickers', () => {
+    expect(selectTurnBusy({ phase: 'settled', streaming: true })).toBe(false)
+    expect(selectTurnBusy({ phase: 'settled', sending: true })).toBe(false)
   })
 
   it('uses hasActiveTurn when phase is absent', () => {
@@ -20,24 +18,24 @@ describe('selectTurnBusy', () => {
     expect(selectTurnBusy({ hasActiveTurn: false })).toBe(false)
   })
 
-  it('keeps pre-acceptance gap busy via transitional signals', () => {
-    expect(
-      selectTurnBusy({
-        hasActiveTurn: false,
-        waitingForResponse: true,
-      }),
-    ).toBe(true)
+  it('keeps pre-acceptance gap busy via streaming/sending only', () => {
     expect(
       selectTurnBusy({
         hasActiveTurn: false,
         sending: true,
       }),
     ).toBe(true)
+    expect(
+      selectTurnBusy({
+        hasActiveTurn: false,
+        streaming: true,
+      }),
+    ).toBe(true)
   })
 
-  it('falls back to transitional signals when Engine fields are unset', () => {
+  it('falls back to pre-accept signals when Engine fields are unset', () => {
     expect(selectTurnBusy({ streaming: true })).toBe(true)
-    expect(selectTurnBusy({ waitingForResponse: true })).toBe(true)
+    expect(selectTurnBusy({ sending: true })).toBe(true)
     expect(selectTurnBusy({})).toBe(false)
   })
 })

@@ -442,6 +442,25 @@ CREATE INDEX IF NOT EXISTS idx_mission_events_mission
   ON mission_events(mission_id, at);
 `,
   },
+  {
+    version: 11,
+    sql: `
+-- Hermes 1:1 native bridge: Agorax Session/Turn ↔ gateway run ids.
+-- Minimal table for cancel/resume after refresh; not Swarm assignment ledger.
+CREATE TABLE IF NOT EXISTS agorax_run_mapping (
+  agent_session_id TEXT PRIMARY KEY,
+  turn_id TEXT,
+  gateway_session_id TEXT,
+  hermes_run_id TEXT,
+  bridge_kind TEXT NOT NULL DEFAULT 'hermes-native',
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_agorax_run_mapping_gateway
+  ON agorax_run_mapping(gateway_session_id);
+CREATE INDEX IF NOT EXISTS idx_agorax_run_mapping_run
+  ON agorax_run_mapping(hermes_run_id);
+`,
+  },
 ]
 
 export function ensureCollabDb(dbPath: string = getCollabDbPath()): void {

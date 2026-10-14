@@ -503,4 +503,28 @@ describe('thinking + visible content through the stream store', () => {
       'still planning',
     )
   })
+
+  it('empty done after beginStreamingTurn removes the seeded write-through host', () => {
+    const sessionKey = 'e2e-empty-done-clears-seed'
+    resetStore(sessionKey)
+    const store = useChatStore.getState()
+    const messageId = `assistant:pending:${sessionKey}:turn-empty`
+
+    store.beginStreamingTurn({ sessionKey, messageId })
+    expect(
+      store
+        .getRealtimeMessages(sessionKey)
+        .some((message) => (message as { id?: string }).id === messageId),
+    ).toBe(true)
+
+    store.processEvent({
+      type: 'done',
+      state: 'complete',
+      sessionKey,
+      transport: 'send-stream',
+    })
+
+    expect(store.getRealtimeMessages(sessionKey)).toEqual([])
+    expect(store.getStreamingState(sessionKey)).toBeNull()
+  })
 })

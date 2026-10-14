@@ -389,6 +389,10 @@ export function assistantHasVisibleHostContent(
   message: AssistantHostContentMessage,
 ): boolean {
   if (message.__optimisticId && !Array.isArray(message.content)) return true
+  // Keep the open-turn durable host in the transcript even before first
+  // thinking/text — Working mounts above this row; filtering it out parked
+  // Working at the list footer so reply text appeared "above then refreshed".
+  if (message.__streamingStatus === 'streaming') return true
   if (
     Array.isArray(message.__streamToolCalls) &&
     message.__streamToolCalls.length > 0

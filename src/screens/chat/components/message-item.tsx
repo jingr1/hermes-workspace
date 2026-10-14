@@ -2579,11 +2579,24 @@ function MessageItemComponent({
     )
   }, [inlineToolSections, effectiveIsStreaming])
   const hasToolCalls = finalToolSections.length > 0
+  const hasActivityContent =
+    finalToolSections.length > 0 ||
+    Boolean(thinking && thinking.trim().length > 0)
+  // Keep the same AssistantAvatar mounted for the whole live turn — including
+  // the empty pre-token frame — so Working→bubble never remounts the avatar.
+  const isEmptyStreamingShell =
+    !isUser &&
+    effectiveIsStreaming &&
+    !hasText &&
+    !hasAttachments &&
+    !hasInlineImages &&
+    !hasSelectionCards
   const shouldRenderMessageBubble =
     hasText ||
     hasAttachments ||
     hasInlineImages ||
     hasSelectionCards ||
+    isEmptyStreamingShell ||
     (effectiveIsStreaming && hasRevealedText)
 
   // 'queued' = delivered to server, waiting for response (busy/backlogged)
@@ -2701,12 +2714,10 @@ function MessageItemComponent({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Settled/transcript activity above the assistant bubble. Live busy
-          surface is TurnActivityHost on the list, not a per-message stub. */}
-      {!isUser &&
-      !hideActivityCard &&
-      (finalToolSections.length > 0 ||
-        (thinking && thinking.trim().length > 0)) ? (
+      {/* Thinking/tools above the assistant bubble for the whole turn.
+          Empty pre-token Working sits beside the avatar below — not a sibling
+          list-level TurnActivityHost (that remounted a different avatar). */}
+      {!isUser && !hideActivityCard && hasActivityContent ? (
         <div className="w-full max-w-[var(--chat-content-max-width)] flex order-first">
           <div className="w-6 shrink-0" aria-hidden />
           <div className="min-w-0 flex-1">
@@ -2765,12 +2776,6 @@ function MessageItemComponent({
           className={cn(
             'gap-2 md:gap-3',
             isUser ? 'flex-row-reverse' : '',
-            // Keep live narration visible while the WORKING card grows —
-            // otherwise stick-to-bottom scrolls the bubble under the header.
-            !isUser &&
-              effectiveIsStreaming &&
-              hasText &&
-              'sticky top-0 z-10 bg-[var(--theme-bg,var(--background))] py-1',
           )}
         >
           {isUser ? (
@@ -2781,8 +2786,43 @@ function MessageItemComponent({
               alt={profileDisplayName}
             />
           ) : (
-            <AssistantAvatar size={24} className="mt-0.5" />
+            <AssistantAvatar
+              size={24}
+              className={cn(
+                'mt-0.5',
+                // Glow on the avatar box itself — a wrapper size-* ring drifts
+                // from the 24px image and looks like a mismatched halo.
+                isEmptyStreamingShell &&
+                  !hasActivityContent &&
+                  'thinking-avatar-glow',
+              )}
+              alt={
+                isEmptyStreamingShell && !hasActivityContent
+                  ? 'Working'
+                  : undefined
+              }
+            />
           )}
+          {isEmptyStreamingShell &&
+          !hasActivityContent &&
+          !hideActivityCard ? (
+            <div className="min-w-0 flex-1 max-w-[80%]">
+              <TuiActivityCard
+                toolSections={[]}
+                thinking={null}
+                isStreaming
+                keepMountedWhileBusy
+                statusTitle="⚡ Working"
+                expandAll={expandAllToolSections}
+                formatLabel={formatToolDisplayLabel}
+                formatArg={keyArgLabel}
+              />
+            </div>
+          ) : isEmptyStreamingShell && hasActivityContent ? (
+            // Reserve the avatar column while activity renders above; first
+            // reply token fills the bubble without remounting the avatar.
+            <div className="min-h-6 min-w-0 max-w-[80%]" aria-hidden />
+          ) : (
           <div
             data-chat-message-bubble={isUser ? 'user' : 'assistant'}
             className={cn(
@@ -2969,6 +3009,7 @@ function MessageItemComponent({
               </span>
             )}
           </div>
+          )}
         </Message>
       )}
       {hasAssistantMetadata ? (
@@ -2991,7 +3032,7 @@ function MessageItemComponent({
         </div>
       ) : null}
 
-      {(!hasToolCalls || hasText) && (
+      {(!hasToolCalls || hasText) && !isEmptyStreamingShell && (
         <MessageActionsBar
           text={fullText}
           timestamp={timestamp}

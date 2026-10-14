@@ -16,13 +16,12 @@ export type TurnBusySource = {
   /** True when there is an active (non-settled) turn id. */
   hasActiveTurn?: boolean
   /**
-   * Transitional Hermes signals collapsed into one owner-side input.
-   * Prefer phase/hasActiveTurn; these exist only until send-stream → Engine.
+   * Pre-accept gap only: local AbortController / submit in flight before
+   * Engine phase exists. Do NOT pass waitingForResponse / pendingGeneration —
+   * those are recovery signals, not busy authority after Engine settle.
    */
   streaming?: boolean
-  waitingForResponse?: boolean
   sending?: boolean
-  hasPendingGeneration?: boolean
 }
 
 export type TurnActivityStatusLabel = 'thinking' | 'working' | 'activity'
@@ -45,28 +44,20 @@ export type ProjectTurnActivityInput = {
 /**
  * Unique busy predicate. UI must not re-derive busy from content presence.
  */
-function transitionalBusy(source: TurnBusySource): boolean {
-  return Boolean(
-    source.streaming ||
-      source.waitingForResponse ||
-      source.sending ||
-      source.hasPendingGeneration,
-  )
+function preAcceptBusy(source: TurnBusySource): boolean {
+  return Boolean(source.streaming || source.sending)
 }
 
 export function selectTurnBusy(source: TurnBusySource): boolean {
   if (typeof source.phase === 'string' && source.phase.trim()) {
-    if (source.phase !== 'settled') return true
-    // Settled phase can briefly overlap finishStream before waiting clears —
-    // keep the host up through that handoff via transitional signals.
-    return transitionalBusy(source)
+    // Settled means idle for busy UI — recovery waiting must not relight Working.
+    return source.phase !== 'settled'
   }
   if (source.hasActiveTurn === true) return true
   if (source.hasActiveTurn === false && source.phase == null) {
-    // Explicit idle from Engine (no active turn) — still allow pre-accept gap.
-    return transitionalBusy(source)
+    return preAcceptBusy(source)
   }
-  return transitionalBusy(source)
+  return preAcceptBusy(source)
 }
 
 /**
