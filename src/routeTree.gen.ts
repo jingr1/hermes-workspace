@@ -160,6 +160,7 @@ import { Route as ApiSkillsHubSearchRouteImport } from './routes/api/skills/hub-
 import { Route as ApiSkillsContentRouteImport } from './routes/api/skills/content'
 import { Route as ApiSessionsSendRouteImport } from './routes/api/sessions/send'
 import { Route as ApiSessionsSearchRouteImport } from './routes/api/sessions/search'
+import { Route as ApiRuntimeConnectRouteImport } from './routes/api/runtime/connect'
 import { Route as ApiRunsDetachRouteImport } from './routes/api/runs/detach'
 import { Route as ApiRunsActiveRouteImport } from './routes/api/runs/active'
 import { Route as ApiRoomsFromMissionRouteImport } from './routes/api/rooms/from-mission'
@@ -1030,6 +1031,11 @@ const ApiSessionsSearchRoute = ApiSessionsSearchRouteImport.update({
   path: '/search',
   getParentRoute: () => ApiSessionsRoute,
 } as any)
+const ApiRuntimeConnectRoute = ApiRuntimeConnectRouteImport.update({
+  id: '/api/runtime/connect',
+  path: '/api/runtime/connect',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiRunsDetachRoute = ApiRunsDetachRouteImport.update({
   id: '/api/runs/detach',
   path: '/api/runs/detach',
@@ -1809,6 +1815,7 @@ export interface FileRoutesByFullPath {
   '/api/rooms/from-mission': typeof ApiRoomsFromMissionRoute
   '/api/runs/active': typeof ApiRunsActiveRoute
   '/api/runs/detach': typeof ApiRunsDetachRoute
+  '/api/runtime/connect': typeof ApiRuntimeConnectRoute
   '/api/sessions/search': typeof ApiSessionsSearchRoute
   '/api/sessions/send': typeof ApiSessionsSendRoute
   '/api/skills/content': typeof ApiSkillsContentRoute
@@ -2069,6 +2076,7 @@ export interface FileRoutesByTo {
   '/api/rooms/from-mission': typeof ApiRoomsFromMissionRoute
   '/api/runs/active': typeof ApiRunsActiveRoute
   '/api/runs/detach': typeof ApiRunsDetachRoute
+  '/api/runtime/connect': typeof ApiRuntimeConnectRoute
   '/api/sessions/search': typeof ApiSessionsSearchRoute
   '/api/sessions/send': typeof ApiSessionsSendRoute
   '/api/skills/content': typeof ApiSkillsContentRoute
@@ -2333,6 +2341,7 @@ export interface FileRoutesById {
   '/api/rooms/from-mission': typeof ApiRoomsFromMissionRoute
   '/api/runs/active': typeof ApiRunsActiveRoute
   '/api/runs/detach': typeof ApiRunsDetachRoute
+  '/api/runtime/connect': typeof ApiRuntimeConnectRoute
   '/api/sessions/search': typeof ApiSessionsSearchRoute
   '/api/sessions/send': typeof ApiSessionsSendRoute
   '/api/skills/content': typeof ApiSkillsContentRoute
@@ -2598,6 +2607,7 @@ export interface FileRouteTypes {
     | '/api/rooms/from-mission'
     | '/api/runs/active'
     | '/api/runs/detach'
+    | '/api/runtime/connect'
     | '/api/sessions/search'
     | '/api/sessions/send'
     | '/api/skills/content'
@@ -2858,6 +2868,7 @@ export interface FileRouteTypes {
     | '/api/rooms/from-mission'
     | '/api/runs/active'
     | '/api/runs/detach'
+    | '/api/runtime/connect'
     | '/api/sessions/search'
     | '/api/sessions/send'
     | '/api/skills/content'
@@ -3121,6 +3132,7 @@ export interface FileRouteTypes {
     | '/api/rooms/from-mission'
     | '/api/runs/active'
     | '/api/runs/detach'
+    | '/api/runtime/connect'
     | '/api/sessions/search'
     | '/api/sessions/send'
     | '/api/skills/content'
@@ -3357,6 +3369,7 @@ export interface RootRouteChildren {
   ApiProfilesUpdateAllModelProviderRoute: typeof ApiProfilesUpdateAllModelProviderRoute
   ApiRunsActiveRoute: typeof ApiRunsActiveRoute
   ApiRunsDetachRoute: typeof ApiRunsDetachRoute
+  ApiRuntimeConnectRoute: typeof ApiRuntimeConnectRoute
   ApiSwarmLanggraphCancelRoute: typeof ApiSwarmLanggraphCancelRoute
   ApiSwarmLanggraphMissionEventRoute: typeof ApiSwarmLanggraphMissionEventRoute
   ApiSwarmLanggraphResumeRoute: typeof ApiSwarmLanggraphResumeRoute
@@ -4460,6 +4473,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/sessions/search'
       preLoaderRoute: typeof ApiSessionsSearchRouteImport
       parentRoute: typeof ApiSessionsRoute
+    }
+    '/api/runtime/connect': {
+      id: '/api/runtime/connect'
+      path: '/api/runtime/connect'
+      fullPath: '/api/runtime/connect'
+      preLoaderRoute: typeof ApiRuntimeConnectRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/runs/detach': {
       id: '/api/runs/detach'
@@ -5835,6 +5855,7 @@ const rootRouteChildren: RootRouteChildren = {
     ApiProfilesUpdateAllModelProviderRoute,
   ApiRunsActiveRoute: ApiRunsActiveRoute,
   ApiRunsDetachRoute: ApiRunsDetachRoute,
+  ApiRuntimeConnectRoute: ApiRuntimeConnectRoute,
   ApiSwarmLanggraphCancelRoute: ApiSwarmLanggraphCancelRoute,
   ApiSwarmLanggraphMissionEventRoute: ApiSwarmLanggraphMissionEventRoute,
   ApiSwarmLanggraphResumeRoute: ApiSwarmLanggraphResumeRoute,

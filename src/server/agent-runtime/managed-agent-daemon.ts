@@ -46,6 +46,26 @@ async function pathExists(filePath: string): Promise<boolean> {
 }
 
 /**
+ * Start the managed-agent daemon when `/health` is down. A healthy daemon is
+ * left running.
+ */
+export async function ensureManagedAgentDaemon(): Promise<{
+  ok: boolean
+  healthy: boolean
+  detail: string
+}> {
+  const baseUrl = managedAgentBaseUrl() || DEFAULT_DAEMON_URL
+  if (await probeManagedAgentDaemonHealth(baseUrl)) {
+    return {
+      ok: true,
+      healthy: true,
+      detail: `already healthy at ${baseUrl}`,
+    }
+  }
+  return restartManagedAgentDaemon()
+}
+
+/**
  * Force-restart the local Agorax managed-agent daemon on the host network.
  * Prefers the prebuilt `.agorax/agorax-agentd` binary; falls back to
  * `scripts/dev-managed-agent.sh --force` (go run).

@@ -101,8 +101,8 @@ export function MobilePromptTrigger() {
               <div className="flex items-center gap-3">
                 <div className="flex shrink-0 items-center gap-1.5">
                   <img
-                    src="/hermes-agent-avatar.webp"
-                    alt="Hermes Agent"
+                    src="/agorax-icon-512.png"
+                    alt="Agorax"
                     className="size-8 rounded-lg"
                   />
                   <span className="text-xs text-primary-600">+</span>

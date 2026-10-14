@@ -1,6 +1,7 @@
 /**
- * In-memory registry of chat runs that should keep the upstream Hermes gateway
- * request alive after the browser SSE client disconnects (profile switch).
+ * In-memory registry of chat runs whose upstream Hermes gateway request must
+ * stay alive after the browser SSE leg closes (profile switch, refresh, or a
+ * dropped proxy). Explicit Stop clears the entry and aborts upstream.
  */
 
 const DETACHED_RUN_TTL_MS = 30 * 60 * 1000

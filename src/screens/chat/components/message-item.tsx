@@ -2679,7 +2679,11 @@ function MessageItemComponent({
       data-chat-message-role={role}
       data-chat-message-id={wrapperDataMessageId}
       style={{
-        contentVisibility: 'auto',
+        // `content-visibility: auto` can drop hit-testing on the action row
+        // under the bubble. The Retry control lives on that row, so keep the
+        // row fully interactive while it is showing.
+        contentVisibility:
+          isUser && (isFailed || isStuckSending) ? 'visible' : 'auto',
         containIntrinsicSize: 'auto 160px',
         ...(typeof wrapperScrollMarginTop === 'number'
           ? { scrollMarginTop: `${wrapperScrollMarginTop}px` }

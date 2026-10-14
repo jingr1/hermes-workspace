@@ -1,7 +1,4 @@
-import {
-  resolveClientDisconnectAction,
-  type ClientDisconnectAction,
-} from './stream-handoff-registry'
+import { type ClientDisconnectAction } from './stream-handoff-registry'
 
 export function shouldAbortUpstreamOnStreamClose(input: {
   explicitAbort?: boolean
@@ -23,6 +20,8 @@ export type ClientDisconnectEvaluation = {
 export function evaluateClientDisconnect(input: {
   activeRunId: string | null
   streamClosed: boolean
+  /** Explicit Stop. A dropped browser/proxy socket is not a stop. */
+  userStopped?: boolean
   resolveAction?: (args: { runId: string }) => ClientDisconnectAction
 }): ClientDisconnectEvaluation {
   const idle: ClientDisconnectEvaluation = {
@@ -33,21 +32,33 @@ export function evaluateClientDisconnect(input: {
   }
   if (!input.activeRunId || input.streamClosed) return idle
 
-  const resolve = input.resolveAction ?? resolveClientDisconnectAction
-  const keepUpstreamAlive =
-    resolve({ runId: input.activeRunId }) === 'detach_handoff'
-  if (keepUpstreamAlive) {
+  if (input.userStopped) {
     return {
-      keepUpstreamAlive: true,
-      detachedHandoff: true,
-      runIdToUnregister: null,
-      shouldPersistHandoff: true,
+      keepUpstreamAlive: false,
+      detachedHandoff: false,
+      runIdToUnregister: input.activeRunId,
+      shouldPersistHandoff: false,
     }
   }
+
+  // Browser refresh, tunnel idle, and navigation close the SSE leg only.
+  // Aborting here is what left the 10:20 turn as
+  // "Operation interrupted: waiting for model response" with no reply.
+  // resolveAction stays as a test/override hook; production disconnects detach.
+  const resolve = input.resolveAction
+  if (resolve && resolve({ runId: input.activeRunId }) === 'abort_upstream') {
+    return {
+      keepUpstreamAlive: false,
+      detachedHandoff: false,
+      runIdToUnregister: input.activeRunId,
+      shouldPersistHandoff: false,
+    }
+  }
+
   return {
-    keepUpstreamAlive: false,
-    detachedHandoff: false,
-    runIdToUnregister: input.activeRunId,
-    shouldPersistHandoff: false,
+    keepUpstreamAlive: true,
+    detachedHandoff: true,
+    runIdToUnregister: null,
+    shouldPersistHandoff: true,
   }
 }

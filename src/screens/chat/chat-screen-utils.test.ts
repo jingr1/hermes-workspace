@@ -4,6 +4,7 @@ import {
   advanceStickyStreamingText,
   buildChatNavKey,
   createResponseWaitSnapshot,
+  isRetryableUserMessage,
   isTerminalActiveRunStatus,
   profileNameFromNavKey,
   shouldCancelStreamOnSessionNav,
@@ -360,5 +361,40 @@ describe('shouldShowHermesProcessingIndicator', () => {
         hasPendingGeneration: false,
       }),
     ).toBe(false)
+  })
+})
+
+describe('isRetryableUserMessage', () => {
+  it('resends a stuck sending message only when the user clicks Retry', () => {
+    const message = {
+      role: 'user' as const,
+      content: [{ type: 'text' as const, text: 'hello' }],
+      status: 'sending' as const,
+    }
+
+    expect(isRetryableUserMessage(message, 'manual')).toBe(true)
+    expect(isRetryableUserMessage(message, 'auto')).toBe(false)
+  })
+
+  it('resends an error message on both manual and auto retry', () => {
+    const message = {
+      role: 'user' as const,
+      content: [{ type: 'text' as const, text: 'hello' }],
+      status: 'error' as const,
+    }
+
+    expect(isRetryableUserMessage(message, 'manual')).toBe(true)
+    expect(isRetryableUserMessage(message, 'auto')).toBe(true)
+  })
+
+  it('does not resend a delivered queued message', () => {
+    const message = {
+      role: 'user' as const,
+      content: [{ type: 'text' as const, text: 'hello' }],
+      status: 'queued' as const,
+    }
+
+    expect(isRetryableUserMessage(message, 'manual')).toBe(false)
+    expect(isRetryableUserMessage(message, 'auto')).toBe(false)
   })
 })

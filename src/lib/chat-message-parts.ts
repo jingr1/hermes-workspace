@@ -396,6 +396,12 @@ export function assistantHasVisibleHostContent(
   ) {
     return true
   }
+  if (
+    typeof message.__streamingThinking === 'string' &&
+    message.__streamingThinking.trim().length > 0
+  ) {
+    return true
+  }
 
   const content = Array.isArray(message.content) ? message.content : []
   if (content.length === 0) return false

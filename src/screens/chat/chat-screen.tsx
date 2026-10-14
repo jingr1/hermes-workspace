@@ -26,6 +26,7 @@ import {
   buildChatNavKey,
   createOptimisticMessage,
   createResponseWaitSnapshot,
+  isRetryableUserMessage,
   shouldCancelStreamOnSessionNav,
   shouldClearWaitingForAssistantMessage,
   shouldHandoffStreamOnProfileNav,
@@ -404,11 +405,11 @@ function getRetryMessageKey(message: ChatMessage): string {
   return `fallback:${message.role ?? 'unknown'}:${timestamp}:${messageText}`
 }
 
-function isRetryableQueuedMessage(message: ChatMessage): boolean {
-  if ((message.role || '') !== 'user') return false
-  const raw = message as Record<string, unknown>
-  const status = normalizeMessageValue(raw.status)
-  return status === 'error'
+function isRetryableQueuedMessage(
+  message: ChatMessage,
+  mode: 'manual' | 'auto',
+): boolean {
+  return isRetryableUserMessage(message, mode)
 }
 
 const commandHelpers: ChatComposerHelpers = {
@@ -2503,7 +2504,7 @@ export function ChatScreen({
 
   const retryQueuedMessage = useCallback(
     function retryQueuedMessage(message: ChatMessage, mode: 'manual' | 'auto') {
-      if (!isRetryableQueuedMessage(message)) return false
+      if (!isRetryableQueuedMessage(message, mode)) return false
 
       const body = textFromMessage(message).trim()
       const attachments = getMessageRetryAttachments(message)

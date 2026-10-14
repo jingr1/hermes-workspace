@@ -213,24 +213,16 @@ export function MobileHamburgerMenu() {
         >
           <div className="flex items-center gap-2.5">
             <img
-                  src="/hermes-agent-avatar.webp"
-              alt="Hermes Agent"
+              src="/agorax-icon-512.png"
+              alt="Agorax"
               className="size-8 rounded-xl shrink-0"
             />
-            <div className="flex flex-col leading-tight">
-              <span
-                className="font-bold text-[15px] tracking-tight"
-                style={{ color: 'var(--color-ink, #111)' }}
-              >
-                Hermes Agent
-              </span>
-              <span
-                className="text-[11px]"
-                style={{ color: 'var(--color-muted, #888)' }}
-              >
-                Workspace
-              </span>
-            </div>
+            <span
+              className="font-bold text-[15px] tracking-tight"
+              style={{ color: 'var(--color-ink, #111)' }}
+            >
+              Agorax
+            </span>
           </div>
           <button
             type="button"

@@ -113,6 +113,38 @@ const PROVIDERS = [
   },
 ]
 
+function RuntimeLinkRow({
+  label,
+  status,
+  detail,
+}: {
+  label: string
+  status: 'pending' | 'ready' | 'error'
+  detail: string
+}) {
+  return (
+    <div
+      className="rounded-xl px-3 py-2"
+      style={{ border: '1px solid var(--theme-border)' }}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className={cn(
+            'size-2 rounded-full',
+            status === 'ready' && 'bg-green-500',
+            status === 'error' && 'bg-red-500',
+            status === 'pending' && 'animate-pulse bg-accent-500',
+          )}
+        />
+        <span>{label}</span>
+      </div>
+      {status === 'error' && detail ? (
+        <p className="mt-1 break-all text-xs text-red-400">{detail}</p>
+      ) : null}
+    </div>
+  )
+}
+
 function getEnhancedFeatureNames(
   capabilities?: GatewayStatusResponse['capabilities'],
 ): Array<string> {
@@ -488,6 +520,69 @@ export function ClaudeOnboarding() {
     setShow(false)
   }, [])
 
+  const connectGeneration = useRef(0)
+  const [runtimeConnect, setRuntimeConnect] = useState<{
+    phase: 'connecting' | 'ready' | 'error'
+    hermes: 'pending' | 'ready' | 'error'
+    managed: 'pending' | 'ready' | 'error'
+    hermesDetail: string
+    managedDetail: string
+  }>({
+    phase: 'connecting',
+    hermes: 'pending',
+    managed: 'pending',
+    hermesDetail: '',
+    managedDetail: '',
+  })
+
+  const connectRuntimes = useCallback(async () => {
+    const generation = connectGeneration.current + 1
+    connectGeneration.current = generation
+    setRuntimeConnect({
+      phase: 'connecting',
+      hermes: 'pending',
+      managed: 'pending',
+      hermesDetail: '',
+      managedDetail: '',
+    })
+
+    try {
+      const res = await fetch('/api/runtime/connect', { method: 'POST' })
+      const data = (await res.json()) as {
+        hermes?: { ok?: boolean; detail?: string }
+        managed?: { ok?: boolean; detail?: string }
+        error?: string
+      }
+      if (connectGeneration.current !== generation) return
+
+      const hermesOk = Boolean(data.hermes?.ok)
+      const managedOk = Boolean(data.managed?.ok)
+      setRuntimeConnect({
+        phase: hermesOk && managedOk ? 'ready' : 'error',
+        hermes: hermesOk ? 'ready' : 'error',
+        managed: managedOk ? 'ready' : 'error',
+        hermesDetail: data.hermes?.detail || data.error || '',
+        managedDetail: data.managed?.detail || data.error || '',
+      })
+      if (hermesOk && managedOk) complete()
+    } catch (err) {
+      if (connectGeneration.current !== generation) return
+      const detail = err instanceof Error ? err.message : 'Connection failed'
+      setRuntimeConnect({
+        phase: 'error',
+        hermes: 'error',
+        managed: 'error',
+        hermesDetail: detail,
+        managedDetail: detail,
+      })
+    }
+  }, [complete])
+
+  useEffect(() => {
+    if (!show) return
+    void connectRuntimes()
+  }, [connectRuntimes, show])
+
   if (!show) return null
 
   const cardStyle: React.CSSProperties = {
@@ -523,28 +618,46 @@ export function ClaudeOnboarding() {
           {step === 'welcome' && (
             <div className="space-y-4 text-center">
               <img
-                src="/hermes-agent-avatar.webp"
-                alt="Hermes Agent"
+                src="/agorax-icon-512.png"
+                alt="Agorax"
                 className="mx-auto size-20 rounded-2xl"
                 style={{
-                  filter: 'drop-shadow(0 8px 24px rgba(99,102,241,0.3))',
+                  filter: 'drop-shadow(0 8px 24px rgba(232,163,61,0.32))',
                 }}
               />
               <h2 className="text-xl font-bold">Welcome to Agorax</h2>
               <p className="text-sm" style={mutedStyle}>
-                Works with any OpenAI-compatible backend. Hermes Agent gateway
-                APIs unlock sessions, memory, skills, and other extras
-                automatically.
+                Connecting the Hermes Agent gateway and the managed-agent
+                daemon.
               </p>
-              <button
-                onClick={() => {
-                  setStep('connect')
-                  void checkBackend()
-                }}
-                className="w-full rounded-xl bg-accent-500 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent-600"
-              >
-                Connect Backend
-              </button>
+              <div className="space-y-2 text-left text-sm">
+                <RuntimeLinkRow
+                  label="Hermes Agent gateway"
+                  status={runtimeConnect.hermes}
+                  detail={runtimeConnect.hermesDetail}
+                />
+                <RuntimeLinkRow
+                  label="managed-agent daemon"
+                  status={runtimeConnect.managed}
+                  detail={runtimeConnect.managedDetail}
+                />
+              </div>
+              {runtimeConnect.phase === 'error' ? (
+                <button
+                  onClick={() => void connectRuntimes()}
+                  className="w-full rounded-xl bg-accent-500 py-3 text-sm font-semibold text-white transition-colors hover:bg-accent-600"
+                >
+                  Retry
+                </button>
+              ) : (
+                <div
+                  className="flex items-center justify-center gap-2 text-sm"
+                  style={mutedStyle}
+                >
+                  <span className="size-2 animate-pulse rounded-full bg-accent-500" />
+                  Connecting…
+                </div>
+              )}
               <button onClick={complete} className="text-xs" style={mutedStyle}>
                 Skip setup
               </button>

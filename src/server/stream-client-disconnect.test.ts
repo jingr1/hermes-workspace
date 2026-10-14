@@ -49,7 +49,36 @@ describe('stream-client-disconnect', () => {
     })
   })
 
-  it('unregisters active runs when not detached', () => {
+  it('keeps an active run alive when the browser drops', () => {
+    expect(
+      evaluateClientDisconnect({
+        activeRunId: 'run-2',
+        streamClosed: false,
+      }),
+    ).toEqual({
+      keepUpstreamAlive: true,
+      detachedHandoff: true,
+      runIdToUnregister: null,
+      shouldPersistHandoff: true,
+    })
+  })
+
+  it('aborts upstream on explicit Stop', () => {
+    expect(
+      evaluateClientDisconnect({
+        activeRunId: 'run-2',
+        streamClosed: false,
+        userStopped: true,
+      }),
+    ).toEqual({
+      keepUpstreamAlive: false,
+      detachedHandoff: false,
+      runIdToUnregister: 'run-2',
+      shouldPersistHandoff: false,
+    })
+  })
+
+  it('unregisters active runs when the override aborts', () => {
     expect(
       evaluateClientDisconnect({
         activeRunId: 'run-2',

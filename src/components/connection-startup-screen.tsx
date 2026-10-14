@@ -5,8 +5,6 @@ import { fetchClaudeAuthStatus } from '@/lib/claude-auth'
 
 const POLL_INTERVAL_MS = 2_000
 const FAILURE_REVEAL_MS = 5_000
-// Fire one silent auto-start attempt this many ms after we still can't connect.
-const AUTO_START_DELAY_MS = 4_000
 
 type Platform = 'macos' | 'windows' | 'linux' | 'unknown'
 
@@ -24,9 +22,14 @@ function getSetupSteps(
 ): Array<{ title: string; command: string; note?: string }> {
   return [
     {
-      title: 'Use any OpenAI-compatible backend',
-      command: 'Set HERMES_API_URL to your backend base URL',
-      note: 'Portable chat works with any backend that exposes /v1/chat/completions (Ollama, LiteLLM, vLLM, etc.)',
+      title: 'Hermes Agent gateway',
+      command: 'hermes gateway run',
+      note: 'Chat, sessions, memory, and skills for Hermes agents. Agorax starts this automatically.',
+    },
+    {
+      title: 'managed-agent daemon',
+      command: 'bash scripts/start-managed-agent-host.sh',
+      note: 'Claude Code, Codex, and Cursor run through this daemon on :8788. Agorax starts it automatically.',
     },
     {
       title: 'Optional: install Hermes Agent locally',
@@ -38,11 +41,6 @@ function getSetupSteps(
       title: 'Set up your agent',
       command: 'hermes setup',
       note: 'Pick your providers once; Hermes Agent stores them under ~/.hermes',
-    },
-    {
-      title: 'Start the gateway',
-      command: 'hermes gateway run',
-      note: 'This starts the HTTP API on :8642 for the workspace',
     },
   ]
 }
@@ -70,7 +68,6 @@ export function ConnectionStartupScreen({ onConnected }: Props) {
   useEffect(() => {
     isDone.current = false
     let pollTimer: ReturnType<typeof setTimeout> | null = null
-    let autoStartTimer: ReturnType<typeof setTimeout> | null = null
     let autoStartFired = false
 
     const failureTimer = setTimeout(() => {
@@ -79,37 +76,43 @@ export function ConnectionStartupScreen({ onConnected }: Props) {
       }
     }, FAILURE_REVEAL_MS)
 
-    // After a short grace period, fire /api/start-claude once silently.
-    // If hermes-agent is installed and just not running, this brings it back
-    // up without making the user click anything. The polling loop will see it.
+    // Bring up both product runtimes immediately. A healthy gateway or daemon
+    // is left running; only a down process is started.
     const fireSilentAutoStart = async () => {
       if (autoStartFired || isDone.current) return
       autoStartFired = true
       try {
-        const res = await fetch('/api/start-claude', {
+        const res = await fetch('/api/runtime/connect', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
         })
         const ct = res.headers.get('content-type') || ''
         if (!ct.includes('application/json')) return
-        const data = (await res.json()) as { ok?: boolean; message?: string }
-        if (res.ok && data.ok) {
-          // surface a one-line note so users see what happened if they're
-          // looking at the failure panel
-          setServerLog([
-            String(
-              data.message ||
-                'Auto-started Hermes Agent gateway — reconnecting…',
-            ),
-          ])
+        const data = (await res.json()) as {
+          ok?: boolean
+          hermes?: { ok?: boolean; detail?: string }
+          managed?: { ok?: boolean; detail?: string }
         }
+        if (res.ok && data.ok) {
+          setServerLog([
+            'Hermes Agent gateway and managed-agent daemon are connected.',
+          ])
+          return
+        }
+        const lines = [
+          data.hermes?.ok
+            ? 'Hermes Agent gateway connected.'
+            : `Hermes Agent gateway: ${data.hermes?.detail || 'not connected'}`,
+          data.managed?.ok
+            ? 'managed-agent daemon connected.'
+            : `managed-agent daemon: ${data.managed?.detail || 'not connected'}`,
+        ]
+        setServerLog(lines)
       } catch {
-        // silent: manual auto-start button stays available
+        // silent: manual connect button stays available
       }
     }
-    autoStartTimer = setTimeout(() => {
-      void fireSilentAutoStart()
-    }, AUTO_START_DELAY_MS)
+    void fireSilentAutoStart()
 
     const tryConnect = async () => {
       try {
@@ -117,7 +120,6 @@ export function ConnectionStartupScreen({ onConnected }: Props) {
         if (isDone.current) return
         isDone.current = true
         clearTimeout(failureTimer)
-        if (autoStartTimer) clearTimeout(autoStartTimer)
         if (pollTimer) clearTimeout(pollTimer)
         onConnectedRef.current(status)
       } catch {
@@ -131,7 +133,6 @@ export function ConnectionStartupScreen({ onConnected }: Props) {
     return () => {
       isDone.current = true
       if (pollTimer) clearTimeout(pollTimer)
-      if (autoStartTimer) clearTimeout(autoStartTimer)
       clearTimeout(failureTimer)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -157,7 +158,7 @@ export function ConnectionStartupScreen({ onConnected }: Props) {
     setServerError(null)
     setServerLog(['Looking for hermes-agent...'])
     try {
-      const res = await fetch('/api/start-claude', {
+      const res = await fetch('/api/runtime/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       })
@@ -170,19 +171,31 @@ export function ConnectionStartupScreen({ onConnected }: Props) {
         return
       }
 
-      const data = (await res.json()) as Record<string, unknown>
+      const data = (await res.json()) as {
+        ok?: boolean
+        error?: string
+        hermes?: { ok?: boolean; detail?: string }
+        managed?: { ok?: boolean; detail?: string }
+      }
       if (res.ok && data.ok) {
         setServerLog([
-          String(data.message || 'Started — waiting for connection...'),
+          'Hermes Agent gateway and managed-agent daemon are connected.',
         ])
         setServerStarting(false)
         return
       }
 
-      const msg = String(data.error || 'Could not find hermes-agent')
-      const hint = data.hint ? String(data.hint) : ''
+      const msg = String(
+        data.error ||
+          [
+            data.hermes?.ok ? '' : data.hermes?.detail,
+            data.managed?.ok ? '' : data.managed?.detail,
+          ]
+            .filter(Boolean)
+            .join('; ') ||
+          'Could not connect Hermes Agent gateway and managed-agent daemon',
+      )
       setServerLog([`Error: ${msg}`])
-      if (hint) setServerLog((prev) => [...prev, `Hint: ${hint}`])
       setServerError(msg)
       setServerStarting(false)
       // Show manual steps when auto-start fails
@@ -228,7 +241,7 @@ export function ConnectionStartupScreen({ onConnected }: Props) {
           aria-hidden={showFailureState}
         >
           <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-white/20 border-t-white/80" />
-          <span>Connecting to your backend...</span>
+          <span>Connecting Hermes Agent gateway and managed-agent daemon...</span>
         </div>
 
         {/* Failure state — setup guide */}
@@ -242,12 +255,12 @@ export function ConnectionStartupScreen({ onConnected }: Props) {
         >
           <div className="w-full rounded-3xl border border-white/10 bg-white/5 p-5 text-left shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-sm">
             <p className="text-base font-medium text-white">
-              Welcome! Let&apos;s connect your backend
+              Connecting Hermes and managed agents
             </p>
             <p className="mt-2 text-sm leading-6 text-white/60">
-              Agorax works with any OpenAI-compatible backend. Hermes
-              Agent gateway APIs unlock enhanced features automatically when
-              they are available.
+              Agorax starts the Hermes Agent gateway and the managed-agent
+              daemon. Hermes covers chat, sessions, and skills. The daemon
+              runs Claude Code, Codex, and Cursor.
             </p>
 
             {/* Auto-start section */}
@@ -269,7 +282,7 @@ export function ConnectionStartupScreen({ onConnected }: Props) {
                     Detecting...
                   </span>
                 ) : (
-                  'Auto-Start Hermes Agent Gateway'
+                  'Connect Hermes gateway and managed-agent'
                 )}
               </button>
 
@@ -350,7 +363,7 @@ export function ConnectionStartupScreen({ onConnected }: Props) {
                   <code className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-white/70">
                     HERMES_API_URL
                   </code>{' '}
-                  at any OpenAI-compatible backend:
+                  at your Hermes Agent gateway:
                 </p>
                 <pre className="mt-2 overflow-x-auto font-mono text-xs text-white/60">
                   HERMES_API_URL=http://your-server:8642 pnpm dev:ui
@@ -362,7 +375,7 @@ export function ConnectionStartupScreen({ onConnected }: Props) {
 
         {!showFailureState ? (
           <p className="mt-6 text-xs text-white/45">
-            This page auto-refreshes when a compatible backend is detected
+            This page continues when the Hermes Agent gateway is reachable
           </p>
         ) : null}
       </div>

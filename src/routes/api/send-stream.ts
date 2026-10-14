@@ -17,7 +17,10 @@ import {
   setRunThinking,
   upsertRunToolCall,
 } from '../../server/run-store'
-import { clearRunDetached } from '../../server/stream-handoff-registry'
+import {
+  clearRunDetached,
+  markRunDetached,
+} from '../../server/stream-handoff-registry'
 import {
   evaluateClientDisconnect,
   shouldAbortUpstreamOnStreamClose,
@@ -593,6 +596,7 @@ export const Route = createFileRoute('/api/send-stream')({
         const abortController = new AbortController()
         let keepUpstreamAlive = false
         let detachedHandoff = false
+        let userStopped = false
         const liveRunIds = new Set<string>()
         // Bind a run id to this request's AbortController so POST /api/runs/:id/stop
         // can hard-interrupt Hermes even after the browser lost its fetch handle.
@@ -603,6 +607,7 @@ export const Route = createFileRoute('/api/send-stream')({
           registerActiveSendRun(trimmed, {
             sessionKey: runSessionKey,
             abortUpstream: () => {
+              userStopped = true
               clearRunDetached(trimmed)
               keepUpstreamAlive = false
               detachedHandoff = false
@@ -651,9 +656,13 @@ export const Route = createFileRoute('/api/send-stream')({
         }
 
         function handleClientDisconnect() {
+          if (activeRunId && !userStopped) {
+            markRunDetached(activeRunId)
+          }
           const evaluation = evaluateClientDisconnect({
             activeRunId,
             streamClosed,
+            userStopped,
           })
           keepUpstreamAlive = evaluation.keepUpstreamAlive
           detachedHandoff = evaluation.detachedHandoff

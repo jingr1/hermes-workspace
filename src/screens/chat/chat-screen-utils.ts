@@ -12,6 +12,22 @@ export type ResponseWaitSnapshot = {
   lastAssistantText: string | null
 }
 
+/**
+ * Manual Retry is shown for a rejected send (`error`) and for a send that
+ * never left `sending`. Auto flush must ignore `sending`: that request may
+ * still be in flight, and resending it would duplicate the turn.
+ */
+export function isRetryableUserMessage(
+  message: ChatMessage,
+  mode: 'manual' | 'auto',
+): boolean {
+  if ((message.role || '') !== 'user') return false
+  const status = (message as { status?: unknown }).status
+  const normalized = typeof status === 'string' ? status.trim() : ''
+  if (normalized === 'error') return true
+  return mode === 'manual' && normalized === 'sending'
+}
+
 export function isTerminalActiveRunStatus(status: unknown): boolean {
   return (
     typeof status === 'string' &&

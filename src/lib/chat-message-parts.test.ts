@@ -145,6 +145,16 @@ describe('assistantHasVisibleHostContent', () => {
     ).toBe(false)
   })
 
+  it('keeps streaming rows that only have sidecar thinking', () => {
+    expect(
+      assistantHasVisibleHostContent({
+        content: [],
+        __streamingStatus: 'streaming',
+        __streamingThinking: 'planning the next step',
+      }),
+    ).toBe(true)
+  })
+
   it('keeps streaming rows once tool calls are attached', () => {
     expect(
       assistantHasVisibleHostContent({

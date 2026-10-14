@@ -25,7 +25,10 @@ import {
   ChatContainerScrollAnchor,
 } from '@/components/prompt-kit/chat-container'
 import { AssistantAvatar } from '@/components/avatars'
-import { thinkingTextFromContent } from '@/lib/chat-message-parts'
+import {
+  assistantHasWorkingSurface,
+  thinkingTextFromContent,
+} from '@/lib/chat-message-parts'
 import { cn } from '@/lib/utils'
 import { hapticTap } from '@/lib/haptics'
 import { CHAT_OPEN_MESSAGE_SEARCH_EVENT } from '@/screens/chat/chat-events'
@@ -546,9 +549,11 @@ export function streamingMessageHasVisibleContent(
   if (options?.hasToolActivity) return true
   if (options?.streamingText?.trim()) return true
   if (options?.streamingThinking?.trim()) return true
-  if (textFromMessage(message).trim().length > 0) return true
-  if (getToolCallsFromMessage(message).length > 0) return true
-  return thinkingTextFromContent(message.content).trim().length > 0
+  // Same predicate as the Working card / pill. Sidecar fields
+  // (`__streamingThinking`, `__streamToolCalls`) count — hiding the row
+  // while those are set unmounts Working and leaves the pill off.
+  if (assistantHasWorkingSurface(message)) return true
+  return textFromMessage(message).trim().length > 0
 }
 
 export function buildDisplayEntries(

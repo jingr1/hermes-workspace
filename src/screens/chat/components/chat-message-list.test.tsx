@@ -110,6 +110,27 @@ describe('streamingMessageHasVisibleContent', () => {
     ).toBe(true)
   })
 
+  it('keeps a Working row visible when only sidecar thinking or tools remain', () => {
+    expect(
+      streamingMessageHasVisibleContent({
+        id: 'a-think',
+        role: 'assistant',
+        content: [],
+        __streamingThinking: 'planning',
+        timestamp: 1,
+      } as unknown as ChatMessage),
+    ).toBe(true)
+    expect(
+      streamingMessageHasVisibleContent({
+        id: 'a-tool',
+        role: 'assistant',
+        content: [],
+        __streamToolCalls: [{ id: 't1', name: 'Read' }],
+        timestamp: 1,
+      } as unknown as ChatMessage),
+    ).toBe(true)
+  })
+
   it('treats managed assistant text on the message row as visible', () => {
     expect(
       streamingMessageHasVisibleContent(

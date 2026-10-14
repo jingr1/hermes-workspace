@@ -1,7 +1,9 @@
 import { create } from 'zustand'
 import {
+  assistantHasWorkingSurface,
   mergeAssistantThinkingFromSource,
   normalizeToolCallArgs,
+  thinkingTextFromMessage,
 } from '../lib/chat-message-parts'
 import {
   assistantMessageIdForRun,
@@ -620,6 +622,63 @@ function stripFinalTagsFromMessage(msg: ChatMessage): ChatMessage {
   return nextMessage
 }
 
+function toolCallsFromChatMessage(
+  message: ChatMessage,
+): StreamingState['toolCalls'] {
+  const embedded = (message as { __streamToolCalls?: unknown }).__streamToolCalls
+  const embeddedTools = Array.isArray(embedded) ? embedded : []
+  const contentTools = Array.isArray(message.content)
+    ? message.content.filter((part) => {
+        if (!part || typeof part !== 'object') return false
+        const type = (part as { type?: string }).type
+        return type === 'toolCall' || type === 'tool_use' || type === 'toolUse'
+      })
+    : []
+  const source = embeddedTools.length > 0 ? embeddedTools : contentTools
+  return source.map((entry, index) => {
+    const rec = entry as {
+      id?: unknown
+      name?: unknown
+      phase?: unknown
+      args?: unknown
+      arguments?: unknown
+      preview?: unknown
+      result?: unknown
+    }
+    const id =
+      typeof rec.id === 'string' && rec.id.trim() ? rec.id.trim() : `tool-${index}`
+    const name =
+      typeof rec.name === 'string' && rec.name.trim() ? rec.name.trim() : 'tool'
+    return {
+      id,
+      name,
+      phase: typeof rec.phase === 'string' && rec.phase.trim() ? rec.phase : 'complete',
+      args: rec.args ?? rec.arguments,
+      preview: typeof rec.preview === 'string' ? rec.preview : undefined,
+      result: typeof rec.result === 'string' ? rec.result : undefined,
+    }
+  })
+}
+
+/**
+ * A second `done` (finishStream after the SSE done) runs after streaming
+ * state was deleted. Seed from the durable row so that settle cannot replace
+ * a Working card's thinking/tools with an empty projection.
+ */
+function streamingSeedFromDurableRow(
+  messages: Array<ChatMessage> | undefined,
+  messageId: string,
+): Pick<StreamingState, 'text' | 'thinking' | 'toolCalls'> | null {
+  if (!messages || !messageId) return null
+  const row = messages.find((message) => getMessageId(message) === messageId)
+  if (!row || row.role !== 'assistant') return null
+  const text = extractMessageText(row)
+  const thinking = thinkingTextFromMessage(row)
+  const toolCalls = toolCallsFromChatMessage(row)
+  if (!text && !thinking && toolCalls.length === 0) return null
+  return { text, thinking, toolCalls }
+}
+
 function getMessageId(msg: ChatMessage | null | undefined): string | undefined {
   if (!msg) return undefined
   const id = (msg as { id?: string }).id
@@ -1122,7 +1181,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ) {
             const prevEmptyIdx = sessionMessages.reduce<number>(
               (found, m, idx) =>
-                m.role === 'assistant' && extractMessageText(m).length === 0
+                m.role === 'assistant' &&
+                extractMessageText(m).length === 0 &&
+                !assistantHasWorkingSurface(m)
                   ? idx
                   : found,
               -1,
@@ -1134,6 +1195,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 sortMessagesChronologically(sessionMessages),
               )
               set({ realtimeMessages: messages, lastEventAt: now })
+              break
+            }
+            // A thinking/tool row has no plain text. Do not open a second
+            // empty assistant beside it — that replacement used to unmount
+            // the Working card.
+            if (
+              sessionMessages.some(
+                (message) =>
+                  message.role === 'assistant' &&
+                  assistantHasWorkingSurface(message),
+              )
+            ) {
               break
             }
           }
@@ -1333,6 +1406,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // Tutti settle: same durable row flips to complete. Do not replace
         // live content with a differently shaped done.message echo.
         const streamingMap = new Map(state.streamingState)
+        const hadLiveStream = streamingMap.has(sessionKey)
         const prev =
           streamingMap.get(sessionKey) ?? createEmptyStreamingState()
         const streaming = withDurableStreamingIdentity(
@@ -1343,6 +1417,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
         // Fold any late text from done.message without dropping live thinking.
         let settledStreaming = streaming
+        if (!hadLiveStream && streaming.messageId) {
+          const seeded = streamingSeedFromDurableRow(
+            state.realtimeMessages.get(sessionKey),
+            streaming.messageId,
+          )
+          if (seeded) {
+            settledStreaming = {
+              ...settledStreaming,
+              text: settledStreaming.text.trim() ? settledStreaming.text : seeded.text,
+              thinking: settledStreaming.thinking.trim()
+                ? settledStreaming.thinking
+                : seeded.thinking,
+              toolCalls:
+                settledStreaming.toolCalls.length > 0
+                  ? settledStreaming.toolCalls
+                  : seeded.toolCalls,
+            }
+          }
+        }
         if (event.message) {
           const cleaned = ensureAssistantTextContent(
             stripFinalTagsFromMessage(event.message),

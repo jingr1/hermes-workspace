@@ -326,6 +326,12 @@ async function requestHandler(req, res) {
 
 function listenOn(bindHost) {
   const httpServer = createServer(requestHandler)
+  // Node's default keepAliveTimeout is 5s. Chrome keeps idle HTTP/1.1 sockets
+  // much longer and does not retry a POST that lands on one the server already
+  // closed, so /api/send-stream fails with "Failed to fetch" and never reaches
+  // the route. Stay above the browser pool; headersTimeout must be larger.
+  httpServer.keepAliveTimeout = 65_000
+  httpServer.headersTimeout = 70_000
   httpServer.listen(port, bindHost, () => {
     console.log(`Agorax running at http://${bindHost}:${port}`)
   })

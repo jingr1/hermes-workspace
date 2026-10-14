@@ -10,7 +10,7 @@ function LogoLoader({ className }: LogoLoaderProps) {
   return (
     <span className="logo-loader-track" aria-hidden="true">
       <img
-        src="/hermes-agent-avatar.webp"
+        src="/agorax-icon-512.png"
         alt=""
         className={cn('logo-loader-icon size-4 rounded', className)}
       />

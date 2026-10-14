@@ -407,4 +407,100 @@ describe('thinking + visible content through the stream store', () => {
     expect(content.find((p) => p.type === 'text')?.text).toBe('Done.')
     expect((assistant as any).__streamToolCalls?.length).toBe(1)
   })
+
+  it('a second done keeps the Working card tools after streaming state is gone', () => {
+    const sessionKey = 'e2e-second-done-keeps-tools'
+    resetStore(sessionKey)
+    const store = useChatStore.getState()
+
+    store.processEvent({
+      type: 'thinking',
+      text: 'look up the file',
+      sessionKey,
+      runId: 'run-9',
+      transport: 'send-stream',
+    })
+    store.processEvent({
+      type: 'tool',
+      phase: 'calling',
+      name: 'read_file',
+      toolCallId: 'tc-9',
+      sessionKey,
+      runId: 'run-9',
+      transport: 'send-stream',
+    })
+    store.processEvent({
+      type: 'done',
+      state: 'final',
+      sessionKey,
+      runId: 'run-9',
+      transport: 'send-stream',
+    })
+    store.processEvent({
+      type: 'done',
+      state: 'complete',
+      sessionKey,
+      runId: 'run-9',
+      transport: 'send-stream',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'partial' }],
+      },
+    })
+
+    const assistant = store
+      .getRealtimeMessages(sessionKey)
+      .find((message) => message.role === 'assistant')
+    const content = assistant?.content as Array<{
+      type: string
+      thinking?: string
+      name?: string
+      text?: string
+    }>
+    expect(content.find((part) => part.type === 'thinking')?.thinking).toBe(
+      'look up the file',
+    )
+    expect(content.find((part) => part.type === 'toolCall')?.name).toBe(
+      'read_file',
+    )
+    expect(content.find((part) => part.type === 'text')?.text).toBe('partial')
+    expect((assistant as { __streamToolCalls?: Array<unknown> }).__streamToolCalls)
+      .toHaveLength(1)
+  })
+
+  it('message.started does not replace a thinking-only Working row', () => {
+    const sessionKey = 'e2e-started-keeps-working'
+    resetStore(sessionKey)
+    const store = useChatStore.getState()
+
+    store.processEvent({
+      type: 'thinking',
+      text: 'still planning',
+      sessionKey,
+      runId: 'run-started',
+      transport: 'send-stream',
+    })
+    store.clearStreamingSession(sessionKey)
+    store.processEvent({
+      type: 'message',
+      sessionKey,
+      transport: 'send-stream',
+      message: {
+        role: 'assistant',
+        content: [],
+      },
+    })
+
+    const assistants = store
+      .getRealtimeMessages(sessionKey)
+      .filter((message) => message.role === 'assistant')
+    expect(assistants).toHaveLength(1)
+    const content = assistants[0]?.content as Array<{
+      type: string
+      thinking?: string
+    }>
+    expect(content.find((part) => part.type === 'thinking')?.thinking).toBe(
+      'still planning',
+    )
+  })
 })

@@ -15,6 +15,7 @@ import {
 } from '../../server/gateway-capabilities'
 import { isAuthenticated } from '../../server/auth-middleware'
 import { startGroupChatRunner } from '../../server/group-chat/group-chat-runner'
+import { ensureManagedAgentDaemon } from '../../server/agent-runtime/managed-agent-daemon'
 import { ensureActiveProfileGateway } from '../../server/gateway-pool'
 
 // Start the Bot Mode group-chat runner when the server process starts. The
@@ -28,6 +29,13 @@ startGroupChatRunner()
 void ensureActiveProfileGateway().catch((error) => {
   console.warn(
     '[connection-status] auto-start gateway failed:',
+    error instanceof Error ? error.message : String(error),
+  )
+})
+
+void ensureManagedAgentDaemon().catch((error) => {
+  console.warn(
+    '[connection-status] auto-start managed-agent daemon failed:',
     error instanceof Error ? error.message : String(error),
   )
 })
