@@ -7,7 +7,8 @@ import type { CallBackProps, Styles } from 'react-joyride'
 import { useSettingsStore } from '@/hooks/use-settings'
 import { useResolvedTheme } from '@/hooks/use-chat-settings'
 
-const TOUR_STORAGE_KEY = 'claude-onboarding-completed'
+const TOUR_STORAGE_KEY = 'agorax-onboarding-tour-complete'
+const LEGACY_TOUR_STORAGE_KEY = 'claude-onboarding-completed'
 
 // Accent color mapping to hex values
 const ACCENT_COLORS = {
@@ -41,15 +42,25 @@ export function OnboardingTour() {
     if (!mounted) return
 
     try {
-      const hasCompletedTour = localStorage.getItem(TOUR_STORAGE_KEY)
-      if (hasCompletedTour) return
+      const hasCompletedTour =
+        localStorage.getItem(TOUR_STORAGE_KEY) === 'true' ||
+        localStorage.getItem(LEGACY_TOUR_STORAGE_KEY) === 'true'
+      if (hasCompletedTour) {
+        if (localStorage.getItem(TOUR_STORAGE_KEY) !== 'true') {
+          localStorage.setItem(TOUR_STORAGE_KEY, 'true')
+          localStorage.removeItem(LEGACY_TOUR_STORAGE_KEY)
+        }
+        return
+      }
 
       // Wait for setup wizard to finish before starting tour
-      const CLAUDE_SETUP_KEY = 'claude-configured'
+      const SETUP_KEY = 'agorax-configured'
+      const LEGACY_SETUP_KEY = 'claude-configured'
       const checkAndStart = () => {
-        const claudeConfigured =
-          localStorage.getItem(CLAUDE_SETUP_KEY) === 'true'
-        if (claudeConfigured) {
+        const configured =
+          localStorage.getItem(SETUP_KEY) === 'true' ||
+          localStorage.getItem(LEGACY_SETUP_KEY) === 'true'
+        if (configured) {
           setRun(true)
           return true
         }
@@ -79,6 +90,7 @@ export function OnboardingTour() {
     if (shouldCompleteTour) {
       try {
         localStorage.setItem(TOUR_STORAGE_KEY, 'true')
+        localStorage.removeItem(LEGACY_TOUR_STORAGE_KEY)
       } catch {
         // ignore
       }

@@ -66,4 +66,5 @@ export const ONBOARDING_STEPS: Array<OnboardingStep> = [
   },
 ]
 
-export const STORAGE_KEY = 'claude-onboarding-complete'
+export const STORAGE_KEY = 'agorax-onboarding-complete'
+export const LEGACY_STORAGE_KEY = 'claude-onboarding-complete'

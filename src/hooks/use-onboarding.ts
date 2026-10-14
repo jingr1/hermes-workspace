@@ -1,5 +1,28 @@
 import { create } from 'zustand'
-import { STORAGE_KEY } from '@/components/onboarding/onboarding-steps'
+import {
+  LEGACY_STORAGE_KEY,
+  STORAGE_KEY,
+} from '@/components/onboarding/onboarding-steps'
+
+function readCompleted(): boolean {
+  if (localStorage.getItem(STORAGE_KEY) === 'true') return true
+  if (localStorage.getItem(LEGACY_STORAGE_KEY) === 'true') {
+    localStorage.setItem(STORAGE_KEY, 'true')
+    localStorage.removeItem(LEGACY_STORAGE_KEY)
+    return true
+  }
+  return false
+}
+
+function writeCompleted(completed: boolean): void {
+  if (completed) {
+    localStorage.setItem(STORAGE_KEY, 'true')
+    localStorage.removeItem(LEGACY_STORAGE_KEY)
+  } else {
+    localStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem(LEGACY_STORAGE_KEY)
+  }
+}
 
 type OnboardingState = {
   isOpen: boolean
@@ -35,8 +58,7 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
     set({ _initialized: true })
     if (typeof window === 'undefined') return
     try {
-      const completed = localStorage.getItem(STORAGE_KEY) === 'true'
-      if (!completed) {
+      if (!readCompleted()) {
         set({ isOpen: true, currentStep: 0 })
       }
     } catch {
@@ -66,17 +88,17 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
   },
 
   complete: () => {
-    localStorage.setItem(STORAGE_KEY, 'true')
+    writeCompleted(true)
     set({ isOpen: false })
   },
 
   skip: () => {
-    localStorage.setItem(STORAGE_KEY, 'true')
+    writeCompleted(true)
     set({ isOpen: false })
   },
 
   reset: () => {
-    localStorage.removeItem(STORAGE_KEY)
+    writeCompleted(false)
     set({ isOpen: true, currentStep: 0 })
   },
 }))

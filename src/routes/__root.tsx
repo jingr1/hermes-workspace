@@ -28,10 +28,12 @@ import {
 } from '@/hooks/use-settings'
 import { useApplyChatWidth } from '@/hooks/use-chat-settings'
 import {
-  ClaudeOnboarding,
+  AgoraxOnboarding,
   ONBOARDING_COMPLETE_EVENT,
   ONBOARDING_KEY,
-} from '@/components/onboarding/claude-onboarding'
+  readOnboardingComplete,
+  writeOnboardingComplete,
+} from '@/components/onboarding/agorax-onboarding'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { LoginScreen } from '@/components/auth/login-screen'
 
@@ -299,7 +301,7 @@ function RootLayout() {
 
     const syncOnboardingCompletion = () => {
       try {
-        setOnboardingComplete(localStorage.getItem(ONBOARDING_KEY) === 'true')
+        setOnboardingComplete(readOnboardingComplete())
       } catch {
         setOnboardingComplete(false)
       }
@@ -325,7 +327,7 @@ function RootLayout() {
           } | null,
         ) => {
           if (status?.ok || (status?.chatReady && status?.modelConfigured)) {
-            localStorage.setItem(ONBOARDING_KEY, 'true')
+            writeOnboardingComplete(true)
             syncOnboardingCompletion()
           }
         },
@@ -333,7 +335,13 @@ function RootLayout() {
       .catch(() => undefined)
 
     const handleStorage = (event: StorageEvent) => {
-      if (event.key && event.key !== ONBOARDING_KEY) return
+      if (
+        event.key &&
+        event.key !== ONBOARDING_KEY &&
+        event.key !== 'claude-onboarding-complete'
+      ) {
+        return
+      }
       syncOnboardingCompletion()
     }
 
@@ -386,7 +394,7 @@ function RootLayout() {
       <Toaster />
       <AttentionToaster />
       {mounted && rootSurfaceState.showLogin ? <LoginScreen /> : null}
-      {mounted && rootSurfaceState.showOnboarding ? <ClaudeOnboarding /> : null}
+      {mounted && rootSurfaceState.showOnboarding ? <AgoraxOnboarding /> : null}
       {rootSurfaceState.showWorkspaceShell ? (
         <>
           <GlobalShortcutListener />

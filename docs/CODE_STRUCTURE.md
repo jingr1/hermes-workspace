@@ -213,7 +213,7 @@ TanStack Start 文件路由：每个 `.ts` 文件export server handlers。
 | `auth.anthropic.ts`、`oauth.device-code.ts` | 鉴权 |
 | `integrations.ts`、`plugins.ts`、`claude-jobs.ts` | 集成 / 插件 / job |
 | `agent-runtime/{install,login,status,enable,daemon.restart}.ts` | Managed runtime 安装/启用 |
-| `start-claude.ts`、`stt-status.ts`、`transcribe.ts` | 启动 Claude / STT |
+| `start-gateway.ts`、`stt-status.ts`、`transcribe.ts` | 启动 Hermes gateway / STT |
 | `background.ts`、`events.ts`、`collab-events.ts` | 后台任务 / 事件 |
 
 ---

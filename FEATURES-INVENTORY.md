@@ -211,7 +211,7 @@
 | `/api/connection-status` | GET    | Gateway connection status with capabilities   |
 | `/api/gateway-status`    | GET    | Detailed gateway capabilities                 |
 | `/api/start-agent`       | POST   | Auto-start Claude agent process               |
-| `/api/start-claude`      | POST   | Start Hermes Agent gateway                    |
+| `/api/start-gateway`     | POST   | Start Hermes Agent gateway                    |
 | `/api/workspace`         | GET    | Workspace auto-detection                      |
 
 ### 2.10 OAuth
@@ -306,7 +306,7 @@
 - **usage-meter/** — usage-meter, usage-meter-compact, usage-details-modal, context-alert-modal
 - **search/** — search-modal, search-input, search-results, search-result-item, quick-actions
 - **settings-dialog/** — settings-dialog
-- **onboarding/** — claude-onboarding, onboarding-wizard, onboarding-tour, tour-steps, setup-step-content, provider-select-step
+- **onboarding/** — agorax-onboarding, onboarding-wizard, onboarding-tour, tour-steps, setup-step-content, provider-select-step
 - **agent-chat/** — AgentChatModal, AgentChatHeader, AgentChatInput, AgentChatMessages
 - **avatars/** — user-avatar, assistant-avatar
 - **auth/** — login-screen

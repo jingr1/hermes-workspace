@@ -82,7 +82,7 @@ export function ConnectionStartupScreen({ onConnected }: Props) {
       if (autoStartFired || isDone.current) return
       autoStartFired = true
       try {
-        const res = await fetch('/api/start-claude', {
+        const res = await fetch('/api/start-gateway', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
         })
@@ -144,7 +144,7 @@ export function ConnectionStartupScreen({ onConnected }: Props) {
     setServerError(null)
     setServerLog(['Looking for hermes-agent...'])
     try {
-      const res = await fetch('/api/start-claude', {
+      const res = await fetch('/api/start-gateway', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       })

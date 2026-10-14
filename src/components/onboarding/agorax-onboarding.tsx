@@ -30,8 +30,39 @@ function stripProviderPrefix(model: string): string {
   return model
 }
 
-export const ONBOARDING_KEY = 'claude-onboarding-complete'
-export const ONBOARDING_COMPLETE_EVENT = 'claude:onboarding-complete'
+export const ONBOARDING_KEY = 'agorax-onboarding-complete'
+const LEGACY_ONBOARDING_KEY = 'claude-onboarding-complete'
+export const ONBOARDING_COMPLETE_EVENT = 'agorax:onboarding-complete'
+
+export function readOnboardingComplete(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    if (localStorage.getItem(ONBOARDING_KEY) === 'true') return true
+    if (localStorage.getItem(LEGACY_ONBOARDING_KEY) === 'true') {
+      localStorage.setItem(ONBOARDING_KEY, 'true')
+      localStorage.removeItem(LEGACY_ONBOARDING_KEY)
+      return true
+    }
+  } catch {
+    return false
+  }
+  return false
+}
+
+export function writeOnboardingComplete(completed: boolean): void {
+  if (typeof window === 'undefined') return
+  try {
+    if (completed) {
+      localStorage.setItem(ONBOARDING_KEY, 'true')
+      localStorage.removeItem(LEGACY_ONBOARDING_KEY)
+    } else {
+      localStorage.removeItem(ONBOARDING_KEY)
+      localStorage.removeItem(LEGACY_ONBOARDING_KEY)
+    }
+  } catch {
+    // Ignore quota / private-mode failures.
+  }
+}
 
 function dispatchOnboardingCompletionChanged(completed: boolean) {
   if (typeof window === 'undefined') return
@@ -130,7 +161,7 @@ function getEnhancedFeatureNames(
     .map((feature) => feature.label)
 }
 
-export function ClaudeOnboarding() {
+export function AgoraxOnboarding() {
   const [show, setShow] = useState(false)
   const [step, setStep] = useState<Step>('welcome')
   const [backendStatus, setBackendStatus] = useState<
@@ -457,7 +488,7 @@ export function ClaudeOnboarding() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    if (!localStorage.getItem(ONBOARDING_KEY)) {
+    if (!readOnboardingComplete()) {
       setShow(true)
     }
   }, [])
@@ -483,7 +514,7 @@ export function ClaudeOnboarding() {
   }, [loadCurrentConfig, show])
 
   const complete = useCallback(() => {
-    localStorage.setItem(ONBOARDING_KEY, 'true')
+    writeOnboardingComplete(true)
     dispatchOnboardingCompletionChanged(true)
     setShow(false)
   }, [])
@@ -504,7 +535,7 @@ export function ClaudeOnboarding() {
 
     // Ask the UI server (the :6734 origin the phone opened) for status.
     // Daemon health is not part of this check.
-    void fetch('/api/start-claude', { method: 'POST' }).catch(() => undefined)
+    void fetch('/api/start-gateway', { method: 'POST' }).catch(() => undefined)
 
     try {
       const res = await fetch('/api/connection-status', {

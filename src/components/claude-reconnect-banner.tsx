@@ -47,7 +47,7 @@ export function ClaudeReconnectBanner({
   const wasDisconnectedRef = useRef(false)
   const flashTimerRef = useRef<number | null>(null)
   // Silent auto-restart: if the gateway disappears mid-session, fire
-  // /api/start-claude once. After that, fall back to the manual "Start Agent"
+  // /api/start-gateway once. After that, fall back to the manual "Start Agent"
   // button so we don't loop forever on a busted environment.
   const autoRestartTriedAtRef = useRef<number>(0)
   // Cool-down so a permanently-dead gateway doesn't get poked every probe.
@@ -116,7 +116,7 @@ export function ClaudeReconnectBanner({
             const sinceLastTry = Date.now() - autoRestartTriedAtRef.current
             if (sinceLastTry > AUTO_RESTART_COOLDOWN_MS) {
               autoRestartTriedAtRef.current = Date.now()
-              void fetch('/api/start-claude', {
+              void fetch('/api/start-gateway', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
               })
