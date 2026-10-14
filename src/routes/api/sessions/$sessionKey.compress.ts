@@ -7,7 +7,7 @@ import {
   getMessages,
   oneshotCompletion,
 } from '../../../server/hermes-api'
-import { ensureActiveProfileGateway } from '../../../server/gateway-pool'
+import { ensureChatGateway, enterChatGateway } from '../../../server/chat-gateway'
 import {
   ensureGatewayProbed,
   getCapabilities,
@@ -93,7 +93,9 @@ export const Route = createFileRoute('/api/sessions/$sessionKey/compress')({
         }
 
         try {
-          await ensureActiveProfileGateway()
+          const requestedProfile =
+            typeof body.profileName === 'string' ? body.profileName.trim() : ''
+          enterChatGateway(await ensureChatGateway(requestedProfile))
           await ensureGatewayProbed()
           if (!getCapabilities().sessionCompress) {
             return json(

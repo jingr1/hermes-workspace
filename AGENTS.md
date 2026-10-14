@@ -192,7 +192,7 @@ set -g exit-unattached off
 - **桌面端**：`electron/main.cjs`；`electron:build:win` 产出 NSIS 到 `release/`。
 - **两套/三套 `.env`：** Gateway 读 `%LOCALAPPDATA%\hermes\.env`；CLI 读 `%USERPROFILE%\.hermes\.env`；Workspace 读仓库 `.env`。API key 需保持一致。
 - Gateway API 需 `API_SERVER_ENABLED=true` + `API_SERVER_KEY`，否则无已连接平台。
-- Workspace 运行时优先读 `HERMES_API_URL` / `HERMES_API_TOKEN` / `HERMES_DASHBOARD_URL`；`CLAUDE_*` 同名变量仅作兼容回退。
+- Workspace 运行时读 `HERMES_API_URL` / `HERMES_API_TOKEN` / `HERMES_DASHBOARD_URL`。Gateway 地址只认 `HERMES_API_URL`。`HERMES_API_TOKEN` 与 `HERMES_DASHBOARD_URL` 仍接受同名 `CLAUDE_*` 回退。本地多 profile（`HERMES_GATEWAY_POOL` 开着，loopback 默认开）时，1:1 聊天按请求里的 profile 直连该 profile 的端口和 `API_SERVER_KEY`，不改进程全局 `HERMES_API`。Pool 关掉或远程配对时，所有 profile 仍共用这一个地址。
 - Windows 无自带 `sqlite3` CLI：`winget install SQLite.SQLite`，并把 `sqlite3.exe` 放进 PATH。
 - Claude Code managed agents 需要 `claude` CLI：`npm install -g @anthropic-ai/claude-code`。
 - 端口冲突：PowerShell `netstat -ano | findstr :<port>` + `Stop-Process -Id <PID> -Force`。

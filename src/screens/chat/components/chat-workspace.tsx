@@ -1,8 +1,7 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { useQueryClient } from '@tanstack/react-query'
 import { ChatScreen } from '../chat-screen'
 import { useProfiles } from '../hooks/use-profiles'
 import { ChatRouteLoading } from '../chat-route-loading'
@@ -89,23 +88,17 @@ function HermesChatShell({
     state.agents.find((a) => a.agentId === agentId),
   )
   const { activateProfile, activeProfileName } = useProfiles()
-  const queryClient = useQueryClient()
   const targetProfile = agent?.runtimeConfig.profile ?? agentId
-  const pendingSwitchRef = useRef(false)
 
   // Activate in the background — never unmount ChatScreen for this, or the
   // chat pane flashes empty (reads as a black screen in dark theme).
+  // Session lists are keyed by profile and already refetch on that key change.
+  // Invalidating them here waited out workspace catalog load, then fetched
+  // the list a second time.
   useEffect(() => {
     if (!agent || activeProfileName === targetProfile) return
-    pendingSwitchRef.current = true
     activateProfile(targetProfile)
   }, [activateProfile, activeProfileName, targetProfile, agent])
-
-  useEffect(() => {
-    if (!pendingSwitchRef.current || activeProfileName !== targetProfile) return
-    pendingSwitchRef.current = false
-    void queryClient.invalidateQueries({ queryKey: ['chat', 'sessions'] })
-  }, [activeProfileName, targetProfile, queryClient])
 
   if (!agent) {
     return (

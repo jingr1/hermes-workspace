@@ -28,7 +28,7 @@ const config = defineConfig(({ mode, command }) => {
       process.env[key] = env[key]
     }
   }
-  const claudeApiUrl = env.CLAUDE_API_URL?.trim() || 'http://127.0.0.1:8642'
+  const hermesApiUrl = env.HERMES_API_URL?.trim() || 'http://127.0.0.1:8642'
   // /api/connection-status is handled by the real route file at
   // src/routes/api/connection-status.ts; the dev server no longer
   // intercepts that path with a slim shortcut. See #285.
@@ -40,10 +40,8 @@ const config = defineConfig(({ mode, command }) => {
     if (claudeAgentStarted) return
     const explicitUrl = (
       env.HERMES_API_URL ||
-      env.CLAUDE_API_URL ||
       process.env.HERMES_API_URL ||
-      process.env.CLAUDE_API_URL ||
-      claudeApiUrl ||
+      hermesApiUrl ||
       ''
     ).trim()
     let remote = false
@@ -103,7 +101,7 @@ const config = defineConfig(({ mode, command }) => {
   let proxyTarget = 'http://127.0.0.1:8642'
 
   try {
-    const parsed = new URL(claudeApiUrl)
+    const parsed = new URL(hermesApiUrl)
     parsed.protocol = parsed.protocol === 'wss:' ? 'https:' : 'http:'
     parsed.pathname = ''
     proxyTarget = parsed.toString().replace(/\/$/, '')
@@ -540,8 +538,8 @@ const config = defineConfig(({ mode, command }) => {
           // Replace specific env vars first, then the generic fallback
           let result = code
           result = result.replace(
-            /process\.env\.CLAUDE_API_URL/g,
-            JSON.stringify(claudeApiUrl),
+            /process\.env\.HERMES_API_URL/g,
+            JSON.stringify(hermesApiUrl),
           )
           result = result.replace(
             /process\.env\.CLAUDE_API_TOKEN/g,

@@ -9,7 +9,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { isAuthenticated } from '../../server/auth-middleware'
 import {
   BEARER_TOKEN,
-  CLAUDE_API,
+  HERMES_API,
   CLAUDE_DASHBOARD_URL,
   shouldUseDashboard,
 } from '../../server/gateway-capabilities'
@@ -159,7 +159,7 @@ export const Route = createFileRoute('/api/hermes-tasks-assignees')({
             ? await fetchJson(
                 `${CLAUDE_DASHBOARD_URL}/api/plugins/kanban/assignees`,
               )
-            : null) ?? (await fetchJson(`${CLAUDE_API}/api/tasks/assignees`))
+            : null) ?? (await fetchJson(`${HERMES_API}/api/tasks/assignees`))
         const remoteAssignees = remotePayload
           ? normalizeAssigneePayload(remotePayload, humanReviewer)
           : []

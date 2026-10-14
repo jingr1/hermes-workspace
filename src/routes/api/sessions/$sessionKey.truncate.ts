@@ -7,7 +7,7 @@ import {
   ensureGatewayProbed,
   getCapabilities,
 } from '../../../server/gateway-capabilities'
-import { ensureActiveProfileGateway } from '../../../server/gateway-pool'
+import { ensureChatGateway, enterChatGateway } from '../../../server/chat-gateway'
 
 export const Route = createFileRoute('/api/sessions/$sessionKey/truncate')({
   server: {
@@ -41,7 +41,9 @@ export const Route = createFileRoute('/api/sessions/$sessionKey/truncate')({
         }
 
         try {
-          await ensureActiveProfileGateway()
+          const requestedProfile =
+            typeof body.profileName === 'string' ? body.profileName.trim() : ''
+          enterChatGateway(await ensureChatGateway(requestedProfile))
           await ensureGatewayProbed()
           if (!getCapabilities().sessionTruncate) {
             return json(

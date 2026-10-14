@@ -308,10 +308,11 @@ src/server/local-provider-discovery.ts  # Multi-gateway provider discovery
 ### Environment Variables
 
 ```bash
-CLAUDE_GATEWAY_POOL_ENABLED=true   # Enable multi-gateway mode
-CLAUDE_GATEWAY_BASE_PORT=8642      # Starting port
-CLAUDE_GATEWAY_POOL_MAX=10         # Max concurrent gateways
-CLAUDE_GATEWAY_HEALTH_INTERVAL=30  # Health check seconds
+# Unset or any value other than 0/false/off: on for loopback pairing, off for a remote URL.
+HERMES_GATEWAY_POOL=1
+HERMES_GATEWAY_POOL_MAX=8          # Max resident gateways (default is pinned)
+HERMES_GATEWAY_IDLE_TTL=0          # Seconds; 0 disables idle eviction
+HERMES_GATEWAY_EVICT_INTERVAL=60   # Eviction scan seconds
 ```
 
 ### workspace-overrides.json

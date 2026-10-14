@@ -671,7 +671,7 @@ export function DashboardScreen() {
     // cache collisions with the chat sidebar which fetches fewer sessions
     // and overwrites the dashboard's larger dataset.
     // Also use the workspace proxy (/api/sessions) rather than the server-side
-    // listSessions() — the latter calls the gateway via CLAUDE_API which is
+    // listSessions() — the latter calls the gateway via HERMES_API which is
     // only available server-side and returns nothing when called from the client.
     // Do not gate this direct proof behind /api/gateway-status. That probe can
     // be stale/loading while /api/sessions already works, which made the

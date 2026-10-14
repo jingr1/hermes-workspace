@@ -321,21 +321,24 @@ export function WorkspaceFolderPicker({
 
           {flatNodes.map((node) => (
             <div key={node.folder.path}>
-              <button
-                type="button"
-                onClick={() => onChange(node.folder.fullPath)}
+              <div
                 className={cn(
-                  'flex w-full items-center gap-1 rounded-md py-1 pr-2 text-left transition-colors',
+                  'flex w-full items-center gap-1 rounded-md py-1 pr-2 transition-colors',
                   value === node.folder.fullPath
                     ? 'bg-[var(--theme-accent-soft)] outline outline-1 outline-[var(--theme-accent)]'
                     : 'hover:bg-[var(--theme-card2)]',
                 )}
                 style={{ paddingLeft: `${12 + node.depth * 16}px` }}
               >
-                <span
+                <button
+                  type="button"
+                  aria-label={
+                    node.isExpanded
+                      ? `Collapse ${node.folder.name}`
+                      : `Expand ${node.folder.name}`
+                  }
                   className="inline-flex w-3.5 shrink-0 items-center justify-center text-[10px] text-[var(--theme-muted)]"
-                  onClick={(event) => {
-                    event.stopPropagation()
+                  onClick={() => {
                     void toggleExpand(node.folder)
                   }}
                 >
@@ -350,15 +353,21 @@ export function WorkspaceFolderPicker({
                       strokeWidth={1.8}
                     />
                   )}
-                </span>
-                <HugeiconsIcon
-                  icon={Folder01Icon}
-                  size={14}
-                  strokeWidth={1.8}
-                  className="shrink-0"
-                />
-                <span className="min-w-0 truncate">{node.folder.name}</span>
-              </button>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onChange(node.folder.fullPath)}
+                  className="flex min-w-0 flex-1 items-center gap-1 text-left"
+                >
+                  <HugeiconsIcon
+                    icon={Folder01Icon}
+                    size={14}
+                    strokeWidth={1.8}
+                    className="shrink-0"
+                  />
+                  <span className="min-w-0 truncate">{node.folder.name}</span>
+                </button>
+              </div>
               {node.isExpanded &&
               !node.isLoading &&
               node.hasChildren === false ? (

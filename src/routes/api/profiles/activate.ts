@@ -8,6 +8,7 @@ import {
 } from '../../../server/gateway-pool'
 import {
   getProfileGatewayUrl,
+  isGatewayPoolEnabled,
   resolveProfileGatewayPort,
 } from '../../../server/gateway-ports'
 import {
@@ -45,11 +46,11 @@ export const Route = createFileRoute('/api/profiles/activate')({
           }
           touchGatewayLease(name)
           ensureGatewayLifecycleScheduler()
-          // Route chat traffic immediately; respond without probing gateway health.
-          // Cold starts and port ownership checks run in the background so profile
-          // switches (especially to default) are not blocked by SSH/workspace work
-          // or a slow /proc scan on busy hosts.
-          applyProfileGatewayRoute(url)
+          // Pool-on chat reads the profile port itself. Only the single
+          // shared gateway (pool off / remote pairing) still moves HERMES_API.
+          if (!isGatewayPoolEnabled()) {
+            applyProfileGatewayRoute(url)
+          }
 
           void (async () => {
             try {

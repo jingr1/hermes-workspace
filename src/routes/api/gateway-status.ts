@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../server/auth-middleware'
 import {
-  CLAUDE_API,
+  HERMES_API,
   CLAUDE_DASHBOARD_URL,
   ensureGatewayCoreProbed,
   ensureGatewayEnhancedProbed,
@@ -37,11 +37,11 @@ export const Route = createFileRoute('/api/gateway-status')({
         return json({
           capabilities,
           mode: getGatewayMode(),
-          claudeUrl: CLAUDE_API,
+          claudeUrl: HERMES_API,
           dashboardUrl: CLAUDE_DASHBOARD_URL,
           gateway: {
             available: capabilities.health || capabilities.chatCompletions,
-            url: CLAUDE_API,
+            url: HERMES_API,
           },
           dashboard: capabilities.dashboard,
           pool,

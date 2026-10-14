@@ -3,7 +3,7 @@ import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../server/auth-middleware'
 import {
   BEARER_TOKEN,
-  CLAUDE_API,
+  HERMES_API,
   CLAUDE_UPGRADE_INSTRUCTIONS,
   ensureGatewayEnhancedProbed,
 } from '../../../server/gateway-capabilities'
@@ -59,7 +59,7 @@ export const Route = createFileRoute('/api/mcp/$name/logs')({
             headers.set('Authorization', `Bearer ${BEARER_TOKEN}`)
           }
           upstream = await fetch(
-            `${CLAUDE_API}/api/mcp/${encodeURIComponent(name)}/logs`,
+            `${HERMES_API}/api/mcp/${encodeURIComponent(name)}/logs`,
             {
               method: 'GET',
               headers,

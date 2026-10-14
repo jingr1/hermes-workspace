@@ -6,7 +6,12 @@
  */
 
 import {
-  CLAUDE_API,
+  normalizeChatContentParts,
+  storedMessageContentToText,
+} from '../lib/chat-message-parts'
+import { resolveChatGateway } from './chat-gateway'
+import {
+  HERMES_API,
   SESSIONS_API_UNAVAILABLE_MESSAGE,
   dashboardFetch,
   ensureGatewayCoreProbed,
@@ -16,7 +21,6 @@ import {
   getGatewayBearerToken,
   probeGateway,
 } from './gateway-capabilities'
-import { isGatewayPoolEnabled } from './gateway-ports'
 import {
   createSession as createDashboardSession,
   deleteSession as deleteDashboardSession,
@@ -27,17 +31,17 @@ import {
   searchSessions as searchDashboardSessions,
   updateSession as updateDashboardSession,
 } from './hermes-dashboard-api'
-import {
-  normalizeChatContentParts,
-  storedMessageContentToText,
-} from '../lib/chat-message-parts'
 
 const _authHeaders = (): Record<string, string> => {
-  const token = getGatewayBearerToken()
+  const token = resolveChatGateway().token || getGatewayBearerToken()
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
-console.log(`[hermes-api] Configured API: ${CLAUDE_API}`)
+function gatewayUrl(path: string): string {
+  return `${resolveChatGateway().url}${path}`
+}
+
+console.log(`[hermes-api] Configured API: ${HERMES_API}`)
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -82,7 +86,7 @@ export type HermesConfig = {
 // ── Helpers ───────────────────────────────────────────────────────
 
 async function hermesGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${CLAUDE_API}${path}`, { headers: _authHeaders() })
+  const res = await fetch(gatewayUrl(path), { headers: _authHeaders() })
   if (!res.ok) {
     const body = await res.text().catch(() => '')
     throw new Error(`Hermes Agent API ${path}: ${res.status} ${body}`)
@@ -91,7 +95,7 @@ async function hermesGet<T>(path: string): Promise<T> {
 }
 
 async function hermesPost<T>(path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${CLAUDE_API}${path}`, {
+  const res = await fetch(gatewayUrl(path), {
     method: 'POST',
     headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
@@ -104,7 +108,7 @@ async function hermesPost<T>(path: string, body?: unknown): Promise<T> {
 }
 
 async function hermesPatch<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${CLAUDE_API}${path}`, {
+  const res = await fetch(gatewayUrl(path), {
     method: 'PATCH',
     headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -117,7 +121,7 @@ async function hermesPatch<T>(path: string, body: unknown): Promise<T> {
 }
 
 async function hermesDeleteReq(path: string): Promise<void> {
-  const res = await fetch(`${CLAUDE_API}${path}`, {
+  const res = await fetch(gatewayUrl(path), {
     method: 'DELETE',
     headers: _authHeaders(),
   })
@@ -508,15 +512,12 @@ export async function streamChat(
   },
   opts: StreamChatOptions,
 ): Promise<void> {
-  const res = await fetch(
-    `${CLAUDE_API}/api/sessions/${sessionId}/chat/stream`,
-    {
-      method: 'POST',
-      headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: opts.signal,
-    },
-  )
+  const res = await fetch(gatewayUrl(`/api/sessions/${sessionId}/chat/stream`), {
+    method: 'POST',
+    headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: opts.signal,
+  })
 
   if (!res.ok) {
     const text = await res.text().catch(() => '')
@@ -659,7 +660,7 @@ export async function listModels(): Promise<{
 
 export async function isHermesAvailable(): Promise<boolean> {
   try {
-    const res = await fetch(`${CLAUDE_API}/health`, {
+    const res = await fetch(`${HERMES_API}/health`, {
       signal: AbortSignal.timeout(3000),
     })
     if (!res.ok) {
@@ -679,6 +680,6 @@ export {
   ensureGatewayProbed,
   ensureSessionsCapability,
   getCapabilities as getGatewayCapabilities,
-  CLAUDE_API,
+  HERMES_API,
   SESSIONS_API_UNAVAILABLE_MESSAGE,
 }

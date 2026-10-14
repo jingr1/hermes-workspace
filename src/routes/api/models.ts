@@ -9,7 +9,7 @@ import {
   ensureGatewayCoreProbed,
   getGatewayCapabilities,
 } from '../../server/hermes-api'
-import { BEARER_TOKEN, CLAUDE_API } from '../../server/gateway-capabilities'
+import { BEARER_TOKEN, HERMES_API } from '../../server/gateway-capabilities'
 import {
   ensureDiscovery,
   ensureProviderInConfig,
@@ -737,7 +737,7 @@ function readClaudeConfigCatalog(): Array<ModelEntry> {
 async function fetchClaudeModels(): Promise<Array<ModelEntry>> {
   const headers: Record<string, string> = {}
   if (BEARER_TOKEN) headers['Authorization'] = `Bearer ${BEARER_TOKEN}`
-  const response = await fetch(`${CLAUDE_API}/v1/models`, { headers })
+  const response = await fetch(`${HERMES_API}/v1/models`, { headers })
   if (!response.ok)
     throw new Error(`Hermes models request failed (${response.status})`)
   const payload = asRecord(await response.json())

@@ -47,6 +47,7 @@ import {
 } from '../../server/hermes-api'
 import { loadWorkspaceCatalog } from './workspace'
 import {
+  collectGatewayPayloadToolEvents,
   collectSyntheticLiveToolEvents,
   collectSyntheticLiveThinkingText,
   createSyntheticLiveToolTracker,
@@ -73,45 +74,86 @@ function readString(value: unknown): string {
  */
 const THINKING_TAG_NAMES = ['think', 'thinking', 'antThinking', 'thought'] as const
 
+const THINKING_OPEN_TAG =
+  '<(?:thinking|antThinking|thought|think)\\b[^>]*(?:>[\\s\\S]*)?'
+
 /**
- * Extract complete thinking blocks from a streamed text buffer and return the
- * remaining display text, the concatenated thinking text, and the leftover
- * buffer for the next chunk.
+ * Split a streamed assistant buffer into visible text, closed thinking, and
+ * the still-open thinking body.
  *
- * Incomplete opening tags (e.g. a `<thinking>` split across two SSE frames) are
- * held back in the buffer and also suppressed from display so they never flash
- * in the assistant bubble.
+ * Closed `<think>…</think>` pairs are committed. An unclosed tag — including
+ * one whose `>` has not arrived yet — stays in `remainingBuffer` so the next
+ * chunk can finish it, and its body is returned as `pendingThinking` so the
+ * Working card can render before the close tag.
  */
-function extractStreamingThinking(buffer: string): {
+export function extractStreamingThinking(buffer: string): {
   displayText: string
   extractedThinking: string
+  pendingThinking: string
   remainingBuffer: string
 } {
   let extractedThinking = ''
-  let displayText = buffer
+  let rest = buffer
 
   for (const tag of THINKING_TAG_NAMES) {
     const complete = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'gi')
-    let match: RegExpExecArray | null
-    while ((match = complete.exec(buffer)) !== null) {
-      extractedThinking += match[1]
-      displayText = displayText.replace(match[0], '')
-    }
+    rest = rest.replace(complete, (_match, body: string) => {
+      if (body) extractedThinking += body
+      return ''
+    })
   }
 
-  // Suppress a trailing, not-yet-closed opening tag so it cannot leak into the
-  // visible bubble while we wait for the closing tag to arrive.
-  const partialOpen =
-    /<(?:think|thinking|antThinking|thought)\b(?![^>]*>)[\s\S]*$/i.exec(
-      displayText,
-    )
-  let remainingBuffer = displayText
-  if (partialOpen) {
-    displayText = displayText.slice(0, partialOpen.index)
-    remainingBuffer = displayText
+  const unclosed = new RegExp(`${THINKING_OPEN_TAG}$`, 'i').exec(rest)
+  let pendingThinking = ''
+  let displayText = rest
+  // Keep already-visible text in the buffer. fullReplace chunks are the whole
+  // visible accumulation, not just the latest delta. Only the unclosed tag
+  // stays attached so the next frame can finish it.
+  let remainingBuffer = rest
+  if (unclosed && unclosed.index >= 0) {
+    displayText = rest.slice(0, unclosed.index)
+    remainingBuffer = displayText + unclosed[0]
+    const openEnd = unclosed[0].indexOf('>')
+    if (openEnd >= 0) pendingThinking = unclosed[0].slice(openEnd + 1)
   }
 
-  return { displayText, extractedThinking, remainingBuffer }
+  return { displayText, extractedThinking, pendingThinking, remainingBuffer }
+}
+
+/** Closed thinking plus the still-open body, without committing the open body. */
+export function mergeLiveThinking(closed: string, pending: string): string {
+  const closedTrim = closed.trim()
+  const pendingTrim = pending.trim()
+  if (!pendingTrim) return closedTrim
+  if (!closedTrim) return pendingTrim
+  if (closedTrim.endsWith(pendingTrim)) return closedTrim
+  return `${closedTrim}\n\n${pendingTrim}`
+}
+
+/**
+ * Fold one assistant text buffer. Closed pairs append to `closedThinking`.
+ * The open body stays out of that accumulator so the close tag does not
+ * commit it twice.
+ */
+export function consumeInlineThinking(
+  buffer: string,
+  closedThinking: string,
+): {
+  buffer: string
+  closedThinking: string
+  liveThinking: string
+  displayText: string
+} {
+  const split = extractStreamingThinking(buffer)
+  const nextClosed = split.extractedThinking
+    ? closedThinking + split.extractedThinking
+    : closedThinking
+  return {
+    buffer: split.remainingBuffer,
+    closedThinking: nextClosed,
+    liveThinking: mergeLiveThinking(nextClosed, split.pendingThinking),
+    displayText: split.displayText,
+  }
 }
 
 function readNumber(value: unknown): number | undefined {
@@ -433,13 +475,9 @@ export const Route = createFileRoute('/api/send-stream')({
         }
         const csrfCheck = requireJsonContentType(request)
         if (csrfCheck) return csrfCheck
-        const { ensureActiveProfileGateway } =
-          await import('../../server/gateway-pool')
-        await ensureActiveProfileGateway()
-        await ensureSessionsCapability()
 
-        // Read body manually to handle large payloads (image attachments
-        // can push the JSON body above the default ~1MB parse limit).
+        // Read body before choosing a gateway. Pool-on chat pins this
+        // request to the profile's own port and does not move HERMES_API.
         let body: Record<string, unknown> = {}
         try {
           const rawBody = await request.text()
@@ -447,6 +485,23 @@ export const Route = createFileRoute('/api/send-stream')({
         } catch {
           // Fall through — body stays empty, will hit 'message required' below
         }
+
+        const requestedProfile =
+          typeof body.profileName === 'string' ? body.profileName.trim() : ''
+        try {
+          const { ensureChatGateway, enterChatGateway } =
+            await import('../../server/chat-gateway')
+          enterChatGateway(await ensureChatGateway(requestedProfile))
+        } catch (error) {
+          const errorMsg =
+            error instanceof Error ? error.message : 'gateway unavailable'
+          return new Response(JSON.stringify({ ok: false, error: errorMsg }), {
+            status: 503,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+
+        await ensureSessionsCapability()
 
         const rawSessionKey =
           typeof body.sessionKey === 'string' ? body.sessionKey.trim() : ''
@@ -1173,6 +1228,7 @@ export const Route = createFileRoute('/api/send-stream')({
 
               let startedSent = false
               let thinkingAccumulated = ''
+              let lastPublishedInlineThinking = ''
               // Buffers raw assistant deltas so we can split out <thinking>
               // blocks that the gateway inlines into the text stream.
               let assistantTextBuffer = ''
@@ -1200,14 +1256,10 @@ export const Route = createFileRoute('/api/send-stream')({
               })
               lastActivity = 'Processing your message...'
 
-              // Mid-run tool polling: vanilla Hermes Agent currently does not
-              // emit tool.* SSE events live (callback signature drift). Until
-              // upstream fixes that, we synthesize live tool events by polling
-              // the agent's session messages every ~1.5s during the run and
-              // emitting any new tool calls as event: tool with phase complete
-              // as soon as their tool_result message lands. The Workspace
-              // chat-store dedupes by tool_call_id so this is safe alongside
-              // any real live events that might arrive.
+              // Mid-run tool polling: vanilla Hermes Agent often does not emit
+              // tool.* SSE live. Poll the session for tool_calls that were not
+              // already on an event payload. `calling` goes out as soon as the
+              // call is persisted; the tracker dedupes against live events.
               const syntheticLiveToolTracker = createSyntheticLiveToolTracker()
               let lastSyntheticThinkingEmitted = ''
               let liveRunActive = true
@@ -1226,10 +1278,40 @@ export const Route = createFileRoute('/api/send-stream')({
               } catch {
                 liveBaselineCount = 0
               }
+              const publishInlineThinking = (
+                sessionKeyFromEvent: string,
+                runId: string | undefined,
+              ): string => {
+                const next = consumeInlineThinking(
+                  assistantTextBuffer,
+                  thinkingAccumulated,
+                )
+                assistantTextBuffer = next.buffer
+                thinkingAccumulated = next.closedThinking
+                if (
+                  next.liveThinking &&
+                  next.liveThinking !== lastPublishedInlineThinking
+                ) {
+                  lastPublishedInlineThinking = next.liveThinking
+                  persistActiveRun((runSessionKey, activeId) =>
+                    setRunThinking(
+                      runSessionKey,
+                      activeId,
+                      next.liveThinking,
+                    ),
+                  )
+                  const translated = {
+                    text: next.liveThinking,
+                    sessionKey: sessionKeyFromEvent,
+                    runId,
+                  }
+                  sendEvent('thinking', translated)
+                  skipPublish || publishChatEvent('thinking', translated)
+                }
+                return next.displayText
+              }
+
               const livePollerPromise = (async () => {
-                // Initial small delay so the agent has time to ingest the
-                // user message before we start asking for session state.
-                await new Promise((r) => setTimeout(r, 600))
                 while (liveRunActive) {
                   if (!liveRunActive || streamClosed) break
                   try {
@@ -1317,6 +1399,32 @@ export const Route = createFileRoute('/api/send-stream')({
                         if (!activeRunId) activeRunId = runId
                       }
 
+                      // Tool calls already on this frame. Don't wait for the
+                      // session poll — that left Working empty after Thinking
+                      // had already cleared.
+                      if (!event.startsWith('tool.')) {
+                        const payloadTools = collectGatewayPayloadToolEvents({
+                          data,
+                          tracker: syntheticLiveToolTracker,
+                          sessionKey: sessionKeyFromEvent,
+                          runId,
+                        })
+                        for (const synthetic of payloadTools) {
+                          persistActiveRun((runSessionKey, activeId) =>
+                            upsertRunToolCall(runSessionKey, activeId, {
+                              id: synthetic.toolCallId,
+                              name: synthetic.name,
+                              phase: synthetic.phase,
+                              args: synthetic.args,
+                              result: synthetic.result,
+                            }),
+                          )
+                          sendEvent('tool', synthetic)
+                          skipPublish || publishChatEvent('tool', synthetic)
+                          lastActivity = `Running: ${synthetic.name.replace(/_/g, ' ')}`
+                        }
+                      }
+
                       if (!startedSent && runId) {
                         startedSent = true
                         sendEvent('started', {
@@ -1389,25 +1497,11 @@ export const Route = createFileRoute('/api/send-stream')({
                           typeof data.content === 'string' ? data.content : ''
                         if (content) {
                           assistantTextBuffer += content
-                          const { displayText, extractedThinking, remainingBuffer } =
-                            extractStreamingThinking(assistantTextBuffer)
-                          assistantTextBuffer = remainingBuffer
-                          if (extractedThinking) {
-                            thinkingAccumulated += extractedThinking
-                            persistActiveRun((runSessionKey, activeId) =>
-                              setRunThinking(
-                                runSessionKey,
-                                activeId,
-                                thinkingAccumulated,
-                              ),
-                            )
-                            sendEvent('thinking', {
-                              text: thinkingAccumulated,
-                              sessionKey: sessionKeyFromEvent,
-                              runId,
-                            })
-                          }
-                          if (displayText) {
+                          const displayText = publishInlineThinking(
+                            sessionKeyFromEvent,
+                            runId,
+                          )
+                          if (displayText.trim()) {
                             persistActiveRun((runSessionKey, activeId) =>
                               appendRunText(runSessionKey, activeId, displayText, {
                                 replace: true,
@@ -1493,31 +1587,11 @@ export const Route = createFileRoute('/api/send-stream')({
                         // so they render in the Activity panel instead of
                         // appearing in the visible assistant bubble.
                         assistantTextBuffer += delta
-                        const { displayText, extractedThinking, remainingBuffer } =
-                          extractStreamingThinking(assistantTextBuffer)
-                        assistantTextBuffer = remainingBuffer
-                        if (extractedThinking) {
-                          thinkingAccumulated += extractedThinking
-                          persistActiveRun((runSessionKey, activeId) =>
-                            setRunThinking(
-                              runSessionKey,
-                              activeId,
-                              thinkingAccumulated,
-                            ),
-                          )
-                          sendEvent('thinking', {
-                            text: thinkingAccumulated,
-                            sessionKey: sessionKeyFromEvent,
-                            runId,
-                          })
-                          skipPublish ||
-                            publishChatEvent('thinking', {
-                              text: thinkingAccumulated,
-                              sessionKey: sessionKeyFromEvent,
-                              runId,
-                            })
-                        }
-                        if (displayText) {
+                        const displayText = publishInlineThinking(
+                          sessionKeyFromEvent,
+                          runId,
+                        )
+                        if (displayText.trim()) {
                           // displayText is the full visible (thinking-stripped)
                           // accumulation — replace, never append, so the
                           // downstream accumulators don't concatenate duplicates.

@@ -5,7 +5,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { isAuthenticated } from '../../server/auth-middleware'
 import {
   BEARER_TOKEN,
-  CLAUDE_API,
+  HERMES_API,
   CLAUDE_UPGRADE_INSTRUCTIONS,
   ensureGatewayProbed,
 } from '../../server/gateway-capabilities'
@@ -79,7 +79,7 @@ export const Route = createFileRoute('/api/claude-jobs')({
         }
         const params = url.searchParams.toString()
         const res = await fetch(
-          `${CLAUDE_API}/api/jobs${params ? `?${params}` : ''}`,
+          `${HERMES_API}/api/jobs${params ? `?${params}` : ''}`,
           {
             headers: authHeaders(),
           },
@@ -134,7 +134,7 @@ export const Route = createFileRoute('/api/claude-jobs')({
             { status: 503, headers: { 'Content-Type': 'application/json' } },
           )
         }
-        const res = await fetch(`${CLAUDE_API}/api/jobs`, {
+        const res = await fetch(`${HERMES_API}/api/jobs`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...authHeaders() },
           body,

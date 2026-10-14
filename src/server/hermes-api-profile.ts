@@ -1,10 +1,10 @@
 /**
  * Per-profile Hermes FastAPI client factory.
  *
- * `hermes-api.ts` is a process-wide singleton that always points at the
- * current active gateway. Group chat needs to talk to the
- * gateway that owns each participant's profile, so this module builds a
- * lightweight client keyed by profile name.
+ * Group chat talks to the gateway that owns each participant. 1:1 chat uses
+ * the same rule through `resolveChatGateway`: pool on pins that profile's
+ * port; pool off shares HERMES_API. Neither path rewrites the global URL
+ * just because the visible agent changed.
  *
  * The returned client mirrors the surface of `hermes-api.ts` used by the
  * group-chat subsystem:
@@ -339,9 +339,7 @@ export function resolveProfileGatewayUrl(profileName: string): string {
   }
   // Fallback to the global active gateway for deployments without a pool.
   return normalizeUrl(
-    process.env.HERMES_API_URL ||
-      process.env.CLAUDE_API_URL ||
-      'http://127.0.0.1:8642',
+    process.env.HERMES_API_URL || 'http://127.0.0.1:8642',
   )
 }
 

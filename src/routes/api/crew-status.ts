@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import * as yaml from 'yaml'
 import {
   BEARER_TOKEN,
-  CLAUDE_API,
+  HERMES_API,
   ensureGatewayProbed,
 } from '../../server/gateway-capabilities'
 import {
@@ -268,7 +268,7 @@ function readCronJobCount(claudeHome: string): number {
 
 async function fetchAssignedTaskCounts(): Promise<Record<string, number>> {
   try {
-    const res = await fetch(`${CLAUDE_API}/api/tasks?include_done=false`, {
+    const res = await fetch(`${HERMES_API}/api/tasks?include_done=false`, {
       signal: AbortSignal.timeout(3_000),
       headers: BEARER_TOKEN ? { Authorization: `Bearer ${BEARER_TOKEN}` } : {},
     })

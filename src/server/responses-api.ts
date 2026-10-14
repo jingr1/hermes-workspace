@@ -18,7 +18,7 @@
  * `send-stream.ts` can translate to its existing `tool.*` events without
  * caring about Responses-spec quirks.
  */
-import { BEARER_TOKEN, CLAUDE_API } from './gateway-capabilities'
+import { resolveChatGateway } from './chat-gateway'
 
 export type ResponsesStreamEvent =
   | { kind: 'text.delta'; delta: string }
@@ -56,9 +56,6 @@ export type ResponsesChatRequest = {
   agentId?: string
   profileName?: string
 }
-
-const _authHeaders = (): Record<string, string> =>
-  BEARER_TOKEN ? { Authorization: `Bearer ${BEARER_TOKEN}` } : {}
 
 function tryParseJson(value: string): Record<string, unknown> | string | null {
   if (!value) return null
@@ -106,12 +103,13 @@ function extractOutputText(output: unknown): string {
 export async function* streamResponses(
   req: ResponsesChatRequest,
 ): AsyncGenerator<ResponsesStreamEvent, void, void> {
+  const gateway = resolveChatGateway(req.profileName)
   const headers: Record<string, string> = {
-    ..._authHeaders(),
+    ...(gateway.token ? { Authorization: `Bearer ${gateway.token}` } : {}),
     'Content-Type': 'application/json',
     Accept: 'text/event-stream',
   }
-  if (req.sessionId && BEARER_TOKEN) {
+  if (req.sessionId && gateway.token) {
     headers['X-Hermes-Session-Id'] = req.sessionId
   }
   if (req.agentId) headers['X-Hermes-Agent-Id'] = req.agentId
@@ -128,7 +126,7 @@ export async function* streamResponses(
   if (req.model) body.model = req.model
   if (req.sessionId) body.session_id = req.sessionId
 
-  const res = await fetch(`${CLAUDE_API}/v1/responses`, {
+  const res = await fetch(`${gateway.url}/v1/responses`, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),

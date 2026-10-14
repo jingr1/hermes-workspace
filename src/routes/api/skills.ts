@@ -6,7 +6,7 @@ import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../server/auth-middleware'
 import {
   BEARER_TOKEN,
-  CLAUDE_API,
+  HERMES_API,
   CLAUDE_UPGRADE_INSTRUCTIONS,
   ensureGatewayProbed,
 } from '../../server/gateway-capabilities'
@@ -488,7 +488,7 @@ async function fetchClaudeSkills(): Promise<Array<SkillSummary>> {
   // `/v1/skills` first: current agent; `/api/skills` is legacy and often 404s.
   for (const endpoint of ['/v1/skills', '/api/skills'] as const) {
     try {
-      const response = await fetch(`${CLAUDE_API}${endpoint}`, { headers })
+      const response = await fetch(`${HERMES_API}${endpoint}`, { headers })
       if (!response.ok) continue
       return extractSkillItems(await response.json())
         .map((entry) => normalizeSkill(entry))
@@ -697,7 +697,7 @@ export const Route = createFileRoute('/api/skills')({
           }
           if (BEARER_TOKEN) headers['Authorization'] = `Bearer ${BEARER_TOKEN}`
 
-          const response = await fetch(`${CLAUDE_API}${endpoint}`, {
+          const response = await fetch(`${HERMES_API}${endpoint}`, {
             method: 'POST',
             headers,
             body: JSON.stringify(payload),

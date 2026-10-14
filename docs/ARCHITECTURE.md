@@ -118,7 +118,7 @@ Agorax 是 AI agent 的**公共广场 / 多智能体协作控制面**：把聊�
 | 职责           | 要点                                                                                                                     |
 | ------------ | ---------------------------------------------------------------------------------------------------------------------- |
 | Dev 自动拉起     | Hermes gateway（`src/server/gateway-pool.ts`，可用 `AGORAX_AUTO_START_AGENT=false` 禁用）                                      |
-| 代理表          | `/api/hermes-proxy`→`$HERMES_API_URL` / `$CLAUDE_API_URL`（默认 :8642）                                                        |
+| 代理表          | `/api/hermes-proxy`→`$HERMES_API_URL`（默认 :8642）                                                                                      |
 | 安全头          | 全量 CSP / X-Content-Type-Options / Referrer-Policy（与 `src/lib/csp.ts`、`__root.tsx` meta 三处保持同步）                         |
 | Watch ignore | `.runtime/**`、`.tanstack/**` `agents.yaml`、`*.log` 等，防止运行时文件触发 HMR                                                     |
 | Dev 特例       | `PATCH /api/swarm-roster` 在 dev middleware 直写 `agents.yaml`（绕开 dev 模式 SSR PATCH 挂起）                                    |

@@ -1181,10 +1181,8 @@ type ClaudeConfigData = {
   claudeHome: string
 }
 
-const CLAUDE_API =
-  process.env.HERMES_API_URL ||
-  process.env.CLAUDE_API_URL ||
-  'http://127.0.0.1:8642'
+const HERMES_API =
+  process.env.HERMES_API_URL || 'http://127.0.0.1:8642'
 
 type AvailableModelsResponse = {
   provider: string

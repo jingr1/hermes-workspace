@@ -375,6 +375,7 @@ export type AssistantHostContentMessage = {
   __streamingStatus?: string
   __optimisticId?: unknown
   __streamToolCalls?: unknown
+  __streamingThinking?: unknown
 }
 
 /**
@@ -421,6 +422,72 @@ export function assistantHasVisibleHostContent(
       rec.type === 'tool_use' ||
       rec.type === 'toolUse'
     ) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Surface that mounts the in-thread Working card: thinking text or tool calls.
+ * Plain reply text does not count — that used to hide the bottom Thinking pill
+ * before the card had anything to render.
+ */
+export function assistantHasWorkingSurface(
+  message: AssistantHostContentMessage,
+): boolean {
+  if (
+    Array.isArray(message.__streamToolCalls) &&
+    message.__streamToolCalls.length > 0
+  ) {
+    return true
+  }
+  if (
+    typeof message.__streamingThinking === 'string' &&
+    message.__streamingThinking.trim().length > 0
+  ) {
+    return true
+  }
+
+  const content = Array.isArray(message.content) ? message.content : []
+  for (const part of content) {
+    if (!part || typeof part !== 'object') continue
+    const rec = part as Record<string, unknown>
+    if (
+      (rec.type === 'thinking' || rec.type === 'redacted_thinking') &&
+      ((typeof rec.thinking === 'string' && rec.thinking.trim().length > 0) ||
+        (typeof rec.text === 'string' && rec.text.trim().length > 0))
+    ) {
+      return true
+    }
+    if (
+      rec.type === 'toolCall' ||
+      rec.type === 'tool_use' ||
+      rec.type === 'toolUse'
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Open-turn Working surface only (after the last user message).
+ * The bottom Thinking pill stays up until this is true.
+ */
+export function openTurnHasWorkingSurface(
+  messages: ReadonlyArray<AssistantHostContentMessage>,
+): boolean {
+  let lastUserIndex = -1
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === 'user') {
+      lastUserIndex = index
+      break
+    }
+  }
+  for (let index = lastUserIndex + 1; index < messages.length; index += 1) {
+    const message = messages[index]
+    if (message?.role === 'assistant' && assistantHasWorkingSurface(message)) {
       return true
     }
   }

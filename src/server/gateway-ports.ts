@@ -51,7 +51,6 @@ export function pairingGatewayUrl(): string {
   }
   return (
     process.env.HERMES_API_URL?.trim() ||
-    process.env.CLAUDE_API_URL?.trim() ||
     `http://127.0.0.1:${GATEWAY_BASE_PORT}`
   )
 }
@@ -62,8 +61,7 @@ function envFlag(name: string): string {
 
 /** Localhost deployments get a pool; remote pairing stays single-gateway. */
 export function isGatewayPoolEnabled(): boolean {
-  const flag =
-    envFlag('HERMES_GATEWAY_POOL') || envFlag('CLAUDE_GATEWAY_POOL_ENABLED')
+  const flag = envFlag('HERMES_GATEWAY_POOL')
   if (flag === '0' || flag === 'false' || flag === 'off') return false
   if (flag === '1' || flag === 'true' || flag === 'on') return true
   return isLoopbackUrl(pairingGatewayUrl())

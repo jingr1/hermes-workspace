@@ -48,6 +48,11 @@ function isMatchingClientMessage(
   return false
 }
 
+/** First paint. The hook then fills up to HISTORY_FULL_LIMIT in the background. */
+export const HISTORY_FIRST_PAINT_LIMIT = 40
+/** Server cap. Matches the largest window /api/history will return. */
+export const HISTORY_FULL_LIMIT = 500
+
 export const chatQueryKeys = {
   /** Prefix for all session queries (use for invalidation). */
   sessions: ['chat', 'sessions'] as const,
@@ -78,9 +83,10 @@ export async function fetchHistory(payload: {
   /** Initial paint should stay small; default keeps last N messages. */
   limit?: number
 }): Promise<HistoryResponse> {
-  // Server caps history at 500 messages; request the full window so longer
-  // sessions can show the "load earlier" UI instead of silently truncating.
-  const limit = Math.min(500, Math.max(1, payload.limit ?? 500))
+  const limit = Math.min(
+    HISTORY_FULL_LIMIT,
+    Math.max(1, payload.limit ?? HISTORY_FULL_LIMIT),
+  )
   const query = new URLSearchParams({ limit: String(limit) })
   if (payload.sessionKey) query.set('sessionKey', payload.sessionKey)
   if (payload.friendlyId) query.set('friendlyId', payload.friendlyId)

@@ -292,7 +292,29 @@ describe('shouldShowHermesProcessingIndicator', () => {
     ).toBe(true)
   })
 
-  it('suppresses the pill once the open turn hosts thinking or text', () => {
+  it('keeps the pill while the open turn has only reply text', () => {
+    expect(
+      shouldShowHermesProcessingIndicator({
+        messages: [
+          ...priorTurn,
+          {
+            role: 'user',
+            content: [{ type: 'text', text: 'again' }],
+          },
+          {
+            role: 'assistant',
+            content: [{ type: 'text', text: 'I will check the files.' }],
+          },
+        ],
+        isStreaming: true,
+        sending: false,
+        waitingForResponse: true,
+        hasPendingGeneration: false,
+      }),
+    ).toBe(true)
+  })
+
+  it('hides the pill once the open turn can mount Working', () => {
     expect(
       shouldShowHermesProcessingIndicator({
         messages: [
@@ -304,6 +326,32 @@ describe('shouldShowHermesProcessingIndicator', () => {
           {
             role: 'assistant',
             content: [{ type: 'thinking', thinking: 'planning' }],
+          },
+        ],
+        isStreaming: true,
+        sending: false,
+        waitingForResponse: true,
+        hasPendingGeneration: false,
+      }),
+    ).toBe(false)
+
+    expect(
+      shouldShowHermesProcessingIndicator({
+        messages: [
+          ...priorTurn,
+          {
+            role: 'user',
+            content: [{ type: 'text', text: 'again' }],
+          },
+          {
+            role: 'assistant',
+            content: [
+              {
+                type: 'toolCall',
+                id: 'tool-1',
+                name: 'read_file',
+              },
+            ],
           },
         ],
         isStreaming: true,

@@ -1,6 +1,5 @@
+import { resolveChatGateway } from '@/server/chat-gateway'
 import {
-  BEARER_TOKEN,
-  CLAUDE_API,
   dashboardFetch,
   ensureGatewayProbed,
   getCapabilities,
@@ -193,7 +192,12 @@ export function resolvePreferredContextWindow(
 }
 
 function authHeaders(): Record<string, string> {
-  return BEARER_TOKEN ? { Authorization: `Bearer ${BEARER_TOKEN}` } : {}
+  const token = resolveChatGateway().token
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+function gatewayOrigin(): string {
+  return resolveChatGateway().url
 }
 
 export function parseCompressionSettings(
@@ -359,7 +363,7 @@ async function fetchGatewayJson(
 ): Promise<Record<string, unknown> | null> {
   try {
     const gatewayPayload = await parseJsonObject(
-      await fetch(`${CLAUDE_API}${path}`, {
+      await fetch(`${gatewayOrigin()}${path}`, {
         headers: authHeaders(),
         signal: AbortSignal.timeout(2500),
       }),
@@ -429,7 +433,7 @@ async function readGatewayRuntimeSnapshot(
   if (!sid) return null
   try {
     const res = await fetch(
-      `${CLAUDE_API}/api/sessions/${encodeURIComponent(sid)}/runtime`,
+      `${gatewayOrigin()}/api/sessions/${encodeURIComponent(sid)}/runtime`,
       {
         headers: authHeaders(),
         signal: AbortSignal.timeout(2500),
@@ -695,7 +699,7 @@ export async function readContextUsage(
               },
             )
           : await fetch(
-              `${CLAUDE_API}/api/sessions/${encodeURIComponent(resolvedSessionId)}`,
+              `${gatewayOrigin()}/api/sessions/${encodeURIComponent(resolvedSessionId)}`,
               {
                 headers: authHeaders(),
                 signal: AbortSignal.timeout(3000),
@@ -781,7 +785,7 @@ export async function readContextUsage(
                 },
               )
             : await fetch(
-                `${CLAUDE_API}/api/sessions/${encodeURIComponent(targetSessionId)}/messages`,
+                `${gatewayOrigin()}/api/sessions/${encodeURIComponent(targetSessionId)}/messages`,
                 {
                   headers: authHeaders(),
                   signal: AbortSignal.timeout(5000),

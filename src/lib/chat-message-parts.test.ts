@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   assistantHasVisibleHostContent,
+  assistantHasWorkingSurface,
   openTurnHasAssistantHostContent,
+  openTurnHasWorkingSurface,
   mergeAssistantThinkingFromSource,
   mergeStreamToolCallRecords,
   normalizeChatContentParts,
@@ -150,6 +152,49 @@ describe('assistantHasVisibleHostContent', () => {
         __streamingStatus: 'streaming',
         __streamToolCalls: [{ id: 't1', name: 'Read' }],
       }),
+    ).toBe(true)
+  })
+})
+
+describe('openTurnHasWorkingSurface', () => {
+  it('ignores plain reply text so Thinking stays up', () => {
+    expect(
+      openTurnHasWorkingSurface([
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'look' }],
+        },
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'On it.' }],
+        },
+      ]),
+    ).toBe(false)
+    expect(
+      assistantHasWorkingSurface({
+        content: [{ type: 'text', text: 'On it.' }],
+      }),
+    ).toBe(false)
+  })
+
+  it('is true once thinking or a tool call is on the open turn', () => {
+    expect(
+      assistantHasWorkingSurface({
+        content: [{ type: 'thinking', thinking: 'planning' }],
+      }),
+    ).toBe(true)
+    expect(
+      openTurnHasWorkingSurface([
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'look' }],
+        },
+        {
+          role: 'assistant',
+          content: [],
+          __streamToolCalls: [{ id: 't1', name: 'Read' }],
+        },
+      ]),
     ).toBe(true)
   })
 })

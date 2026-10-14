@@ -60,6 +60,37 @@ function extractToolResultText(message: Record<string, unknown>): string {
     .join('\n')
 }
 
+/**
+ * Tool calls already sitting on a gateway event payload. Emits `calling`
+ * through the same tracker as the session poll, so a later poll does not
+ * open a second card for the same id.
+ */
+export function collectGatewayPayloadToolEvents(params: {
+  data: Record<string, unknown>
+  tracker: SyntheticLiveToolTracker
+  sessionKey: string
+  runId?: string
+}): Array<SyntheticLiveToolEvent> {
+  const message = readRecord(params.data.message)
+  const lists = [
+    params.data.tool_calls,
+    params.data.toolCalls,
+    message?.tool_calls,
+    message?.toolCalls,
+  ]
+  const toolCalls = lists.find(
+    (value): value is Array<Record<string, unknown>> =>
+      Array.isArray(value) && value.length > 0,
+  )
+  if (!toolCalls) return []
+  return collectSyntheticLiveToolEvents({
+    messages: [{ role: 'assistant', tool_calls: toolCalls }],
+    tracker: params.tracker,
+    sessionKey: params.sessionKey,
+    runId: params.runId,
+  })
+}
+
 export function createSyntheticLiveToolTracker(): SyntheticLiveToolTracker {
   return {
     emittedPhaseByToolCallId: new Map(),

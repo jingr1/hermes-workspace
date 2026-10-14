@@ -3,7 +3,7 @@ import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../server/auth-middleware'
 import { requireJsonContentType } from '../../server/rate-limit'
 import { createSession, sendChat } from '../../server/hermes-api'
-import { ensureActiveProfileGateway } from '../../server/gateway-pool'
+import { ensureChatGateway, enterChatGateway } from '../../server/chat-gateway'
 import {
   getBackgroundTask,
   listBackgroundTasks,
@@ -61,7 +61,10 @@ export const Route = createFileRoute('/api/background')({
         }
 
         try {
-          await ensureActiveProfileGateway()
+          const requestedProfile =
+            typeof body.profileName === 'string' ? body.profileName.trim() : ''
+          const gateway = await ensureChatGateway(requestedProfile)
+          enterChatGateway(gateway)
           const bgSession = await createSession({
             title: `bg: ${prompt.slice(0, 60)}`,
           })
@@ -70,6 +73,7 @@ export const Route = createFileRoute('/api/background')({
             prompt,
             sessionId: bgSession.id,
             run: async () => {
+              enterChatGateway(gateway)
               const result = await sendChat(bgSession.id, prompt)
               const answer =
                 typeof result === 'object' && result

@@ -299,6 +299,36 @@ function buildReference(pathValue: string) {
   return `See file: workspace/${normalized}`
 }
 
+function findFileEntry(
+  entries: Array<FileEntry>,
+  pathValue: string,
+): FileEntry | null {
+  for (const entry of entries) {
+    if (entry.path === pathValue) return entry
+    if (entry.children?.length) {
+      const nested = findFileEntry(entry.children, pathValue)
+      if (nested) return nested
+    }
+  }
+  return null
+}
+
+/** Depth-capped listings omit `children`. Keep those folders loadable on expand. */
+function withLazyChildren(
+  entries: Array<FileEntry>,
+  lazyChildren: ReadonlyMap<string, Array<FileEntry>>,
+): Array<FileEntry> {
+  return entries.map((entry) => {
+    if (entry.type !== 'folder') return entry
+    const children =
+      entry.children !== undefined
+        ? entry.children
+        : lazyChildren.get(entry.path)
+    if (!children) return entry
+    return { ...entry, children: withLazyChildren(children, lazyChildren) }
+  })
+}
+
 function filterTree(entries: Array<FileEntry>, term: string): Array<FileEntry> {
   if (!term.trim()) return entries
   const lower = term.toLowerCase()
@@ -331,6 +361,12 @@ export function FileExplorerSidebar({
   className,
 }: FileExplorerSidebarProps) {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
+  const [lazyChildren, setLazyChildren] = useState<
+    Map<string, Array<FileEntry>>
+  >(() => new Map())
+  const [loadingFolders, setLoadingFolders] = useState<Set<string>>(
+    () => new Set(),
+  )
   const [search, setSearch] = useState('')
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [promptState, setPromptState] = useState<PromptState | null>(null)
@@ -387,12 +423,12 @@ export function FileExplorerSidebar({
     staleTime: 30_000,
     retry: false,
   })
-  const entries = useMemo(
-    () =>
+  const entries = useMemo(() => {
+    const base =
       ((deepQuery.data ?? filesQuery.data) as Array<FileEntry> | undefined) ??
-      [],
-    [deepQuery.data, filesQuery.data],
-  )
+      []
+    return withLazyChildren(base, lazyChildren)
+  }, [deepQuery.data, filesQuery.data, lazyChildren])
   const loading =
     workspacePending ||
     (Boolean(workspacePath) &&
@@ -424,6 +460,8 @@ export function FileExplorerSidebar({
 
   useEffect(() => {
     setExpanded(new Set())
+    setLazyChildren(new Map())
+    setLoadingFolders(new Set())
     setPreviewPath(null)
     setContextMenu(null)
     setRenamingPath(null)
@@ -467,14 +505,53 @@ export function FileExplorerSidebar({
 
   const isSearchActive = search.trim().length > 0
 
-  const toggleFolder = useCallback((pathValue: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev)
-      if (next.has(pathValue)) next.delete(pathValue)
-      else next.add(pathValue)
-      return next
-    })
-  }, [])
+  const loadFolderChildren = useCallback(
+    (pathValue: string) => {
+      const node = findFileEntry(entries, pathValue)
+      if (!node || node.type !== 'folder' || node.children) return
+      if (loadingFolders.has(pathValue)) return
+      setLoadingFolders((prev) => {
+        const next = new Set(prev)
+        next.add(pathValue)
+        return next
+      })
+      void fetchFileTree(workspaceProfileName, 0, pathValue)
+        .then((children) => {
+          setLazyChildren((prev) => {
+            const next = new Map(prev)
+            next.set(pathValue, children as Array<FileEntry>)
+            return next
+          })
+        })
+        .catch((err: unknown) => {
+          setCrudError(
+            err instanceof Error ? err.message : 'Failed to open folder',
+          )
+        })
+        .finally(() => {
+          setLoadingFolders((prev) => {
+            const next = new Set(prev)
+            next.delete(pathValue)
+            return next
+          })
+        })
+    },
+    [entries, loadingFolders, workspaceProfileName],
+  )
+
+  const toggleFolder = useCallback(
+    (pathValue: string) => {
+      const opening = !expanded.has(pathValue)
+      setExpanded((prev) => {
+        const next = new Set(prev)
+        if (next.has(pathValue)) next.delete(pathValue)
+        else next.add(pathValue)
+        return next
+      })
+      if (opening) loadFolderChildren(pathValue)
+    },
+    [expanded, loadFolderChildren],
+  )
 
   const openPrompt = useCallback((state: PromptState) => {
     setPromptState(state)
@@ -1038,6 +1115,17 @@ export function FileExplorerSidebar({
               </button>
             )}
           </div>
+          {entry.type === 'folder' &&
+          isExpanded &&
+          !entry.children &&
+          loadingFolders.has(entry.path) ? (
+            <div
+              className="py-1 text-xs text-primary-500"
+              style={{ paddingLeft: padding + 14 }}
+            >
+              Loading…
+            </div>
+          ) : null}
           {entry.type === 'folder' && isExpanded && entry.children?.length ? (
             <div>
               {entry.children.map((child) => renderEntry(child, depth + 1))}
@@ -1057,6 +1145,7 @@ export function FileExplorerSidebar({
       handleNameDoubleClick,
       handleUploadFiles,
       isSearchActive,
+      loadingFolders,
       previewPath,
       renameDraft,
       renamingPath,

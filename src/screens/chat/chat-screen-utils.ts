@@ -1,4 +1,4 @@
-import { openTurnHasAssistantHostContent } from '@/lib/chat-message-parts'
+import { openTurnHasWorkingSurface } from '@/lib/chat-message-parts'
 import type { ChatAttachment, ChatMessage } from './types'
 
 export type StickyStreamingTextState = {
@@ -122,9 +122,9 @@ export function shouldSettleWaitingFromActiveRun(
 }
 
 /**
- * Empty-gap ThinkingBubble for Hermes 1:1. Suppress only when the *open turn*
- * (after last user) already hosts Activity / reply content — never because an
- * earlier settled assistant exists in the transcript.
+ * Empty-gap ThinkingBubble for Hermes 1:1. Stay up until the open turn can
+ * mount the Working card (thinking text or tool calls). Plain reply text does
+ * not clear it — that left a blank between Thinking and Working.
  */
 export function shouldShowHermesProcessingIndicator(params: {
   messages: ReadonlyArray<ChatMessage>
@@ -133,7 +133,7 @@ export function shouldShowHermesProcessingIndicator(params: {
   waitingForResponse: boolean
   hasPendingGeneration: boolean
 }): boolean {
-  if (openTurnHasAssistantHostContent(params.messages)) return false
+  if (openTurnHasWorkingSurface(params.messages)) return false
   if (params.isStreaming) return true
   return (
     params.sending ||

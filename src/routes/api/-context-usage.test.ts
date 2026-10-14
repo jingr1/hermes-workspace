@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../server/gateway-capabilities', () => ({
   BEARER_TOKEN: '',
-  CLAUDE_API: 'http://127.0.0.1:8642',
+  HERMES_API: 'http://127.0.0.1:8642',
   dashboardFetch: vi.fn(),
   ensureGatewayProbed: vi.fn(async () => ({ dashboard: { available: false } })),
   getCapabilities: vi.fn(() => ({ dashboard: { available: false } })),

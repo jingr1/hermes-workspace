@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  collectGatewayPayloadToolEvents,
   collectSyntheticLiveThinkingText,
   collectSyntheticLiveToolEvents,
   createSyntheticLiveToolTracker,
 } from './-send-stream-live-tools'
 import {
+  consumeInlineThinking,
   extractReasoningFromGatewayEvent,
   extractReasoningFromToolProgress,
+  extractStreamingThinking,
 } from './send-stream'
 
 describe('extractReasoningFromToolProgress', () => {
@@ -101,6 +104,76 @@ describe('collectSyntheticLiveThinkingText', () => {
         },
       ]),
     ).toBe('longer reasoning trace from gateway persistence')
+  })
+})
+
+describe('extractStreamingThinking', () => {
+  it('emits the unclosed body and keeps the tag for the next chunk', () => {
+    const open = extractStreamingThinking('before <thinking>still planning')
+    expect(open.displayText).toBe('before ')
+    expect(open.pendingThinking).toBe('still planning')
+    expect(open.extractedThinking).toBe('')
+    expect(open.remainingBuffer).toBe('before <thinking>still planning')
+
+    const closed = extractStreamingThinking(
+      `${open.remainingBuffer}</thinking> after`,
+    )
+    expect(closed.extractedThinking).toBe('still planning')
+    expect(closed.pendingThinking).toBe('')
+    expect(closed.displayText).toBe('before  after')
+    expect(closed.remainingBuffer).toBe('before  after')
+  })
+
+  it('holds a tag whose closing bracket has not arrived', () => {
+    const split = extractStreamingThinking('hello <thinking')
+    expect(split.displayText).toBe('hello ')
+    expect(split.pendingThinking).toBe('')
+    expect(split.remainingBuffer).toBe('hello <thinking')
+  })
+})
+
+describe('consumeInlineThinking', () => {
+  it('does not commit the open body twice when the tag closes', () => {
+    const open = consumeInlineThinking('<thinking>plan', '')
+    expect(open.liveThinking).toBe('plan')
+    expect(open.closedThinking).toBe('')
+
+    const closed = consumeInlineThinking(`${open.buffer}</thinking>`, open.closedThinking)
+    expect(closed.closedThinking).toBe('plan')
+    expect(closed.liveThinking).toBe('plan')
+  })
+})
+
+describe('collectGatewayPayloadToolEvents', () => {
+  it('emits calling from tool_calls already on the event', () => {
+    const tracker = createSyntheticLiveToolTracker()
+    const events = collectGatewayPayloadToolEvents({
+      data: {
+        tool_calls: [
+          {
+            id: 'toolu_1',
+            function: {
+              name: 'read_file',
+              arguments: '{"path":"/tmp/AGENTS.md"}',
+            },
+          },
+        ],
+      },
+      tracker,
+      sessionKey: 'session-1',
+      runId: 'run-1',
+    })
+    expect(events).toEqual([
+      {
+        phase: 'calling',
+        name: 'read_file',
+        toolCallId: 'toolu_1',
+        args: { path: '/tmp/AGENTS.md' },
+        result: undefined,
+        sessionKey: 'session-1',
+        runId: 'run-1',
+      },
+    ])
   })
 })
 

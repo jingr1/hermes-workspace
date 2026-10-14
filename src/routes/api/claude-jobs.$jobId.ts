@@ -6,7 +6,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { isAuthenticated } from '../../server/auth-middleware'
 import {
   BEARER_TOKEN,
-  CLAUDE_API,
+  HERMES_API,
   CLAUDE_UPGRADE_INSTRUCTIONS,
   ensureGatewayProbed,
 } from '../../server/gateway-capabilities'
@@ -63,8 +63,8 @@ export const Route = createFileRoute('/api/claude-jobs/$jobId')({
         if (!capabilities.jobs) return notSupported()
 
         const target = action
-          ? `${CLAUDE_API}/api/jobs/${params.jobId}/${action}${url.search}`
-          : `${CLAUDE_API}/api/jobs/${params.jobId}`
+          ? `${HERMES_API}/api/jobs/${params.jobId}/${action}${url.search}`
+          : `${HERMES_API}/api/jobs/${params.jobId}`
         const res = await fetch(target, { headers: authHeaders() })
         return new Response(await res.text(), {
           status: res.status,
@@ -128,8 +128,8 @@ export const Route = createFileRoute('/api/claude-jobs/$jobId')({
         if (!capabilities.jobs) return notSupported()
 
         const target = action
-          ? `${CLAUDE_API}/api/jobs/${params.jobId}/${action}`
-          : `${CLAUDE_API}/api/jobs/${params.jobId}`
+          ? `${HERMES_API}/api/jobs/${params.jobId}/${action}`
+          : `${HERMES_API}/api/jobs/${params.jobId}`
         const res = await fetch(target, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -213,7 +213,7 @@ export const Route = createFileRoute('/api/claude-jobs/$jobId')({
         const capabilities = await ensureGatewayProbed()
         if (!capabilities.jobs) return notSupported()
 
-        const res = await fetch(`${CLAUDE_API}/api/jobs/${params.jobId}`, {
+        const res = await fetch(`${HERMES_API}/api/jobs/${params.jobId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', ...authHeaders() },
           body,
@@ -254,7 +254,7 @@ export const Route = createFileRoute('/api/claude-jobs/$jobId')({
         const capabilities = await ensureGatewayProbed()
         if (!capabilities.jobs) return notSupported()
 
-        const res = await fetch(`${CLAUDE_API}/api/jobs/${params.jobId}`, {
+        const res = await fetch(`${HERMES_API}/api/jobs/${params.jobId}`, {
           method: 'DELETE',
           headers: authHeaders(),
         })

@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../server/auth-middleware'
-import { BEARER_TOKEN, CLAUDE_API } from '../../../server/gateway-capabilities'
+import { BEARER_TOKEN, HERMES_API } from '../../../server/gateway-capabilities'
 
 function authHeaders(): Record<string, string> {
   return BEARER_TOKEN ? { Authorization: `Bearer ${BEARER_TOKEN}` } : {}
@@ -27,7 +27,7 @@ export const Route = createFileRoute('/api/skills/uninstall')({
             )
           }
 
-          const response = await fetch(`${CLAUDE_API}/api/skills/uninstall`, {
+          const response = await fetch(`${HERMES_API}/api/skills/uninstall`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

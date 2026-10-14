@@ -8,7 +8,12 @@ import { useQueryClient } from '@tanstack/react-query'
 import { setActiveProfileOptimistic, useProfiles } from '../hooks/use-profiles'
 import { useRenameSession } from '../hooks/use-rename-session'
 import { useDeleteSession } from '../hooks/use-delete-session'
-import { chatQueryKeys, fetchHistory, fetchSessions } from '../chat-queries'
+import {
+  HISTORY_FIRST_PAINT_LIMIT,
+  chatQueryKeys,
+  fetchHistory,
+  fetchSessions,
+} from '../chat-queries'
 import { resolveSessionForProfile, writeLastSession } from '../last-session'
 import { SidebarSessions } from './sidebar/sidebar-sessions'
 import { SessionDeleteDialog } from './sidebar/session-delete-dialog'
@@ -61,6 +66,7 @@ function prefetchSessionHistory(
         sessionKey: sessionId,
         friendlyId: sessionId,
         profile: profileName,
+        limit: HISTORY_FIRST_PAINT_LIMIT,
       }),
     staleTime: 10_000,
   })
@@ -176,7 +182,9 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
         staleTime: 60_000,
       })
 
+    let cancelled = false
     void prefetchSessions(activeProfileName).then(() => {
+      if (cancelled) return
       const cached = queryClient.getQueryData<Array<SessionMeta>>(
         chatQueryKeys.sessionsForProfile(activeProfileName),
       )
@@ -186,7 +194,24 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
         resolveSessionForProfile(cached, activeProfileName),
       )
     })
-  }, [activeProfileName, queryClient])
+
+    // Other profiles' lists are small (id/title only). Warm them after the
+    // visible history request has had a chance to start.
+    const warmOthers = window.setTimeout(() => {
+      if (cancelled) return
+      for (const agent of agents) {
+        if (agent.runtime !== 'hermes') continue
+        const profile = agent.runtimeConfig.profile ?? agent.agentId
+        if (!profile || profile === activeProfileName) continue
+        void prefetchSessions(profile)
+      }
+    }, 400)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(warmOthers)
+    }
+  }, [activeProfileName, agents, queryClient])
 
   const handleSelectAgent = useCallback(
     (agentId: string) => {
@@ -204,18 +229,20 @@ export const ChatSessionSidebar = memo(function ChatSessionSidebar({
 
       if (agent.runtime === 'hermes') {
         const targetProfile = agent.runtimeConfig.profile ?? agent.agentId
+        if (targetProfile !== activeProfileName) {
+          writeLastSession(activeFriendlyId, activeProfileName)
+          setActiveProfileOptimistic(queryClient, targetProfile)
+          preloadWorkspaceFolders(targetProfile)
+          activateProfile(targetProfile)
+        } else if (activeFriendlyId && activeFriendlyId !== 'new') {
+          writeLastSession(activeFriendlyId, activeProfileName)
+        }
+
+        // Handoff detaches an in-flight stream. The session list and the
+        // remembered transcript do not need to wait for that POST.
+        void requestStreamHandoffIfActive()
+
         void (async () => {
-          await requestStreamHandoffIfActive()
-
-          if (targetProfile !== activeProfileName) {
-            writeLastSession(activeFriendlyId, activeProfileName)
-            setActiveProfileOptimistic(queryClient, targetProfile)
-            preloadWorkspaceFolders(targetProfile)
-            activateProfile(targetProfile)
-          } else if (activeFriendlyId && activeFriendlyId !== 'new') {
-            writeLastSession(activeFriendlyId, activeProfileName)
-          }
-
           let resolvedSession = resolveSessionForProfile(
             undefined,
             targetProfile,

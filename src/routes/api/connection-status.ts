@@ -9,7 +9,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { json } from '@tanstack/react-start'
 import YAML from 'yaml'
 import {
-  CLAUDE_API,
+  HERMES_API,
   ensureGatewayCoreProbed,
   getChatMode,
 } from '../../server/gateway-capabilities'
@@ -148,7 +148,7 @@ export const Route = createFileRoute('/api/connection-status')({
             enhancedChat: caps.enhancedChat,
             dashboard: caps.dashboard.available,
           },
-          claudeUrl: CLAUDE_API,
+          claudeUrl: HERMES_API,
         }
 
         return Response.json(body)

@@ -3,7 +3,7 @@ import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../server/auth-middleware'
 import {
   BEARER_TOKEN,
-  CLAUDE_API,
+  HERMES_API,
   CLAUDE_UPGRADE_INSTRUCTIONS,
   ensureGatewayEnhancedProbed,
 } from '../../../server/gateway-capabilities'
@@ -24,7 +24,7 @@ async function mcpFetch(path: string, init: RequestInit): Promise<Response> {
   if (BEARER_TOKEN && !headers.has('Authorization')) {
     headers.set('Authorization', `Bearer ${BEARER_TOKEN}`)
   }
-  return fetch(`${CLAUDE_API}${path}`, { ...init, headers })
+  return fetch(`${HERMES_API}${path}`, { ...init, headers })
 }
 
 export const Route = createFileRoute('/api/mcp/test')({

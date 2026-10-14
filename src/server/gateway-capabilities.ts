@@ -65,10 +65,9 @@ function normalizeUrl(u: string): string {
 
 const _initialOverrides = readOverrides()
 
-export let CLAUDE_API = normalizeUrl(
+export let HERMES_API = normalizeUrl(
   _initialOverrides.claudeApiUrl ||
     process.env.HERMES_API_URL ||
-    process.env.CLAUDE_API_URL ||
     'http://127.0.0.1:8642',
 )
 export let CLAUDE_DASHBOARD_URL = normalizeUrl(
@@ -84,21 +83,21 @@ export let CLAUDE_DASHBOARD_URL = normalizeUrl(
  */
 export function applyProfileGatewayRoute(url: string): string {
   const normalized = normalizeUrl(url)
-  if (!normalized) return CLAUDE_API
+  if (!normalized) return HERMES_API
   getGatewayBearerToken()
-  if (normalized === CLAUDE_API) return CLAUDE_API
-  CLAUDE_API = normalized
+  if (normalized === HERMES_API) return HERMES_API
+  HERMES_API = normalized
   if (restoreCachedCapabilities(normalized)) {
     probePromise = null
     console.log(
-      `[gateway] Routed active profile to ${CLAUDE_API} (cached capabilities)`,
+      `[gateway] Routed active profile to ${HERMES_API} (cached capabilities)`,
     )
-    return CLAUDE_API
+    return HERMES_API
   }
   probePromise = null
   lastProbeAt = 0
-  console.log(`[gateway] Routed active profile to ${CLAUDE_API}`)
-  return CLAUDE_API
+  console.log(`[gateway] Routed active profile to ${HERMES_API}`)
+  return HERMES_API
 }
 
 /**
@@ -112,21 +111,19 @@ export function setGatewayUrl(input: string | null | undefined): string {
   const overrides = readOverrides()
   if (normalized) {
     overrides.claudeApiUrl = normalized
-    CLAUDE_API = normalized
+    HERMES_API = normalized
   } else {
     delete overrides.claudeApiUrl
-    CLAUDE_API = normalizeUrl(
-      process.env.HERMES_API_URL ||
-        process.env.CLAUDE_API_URL ||
-        'http://127.0.0.1:8642',
+    HERMES_API = normalizeUrl(
+      process.env.HERMES_API_URL || 'http://127.0.0.1:8642',
     )
   }
   writeOverrides(overrides)
   // Force reprobe on the next capability check.
   probePromise = null
   lastProbeAt = 0
-  capabilityCacheByUrl.delete(CLAUDE_API)
-  return CLAUDE_API
+  capabilityCacheByUrl.delete(HERMES_API)
+  return HERMES_API
 }
 
 /**
@@ -161,10 +158,10 @@ export function getResolvedUrls(): {
   const overrides = readOverrides()
   const source = overrides.claudeApiUrl
     ? 'override'
-    : process.env.HERMES_API_URL || process.env.CLAUDE_API_URL
+    : process.env.HERMES_API_URL
       ? 'env'
       : 'default'
-  return { gateway: CLAUDE_API, dashboard: CLAUDE_DASHBOARD_URL, source }
+  return { gateway: HERMES_API, dashboard: CLAUDE_DASHBOARD_URL, source }
 }
 
 export const CLAUDE_UPGRADE_INSTRUCTIONS =
@@ -540,7 +537,7 @@ export async function dashboardFetch(
 
 /**
  * Lightweight fetch helper that targets the gateway base URL
- * (`CLAUDE_API`, e.g. http://127.0.0.1:8645). Used for endpoints that
+ * (`HERMES_API`, e.g. http://127.0.0.1:8645). Used for endpoints that
  * live on the gateway runtime rather than the dashboard, like
  * `/health/detailed`.
  */
@@ -550,7 +547,7 @@ export async function gatewayFetch(
 ): Promise<Response> {
   const url = /^https?:\/\//i.test(path)
     ? path
-    : `${CLAUDE_API}${path.startsWith('/') ? path : `/${path}`}`
+    : `${HERMES_API}${path.startsWith('/') ? path : `/${path}`}`
   const headers = new Headers(init.headers)
   for (const [k, v] of Object.entries(authHeaders())) {
     if (!headers.has(k)) headers.set(k, v)
@@ -664,7 +661,7 @@ function preserveCoreCapabilitiesOnTransientFailure(
 
 async function probe(probePath: string): Promise<boolean> {
   try {
-    const res = await fetch(`${CLAUDE_API}${probePath}`, {
+    const res = await fetch(`${HERMES_API}${probePath}`, {
       headers: authHeaders(),
       signal: AbortSignal.timeout(probeTimeoutMs()),
     })
@@ -701,7 +698,7 @@ async function probeSessionMutationFeatures(): Promise<{
   sessionCompress: boolean
 }> {
   try {
-    const res = await fetch(`${CLAUDE_API}/v1/capabilities`, {
+    const res = await fetch(`${HERMES_API}/v1/capabilities`, {
       headers: authHeaders(),
       signal: AbortSignal.timeout(probeTimeoutMs()),
     })
@@ -724,7 +721,7 @@ async function probeSessionMutationFeatures(): Promise<{
 async function probeEnhancedChatStream(): Promise<boolean> {
   try {
     const res = await fetch(
-      `${CLAUDE_API}/api/sessions/__probe__/chat/stream`,
+      `${HERMES_API}/api/sessions/__probe__/chat/stream`,
       {
         method: 'POST',
         headers: { ...authHeaders(), 'Content-Type': 'application/json' },
@@ -750,7 +747,7 @@ async function probeEnhancedChatStream(): Promise<boolean> {
 
 async function probeChatCompletions(): Promise<boolean> {
   try {
-    const getRes = await fetch(`${CLAUDE_API}/v1/chat/completions`, {
+    const getRes = await fetch(`${HERMES_API}/v1/chat/completions`, {
       method: 'GET',
       headers: authHeaders(),
       signal: AbortSignal.timeout(probeTimeoutMs()),
@@ -765,7 +762,7 @@ async function probeChatCompletions(): Promise<boolean> {
       // validation error (400/422) on a real endpoint and 404 on an absent one.
       // No tokens are spent because the request fails validation before inference.
       try {
-        const postRes = await fetch(`${CLAUDE_API}/v1/chat/completions`, {
+        const postRes = await fetch(`${HERMES_API}/v1/chat/completions`, {
           method: 'POST',
           headers: { ...authHeaders(), 'Content-Type': 'application/json' },
           body: '{}',
@@ -825,7 +822,7 @@ async function probeMcp(dashboardAvailable: boolean): Promise<boolean> {
     }
   }
   try {
-    const res = await fetch(`${CLAUDE_API}/api/mcp`, {
+    const res = await fetch(`${HERMES_API}/api/mcp`, {
       headers: authHeaders(),
       signal: AbortSignal.timeout(probeTimeoutMs()),
     })
@@ -837,7 +834,7 @@ async function probeMcp(dashboardAvailable: boolean): Promise<boolean> {
 
 /**
  * Conservative loopback check. Returns true ONLY when:
- *   1. Both `CLAUDE_API` and `CLAUDE_DASHBOARD_URL` resolve to a loopback host
+ *   1. Both `HERMES_API` and `CLAUDE_DASHBOARD_URL` resolve to a loopback host
  *      (`127.0.0.1`, `::1`, or `localhost`).
  *   2. Workspace `HOST` env is unset OR loopback. Any non-loopback `HOST`
  *      (including `0.0.0.0`) disables fallback so we never silently expose a
@@ -864,7 +861,7 @@ export function isLocalhostDeployment(): boolean {
   }
   const host = (process.env.HOST || '').trim()
   if (host && !isLoopbackHost(host)) return false
-  return isLoopbackUrl(CLAUDE_API) && isLoopbackUrl(CLAUDE_DASHBOARD_URL)
+  return isLoopbackUrl(HERMES_API) && isLoopbackUrl(CLAUDE_DASHBOARD_URL)
 }
 
 /**
@@ -1017,7 +1014,7 @@ function logCapabilities(next: GatewayCapabilities): void {
   else optionalMissing.push('dashboard')
 
   const mode = getGatewayMode()
-  const summary = `[gateway] gateway=${CLAUDE_API} dashboard=${next.dashboard.url} mode=${mode} core=[${core.join(', ')}] enhanced=[${enhanced.join(', ')}] missing=[${missing.join(', ')}] optional=[${optionalMissing.join(', ')}]`
+  const summary = `[gateway] gateway=${HERMES_API} dashboard=${next.dashboard.url} mode=${mode} core=[${core.join(', ')}] enhanced=[${enhanced.join(', ')}] missing=[${missing.join(', ')}] optional=[${optionalMissing.join(', ')}]`
   if (summary === lastLoggedSummary) return
   lastLoggedSummary = summary
   console.log(summary)
@@ -1031,20 +1028,17 @@ function logCapabilities(next: GatewayCapabilities): void {
 
 async function autoDetectGatewayUrl(): Promise<void> {
   try {
-    const { getActiveProfileName } = await import('./profiles-browser')
-    const { isGatewayPoolEnabled, getProfileGatewayUrl } =
-      await import('./gateway-ports')
+    const { isGatewayPoolEnabled } = await import('./gateway-ports')
     if (isGatewayPoolEnabled()) {
-      applyProfileGatewayRoute(
-        getProfileGatewayUrl(getActiveProfileName() || 'default'),
-      )
+      // The pool already has a stable port per profile. Probes must not
+      // swing the process-global URL onto whichever profile is selected.
       return
     }
   } catch {
     // port map unavailable — fall through to legacy detection
   }
 
-  if (process.env.HERMES_API_URL || process.env.CLAUDE_API_URL) return
+  if (process.env.HERMES_API_URL) return
 
   const candidates = [
     'http://127.0.0.1:8642',
@@ -1058,8 +1052,8 @@ async function autoDetectGatewayUrl(): Promise<void> {
         signal: AbortSignal.timeout(probeTimeoutMs()),
       })
       if (res.ok) {
-        CLAUDE_API = candidate
-        console.log(`[gateway] Connected to Hermes gateway at ${CLAUDE_API}`)
+        HERMES_API = candidate
+        console.log(`[gateway] Connected to Hermes gateway at ${HERMES_API}`)
         return
       }
     } catch {
@@ -1273,7 +1267,7 @@ export async function probeGateway(options?: {
   try {
     await probePromise
     if (waitForEnhanced && enhancedProbePromise) await enhancedProbePromise
-    rememberCapabilityProbe(CLAUDE_API, capabilities)
+    rememberCapabilityProbe(HERMES_API, capabilities)
     return capabilities
   } finally {
     probePromise = null

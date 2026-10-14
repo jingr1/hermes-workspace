@@ -1,7 +1,7 @@
 /**
  * Multi-gateway pool: one Hermes API server per profile, lazy start,
  * LRU eviction when more than N profiles stay warm (see gateway-lifecycle.ts).
- * `default` is pinned resident; background starts never steal CLAUDE_API.
+ * `default` is pinned resident; background starts never steal HERMES_API.
  */
 import path from 'node:path'
 import {
@@ -199,6 +199,9 @@ async function applyRouteIfActive(
   profileName: string,
   url: string,
 ): Promise<void> {
+  // Pool-on chat addresses each profile directly. Rewriting HERMES_API here
+  // would retarget every other in-flight 1:1 turn.
+  if (isGatewayPoolEnabled()) return
   const { shouldApplyGatewayRoute } = await import('./gateway-lifecycle')
   if (!shouldApplyGatewayRoute(profileName, getActiveProfileName())) return
   await applyRoute(url)

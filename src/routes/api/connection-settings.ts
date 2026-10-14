@@ -1,7 +1,7 @@
 /**
  * Workspace connection settings — read/write the gateway + dashboard URLs the
  * workspace uses. Writes to ~/.hermes/workspace-overrides.json and updates
- * the in-process CLAUDE_API / CLAUDE_DASHBOARD_URL live, so users can
+ * the in-process HERMES_API / CLAUDE_DASHBOARD_URL live, so users can
  * relocate to a Tailscale/LAN address without restarting the workspace.
  *
  * See #101.

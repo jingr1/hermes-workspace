@@ -88,17 +88,15 @@ export function readGatewayLifecycleConfig(
 ): GatewayLifecycleConfig {
   return {
     maxResident: readPositiveInt(
-      env.HERMES_GATEWAY_POOL_MAX ?? env.CLAUDE_GATEWAY_POOL_MAX,
+      env.HERMES_GATEWAY_POOL_MAX,
       DEFAULT_MAX_RESIDENT,
     ),
     idleTtlMs:
-      readNonNegativeInt(
-        env.HERMES_GATEWAY_IDLE_TTL ?? env.CLAUDE_GATEWAY_IDLE_TTL,
-        DEFAULT_IDLE_TTL_SEC,
-      ) * 1000,
+      readNonNegativeInt(env.HERMES_GATEWAY_IDLE_TTL, DEFAULT_IDLE_TTL_SEC) *
+      1000,
     evictIntervalMs:
       readPositiveInt(
-        env.HERMES_GATEWAY_EVICT_INTERVAL ?? env.CLAUDE_GATEWAY_EVICT_INTERVAL,
+        env.HERMES_GATEWAY_EVICT_INTERVAL,
         DEFAULT_EVICT_INTERVAL_SEC,
       ) * 1000,
   }
@@ -250,7 +248,7 @@ export async function runEvictionCycle(options?: {
   return victims
 }
 
-/** Keep the default gateway warm; never steal CLAUDE_API unless it is active. */
+/** Keep the default gateway warm; never steal HERMES_API unless it is active. */
 export async function ensureDefaultResidentGateway(): Promise<void> {
   if (!isGatewayPoolEnabled()) return
   if (defaultEnsureDepth > 0) return

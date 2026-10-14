@@ -2636,11 +2636,12 @@ export function ChatScreen({
         const res = await fetch('/api/sessions', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(
-            preferredFriendlyId && preferredFriendlyId.trim().length > 0
+          body: JSON.stringify({
+            ...(preferredFriendlyId && preferredFriendlyId.trim().length > 0
               ? { friendlyId: preferredFriendlyId }
-              : {},
-          ),
+              : {}),
+            profileName: workspaceProfileName || activeProfileName || undefined,
+          }),
         })
         if (!res.ok) throw new Error(await readError(res))
 
@@ -2713,7 +2714,7 @@ export function ChatScreen({
         },
       )
     },
-    [queryClient, activeProfileName],
+    [queryClient, activeProfileName, workspaceProfileName],
   )
 
   const scrollChatToBottom = useCallback(
@@ -2741,7 +2742,10 @@ export function ChatScreen({
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ keepCount }),
+          body: JSON.stringify({
+            keepCount,
+            profileName: workspaceProfileName || activeProfileName || undefined,
+          }),
         },
       )
       const data = (await res.json().catch(() => ({}))) as {
@@ -2757,10 +2761,12 @@ export function ChatScreen({
     },
     [
       activeFriendlyId,
+      activeProfileName,
       activeSessionKey,
       forcedSessionKey,
       historyQuery,
       resolvedSessionKey,
+      workspaceProfileName,
     ],
   )
 
@@ -3125,7 +3131,7 @@ export function ChatScreen({
               {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: rest }),
+                body: JSON.stringify({ text: rest, profileName: workspaceProfileName || activeProfileName || undefined }),
               },
             )
             const data = (await res.json().catch(() => ({}))) as {
@@ -3193,6 +3199,8 @@ export function ChatScreen({
                 body: JSON.stringify({
                   focusTopic: focusTopic || undefined,
                   keepCount: 6,
+                  profileName:
+                    workspaceProfileName || activeProfileName || undefined,
                 }),
               },
             )
@@ -3244,7 +3252,11 @@ export function ChatScreen({
             const res = await fetch('/api/btw', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ sessionId: sessionKey, question }),
+              body: JSON.stringify({
+                sessionId: sessionKey,
+                question,
+                profileName: workspaceProfileName || activeProfileName || undefined,
+              }),
             })
             const data = (await res.json().catch(() => ({}))) as {
               ok?: boolean
@@ -3298,7 +3310,11 @@ export function ChatScreen({
             const res = await fetch('/api/background', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ sessionId: sessionKey, prompt }),
+              body: JSON.stringify({
+                sessionId: sessionKey,
+                prompt,
+                profileName: workspaceProfileName || activeProfileName || undefined,
+              }),
             })
             const data = (await res.json().catch(() => ({}))) as {
               ok?: boolean
@@ -3337,6 +3353,7 @@ export function ChatScreen({
     [
       activeFriendlyId,
       activeIsRealtimeStreaming,
+      activeProfileName,
       activeSessionKey,
       canCompressSession,
       canTruncateSession,
@@ -3351,6 +3368,7 @@ export function ChatScreen({
       streamingRunId,
       truncateCurrentSession,
       waitingForResponse,
+      workspaceProfileName,
     ],
   )
 
@@ -3732,7 +3750,10 @@ export function ChatScreen({
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text }),
+            body: JSON.stringify({
+              text,
+              profileName: workspaceProfileName || activeProfileName || undefined,
+            }),
           },
         )
         const data = (await res.json().catch(() => ({}))) as {
@@ -3769,7 +3790,7 @@ export function ChatScreen({
         )
       }
     },
-    [activeSteerRunId, queueSessionKey],
+    [activeProfileName, activeSteerRunId, queueSessionKey, workspaceProfileName],
   )
 
   const handleInterruptSendFromComposer = useCallback(

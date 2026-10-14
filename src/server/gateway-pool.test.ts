@@ -23,9 +23,7 @@ function makeHome(): string {
   process.env.HERMES_HOME = hermesHome
   process.env.AGORAX_STATE_DIR = path.join(hermesHome, 'workspace')
   delete process.env.HERMES_API_URL
-  delete process.env.CLAUDE_API_URL
   delete process.env.HERMES_GATEWAY_POOL
-  delete process.env.CLAUDE_GATEWAY_POOL_ENABLED
   return hermesHome
 }
 
@@ -188,6 +186,14 @@ describe('isGatewayPoolEnabled', () => {
     makeHome()
     process.env.HERMES_API_URL = 'http://127.0.0.1:8642'
     process.env.HERMES_GATEWAY_POOL = '0'
+    const mod = await loadMod()
+    expect(mod.isGatewayPoolEnabled()).toBe(false)
+  })
+
+  it('ignores the removed CLAUDE_GATEWAY_POOL_ENABLED name', async () => {
+    makeHome()
+    process.env.HERMES_API_URL = 'http://100.64.0.10:8642'
+    process.env.CLAUDE_GATEWAY_POOL_ENABLED = '1'
     const mod = await loadMod()
     expect(mod.isGatewayPoolEnabled()).toBe(false)
   })

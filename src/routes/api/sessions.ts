@@ -115,9 +115,26 @@ export const Route = createFileRoute('/api/sessions')({
         }
         const csrfCheckPost = requireJsonContentType(request)
         if (csrfCheckPost) return csrfCheckPost
-        const { ensureActiveProfileGateway } =
-          await import('../../server/gateway-pool')
-        await ensureActiveProfileGateway()
+        const body = (await request.json().catch(() => ({}))) as Record<
+          string,
+          unknown
+        >
+        const requestedProfile =
+          typeof body.profileName === 'string' ? body.profileName.trim() : ''
+        try {
+          const { ensureChatGateway, enterChatGateway } =
+            await import('../../server/chat-gateway')
+          enterChatGateway(await ensureChatGateway(requestedProfile))
+        } catch (error) {
+          return json(
+            {
+              ok: false,
+              error:
+                error instanceof Error ? error.message : 'gateway unavailable',
+            },
+            { status: 503 },
+          )
+        }
         const capabilities = await ensureSessionsCapability()
         if (!capabilities.sessions) {
           const friendlyId = randomUUID()
@@ -130,11 +147,6 @@ export const Route = createFileRoute('/api/sessions')({
           })
         }
         try {
-          const body = (await request.json().catch(() => ({}))) as Record<
-            string,
-            unknown
-          >
-
           const requestedLabel =
             typeof body.label === 'string' ? body.label.trim() : ''
           const label = requestedLabel || undefined

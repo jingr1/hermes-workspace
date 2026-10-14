@@ -3,7 +3,7 @@ import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../server/auth-middleware'
 import { requireJsonContentType } from '../../../server/rate-limit'
 import { steerRun } from '../../../server/hermes-api'
-import { ensureActiveProfileGateway } from '../../../server/gateway-pool'
+import { ensureChatGateway, enterChatGateway } from '../../../server/chat-gateway'
 
 export const Route = createFileRoute('/api/runs/$runId/steer')({
   server: {
@@ -31,7 +31,9 @@ export const Route = createFileRoute('/api/runs/$runId/steer')({
         }
 
         try {
-          await ensureActiveProfileGateway()
+          const requestedProfile =
+            typeof body.profileName === 'string' ? body.profileName.trim() : ''
+          enterChatGateway(await ensureChatGateway(requestedProfile))
           const result = await steerRun(runId, text)
           return json({
             ok: true,

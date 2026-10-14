@@ -38,7 +38,6 @@ beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock)
   delete process.env.HERMES_HOME
   delete process.env.HERMES_HOME
-  delete process.env.CLAUDE_API_URL
   delete process.env.HERMES_API_URL
   delete process.env.CLAUDE_DASHBOARD_URL
   delete process.env.HERMES_DASHBOARD_URL
@@ -59,13 +58,13 @@ async function loadMod() {
 describe('gateway-capabilities', () => {
   it('default port is 8642', async () => {
     const mod = await loadMod()
-    expect(mod.CLAUDE_API).toBe('http://127.0.0.1:8642')
+    expect(mod.HERMES_API).toBe('http://127.0.0.1:8642')
   })
 
   it('applyProfileGatewayRoute does not persist a connection override', async () => {
     const mod = await loadMod()
     mod.applyProfileGatewayRoute('http://127.0.0.1:8649')
-    expect(mod.CLAUDE_API).toBe('http://127.0.0.1:8649')
+    expect(mod.HERMES_API).toBe('http://127.0.0.1:8649')
     expect(mod.getResolvedUrls().source).not.toBe('override')
   })
 
@@ -142,17 +141,17 @@ describe('gateway-capabilities', () => {
   it('setGatewayUrl fallback uses 8642 when env override is cleared', async () => {
     const mod = await loadMod()
     mod.setGatewayUrl('http://tailscale:9999')
-    expect(mod.CLAUDE_API).toBe('http://tailscale:9999')
+    expect(mod.HERMES_API).toBe('http://tailscale:9999')
 
     const fallback = mod.setGatewayUrl(null as any)
     expect(fallback).toBe('http://127.0.0.1:8642')
-    expect(mod.CLAUDE_API).toBe('http://127.0.0.1:8642')
+    expect(mod.HERMES_API).toBe('http://127.0.0.1:8642')
   })
 
-  it('respects CLAUDE_API_URL env when no override', async () => {
-    process.env.CLAUDE_API_URL = 'http://localhost:9000'
+  it('respects HERMES_API_URL env when no override', async () => {
+    process.env.HERMES_API_URL = 'http://localhost:9000'
     const mod = await loadMod()
-    expect(mod.CLAUDE_API).toBe('http://localhost:9000')
+    expect(mod.HERMES_API).toBe('http://localhost:9000')
   })
 
   it('does not let dashboard auto-detect override an explicit HERMES_DASHBOARD_URL', async () => {
@@ -367,7 +366,7 @@ describe('gateway-capabilities', () => {
     it('returns false when gateway URL is rewritten to a non-loopback host', async () => {
       const mod = await loadMod()
       // Use the runtime setter to bypass env-var loading paths that the
-      // pre-existing CLAUDE_API_URL test (above) shows are not reliable in
+      // pre-existing HERMES_API_URL test (above) shows are not reliable in
       // vitest's resetModules cycle.
       mod.setGatewayUrl('http://10.0.0.5:8642')
       try {

@@ -25,8 +25,10 @@ describe('file explorer workspace refresh', () => {
       'fileTreeQueryKey(workspaceProfileName, workspacePath, 3)',
     )
     expect(sidebarSource).toContain('deepQuery.data ?? filesQuery.data')
-    expect(sidebarSource).not.toContain('loadFolderChildren')
-    expect(sidebarSource).not.toContain('patchFileTreeChildren')
+    expect(sidebarSource).toContain('loadFolderChildren')
+    expect(sidebarSource).toContain(
+      'fetchFileTree(workspaceProfileName, 0, pathValue)',
+    )
   })
 
   it('shows loading instead of empty while the tree is fetching', () => {

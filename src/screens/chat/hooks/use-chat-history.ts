@@ -3,7 +3,12 @@ import { useQuery } from '@tanstack/react-query'
 
 import { reconcileHistoryResponse } from '@/lib/chat-history-reconcile'
 import { assistantHasVisibleHostContent } from '@/lib/chat-message-parts'
-import { chatQueryKeys, fetchHistory } from '../chat-queries'
+import {
+  HISTORY_FIRST_PAINT_LIMIT,
+  HISTORY_FULL_LIMIT,
+  chatQueryKeys,
+  fetchHistory,
+} from '../chat-queries'
 import { getMessageTimestamp, textFromMessage } from '../utils'
 import {
   cleanupExpiredPendingSends,
@@ -330,6 +335,8 @@ export function useChatHistory({
     effectiveFriendlyId,
     effectiveSessionKeyForHistory,
   )
+  const expandedHistoryKeys = useRef(new Set<string>())
+  const historyKeyId = historyKey.join('\0')
 
   const historyQuery = useQuery({
     queryKey: historyKey,
@@ -351,6 +358,9 @@ export function useChatHistory({
         sessionKey: sessionKeyForHistory,
         friendlyId: activeFriendlyId,
         profile: profileName,
+        limit: expandedHistoryKeys.current.has(historyKeyId)
+          ? HISTORY_FULL_LIMIT
+          : HISTORY_FIRST_PAINT_LIMIT,
       })
 
       let dataWithRecovery = serverData
@@ -446,6 +456,56 @@ export function useChatHistory({
       ? historyQuery.data.messages
       : []
   }, [historyQuery.data?.messages])
+
+  // First paint is the last 40 messages. Fill the rest without blocking the
+  // skeleton; later refetches keep the full window once it has been requested.
+  useEffect(() => {
+    if (portableMode || !historyQuery.isSuccess) return
+    if (
+      !sessionKeyForHistory ||
+      sessionKeyForHistory === 'new' ||
+      sessionKeyForHistory === 'main'
+    ) {
+      return
+    }
+    if (expandedHistoryKeys.current.has(historyKeyId)) return
+    if (rawHistoryMessages.length < HISTORY_FIRST_PAINT_LIMIT) {
+      expandedHistoryKeys.current.add(historyKeyId)
+      return
+    }
+    expandedHistoryKeys.current.add(historyKeyId)
+    const requestedKey = historyKeyId
+    void fetchHistory({
+      sessionKey: sessionKeyForHistory,
+      friendlyId: activeFriendlyId,
+      profile: profileName,
+      limit: HISTORY_FULL_LIMIT,
+    })
+      .then((full) => {
+        if (expandedHistoryKeys.current.has(requestedKey) === false) return
+        queryClient.setQueryData(
+          historyKey,
+          (current: HistoryResponse | undefined) => {
+            const currentCount = current?.messages?.length ?? 0
+            if (currentCount >= (full.messages?.length ?? 0)) return current
+            return full
+          },
+        )
+      })
+      .catch(() => {
+        expandedHistoryKeys.current.delete(requestedKey)
+      })
+  }, [
+    activeFriendlyId,
+    historyKey,
+    historyKeyId,
+    historyQuery.isSuccess,
+    portableMode,
+    profileName,
+    queryClient,
+    rawHistoryMessages.length,
+    sessionKeyForHistory,
+  ])
 
   useEffect(() => {
     if (!sessionKeyForHistory || sessionKeyForHistory === 'new') return

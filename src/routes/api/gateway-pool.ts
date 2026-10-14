@@ -6,7 +6,7 @@ import {
   isGatewayPoolEnabled,
 } from '../../server/gateway-pool'
 import { getActiveProfileName } from '../../server/profiles-browser'
-import { CLAUDE_API } from '../../server/gateway-capabilities'
+import { HERMES_API } from '../../server/gateway-capabilities'
 
 export const Route = createFileRoute('/api/gateway-pool')({
   server: {
@@ -20,7 +20,7 @@ export const Route = createFileRoute('/api/gateway-pool')({
         return json({
           enabled,
           activeProfile: getActiveProfileName(),
-          routedUrl: CLAUDE_API,
+          routedUrl: HERMES_API,
           gateways,
         })
       },

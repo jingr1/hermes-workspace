@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { CLAUDE_API } from './gateway-capabilities'
+import { HERMES_API } from './gateway-capabilities'
+import { resolveChatGateway } from './chat-gateway'
 
 /**
  * Optional bearer token for authenticated OpenAI-compatible endpoints
@@ -40,20 +41,22 @@ export function getBearerToken(): string {
   return ''
 }
 
-/** Cached first available model from /v1/models — used as fallback when no model is specified. */
-let _cachedDefaultModel: string | null = null
+/** Cached first available model per gateway origin. */
+const defaultModelByOrigin = new Map<string, string>()
 
 async function getDefaultModel(): Promise<string> {
-  if (_cachedDefaultModel) return _cachedDefaultModel
+  const gateway = resolveChatGateway()
+  const cached = defaultModelByOrigin.get(gateway.url)
+  if (cached) return cached
   if (process.env.CLAUDE_DEFAULT_MODEL) {
-    _cachedDefaultModel = process.env.CLAUDE_DEFAULT_MODEL
-    return _cachedDefaultModel
+    defaultModelByOrigin.set(gateway.url, process.env.CLAUDE_DEFAULT_MODEL)
+    return process.env.CLAUDE_DEFAULT_MODEL
   }
   try {
     const headers: Record<string, string> = {}
-    const bearer = getBearerToken()
+    const bearer = gateway.token || getBearerToken()
     if (bearer) headers['Authorization'] = `Bearer ${bearer}`
-    const res = await fetch(`${CLAUDE_API}/v1/models`, {
+    const res = await fetch(`${gateway.url}/v1/models`, {
       headers,
       signal: AbortSignal.timeout(3_000),
     })
@@ -64,8 +67,9 @@ async function getDefaultModel(): Promise<string> {
         const preferred = data.data.find((m) =>
           /qwen|llama|mistral|gemma/i.test(m.id),
         )
-        _cachedDefaultModel = preferred?.id ?? data.data[0].id
-        return _cachedDefaultModel
+        const model = preferred?.id ?? data.data[0].id
+        defaultModelByOrigin.set(gateway.url, model)
+        return model
       }
     }
   } catch {
@@ -281,7 +285,10 @@ export async function openaiChat(
   options: OpenAIChatOptions = {},
 ): Promise<string | AsyncGenerator<StreamChunkType, void, void>> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  const bearer = getBearerToken()
+  const gateway = options.baseUrl ? null : resolveChatGateway(options.profileName)
+  const bearer = options.baseUrl
+    ? getBearerToken()
+    : gateway?.token || getBearerToken()
   if (bearer) {
     headers['Authorization'] = `Bearer ${bearer}`
   }
@@ -298,7 +305,7 @@ export async function openaiChat(
 
   const endpoint = options.baseUrl
     ? `${options.baseUrl.replace(/\/+$/, '')}/chat/completions`
-    : `${CLAUDE_API}/v1/chat/completions`
+    : `${gateway?.url || HERMES_API}/v1/chat/completions`
   const response = await fetch(endpoint, {
     method: 'POST',
     headers,
