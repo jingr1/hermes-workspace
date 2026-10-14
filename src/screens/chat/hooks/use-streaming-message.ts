@@ -2,8 +2,37 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChatAttachment, ChatMessage } from '../types'
 import { readResolvedSessionHeaders } from '@/lib/send-stream-session-headers'
 import { useChatStore } from '@/stores/chat-store'
+import { useHermesTurnStore } from '@/stores/hermes-turn-store'
 import { pushActivity } from '@/components/inspector/activity-store'
 import { readCachedActiveProfile } from './use-profiles'
+
+function applyHermesTurnSse(
+  sessionKey: string,
+  event: string,
+  data: Record<string, unknown>,
+) {
+  if (!sessionKey) return
+  useHermesTurnStore.getState().applySse({
+    sessionKey,
+    event,
+    data,
+  })
+}
+
+function migrateHermesTurnSession(fromKey: string, toKey: string) {
+  if (!fromKey || !toKey || fromKey === toKey) return
+  const store = useHermesTurnStore.getState()
+  const snap = store.getSnapshot(fromKey)
+  if (!snap) return
+  store.beginTurn({ sessionKey: toKey, turnId: snap.turnId })
+  // Re-seed adapter/phase after beginTurn reset
+  useHermesTurnStore.setState((state) => {
+    const bySession = new Map(state.bySession)
+    bySession.set(toKey, { ...snap, pendingBusy: snap.pendingBusy })
+    bySession.delete(fromKey)
+    return { bySession }
+  })
+}
 
 /**
  * Determine whether a stream-resolved session key change should trigger
@@ -246,6 +275,9 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
       }))
       onError?.(message)
       useChatStore.getState().setHeartbeatActivity(null)
+      useHermesTurnStore
+        .getState()
+        .settleTurn(activeSessionKeyRef.current)
     },
     [
       clearHandoffTimer,
@@ -450,6 +482,9 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
 
       onComplete?.(message)
       useChatStore.getState().setHeartbeatActivity(null)
+      useHermesTurnStore
+        .getState()
+        .settleTurn(activeSessionKeyRef.current)
     },
     [
       clearHandoffTimer,
@@ -480,16 +515,24 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
         )
       }
 
-      // hb_signal/keepalive events from server: just mark activity, never let them
-      // surface as user-visible thinking or tool rows.
+      // hb_signal/keepalive: mark liveness only. `heartbeat` still enters the
+      // switch so setHeartbeatActivity can update the delayed activity feed —
+      // returning here left that UI path dead while the empty gap was open.
       if (
         event === 'hb_signal' ||
-        event === 'heartbeat' ||
         event === 'keepalive' ||
         event === 'ping'
       ) {
         markActivity()
         return
+      }
+      if (event === 'heartbeat') {
+        markActivity()
+      }
+
+      // started applies after session promotion inside its case.
+      if (event !== 'started') {
+        applyHermesTurnSse(activeSessionKeyRef.current, event, payload)
       }
 
       switch (event) {
@@ -512,6 +555,10 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
                 resolvedSessionKey,
               })
             ) {
+              migrateHermesTurnSession(
+                activeSessionKeyRef.current,
+                resolvedSessionKey,
+              )
               activeSessionKeyRef.current = resolvedSessionKey
               onSessionResolved?.({
                 sessionKey: resolvedSessionKey,
@@ -519,6 +566,8 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
               })
             }
           }
+          // Apply turn SSE after session promotion so phase tracks the live key.
+          applyHermesTurnSse(activeSessionKeyRef.current, event, payload)
           // Register runId so chat-events skips duplicate chunks for this run
           const runId = payload.runId as string | undefined
           if (runId) {
@@ -902,6 +951,11 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
         error: null,
       })
       useChatStore.getState().setHeartbeatActivity(null)
+      // Engine-shaped turn phase: busy from send accept, before first SSE.
+      useHermesTurnStore.getState().beginTurn({
+        sessionKey: params.sessionKey,
+        turnId: `turn-${messageId}`,
+      })
 
       try {
         const response = await fetch('/api/send-stream', {
@@ -949,6 +1003,7 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
               pinMainSession,
             })
           ) {
+            migrateHermesTurnSession(params.sessionKey, resolvedSessionKey)
             activeSessionKeyRef.current = resolvedSessionKey
             onSessionResolved?.({
               sessionKey: resolvedSessionKey,

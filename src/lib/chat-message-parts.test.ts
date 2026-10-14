@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   assistantHasVisibleHostContent,
   assistantHasWorkingSurface,
-  openTurnHasAssistantHostContent,
-  openTurnHasWorkingSurface,
   mergeAssistantThinkingFromSource,
   mergeStreamToolCallRecords,
   normalizeChatContentParts,
@@ -136,7 +134,7 @@ describe('assistantHasVisibleHostContent', () => {
     ).toBe(false)
   })
 
-  it('rejects empty streaming status alone so ThinkingBubble keeps the gap', () => {
+  it('rejects empty streaming status alone so TurnActivityHost keeps the gap', () => {
     expect(
       assistantHasVisibleHostContent({
         content: [],
@@ -166,20 +164,8 @@ describe('assistantHasVisibleHostContent', () => {
   })
 })
 
-describe('openTurnHasWorkingSurface', () => {
-  it('ignores plain reply text so Thinking stays up', () => {
-    expect(
-      openTurnHasWorkingSurface([
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'look' }],
-        },
-        {
-          role: 'assistant',
-          content: [{ type: 'text', text: 'On it.' }],
-        },
-      ]),
-    ).toBe(false)
+describe('assistantHasWorkingSurface', () => {
+  it('ignores plain reply text', () => {
     expect(
       assistantHasWorkingSurface({
         content: [{ type: 'text', text: 'On it.' }],
@@ -187,68 +173,17 @@ describe('openTurnHasWorkingSurface', () => {
     ).toBe(false)
   })
 
-  it('is true once thinking or a tool call is on the open turn', () => {
+  it('is true for thinking or tool calls', () => {
     expect(
       assistantHasWorkingSurface({
         content: [{ type: 'thinking', thinking: 'planning' }],
       }),
     ).toBe(true)
     expect(
-      openTurnHasWorkingSurface([
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'look' }],
-        },
-        {
-          role: 'assistant',
-          content: [],
-          __streamToolCalls: [{ id: 't1', name: 'Read' }],
-        },
-      ]),
-    ).toBe(true)
-  })
-})
-
-describe('openTurnHasAssistantHostContent', () => {
-  it('ignores settled assistants from earlier turns', () => {
-    expect(
-      openTurnHasAssistantHostContent([
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'first' }],
-        },
-        {
-          role: 'assistant',
-          content: [{ type: 'text', text: 'prior reply' }],
-        },
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'second' }],
-        },
-      ]),
-    ).toBe(false)
-  })
-
-  it('detects host content only after the latest user message', () => {
-    expect(
-      openTurnHasAssistantHostContent([
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'first' }],
-        },
-        {
-          role: 'assistant',
-          content: [{ type: 'text', text: 'prior reply' }],
-        },
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'second' }],
-        },
-        {
-          role: 'assistant',
-          content: [{ type: 'thinking', thinking: 'planning' }],
-        },
-      ]),
+      assistantHasWorkingSurface({
+        content: [],
+        __streamToolCalls: [{ id: 't1', name: 'Read' }],
+      }),
     ).toBe(true)
   })
 })

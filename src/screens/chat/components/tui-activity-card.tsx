@@ -56,6 +56,13 @@ type TuiActivityCardProps = {
   thinking?: string | null
   thinkingElapsedSeconds?: number
   isStreaming: boolean
+  /**
+   * agorax host: keep the card mounted while the turn is busy even when
+   * thinking/tools have not arrived yet (no empty-gap handoff).
+   */
+  keepMountedWhileBusy?: boolean
+  /** Header label override — Thinking / Working / Activity. */
+  statusTitle?: string | null
   expandAll?: boolean
   /** Format a tool's display label from name+args */
   formatLabel: (name: string, args?: Record<string, unknown>) => string
@@ -361,6 +368,8 @@ function TuiActivityCardComponent({
   thinking,
   thinkingElapsedSeconds = 0,
   isStreaming,
+  keepMountedWhileBusy = false,
+  statusTitle = null,
   expandAll,
   formatLabel,
   formatArg,
@@ -407,9 +416,19 @@ function TuiActivityCardComponent({
     el.scrollTop = el.scrollHeight
   }, [isStreaming, visibleTools.length, toolSections.length, hasThinking])
 
-  // No empty "Working" stub — pre-content gap belongs to the bottom
-  // ThinkingBubble. This card only mounts once thinking or tools exist.
-  if (!hasThinking && !hasTools) return null
+  // agorax: busy turns keep the host even with no content yet.
+  // Settled empty rows still hide (nothing to archive).
+  if (!hasThinking && !hasTools && !(keepMountedWhileBusy && isStreaming)) {
+    return null
+  }
+
+  const title =
+    (typeof statusTitle === 'string' && statusTitle.trim()) ||
+    (isStreaming
+      ? hasTools
+        ? '⚡ Working'
+        : 'Thinking…'
+      : 'Activity')
 
   return (
     <div
@@ -434,7 +453,7 @@ function TuiActivityCardComponent({
           className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em]"
           style={{ color: 'var(--theme-muted)' }}
         >
-          {isStreaming ? '⚡ Working' : 'Activity'}
+          {title}
         </span>
         <span className="flex-1" />
         {summary ? (

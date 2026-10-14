@@ -58,8 +58,8 @@
 | --- | --- | --- |
 | A | Identity + Hermes write-through（不换皮） | ✅ |
 | B | Hermes SSE → Activity 纯 adapter | ✅ `hermes-activity-adapter.ts` |
-| C | Native bridge 真接线：send-stream → adapter → Engine | 下一迭代 |
-| D | Hermes 1:1 UI 只订 Engine（与 managed 同 hook 投影） | 待 C |
+| C | Native bridge 真接线：send-stream → adapter → Engine | ✅ `hermesSseToActivityEvents` + `hermes-turn-store` phase；UI `turnBusy` / `TurnActivityHost` |
+| D | Hermes 1:1 UI 只订 Engine（与 managed 同 hook 投影） | 部分：UI 已订 turnBusy；完整 Engine hydrate 仍可加深 |
 
 ## 6. 明确不做
 

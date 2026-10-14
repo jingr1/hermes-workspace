@@ -527,15 +527,11 @@ export function selectManagedAgentChatState(
       : null,
     isStreaming: turnActive,
     /**
-     * Bottom empty-gap Thinking pill. Tutti-style: suppress once the active
-     * turn already has in-thread host content (Activity / reply owns UI).
-     * Distinct from `isStreaming` (composer Stop / turn-active).
+     * Unique agorax busy bit for TurnActivityHost.
+     * Content only changes the host interior — never whether it mounts.
      */
-    showProcessingIndicator: shouldShowManagedProcessingIndicator(
-      sessionMessages,
-      activeTurn,
-      { isSubmitting: options?.isSubmitting === true },
-    ),
+    showProcessingIndicator:
+      turnActive || options?.isSubmitting === true,
     /** Assistant message id that should receive live streaming chrome. */
     streamingMessageId: turnActive
       ? selectManagedStreamingMessageId(sessionMessages, activeTurn.turnId)
@@ -602,27 +598,6 @@ function normalizeActiveToolPhase(status: string | null | undefined): string {
   return resolved || 'running'
 }
 
-/**
- * Tutti processing-row suppress for the managed message lane.
- * Empty-gap pill only — never stay on once assistant host content exists,
- * and never let sticky `isSubmitting` override that.
- */
-export function shouldShowManagedProcessingIndicator(
-  sessionMessages: readonly AgentActivityMessage[],
-  activeTurn: { turnId: string; phase: string } | null,
-  options?: { isSubmitting?: boolean },
-): boolean {
-  // Same transcript the UI renders: trailing host content always wins.
-  if (trailingAssistantHostContent(sessionMessages)) return false
-
-  if (activeTurn && activeTurn.phase !== 'settled') {
-    return !turnHasProcessingHostContent(sessionMessages, activeTurn.turnId)
-  }
-
-  // Pre-turn submit gap only — and only while nothing has hosted yet.
-  return options?.isSubmitting === true
-}
-
 export function selectManagedStreamingMessageId(
   sessionMessages: readonly AgentActivityMessage[],
   activeTurnId: string,
@@ -649,8 +624,7 @@ export function selectManagedStreamingMessageId(
 
 /**
  * Live ACP thought deltas use role `assistant_thinking` + kind `reasoning`.
- * Durable reporter remaps that to role `assistant` + kind `reasoning`. Both
- * must host the in-thread Activity surface and suppress the empty-gap pill.
+ * Durable reporter remaps that to role `assistant` + kind `reasoning`.
  */
 function isAssistantLaneRole(role: string): boolean {
   return role === 'assistant' || role === 'assistant_thinking'
@@ -665,44 +639,10 @@ function isProcessingHostMessage(message: AgentActivityMessage): boolean {
   if (message.kind === 'text') {
     return visibleErrorText(message.payload).trim().length > 0
   }
-  // Unknown assistant kinds with visible text still host the in-thread surface.
   return (
     typeof message.payload.text === 'string' &&
     message.payload.text.trim().length > 0
   )
-}
-
-function turnHasProcessingHostContent(
-  sessionMessages: readonly AgentActivityMessage[],
-  turnId: string,
-): boolean {
-  const tagged = sessionMessages.filter((message) => message.turnId === turnId)
-  if (tagged.length > 0) {
-    return tagged.some((message) => isProcessingHostMessage(message))
-  }
-  // No rows carry this turnId (mapper lag) — use trailing-host fallback.
-  return trailingAssistantHostContent(sessionMessages)
-}
-
-function trailingAssistantHostContent(
-  sessionMessages: readonly AgentActivityMessage[],
-): boolean {
-  let lastUserIndex = -1
-  for (let index = sessionMessages.length - 1; index >= 0; index -= 1) {
-    if (sessionMessages[index]?.role === 'user') {
-      lastUserIndex = index
-      break
-    }
-  }
-  for (
-    let index = lastUserIndex + 1;
-    index < sessionMessages.length;
-    index += 1
-  ) {
-    const message = sessionMessages[index]
-    if (message && isProcessingHostMessage(message)) return true
-  }
-  return false
 }
 
 function toChatMessage(message: {

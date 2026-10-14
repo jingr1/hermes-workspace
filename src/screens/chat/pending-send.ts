@@ -9,8 +9,26 @@ export type PendingSendPayload = {
 }
 
 let pendingSend: PendingSendPayload | null = null
-let pendingGeneration = false
+/** Session-scoped: keys are `s:<sessionKey>` and/or `f:<friendlyId>`. */
+const pendingGenerationKeys = new Set<string>()
 let recentSession: { friendlyId: string; at: number } | null = null
+
+export type PendingSessionIdentity = {
+  sessionKey?: string | null
+  friendlyId?: string | null
+}
+
+function pendingGenerationKeyList(
+  identity: PendingSessionIdentity | null | undefined,
+): Array<string> {
+  if (!identity) return []
+  const keys: Array<string> = []
+  const sessionKey = identity.sessionKey?.trim()
+  const friendlyId = identity.friendlyId?.trim()
+  if (sessionKey) keys.push(`s:${sessionKey}`)
+  if (friendlyId) keys.push(`f:${friendlyId}`)
+  return keys
+}
 
 const PENDING_MESSAGE_STORAGE_PREFIX = 'claude_pending_msg_'
 const PENDING_MESSAGE_MAX_AGE_MS = 5 * 60 * 1000
@@ -225,12 +243,43 @@ export function hasPendingSend() {
   return pendingSend !== null
 }
 
-export function setPendingGeneration(value: boolean) {
-  pendingGeneration = value
+export function hasPendingSendForSession(
+  identity: PendingSessionIdentity,
+): boolean {
+  if (!pendingSend) return false
+  const sessionKey = identity.sessionKey?.trim()
+  const friendlyId = identity.friendlyId?.trim()
+  if (sessionKey && pendingSend.sessionKey === sessionKey) return true
+  if (friendlyId && pendingSend.friendlyId === friendlyId) return true
+  return false
 }
 
-export function hasPendingGeneration() {
-  return pendingGeneration
+/**
+ * Mark (or clear) in-flight generation for a specific session identity.
+ * Never global — a dirty prior session must not light busy UI on another.
+ */
+export function setPendingGeneration(
+  value: boolean,
+  identity: PendingSessionIdentity | null | undefined,
+) {
+  const keys = pendingGenerationKeyList(identity)
+  // No identity → no-op (never throw; never write a process-global flag).
+  if (keys.length === 0) return
+  if (value) {
+    for (const key of keys) pendingGenerationKeys.add(key)
+    return
+  }
+  for (const key of keys) pendingGenerationKeys.delete(key)
+}
+
+/** True when this session (or any, if identity omitted for list synthesis) is pending. */
+export function hasPendingGeneration(
+  identity?: PendingSessionIdentity | null,
+): boolean {
+  if (identity == null) return pendingGenerationKeys.size > 0
+  const keys = pendingGenerationKeyList(identity)
+  if (keys.length === 0) return false
+  return keys.some((key) => pendingGenerationKeys.has(key))
 }
 
 export function resetPendingSend() {
@@ -238,7 +287,7 @@ export function resetPendingSend() {
     clearPendingMessage(pendingSend.sessionKey)
   }
   pendingSend = null
-  pendingGeneration = false
+  pendingGenerationKeys.clear()
 }
 
 export function clearPendingSendForSession(
@@ -251,13 +300,15 @@ export function clearPendingSendForSession(
     removePendingSendFromStorageByFriendlyId(friendlyId)
   }
 
+  setPendingGeneration(false, { sessionKey, friendlyId })
+
   if (!pendingSend) return
   if (sessionKey && pendingSend.sessionKey === sessionKey) {
-    resetPendingSend()
+    pendingSend = null
     return
   }
   if (friendlyId && pendingSend.friendlyId === friendlyId) {
-    resetPendingSend()
+    pendingSend = null
   }
 }
 

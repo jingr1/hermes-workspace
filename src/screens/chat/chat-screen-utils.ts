@@ -1,4 +1,4 @@
-import { openTurnHasWorkingSurface } from '@/lib/chat-message-parts'
+import { assistantHasWorkingSurface } from '@/lib/chat-message-parts'
 import type { ChatAttachment, ChatMessage } from './types'
 
 export type StickyStreamingTextState = {
@@ -88,19 +88,11 @@ export function shouldClearWaitingForAssistantMessage(
   if (!last || last.role !== 'assistant') return false
   if (last.__streamingStatus === 'streaming') return false
 
-  // Thinking-only / empty assistant rows are still in-flight. Clearing waiting
-  // here hides the empty-gap Thinking pill before Activity/Working mounts —
-  // the flash-then-gap users see after send.
+  // Empty placeholders stay in-flight. Any visible host (text / thinking /
+  // tools) can settle waiting — TurnActivityHost owns busy via turnBusy, not
+  // this flag.
   const currentText = assistantPlainText(last).trim()
-  const hasToolHost =
-    Array.isArray(last.content) &&
-    last.content.some(
-      (part) =>
-        !!part &&
-        typeof part === 'object' &&
-        (part as { type?: string }).type === 'toolCall',
-    )
-  if (!currentText && !hasToolHost) return false
+  if (!currentText && !assistantHasWorkingSurface(last)) return false
 
   if (messages.length > snapshot.messageCount) return true
 
@@ -109,8 +101,7 @@ export function shouldClearWaitingForAssistantMessage(
     return true
   }
 
-  // Same assistant row can be rewritten in place (e.g. "Operation interrupted…")
-  // after SSE disconnect — identity/count stay equal but waiting must clear.
+  // Same assistant row rewritten in place (e.g. interrupt text).
   if (
     snapshot.lastAssistantText !== null &&
     currentText.length > 0 &&
@@ -135,27 +126,6 @@ export function shouldSettleWaitingFromActiveRun(
   if (!run) return 'missing'
   if (isTerminalActiveRunStatus(run.status)) return 'settle'
   return 'keep'
-}
-
-/**
- * Empty-gap ThinkingBubble for Hermes 1:1. Stay up until the open turn can
- * mount the Working card (thinking text or tool calls). Plain reply text does
- * not clear it — that left a blank between Thinking and Working.
- */
-export function shouldShowHermesProcessingIndicator(params: {
-  messages: ReadonlyArray<ChatMessage>
-  isStreaming: boolean
-  sending: boolean
-  waitingForResponse: boolean
-  hasPendingGeneration: boolean
-}): boolean {
-  if (openTurnHasWorkingSurface(params.messages)) return false
-  if (params.isStreaming) return true
-  return (
-    params.sending ||
-    params.waitingForResponse ||
-    params.hasPendingGeneration
-  )
 }
 
 export function advanceStickyStreamingText(params: {
@@ -218,11 +188,21 @@ export function createOptimisticMessage(
   return { clientId, optimisticId, optimisticMessage }
 }
 
+/** Last `::` segment of a chat nav key (`profile::canonical::friendly`). */
+export function friendlyIdFromNavKey(navKey: string): string {
+  const idx = navKey.lastIndexOf('::')
+  return idx === -1 ? navKey : navKey.slice(idx + 2)
+}
+
 /**
  * Cancel in-flight SSE when the user actually leaves a session.
  * Promoting `/chat/new` onto the session we just started must not abort
  * the first-turn stream — that leaves the bubble unanswered and the
  * optimistic session gets dropped on the next list refetch.
+ *
+ * Also: after new→thread, `activeCanonicalKey` often fills in a moment later
+ * and changes the middle nav-key segment. That is not a session leave — aborting
+ * here kills the first send before Hermes ever sees it (empty gateway history).
  */
 export function shouldCancelStreamOnSessionNav(params: {
   previousNavKey: string | null
@@ -233,13 +213,27 @@ export function shouldCancelStreamOnSessionNav(params: {
   const { previousNavKey, nextNavKey, nextFriendlyId, activeSendKey } = params
   if (previousNavKey === null || previousNavKey === nextNavKey) return false
 
-  const previousWasNew = previousNavKey.endsWith('::new')
+  const prevFriendly = friendlyIdFromNavKey(previousNavKey)
+  const nextFriendly =
+    nextFriendlyId.trim() || friendlyIdFromNavKey(nextNavKey)
+
+  // Same thread, nav key churn (canonical key / profile prefix only).
+  if (prevFriendly !== 'new' && prevFriendly === nextFriendly) {
+    return false
+  }
+
+  // In-flight send already targets this friendly id.
   if (
-    previousWasNew &&
-    nextFriendlyId !== 'new' &&
+    nextFriendly !== 'new' &&
     Boolean(activeSendKey) &&
-    nextFriendlyId === activeSendKey
+    nextFriendly === activeSendKey
   ) {
+    return false
+  }
+
+  // `/chat/new` → first thread while createSession is still in flight
+  // (activeSendRef not set yet). Cancelling here drops the pending first turn.
+  if (prevFriendly === 'new' && nextFriendly !== 'new') {
     return false
   }
 

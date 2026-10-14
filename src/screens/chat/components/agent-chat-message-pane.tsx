@@ -16,6 +16,7 @@ import type { ChatMessage } from '../types'
 export function AgentChatMessagePane({
   messages,
   showProcessingIndicator,
+  turnBusy,
   isStreaming = false,
   streamingMessageId = null,
   streamingText,
@@ -34,6 +35,8 @@ export function AgentChatMessagePane({
 }: {
   messages: Array<ChatMessage>
   showProcessingIndicator: boolean
+  /** Unique agorax busy authority for TurnActivityHost. */
+  turnBusy?: boolean
   /** Turn-active: message-level live chrome / Stop, not the bottom pill. */
   isStreaming?: boolean
   streamingMessageId?: string | null
@@ -63,11 +66,13 @@ export function AgentChatMessagePane({
   loading?: boolean
 }) {
   const empty = messages.length === 0
+  const busy = turnBusy ?? showProcessingIndicator
 
   return (
     <ChatMessageList
       messages={messages}
-      showProcessingIndicator={showProcessingIndicator}
+      showProcessingIndicator={busy}
+      turnBusy={busy}
       researchCard={undefined}
       loading={loading}
       empty={empty}

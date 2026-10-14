@@ -389,6 +389,15 @@ function RootLayout() {
 
   const rootSurfaceState = getRootSurfaceState(onboardingComplete, authStatus)
 
+  useEffect(() => {
+    if (typeof document === 'undefined' || !mounted) return
+    document.documentElement.setAttribute('data-app-ready', '1')
+    const dismiss = (
+      window as Window & { __dismissSplash?: () => void }
+    ).__dismissSplash
+    dismiss?.()
+  }, [mounted])
+
   return (
     <QueryClientProvider client={queryClient}>
       <Toaster />
@@ -641,40 +650,31 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                 }, 200);
               }, 80);
             };
-            // Don't leave a blank dark splash up while the phone is still
-            // downloading the app or waiting on a runtime probe.
-            setTimeout(function(){ window.__dismissSplash && window.__dismissSplash(); }, 2500);
+            // Keep the branded splash until React marks the app ready.
+            // On Tailscale phones, the JS bundle can take much longer than 2.5s;
+            // dismissing early leaves a blank black page with no error UI.
+            var start = Date.now();
+            function checkReady() {
+              if (splashDismissed) return;
+              if (document.documentElement.getAttribute('data-app-ready') === '1') {
+                window.__dismissSplash && window.__dismissSplash();
+                return;
+              }
+              if (Date.now() - start > 20000) {
+                d.innerHTML = '<div style="font:600 20px/1.2 system-ui,sans-serif;color:'+txt+';margin-bottom:12px">Still loading</div>'
+                  + '<div style="font:400 14px/1.5 system-ui,sans-serif;color:'+muted+';max-width:280px;text-align:center;margin-bottom:20px">The app shell has not started. On mobile Tailscale this is usually a blocked port, a localhost-only bind, or a stalled JS download.</div>'
+                  + '<button type="button" onclick="location.reload()" style="appearance:none;border:0;border-radius:12px;padding:12px 18px;background:'+accent+';color:#fff;font:600 14px system-ui,sans-serif">Reload</button>';
+                return;
+              }
+              setTimeout(checkReady, 200);
+            }
+            setTimeout(checkReady, 150);
           })()
         `),
           }}
         />
         <div className="root">{children}</div>
         <Scripts />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: wrapInlineScript(`
-          (function(){
-            var start = Date.now();
-            function check() {
-              if (window.__splashCheckStopped) return;
-              var el = document.querySelector('[data-connection-startup], [data-runtime-connect]');
-              var elapsed = Date.now() - start;
-              if ((el && elapsed > 150) || elapsed > 2500) {
-                window.__splashCheckStopped = true;
-                requestAnimationFrame(function(){
-                  requestAnimationFrame(function(){
-                    window.__dismissSplash && window.__dismissSplash();
-                  });
-                });
-                return;
-              }
-              setTimeout(check, 50);
-            }
-            setTimeout(check, 150);
-          })()
-        `),
-          }}
-        />
       </body>
     </html>
   )

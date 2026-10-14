@@ -109,7 +109,10 @@ export function useChatSessions({
       !activeAlreadyPresent &&
       (forcedSessionKey ||
         isRecentSession(activeFriendlyId) ||
-        hasPendingGeneration())
+        hasPendingGeneration({
+          sessionKey: forcedSessionKey,
+          friendlyId: activeFriendlyId,
+        }))
     ) {
       const synthetic = buildSyntheticActiveSession(
         activeFriendlyId,

@@ -382,9 +382,8 @@ export type AssistantHostContentMessage = {
  * Whether an assistant message should be kept in the transcript lane.
  * Matches managed ACP: text, thinking, or tool calls all count as host surface.
  *
- * Empty `__streamingStatus === 'streaming'` alone is NOT a host — that gap
- * belongs to the bottom ThinkingBubble. Treating it as host cleared the
- * processing indicator and left only a static Working stub (空窗).
+ * Empty `__streamingStatus === 'streaming'` alone is NOT a host — live busy
+ * UI mounts from turnBusy / TurnActivityHost, not from an empty stream row.
  */
 export function assistantHasVisibleHostContent(
   message: AssistantHostContentMessage,
@@ -435,9 +434,9 @@ export function assistantHasVisibleHostContent(
 }
 
 /**
- * Surface that mounts the in-thread Working card: thinking text or tool calls.
- * Plain reply text does not count — that used to hide the bottom Thinking pill
- * before the card had anything to render.
+ * Thinking text or tool calls on an assistant row (Activity content).
+ * Used by chat-store merge and waiting settlement — not as a busy gate.
+ * Busy UI mounts from turnBusy / TurnActivityHost.
  */
 export function assistantHasWorkingSurface(
   message: AssistantHostContentMessage,
@@ -470,56 +469,6 @@ export function assistantHasWorkingSurface(
       rec.type === 'toolCall' ||
       rec.type === 'tool_use' ||
       rec.type === 'toolUse'
-    ) {
-      return true
-    }
-  }
-  return false
-}
-
-/**
- * Open-turn Working surface only (after the last user message).
- * The bottom Thinking pill stays up until this is true.
- */
-export function openTurnHasWorkingSurface(
-  messages: ReadonlyArray<AssistantHostContentMessage>,
-): boolean {
-  let lastUserIndex = -1
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    if (messages[index]?.role === 'user') {
-      lastUserIndex = index
-      break
-    }
-  }
-  for (let index = lastUserIndex + 1; index < messages.length; index += 1) {
-    const message = messages[index]
-    if (message?.role === 'assistant' && assistantHasWorkingSurface(message)) {
-      return true
-    }
-  }
-  return false
-}
-
-/**
- * Open-turn host only (after the last user message). Prior settled assistants
- * must not suppress the empty-gap ThinkingBubble on a later send — matching
- * managed `trailingAssistantHostContent`.
- */
-export function openTurnHasAssistantHostContent(
-  messages: ReadonlyArray<AssistantHostContentMessage>,
-): boolean {
-  let lastUserIndex = -1
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    if (messages[index]?.role === 'user') {
-      lastUserIndex = index
-      break
-    }
-  }
-  for (let index = lastUserIndex + 1; index < messages.length; index += 1) {
-    const message = messages[index]
-    if (
-      message?.role === 'assistant' &&
-      assistantHasVisibleHostContent(message)
     ) {
       return true
     }

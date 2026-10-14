@@ -11,7 +11,6 @@ import {
   shouldClearWaitingForAssistantMessage,
   shouldHandoffStreamOnProfileNav,
   shouldSettleWaitingFromActiveRun,
-  shouldShowHermesProcessingIndicator,
 } from './chat-screen-utils'
 
 describe('advanceStickyStreamingText', () => {
@@ -90,6 +89,27 @@ describe('shouldCancelStreamOnSessionNav', () => {
       shouldCancelStreamOnSessionNav({
         previousNavKey: 'main::new',
         nextNavKey: 'thread-1::thread-1',
+        nextFriendlyId: 'thread-1',
+        activeSendKey: 'thread-1',
+      }),
+    ).toBe(false)
+  })
+
+  it('keeps the first-turn stream when promoting /chat/new before activeSendRef is set', () => {
+    expect(
+      shouldCancelStreamOnSessionNav({
+        previousNavKey: 'aider::::new',
+        nextNavKey: 'aider::::thread-1',
+        nextFriendlyId: 'thread-1',
+      }),
+    ).toBe(false)
+  })
+
+  it('does not cancel when canonical session key fills in on the same thread', () => {
+    expect(
+      shouldCancelStreamOnSessionNav({
+        previousNavKey: 'aider::::thread-1',
+        nextNavKey: 'aider::thread-1::thread-1',
         nextFriendlyId: 'thread-1',
         activeSendKey: 'thread-1',
       }),
@@ -200,7 +220,7 @@ describe('response wait detection', () => {
     ).toBe(true)
   })
 
-  it('keeps waiting for thinking-only assistant rows so the empty-gap pill does not flash off', () => {
+  it('clears waiting for thinking-only rows once they have surface', () => {
     const snapshot = createResponseWaitSnapshot([
       {
         role: 'user',
@@ -219,6 +239,32 @@ describe('response wait detection', () => {
             role: 'assistant',
             content: [{ type: 'thinking', thinking: 'planning the reply' }],
             id: 'assistant-thinking',
+          },
+        ],
+        snapshot,
+      ),
+    ).toBe(true)
+  })
+
+  it('keeps waiting for empty assistant placeholders', () => {
+    const snapshot = createResponseWaitSnapshot([
+      {
+        role: 'user',
+        content: [{ type: 'text', text: 'hello' }],
+      },
+    ])
+
+    expect(
+      shouldClearWaitingForAssistantMessage(
+        [
+          {
+            role: 'user',
+            content: [{ type: 'text', text: 'hello' }],
+          },
+          {
+            role: 'assistant',
+            content: [],
+            id: 'assistant-empty',
           },
         ],
         snapshot,
@@ -260,107 +306,6 @@ describe('response wait detection', () => {
         snapshot,
       ),
     ).toBe(true)
-  })
-})
-
-describe('shouldShowHermesProcessingIndicator', () => {
-  const priorTurn = [
-    {
-      role: 'user' as const,
-      content: [{ type: 'text' as const, text: 'hi' }],
-    },
-    {
-      role: 'assistant' as const,
-      content: [{ type: 'text' as const, text: 'hello' }],
-    },
-  ]
-
-  it('keeps the empty-gap pill after a later send even when prior assistants exist', () => {
-    expect(
-      shouldShowHermesProcessingIndicator({
-        messages: [
-          ...priorTurn,
-          {
-            role: 'user',
-            content: [{ type: 'text', text: 'again' }],
-          },
-        ],
-        isStreaming: false,
-        sending: true,
-        waitingForResponse: true,
-        hasPendingGeneration: true,
-      }),
-    ).toBe(true)
-  })
-
-  it('keeps the pill while the open turn has only reply text', () => {
-    expect(
-      shouldShowHermesProcessingIndicator({
-        messages: [
-          ...priorTurn,
-          {
-            role: 'user',
-            content: [{ type: 'text', text: 'again' }],
-          },
-          {
-            role: 'assistant',
-            content: [{ type: 'text', text: 'I will check the files.' }],
-          },
-        ],
-        isStreaming: true,
-        sending: false,
-        waitingForResponse: true,
-        hasPendingGeneration: false,
-      }),
-    ).toBe(true)
-  })
-
-  it('hides the pill once the open turn can mount Working', () => {
-    expect(
-      shouldShowHermesProcessingIndicator({
-        messages: [
-          ...priorTurn,
-          {
-            role: 'user',
-            content: [{ type: 'text', text: 'again' }],
-          },
-          {
-            role: 'assistant',
-            content: [{ type: 'thinking', thinking: 'planning' }],
-          },
-        ],
-        isStreaming: true,
-        sending: false,
-        waitingForResponse: true,
-        hasPendingGeneration: false,
-      }),
-    ).toBe(false)
-
-    expect(
-      shouldShowHermesProcessingIndicator({
-        messages: [
-          ...priorTurn,
-          {
-            role: 'user',
-            content: [{ type: 'text', text: 'again' }],
-          },
-          {
-            role: 'assistant',
-            content: [
-              {
-                type: 'toolCall',
-                id: 'tool-1',
-                name: 'read_file',
-              },
-            ],
-          },
-        ],
-        isStreaming: true,
-        sending: false,
-        waitingForResponse: true,
-        hasPendingGeneration: false,
-      }),
-    ).toBe(false)
   })
 })
 

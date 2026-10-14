@@ -2701,9 +2701,8 @@ function MessageItemComponent({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Activity panel above the assistant bubble — only when there is real
-          thinking or tool content. Empty pre-content gap stays on the bottom
-          ThinkingBubble; do not mount a Working stub that replaces it. */}
+      {/* Settled/transcript activity above the assistant bubble. Live busy
+          surface is TurnActivityHost on the list, not a per-message stub. */}
       {!isUser &&
       !hideActivityCard &&
       (finalToolSections.length > 0 ||

@@ -6,7 +6,6 @@ import {
   managedAgentTargetId,
   managedSessionSettingsPatch,
   selectManagedAgentChatState,
-  shouldShowManagedProcessingIndicator,
   syncPendingApprovalsIntoEngine,
 } from './managed-agent-engine'
 import { selectEngineInteractionsForSession } from '@agorax/agent-activity-core'
@@ -111,14 +110,14 @@ describe('Managed Agent Engine adapter', () => {
     expect(state.messages).toHaveLength(1)
     expect(state.activeTurn?.turnId).toBe('turn-1')
     expect(state.isStreaming).toBe(true)
-    // Text already hosts the turn — empty-gap pill must stay off.
-    expect(state.showProcessingIndicator).toBe(false)
+    // agorax: turn busy stays true even when reply text already hosts.
+    expect(state.showProcessingIndicator).toBe(true)
     expect(state.streamingMessageId).toBe('message-1')
     expect(state.interactions[0]?.requestId).toBe('request-1')
     engine.dispose()
   })
 
-  it('shows processing indicator only while the active turn has no host content', () => {
+  it('keeps processing indicator while the active turn is running even with host content', () => {
     const engine = createManagedAgentEngine({
       workspaceId: 'workspace-1',
       commandPort: { kind: 'typed', effects: unsupportedEffects(), execute: async () => undefined },
@@ -159,32 +158,12 @@ describe('Managed Agent Engine adapter', () => {
 
     const withThinking = selectManagedAgentChatState(engine.getSnapshot(), 'session-1')
     expect(withThinking.isStreaming).toBe(true)
-    expect(withThinking.showProcessingIndicator).toBe(false)
+    expect(withThinking.showProcessingIndicator).toBe(true)
     expect(withThinking.streamingMessageId).toBe('reasoning-1')
     engine.dispose()
   })
 
-  it('shouldShowManagedProcessingIndicator suppresses once turn has host content', () => {
-    const active = { turnId: 'turn-1', phase: 'running' }
-    const messages: AgentActivityMessage[] = [{
-      workspaceId: 'workspace-1',
-      agentSessionId: 'session-1',
-      messageId: 'a1',
-      turnId: 'turn-1',
-      role: 'assistant',
-      kind: 'text',
-      payload: { text: 'Done.' },
-      version: 1,
-      sequence: 1,
-      occurredAtUnixMs: 1,
-    }]
-    expect(shouldShowManagedProcessingIndicator([], active)).toBe(true)
-    expect(shouldShowManagedProcessingIndicator(messages, active)).toBe(false)
-    expect(shouldShowManagedProcessingIndicator(messages, null)).toBe(false)
-  })
-
-  it('suppresses the empty-gap pill for live assistant_thinking deltas', () => {
-    const active = { turnId: 'turn-1', phase: 'running' }
+  it('projects live assistant_thinking deltas into the message lane', () => {
     const liveThinking: AgentActivityMessage[] = [{
       workspaceId: 'workspace-1',
       agentSessionId: 'session-1',
@@ -197,7 +176,6 @@ describe('Managed Agent Engine adapter', () => {
       sequence: 1,
       occurredAtUnixMs: 1,
     }]
-    expect(shouldShowManagedProcessingIndicator(liveThinking, active)).toBe(false)
 
     const engine = createManagedAgentEngine({
       workspaceId: 'workspace-1',
@@ -214,7 +192,7 @@ describe('Managed Agent Engine adapter', () => {
     const projected = selectManagedAgentChatState(engine.getSnapshot(), 'session-1', {
       sessionMessages: liveThinking,
     })
-    expect(projected.showProcessingIndicator).toBe(false)
+    expect(projected.showProcessingIndicator).toBe(true)
     expect(projected.streamingMessageId).toBe('thought-1')
     expect(projected.messages[0]?.role).toBe('assistant')
     expect(projected.messages[0]?.content?.[0]).toMatchObject({
@@ -222,84 +200,6 @@ describe('Managed Agent Engine adapter', () => {
       thinking: 'The user greeted me in Chinese.',
     })
     engine.dispose()
-  })
-
-  it('does not let sticky isSubmitting resurrect the pill after host content', () => {
-    const active = { turnId: 'turn-1', phase: 'running' }
-    const messages: AgentActivityMessage[] = [
-      {
-        workspaceId: 'workspace-1',
-        agentSessionId: 'session-1',
-        messageId: 'u1',
-        turnId: 'turn-1',
-        role: 'user',
-        kind: 'text',
-        payload: { text: '你好' },
-        version: 1,
-        sequence: 1,
-        occurredAtUnixMs: 1,
-      },
-      {
-        workspaceId: 'workspace-1',
-        agentSessionId: 'session-1',
-        messageId: 'a1',
-        turnId: 'turn-1',
-        role: 'assistant',
-        kind: 'text',
-        payload: { text: '你好！有什么我可以帮你的吗？' },
-        version: 1,
-        sequence: 2,
-        occurredAtUnixMs: 2,
-      },
-    ]
-    expect(
-      shouldShowManagedProcessingIndicator(messages, active, {
-        isSubmitting: true,
-      }),
-    ).toBe(false)
-  })
-
-  it('suppresses the pill when host content lacks the active turnId', () => {
-    const active = { turnId: 'turn-active', phase: 'running' }
-    const messages: AgentActivityMessage[] = [
-      {
-        workspaceId: 'workspace-1',
-        agentSessionId: 'session-1',
-        messageId: 'u1',
-        turnId: 'turn-old',
-        role: 'user',
-        kind: 'text',
-        payload: { text: '你好' },
-        version: 1,
-        sequence: 1,
-        occurredAtUnixMs: 1,
-      },
-      {
-        workspaceId: 'workspace-1',
-        agentSessionId: 'session-1',
-        messageId: 'a1',
-        turnId: 'turn-old',
-        role: 'assistant',
-        kind: 'reasoning',
-        payload: { text: 'User just said 你好' },
-        version: 1,
-        sequence: 2,
-        occurredAtUnixMs: 2,
-      },
-      {
-        workspaceId: 'workspace-1',
-        agentSessionId: 'session-1',
-        messageId: 'a2',
-        turnId: 'turn-old',
-        role: 'assistant',
-        kind: 'text',
-        payload: { text: '你好！' },
-        version: 1,
-        sequence: 3,
-        occurredAtUnixMs: 3,
-      },
-    ]
-    expect(shouldShowManagedProcessingIndicator(messages, active)).toBe(false)
   })
 
   it('derives active tool calls from canonical tool_call messages', () => {

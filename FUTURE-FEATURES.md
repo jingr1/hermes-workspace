@@ -48,16 +48,17 @@
 
 ### 5. Chat turn Phase D — Hermes 1:1 UI 只订 Engine
 
-**做什么：** Hermes 1:1 与 managed 共用同一套 UI 投影 hook（读 Engine VM：气泡 / Activity / Stop / 空档 Thinking pill）。删除或退役 Hermes 专用双轨：`useRealtimeChatHistory` + `finalDisplayMessages` 上的 history/store 并行 merge、`hermesShowProcessingIndicator` 与 `shouldShowManagedProcessingIndicator` 分叉。  
-**为什么：** 合同目标是「运行时可以分叉，身份/事件/settle 同源」；D 完成后 UI **只认 Engine**，底部 pill 与线程内 host 互斥由同一套 selector 保证。  
+**做什么：** Hermes 1:1 与 managed 共用同一套 UI 投影 hook（读 Engine VM：气泡 / Activity / Stop）。UI **只认 Engine** / `turnBusy`，不再分叉 Hermes/managed busy 谓词。  
+**已清（Tutti-feel 前置）：** 双轨 `shouldShowHermesProcessingIndicator` / `shouldShowManagedProcessingIndicator`、`thinkingGrace`、host-surface 互斥补丁已退役；两端统一 `selectTurnBusy` + `TurnActivityHost`。  
+**为什么：** 合同目标是「运行时可以分叉，身份/事件/settle 同源」；D 完成后底部 busy 与线程内 host 由同一套 selector 保证。  
 **落点：**
 
 - 合同：`[docs/chat-turn-identity-contract.md](docs/chat-turn-identity-contract.md)` Phase D
-- 对照实现：`src/screens/chat/hooks/use-managed-agent-chat.ts`、`src/screens/chat/lib/managed-agent-engine.ts`
-- 迁移面：`chat-screen.tsx` Hermes 路径、`chat-store` 流式缓冲逐步降级为兼容或删除
+- 对照实现：`src/screens/chat/hooks/use-managed-agent-chat.ts`、`src/screens/chat/lib/managed-agent-engine.ts`、`src/lib/turn-activity.ts`、`src/stores/hermes-turn-store.ts`
+- 迁移面：`chat-screen.tsx` Hermes 路径仍走 history/store merge；`chat-store` 流式缓冲逐步降级为兼容或删除；`showProcessingIndicator` prop 收口到只用 `turnBusy`
 
-**前置：** **必须先完成 Phase C**（Engine 里已有 Hermes turn 权威桶，才能「只订 Engine」）。  
-**风险：** Hermes 1:1 是主路径；未稳定 C 前切 D 会同时踩 streaming、Stop、history 回填、portable mode。
+**前置：** Phase C 部分已落地（`hermes-turn-store` + SSE→activity）；完整 Engine hydrate 仍待。  
+**风险：** Hermes 1:1 是主路径；未稳定完整 C 前切 D 会同时踩 streaming、Stop、history 回填、portable mode。
 
 ---
 

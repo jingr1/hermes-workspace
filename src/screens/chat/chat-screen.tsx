@@ -31,8 +31,9 @@ import {
   shouldClearWaitingForAssistantMessage,
   shouldHandoffStreamOnProfileNav,
   shouldSettleWaitingFromActiveRun,
-  shouldShowHermesProcessingIndicator,
 } from './chat-screen-utils'
+import { selectTurnBusy } from '@/lib/turn-activity'
+import { useHermesTurnStore } from '@/stores/hermes-turn-store'
 import {
   findLastUserMessage,
   historyIndexOf,
@@ -77,6 +78,7 @@ import {
   consumePendingSend,
   hasPendingGeneration,
   hasPendingSend,
+  hasPendingSendForSession,
   isRecentSession,
   resetPendingSend,
   setPendingGeneration,
@@ -723,7 +725,10 @@ export function ChatScreen({
     isNewChat ||
     Boolean(forcedSessionKey) ||
     isRecentSession(activeFriendlyId) ||
-    hasPendingGeneration() ||
+    hasPendingGeneration({
+      sessionKey: forcedSessionKey || activeSessionKey,
+      friendlyId: activeFriendlyId,
+    }) ||
     (sessionsQuery.isSuccess && sessionOwnedByProfile)
   const {
     historyQuery,
@@ -789,9 +794,32 @@ export function ChatScreen({
   // true otherwise. This prevents showing "Thinking" until the API confirms.
   const [activeRunCheckDone, setActiveRunCheckDone] = useState(!needsStaleCheck)
 
+  const pendingSessionIdentity = useMemo(
+    () => ({
+      sessionKey:
+        resolvedSessionKey ||
+        activeCanonicalKey ||
+        (isNewChat ? null : sessionKeyForHistory) ||
+        null,
+      friendlyId: isNewChat ? 'new' : activeFriendlyId,
+    }),
+    [
+      resolvedSessionKey,
+      activeCanonicalKey,
+      isNewChat,
+      sessionKeyForHistory,
+      activeFriendlyId,
+    ],
+  )
+
   const waitingForResponse = useMemo(() => {
     const key = sessionKeyForWaiting.current
-    if (!key) return hasPendingSend() || hasPendingGeneration()
+    if (!key) {
+      return (
+        hasPendingSendForSession(pendingSessionIdentity) ||
+        hasPendingGeneration(pendingSessionIdentity)
+      )
+    }
 
     // If we restored waiting state from sessionStorage but haven't verified
     // with the API yet, don't show thinking — it might be stale (Issue #449).
@@ -804,7 +832,7 @@ export function ChatScreen({
     }
 
     return storeWaiting.has(key)
-  }, [storeWaiting, activeRunCheckDone])
+  }, [storeWaiting, activeRunCheckDone, pendingSessionIdentity])
 
   const setWaitingForResponse = useCallback((waiting: boolean) => {
     const store = useChatStore.getState()
@@ -881,8 +909,11 @@ export function ChatScreen({
     onUserMessage: useCallback(() => {
       // External message arrived (e.g. from Telegram) — show thinking indicator
       setWaitingForResponse(true)
-      setPendingGeneration(true)
-    }, []),
+      setPendingGeneration(true, {
+        sessionKey: sessionKeyForWaiting.current,
+        friendlyId: portableChatFriendlyId,
+      })
+    }, [portableChatFriendlyId, setWaitingForResponse]),
     onApprovalRequest: useCallback((payload: Record<string, unknown>) => {
       const approvalId =
         typeof payload.id === 'string'
@@ -1067,9 +1098,19 @@ export function ChatScreen({
       window.clearTimeout(failsafeTimerRef.current)
       failsafeTimerRef.current = null
     }
-    setPendingGeneration(false)
+    const activeSend = activeSendRef.current
+    if (activeSend) {
+      setPendingGeneration(false, {
+        sessionKey: activeSend.sessionKey,
+        friendlyId: activeSend.friendlyId,
+      })
+    }
+    setPendingGeneration(false, {
+      sessionKey: sessionKeyForWaiting.current,
+      friendlyId: isNewChat ? 'new' : activeFriendlyId,
+    })
     setWaitingForResponse(false)
-  }, [streamStop])
+  }, [activeFriendlyId, isNewChat, streamStop])
 
   const streamStart = useCallback(() => {
     if (!activeFriendlyId || isNewChat) return
@@ -1520,10 +1561,17 @@ export function ChatScreen({
         setError(errorMessage)
         toast('Failed to send message', { type: 'error' })
         showErrorToast(messageText)
-        setPendingGeneration(false)
+        const failedSend = activeSendRef.current
+        if (failedSend) {
+          setPendingGeneration(false, {
+            sessionKey: failedSend.sessionKey,
+            friendlyId: failedSend.friendlyId,
+          })
+        }
+        setPendingGeneration(false, pendingSessionIdentity)
         setWaitingForResponse(false)
       },
-      [canMutateChatRoute, navigate, queryClient],
+      [canMutateChatRoute, navigate, pendingSessionIdentity, queryClient],
     ),
     onMessageAccepted: useCallback(
       (_sessionKey: string, friendlyId: string, clientId: string) => {
@@ -1553,11 +1601,18 @@ export function ChatScreen({
       [queryClient],
     ),
     onAbort: useCallback(() => {
+      const abortedSend = activeSendRef.current
+      if (abortedSend) {
+        setPendingGeneration(false, {
+          sessionKey: abortedSend.sessionKey,
+          friendlyId: abortedSend.friendlyId,
+        })
+      }
+      setPendingGeneration(false, pendingSessionIdentity)
       activeSendRef.current = null
       setSending(false)
-      setPendingGeneration(false)
       setWaitingForResponse(false)
-    }, [setWaitingForResponse]),
+    }, [pendingSessionIdentity, setWaitingForResponse]),
     acceptedTimeoutMs: modelsQuery.data?.streamAcceptedTimeoutMs,
     handoffTimeoutMs: modelsQuery.data?.streamHandoffTimeoutMs,
   })
@@ -1808,25 +1863,35 @@ export function ChatScreen({
     realtimeStreamingMessageId,
   ])
 
-  const hermesShowProcessingIndicator = useMemo(
+  const hermesTurnSnapshot = useHermesTurnStore((state) =>
+    resolvedSessionKey
+      ? (state.bySession.get(resolvedSessionKey) ?? null)
+      : null,
+  )
+  const hermesTurnBusy = useMemo(
     () =>
-      shouldShowHermesProcessingIndicator({
-        messages: finalDisplayMessages,
-        isStreaming:
+      selectTurnBusy({
+        phase: hermesTurnSnapshot?.phase,
+        hasActiveTurn: hermesTurnSnapshot
+          ? hermesTurnSnapshot.phase !== 'settled' ||
+            hermesTurnSnapshot.pendingBusy
+          : false,
+        streaming:
           localIsStreaming ||
           activeIsRealtimeStreaming ||
           derivedStreamingInfo.isStreaming,
         sending,
         waitingForResponse,
-        hasPendingGeneration: hasPendingGeneration(),
+        hasPendingGeneration: hasPendingGeneration(pendingSessionIdentity),
       }),
     [
+      hermesTurnSnapshot,
       sending,
       waitingForResponse,
       localIsStreaming,
       activeIsRealtimeStreaming,
       derivedStreamingInfo.isStreaming,
-      finalDisplayMessages,
+      pendingSessionIdentity,
     ],
   )
 
@@ -1915,9 +1980,8 @@ export function ChatScreen({
   }, [finalDisplayMessages, waitingForResponse, streamFinish])
 
   // Note: do not streamFinish() merely because streamingState flickers off.
-  // That cleared waiting early and hid Thinking before Working/Activity
-  // appeared. Settlement stays on onComplete / shouldClearWaiting (visible
-  // host content) / active-run probe / failsafes.
+  // Busy UI is turnBusy / TurnActivityHost; waiting settlement stays on
+  // onComplete / shouldClearWaiting / active-run probe / failsafes.
 
   const handleSwitchModel = useCallback(async () => {
     if (!suggestion) return
@@ -2103,7 +2167,7 @@ export function ChatScreen({
     !isNewChat &&
     !forcedSessionKey &&
     !isRecentSession(activeFriendlyId) &&
-    !hasPendingGeneration() &&
+    !hasPendingGeneration(pendingSessionIdentity) &&
     profilesReady &&
     sessionsQuery.isSuccess &&
     !sessionOwnedByProfile
@@ -2270,14 +2334,22 @@ export function ChatScreen({
       pendingStartRef.current = false
       return
     }
-    if (hasPendingSend() || hasPendingGeneration()) {
+    // Only keep waiting when THIS session still has pending send/generation.
+    const identity = {
+      sessionKey: resolvedSessionKey,
+      friendlyId: resetKey,
+    }
+    if (
+      hasPendingSendForSession(identity) ||
+      hasPendingGeneration(identity)
+    ) {
       setWaitingForResponse(true)
       return
     }
     streamStop()
     lastAssistantSignature.current = ''
     setWaitingForResponse(false)
-  }, [activeFriendlyId, isNewChat, streamStop])
+  }, [activeFriendlyId, isNewChat, resolvedSessionKey, streamStop])
 
   /**
    * Simplified sendMessage - fire and forget.
@@ -2343,7 +2415,7 @@ export function ChatScreen({
         )
       }
 
-      setPendingGeneration(true)
+      setPendingGeneration(true, { sessionKey, friendlyId })
       setSending(true)
       setError(null)
       clearCompletedStreaming()
@@ -3436,7 +3508,10 @@ export function ChatScreen({
         )
         appendHistoryMessage(queryClient, threadId, threadId, optimisticMessage)
         upsertSessionInCache(threadId, optimisticMessage)
-        setPendingGeneration(true)
+        setPendingGeneration(true, {
+          sessionKey: threadId,
+          friendlyId: threadId,
+        })
         setSending(true)
         setWaitingForResponse(true)
 
@@ -4110,7 +4185,8 @@ export function ChatScreen({
             mainRef={mainRef}
             mainClassName={cn(
               'transition-[margin-bottom] duration-200',
-              (activeIsRealtimeStreaming || hasPendingGeneration()) &&
+              (activeIsRealtimeStreaming ||
+                hasPendingGeneration(pendingSessionIdentity)) &&
                 'chat-streaming-glow',
             )}
             mainStyle={{
@@ -4292,7 +4368,8 @@ export function ChatScreen({
                 }
                 notice={null}
                 noticePosition="end"
-                showProcessingIndicator={hermesShowProcessingIndicator}
+                showProcessingIndicator={hermesTurnBusy}
+                turnBusy={hermesTurnBusy}
                 sessionKey={activeCanonicalKey}
                 pinToTop={false}
                 pinGroupMinHeight={pinGroupMinHeight}

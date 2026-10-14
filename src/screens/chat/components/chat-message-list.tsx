@@ -25,21 +25,73 @@ import {
   ChatContainerScrollAnchor,
 } from '@/components/prompt-kit/chat-container'
 import { AssistantAvatar } from '@/components/avatars'
-import {
-  assistantHasWorkingSurface,
-  thinkingTextFromContent,
-} from '@/lib/chat-message-parts'
+import { assistantHasWorkingSurface } from '@/lib/chat-message-parts'
 import { cn } from '@/lib/utils'
 import { hapticTap } from '@/lib/haptics'
 import { CHAT_OPEN_MESSAGE_SEARCH_EVENT } from '@/screens/chat/chat-events'
 import { useChatStore } from '@/stores/chat-store'
 import { useChatSettingsStore } from '@/hooks/use-chat-settings'
+import { TurnActivityHost } from './turn-activity-host'
+import type { TuiToolSection } from './tui-activity-card'
 
-/** Duration (ms) the thinking indicator stays visible after
- *  showProcessingIndicator clears, giving the first response message time to
- *  render — prevents a flash of blank space. Keep short so the shimmer only
- *  bridges until the first tool/text event arrives. */
-const THINKING_GRACE_PERIOD_MS = 300
+function formatTurnActivityLabel(
+  name: string,
+  _args?: Record<string, unknown>,
+): string {
+  const trimmed = name.trim()
+  if (!trimmed) return 'tool'
+  return trimmed.replace(/_/g, ' ')
+}
+
+function formatTurnActivityArg(
+  name: string,
+  args?: Record<string, unknown>,
+): string | null {
+  if (!args || typeof args !== 'object') return null
+  const preferred = ['path', 'file_path', 'command', 'query', 'pattern', 'url']
+  for (const key of preferred) {
+    const value = args[key]
+    if (typeof value === 'string' && value.trim()) {
+      const text = value.trim()
+      return text.length > 48 ? `${text.slice(0, 45)}…` : text
+    }
+  }
+  return null
+}
+
+function toolSectionsFromActiveCalls(
+  activeToolCalls: Array<{
+    id: string
+    name: string
+    phase: string
+    args?: unknown
+  }>,
+): Array<TuiToolSection> {
+  return activeToolCalls.map((toolCall, index) => {
+    const phase = toolCall.phase || 'calling'
+    const isError = phase === 'error'
+    const isComplete =
+      phase === 'done' ||
+      phase === 'complete' ||
+      phase === 'completed' ||
+      phase === 'result'
+    return {
+      key: toolCall.id || `${toolCall.name}-${index}`,
+      type: toolCall.name || 'tool',
+      input:
+        toolCall.args && typeof toolCall.args === 'object'
+          ? (toolCall.args as Record<string, unknown>)
+          : undefined,
+      outputText: '',
+      errorText: isError ? 'Tool failed' : undefined,
+      state: isError
+        ? 'output-error'
+        : isComplete
+          ? 'output-available'
+          : 'input-available',
+    }
+  })
+}
 
 const TOOL_EMOJIS: Record<string, string> = {
   web_search: '🔍',
@@ -506,37 +558,12 @@ function isAssistantToolCallOnlyMessage(message: ChatMessage): boolean {
   return hasToolCalls && text.trim().length === 0
 }
 
-function displayEntriesHaveAssistantHostSurface(
-  entries: Array<DisplayEntry>,
-): boolean {
-  // Open turn only — prior settled assistants must not suppress ThinkingBubble
-  // grace / live-tool fallback on a later user send.
-  let lastUserIndex = -1
-  for (let index = entries.length - 1; index >= 0; index -= 1) {
-    if (entries[index]?.message.role === 'user') {
-      lastUserIndex = index
-      break
-    }
-  }
-  for (let index = lastUserIndex + 1; index < entries.length; index += 1) {
-    const message = entries[index]?.message
-    if (!message || message.role !== 'assistant') continue
-    if (textFromMessage(message).trim().length > 0) return true
-    if (getToolCallsFromMessage(message).length > 0) return true
-    if (thinkingTextFromContent(message.content).trim().length > 0) return true
-  }
-  return false
-}
-
 /**
  * Managed ACP puts live text/thinking on the ChatMessage itself (optimistic
  * overlay), not Hermes `streamingText` / `streamingThinking` props. The live
  * wrapper must treat that content as visible — otherwise the streaming target
  * stays `display:none` until the turn settles, which looks like Activity ended
  * long before the reply bubble appears.
- *
- * Thinking detection uses the shared content helper so Hermes history parts and
- * managed reasoning rows stay equivalent.
  */
 export function streamingMessageHasVisibleContent(
   message: ChatMessage,
@@ -549,9 +576,8 @@ export function streamingMessageHasVisibleContent(
   if (options?.hasToolActivity) return true
   if (options?.streamingText?.trim()) return true
   if (options?.streamingThinking?.trim()) return true
-  // Same predicate as the Working card / pill. Sidecar fields
-  // (`__streamingThinking`, `__streamToolCalls`) count — hiding the row
-  // while those are set unmounts Working and leaves the pill off.
+  // Sidecar thinking/tools count so the row is not display:none while
+  // TurnActivityHost shows live activity from the same message.
   if (assistantHasWorkingSurface(message)) return true
   return textFromMessage(message).trim().length > 0
 }
@@ -703,11 +729,14 @@ type ChatMessageListProps = {
   notice?: React.ReactNode
   noticePosition?: 'start' | 'end'
   /**
-   * Authoritative empty-gap Thinking pill (Tutti-style processing indicator).
-   * Projected by the chat owner — ChatMessageList does not infer it from
-   * turn-active `isStreaming` or message heuristics.
+   * @deprecated Prefer `turnBusy`. Kept for managed/legacy call sites during
+   * the TurnActivityHost migration.
    */
   showProcessingIndicator: boolean
+  /**
+   * Unique agorax busy authority for TurnActivityHost.
+   */
+  turnBusy?: boolean
   sessionKey?: string
   pinToTop: boolean
   pinGroupMinHeight: number
@@ -744,6 +773,7 @@ function ChatMessageListComponent({
   notice,
   noticePosition = 'start',
   showProcessingIndicator,
+  turnBusy: turnBusyProp,
   sessionKey,
   pinToTop,
   pinGroupMinHeight,
@@ -761,6 +791,8 @@ function ChatMessageListComponent({
   hideSystemMessages = false,
   isCompacting = false,
 }: ChatMessageListProps) {
+  // Single busy bit: owner `turnBusy` wins; legacy processing indicator is fallback.
+  const turnBusy = turnBusyProp ?? showProcessingIndicator
   const activityDisplayMode = useChatSettingsStore(
     (s) => s.settings.chatActivityDisplayMode ?? 'compact',
   )
@@ -785,19 +817,13 @@ function ChatMessageListComponent({
   const [unreadCount, setUnreadCount] = useState(0)
   const [expandAllToolSections, setExpandAllToolSections] = useState(false)
 
-  // Activity feed delay: only show tool activity after 10s of thinking.
-  // For the first 10s, the ThinkingBubble stays simple ("Thinking…").
+  // Activity feed delay: elapsed seconds for TurnActivityHost chrome.
+  // Research/compact fallback ThinkingBubble stays simple for the first 10s.
   const THINKING_ACTIVITY_DELAY_S = 10
   const [thinkingElapsed, setThinkingElapsed] = useState(0)
   const thinkingStartRef = useRef<number>(0)
   const thinkingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Brief bridge after showProcessingIndicator clears so the first response
-  // row can mount without a blank-space flash.
-  const [thinkingGrace, setThinkingGrace] = useState(false)
-  const thinkingGraceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  )
   const [isMessageSearchOpen, setIsMessageSearchOpen] = useState(false)
   const [messageSearchValue, setMessageSearchValue] = useState('')
   const [activeSearchMatchIndex, setActiveSearchMatchIndex] = useState(0)
@@ -820,11 +846,6 @@ function ChatMessageListComponent({
     media.addEventListener('change', updateIsMobile)
     return () => media.removeEventListener('change', updateIsMobile)
   }, [])
-
-  // Grace-period refs (declared here so hooks run in consistent order;
-  // actual logic is after displayMessages useMemo below).
-  const prevProcessingRef = useRef(showProcessingIndicator)
-  const assistantMessageCountRef = useRef(0)
 
   // Pull-to-refresh handlers removed
 
@@ -969,73 +990,10 @@ function ChatMessageListComponent({
     [displayMessages],
   )
 
-  // Bug 2 fix: grace-period effects — placed after displayMessages so they can
-  // reference it safely.
-
-  // Early-cancel grace when streaming text actually starts flowing — this is the
-  // primary exit path (not the 10s ceiling timer). Ensures zero blank gap.
-  useEffect(() => {
-    if (thinkingGrace && streamingText && streamingText.trim().length > 0) {
-      if (thinkingGraceTimerRef.current) {
-        clearTimeout(thinkingGraceTimerRef.current)
-        thinkingGraceTimerRef.current = null
-      }
-      setThinkingGrace(false)
-    }
-  }, [streamingText, thinkingGrace])
-
-  useEffect(() => {
-    const currentAssistantCount = displayEntries.filter(
-      ({ message }) => message.role === 'assistant',
-    ).length
-
-    // Cancel grace period early when a new assistant message appears
-    if (
-      thinkingGrace &&
-      currentAssistantCount > assistantMessageCountRef.current
-    ) {
-      if (thinkingGraceTimerRef.current) {
-        clearTimeout(thinkingGraceTimerRef.current)
-        thinkingGraceTimerRef.current = null
-      }
-      setThinkingGrace(false)
-    }
-
-    assistantMessageCountRef.current = currentAssistantCount
-  }, [displayEntries, messages, thinkingGrace])
-
-  useEffect(() => {
-    const wasProcessing = prevProcessingRef.current
-    prevProcessingRef.current = showProcessingIndicator
-
-    if (wasProcessing && !showProcessingIndicator) {
-      // Snapshot assistant count at the moment the empty-gap indicator cleared
-      assistantMessageCountRef.current = displayEntries.filter(
-        ({ message }) => message.role === 'assistant',
-      ).length
-      if (thinkingGraceTimerRef.current) {
-        clearTimeout(thinkingGraceTimerRef.current)
-        thinkingGraceTimerRef.current = null
-      }
-      // Host content already owns the lane (Activity / reply) — do not bridge
-      // with another empty-gap Thinking pill after the indicator clears.
-      if (displayEntriesHaveAssistantHostSurface(displayEntries)) {
-        setThinkingGrace(false)
-      } else {
-        setThinkingGrace(true)
-        thinkingGraceTimerRef.current = setTimeout(() => {
-          thinkingGraceTimerRef.current = null
-          setThinkingGrace(false)
-        }, THINKING_GRACE_PERIOD_MS)
-      }
-    }
-
-    return () => {
-      if (thinkingGraceTimerRef.current) {
-        clearTimeout(thinkingGraceTimerRef.current)
-      }
-    }
-  }, [displayEntries, showProcessingIndicator]) // eslint-disable-line react-hooks/exhaustive-deps
+  const liveTurnToolSections = useMemo(
+    () => toolSectionsFromActiveCalls(activeToolCalls),
+    [activeToolCalls],
+  )
 
   const normalizedMessageSearch = useMemo(
     function getNormalizedMessageSearch() {
@@ -1311,38 +1269,14 @@ function ChatMessageListComponent({
     .filter(({ message }) => message.role === 'user')
     .map(({ index }) => index)
     .pop()
-  // Bottom Thinking pill — owner-projected empty-gap only (plus grace/compact).
-  const showTypingIndicator =
-    isCompacting || showProcessingIndicator || thinkingGrace
-
   const showResearchCard = Boolean(
     researchCard && researchCard.steps.length > 0,
   )
 
-  // Contract: once the open turn has real in-thread content (text / thinking /
-  // tools), never light the bottom pill from liveToolActivity alone.
-  // Empty streaming rows do NOT count — that would suppress ThinkingBubble
-  // and recreate the 空窗 that the Working stub failed to fix.
-  const hasInThreadTurnHost =
-    displayEntriesHaveAssistantHostSurface(visibleEntries) ||
-    (isStreaming &&
-      (Boolean(streamingText && streamingText.trim().length > 0) ||
-        Boolean(streamingThinking && streamingThinking.trim().length > 0) ||
-        activeToolCalls.length > 0 ||
-        liveToolActivity.length > 0))
-
-  const showBottomLiveToolFallback =
-    !hasInThreadTurnHost &&
-    (liveToolActivity.length > 0 ||
-      (isStreaming && activeToolCalls.length > 0))
-
-  // Compute visibility of the entire bottom thinking area — the same gate
-  // used for rendering (lines below). Start / stop the elapsed timer here.
+  // Single host: turnBusy mounts TurnActivityHost (even with empty content).
+  // Compacting / research still use the bottom status area.
   const thinkingAreaVisible =
-    showTypingIndicator ||
-    showResearchCard ||
-    isCompacting ||
-    showBottomLiveToolFallback
+    turnBusy || showResearchCard || isCompacting
 
   // Track how long the thinking area has been visible to gate the delayed
   // activity feed (10s threshold).
@@ -1404,8 +1338,8 @@ function ChatMessageListComponent({
     visibleEntries.length > 0 ||
     showToolOnlyNotice ||
     showResearchCard ||
-    showTypingIndicator ||
-    showBottomLiveToolFallback
+    turnBusy ||
+    isCompacting
 
   const normalizedStreamingToolCalls = useMemo<
     Array<{
@@ -1548,16 +1482,15 @@ function ChatMessageListComponent({
     // changes for the lifetime of the stream. The div's opacity toggles between
     // 0 (no text yet) and 1 (text flowing) without unmounting the inner
     // MessageItem — preserving its reveal-timer state so text streams word-by-word.
-    // Empty-gap ThinkingBubble stays visible via showProcessingIndicator
-    // while this wrapper is invisible.
+    // Live activity lives on TurnActivityHost while turnBusy. Empty streaming
+    // rows stay hidden until reply text arrives; thinking/tools do not need
+    // the message row to mount the host.
     if (messageIsStreaming) {
       const hasStreamingActivity =
         normalizedStreamingToolCalls.length > 0 ||
         liveToolActivity.length > 0 ||
         lifecycleEvents.length > 0 ||
         Boolean(streamingThinking && streamingThinking.trim().length > 0)
-      // Hide empty streaming rows so the bottom ThinkingBubble owns the gap.
-      // Reveal once text / thinking / tools arrive on the live host.
       const isEmptyPlaceholder = !streamingMessageHasVisibleContent(
         chatMessage,
         {
@@ -1612,7 +1545,9 @@ function ChatMessageListComponent({
             simulateStreaming={simulateStreaming}
             streamingKey={signature}
             expandAllToolSections={expandAllToolSections || streamActivityMode}
-            hideActivityCard={hideActivityCards}
+            hideActivityCard={
+              hideActivityCards || (turnBusy && messageIsStreaming)
+            }
           />
         </div>
       )
@@ -1649,7 +1584,9 @@ function ChatMessageListComponent({
         simulateStreaming={simulateStreaming}
         streamingKey={signature}
         expandAllToolSections={expandAllToolSections || streamActivityMode}
-        hideActivityCard={hideActivityCards}
+        hideActivityCard={
+          hideActivityCards || (turnBusy && messageIsStreaming)
+        }
       />
     )
   }
@@ -2132,7 +2069,10 @@ function ChatMessageListComponent({
                         expandAllToolSections={
                           expandAllToolSections || streamActivityMode
                         }
-                        hideActivityCard={hideActivityCards}
+                        hideActivityCard={
+                          hideActivityCards ||
+                          (turnBusy && messageIsStreaming)
+                        }
                         isLastAssistant={forceActionsVisible}
                       />
                     )
@@ -2181,14 +2121,21 @@ function ChatMessageListComponent({
                 ) : null}
               </>
             )}
-            {/* Bottom thinking bubble — only for early/empty phases before the
-                per-message Activity card above the assistant bubble exists.
-                Once the in-thread host owns the turn, liveToolActivity must not
-                keep this pill lit (dual-host flash). */}
-            {(showTypingIndicator ||
-              showResearchCard ||
-              isCompacting ||
-              showBottomLiveToolFallback) ? (
+            {/* Live turn host. Settled activity stays on MessageItem. */}
+            {turnBusy && !hideActivityCards ? (
+              <div className="flex flex-col gap-1 py-1.5 px-1 animate-in fade-in duration-300 md:gap-1.5 md:py-2">
+                <TurnActivityHost
+                  turnBusy
+                  thinkingText={streamingThinking}
+                  toolSections={liveTurnToolSections}
+                  thinkingElapsedSeconds={thinkingElapsed}
+                  expandAll={expandAllToolSections || streamActivityMode}
+                  formatLabel={formatTurnActivityLabel}
+                  formatArg={formatTurnActivityArg}
+                />
+              </div>
+            ) : null}
+            {!turnBusy && (showResearchCard || isCompacting) ? (
               <div
                 className="flex flex-col gap-1 py-1.5 px-1 animate-in fade-in duration-300 md:gap-1.5 md:py-2"
                 role="status"
@@ -2337,6 +2284,7 @@ function areChatMessageListEqual(
     prev.notice === next.notice &&
     prev.noticePosition === next.noticePosition &&
     prev.showProcessingIndicator === next.showProcessingIndicator &&
+    prev.turnBusy === next.turnBusy &&
     prev.sessionKey === next.sessionKey &&
     prev.pinToTop === next.pinToTop &&
     prev.pinGroupMinHeight === next.pinGroupMinHeight &&
