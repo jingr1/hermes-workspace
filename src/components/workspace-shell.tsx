@@ -189,7 +189,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
         (prev) => prev ?? { authenticated: true, authRequired: false },
       )
       setConnectionVerified(true)
-    }, 6_000)
+    }, 3_000)
     return () => clearTimeout(timer)
   }, [connectionVerified])
 

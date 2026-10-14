@@ -113,38 +113,6 @@ const PROVIDERS = [
   },
 ]
 
-function RuntimeLinkRow({
-  label,
-  status,
-  detail,
-}: {
-  label: string
-  status: 'pending' | 'ready' | 'error'
-  detail: string
-}) {
-  return (
-    <div
-      className="rounded-xl px-3 py-2"
-      style={{ border: '1px solid var(--theme-border)' }}
-    >
-      <div className="flex items-center gap-2">
-        <span
-          className={cn(
-            'size-2 rounded-full',
-            status === 'ready' && 'bg-green-500',
-            status === 'error' && 'bg-red-500',
-            status === 'pending' && 'animate-pulse bg-accent-500',
-          )}
-        />
-        <span>{label}</span>
-      </div>
-      {status === 'error' && detail ? (
-        <p className="mt-1 break-all text-xs text-red-400">{detail}</p>
-      ) : null}
-    </div>
-  )
-}
-
 function getEnhancedFeatureNames(
   capabilities?: GatewayStatusResponse['capabilities'],
 ): Array<string> {
@@ -523,57 +491,53 @@ export function ClaudeOnboarding() {
   const connectGeneration = useRef(0)
   const [runtimeConnect, setRuntimeConnect] = useState<{
     phase: 'connecting' | 'ready' | 'error'
-    hermes: 'pending' | 'ready' | 'error'
-    managed: 'pending' | 'ready' | 'error'
-    hermesDetail: string
-    managedDetail: string
+    detail: string
   }>({
     phase: 'connecting',
-    hermes: 'pending',
-    managed: 'pending',
-    hermesDetail: '',
-    managedDetail: '',
+    detail: '',
   })
 
   const connectRuntimes = useCallback(async () => {
     const generation = connectGeneration.current + 1
     connectGeneration.current = generation
-    setRuntimeConnect({
-      phase: 'connecting',
-      hermes: 'pending',
-      managed: 'pending',
-      hermesDetail: '',
-      managedDetail: '',
-    })
+    setRuntimeConnect({ phase: 'connecting', detail: '' })
+
+    // Ask the UI server (the :6734 origin the phone opened) for status.
+    // Daemon health is not part of this check.
+    void fetch('/api/start-claude', { method: 'POST' }).catch(() => undefined)
 
     try {
-      const res = await fetch('/api/runtime/connect', { method: 'POST' })
-      const data = (await res.json()) as {
-        hermes?: { ok?: boolean; detail?: string }
-        managed?: { ok?: boolean; detail?: string }
-        error?: string
+      const res = await fetch('/api/connection-status', {
+        cache: 'no-store',
+        signal: AbortSignal.timeout(8_000),
+      })
+      if (connectGeneration.current !== generation) return
+      if (!res.ok) {
+        setRuntimeConnect({
+          phase: 'error',
+          detail: `Connection status HTTP ${res.status}`,
+        })
+        return
+      }
+      const status = (await res.json()) as {
+        health?: boolean
+        chatReady?: boolean
+        detail?: string
       }
       if (connectGeneration.current !== generation) return
-
-      const hermesOk = Boolean(data.hermes?.ok)
-      const managedOk = Boolean(data.managed?.ok)
-      setRuntimeConnect({
-        phase: hermesOk && managedOk ? 'ready' : 'error',
-        hermes: hermesOk ? 'ready' : 'error',
-        managed: managedOk ? 'ready' : 'error',
-        hermesDetail: data.hermes?.detail || data.error || '',
-        managedDetail: data.managed?.detail || data.error || '',
-      })
-      if (hermesOk && managedOk) complete()
-    } catch (err) {
-      if (connectGeneration.current !== generation) return
-      const detail = err instanceof Error ? err.message : 'Connection failed'
+      if (status.health || status.chatReady) {
+        complete()
+        return
+      }
       setRuntimeConnect({
         phase: 'error',
-        hermes: 'error',
-        managed: 'error',
-        hermesDetail: detail,
-        managedDetail: detail,
+        detail: status.detail || 'Workspace has no gateway connection yet.',
+      })
+    } catch (err) {
+      if (connectGeneration.current !== generation) return
+      setRuntimeConnect({
+        phase: 'error',
+        detail: err instanceof Error ? err.message : 'Failed to fetch',
       })
     }
   }, [complete])
@@ -599,6 +563,7 @@ export function ClaudeOnboarding() {
 
   return (
     <div
+      data-runtime-connect=""
       className="fixed inset-0 z-[99999] flex items-center justify-center px-4"
       style={{
         backgroundColor: 'rgba(0,0,0,0.85)',
@@ -627,21 +592,13 @@ export function ClaudeOnboarding() {
               />
               <h2 className="text-xl font-bold">Welcome to Agorax</h2>
               <p className="text-sm" style={mutedStyle}>
-                Connecting the Hermes Agent gateway and the managed-agent
-                daemon.
+                Checking connection status from this workspace.
               </p>
-              <div className="space-y-2 text-left text-sm">
-                <RuntimeLinkRow
-                  label="Hermes Agent gateway"
-                  status={runtimeConnect.hermes}
-                  detail={runtimeConnect.hermesDetail}
-                />
-                <RuntimeLinkRow
-                  label="managed-agent daemon"
-                  status={runtimeConnect.managed}
-                  detail={runtimeConnect.managedDetail}
-                />
-              </div>
+              {runtimeConnect.detail ? (
+                <p className="text-left text-xs text-red-400">
+                  {runtimeConnect.detail}
+                </p>
+              ) : null}
               {runtimeConnect.phase === 'error' ? (
                 <button
                   onClick={() => void connectRuntimes()}

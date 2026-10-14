@@ -42,33 +42,55 @@ export const Route = createFileRoute('/api/runtime/connect')({
           return json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        const [hermesResult, managedResult] = await Promise.all([
-          ensureActiveProfileGateway().catch((error: unknown) => {
-            const detail =
-              error instanceof Error ? error.message : String(error)
-            return {
-              ok: false as const,
-              error: detail,
-            }
-          }),
-          ensureManagedAgentDaemon().catch((error: unknown) => ({
-            ok: false,
-            healthy: false,
-            detail: error instanceof Error ? error.message : String(error),
-          })),
-        ])
+        let timer: ReturnType<typeof setTimeout> | undefined
+        try {
+          const deadline = new Promise<never>((_, reject) => {
+            timer = setTimeout(
+              () => reject(new Error('runtime connect timed out')),
+              8_000,
+            )
+          })
+          const [hermesResult, managedResult] = await Promise.race([
+            Promise.all([
+              ensureActiveProfileGateway().catch((error: unknown) => {
+                const detail =
+                  error instanceof Error ? error.message : String(error)
+                return {
+                  ok: false as const,
+                  error: detail,
+                }
+              }),
+              ensureManagedAgentDaemon().catch((error: unknown) => ({
+                ok: false,
+                healthy: false,
+                detail: error instanceof Error ? error.message : String(error),
+              })),
+            ]),
+            deadline,
+          ])
 
-        const hermes = hermesLink(hermesResult)
-        const managed: RuntimeLink = {
-          ok: managedResult.ok && managedResult.healthy,
-          detail: managedResult.detail,
+          const hermes = hermesLink(hermesResult)
+          const managed: RuntimeLink = {
+            ok: managedResult.ok && managedResult.healthy,
+            detail: managedResult.detail,
+          }
+          const ok = hermes.ok && managed.ok
+
+          return json({ ok, hermes, managed }, { status: ok ? 200 : 503 })
+        } catch (error) {
+          const detail =
+            error instanceof Error ? error.message : 'runtime connect timed out'
+          return json(
+            {
+              ok: false,
+              hermes: { ok: false, detail },
+              managed: { ok: false, detail },
+            },
+            { status: 503 },
+          )
+        } finally {
+          if (timer) clearTimeout(timer)
         }
-        const ok = hermes.ok && managed.ok
-
-        return json(
-          { ok, hermes, managed },
-          { status: ok ? 200 : 503 },
-        )
       },
     },
   },

@@ -311,7 +311,10 @@ function RootLayout() {
 
     syncOnboardingCompletion()
 
-    void fetch('/api/connection-status')
+    void fetch('/api/connection-status', {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(4_000),
+    })
       .then((res) => (res.ok ? res.json() : null))
       .then(
         (
@@ -630,8 +633,9 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                 }, 200);
               }, 80);
             };
-            // Safety fallback; normal dismissal waits for the connection screen.
-            setTimeout(function(){ window.__dismissSplash && window.__dismissSplash(); }, 10000);
+            // Don't leave a blank dark splash up while the phone is still
+            // downloading the app or waiting on a runtime probe.
+            setTimeout(function(){ window.__dismissSplash && window.__dismissSplash(); }, 2500);
           })()
         `),
           }}
@@ -644,16 +648,19 @@ function RootDocument({ children }: { children: React.ReactNode }) {
           (function(){
             var start = Date.now();
             function check() {
-              var el = document.querySelector('[data-connection-startup]');
+              if (window.__splashCheckStopped) return;
+              var el = document.querySelector('[data-connection-startup], [data-runtime-connect]');
               var elapsed = Date.now() - start;
-              if (el && elapsed > 150) {
+              if ((el && elapsed > 150) || elapsed > 2500) {
+                window.__splashCheckStopped = true;
                 requestAnimationFrame(function(){
                   requestAnimationFrame(function(){
                     window.__dismissSplash && window.__dismissSplash();
                   });
                 });
+                return;
               }
-              else { setTimeout(check, 50); }
+              setTimeout(check, 50);
             }
             setTimeout(check, 150);
           })()
