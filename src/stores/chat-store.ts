@@ -1867,6 +1867,25 @@ function mergeRealtimeAssistantMetadata(
 
   let merged: ChatMessage = historyMessage
 
+  // Keep the live write-through identity. History often echoes as `msg-N`
+  // while the durable row was `assistant:<runId>` — swapping id remounts the
+  // list row (fade-in + Activity height collapse = transcript jump).
+  const rtId = getMessageId(realtimeMessage)
+  if (rtId && rtId.startsWith('assistant:')) {
+    merged = {
+      ...merged,
+      id: rtId,
+      messageId: rtId,
+    }
+  }
+  const rtRun =
+    typeof (realtimeMessage as { runId?: unknown }).runId === 'string'
+      ? (realtimeMessage as { runId: string }).runId.trim()
+      : ''
+  if (rtRun) {
+    merged = { ...merged, runId: rtRun }
+  }
+
   // Preserve live tool pills when history has text but not stream tool metadata.
   if (
     realtimeToolCalls.length > 0 &&

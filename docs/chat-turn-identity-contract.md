@@ -59,7 +59,7 @@
 | A | Identity + Hermes write-through（不换皮） | ✅ |
 | B | Hermes SSE → Activity 纯 adapter | ✅ `hermes-activity-adapter.ts` |
 | C | Native bridge 真接线：send-stream → adapter → Engine | ✅ `createHermesAgentEngine` + commandPort（`/api/send-stream` / `/api/runs/.../stop` 仅 port 内）；`agorax_run_mapping` 落 collab.db；SSE→adapter→`coordinator.ingestEvent` |
-| D | Hermes 1:1 UI 只订 Engine（与 managed 同 hook 投影） | ✅ `useHermesEngineChatState`；`turnBusy` / `interactionBusy` ← Engine（不再 OR waiting）。已删 `hermes-turn-store`、二次 `done`、`showProcessingIndicator` 双 prop；pending id 必须带 turnKey；heartbeat → TurnActivityHost 空档；sticky 仅 live turn；`useActiveRunCheck` remount 只 clear-orphan（不 `setSessionWaiting`）；`waitingForResponse` 仅 send/recovery settle probe，不驱动 Working / `isStreaming` |
+| D | Hermes 1:1 UI 只订 Engine（与 managed 同 hook 投影） | ✅ `useHermesEngineChatState`；`turnBusy` / `interactionBusy` ← Engine（不再 OR waiting）。已删 `hermes-turn-store`、二次 `done`、`showProcessingIndicator` 双 prop；pending id 必须带 turnKey；heartbeat → TurnActivityHost 空档；sticky 仅 live turn；`useActiveRunCheck` remount 只 clear-orphan（不 `setSessionWaiting`）；`waitingForResponse` 仅 send/recovery settle probe，不驱动 Working / `isStreaming`；history merge **保留** `assistant:<runId>`（禁止换成 `msg-N` 导致 list key remount 跳变） |
 
 ## 6. 明确不做
 

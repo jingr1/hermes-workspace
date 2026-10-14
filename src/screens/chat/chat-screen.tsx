@@ -1816,14 +1816,23 @@ export function ChatScreen({
     // Tutti contract: chat-store write-through already upserts one durable
     // assistant row (`assistant:<runId>`). Do not inject a second
     // `streaming-current` placeholder — that was the Hermes/managed fork.
-    // Keep folding while a live durable id is known so settle does not
-    // suddenly re-expand mid-turn orphans beside the host.
-    // Only fold against an open-turn host. Using last `complete` row as liveId
-    // kept folding settled history into an empty pending host after empty done.
+    //
+    // Keep folding for the open turn *after* settle too. Gating liveId on
+    // `__streamingStatus === 'streaming'` dropped the fold the instant done
+    // flipped the row to `complete`, re-expanding orphans / reshaping the
+    // host (transcript jump). Prefer streamingMessageId, else the durable
+    // assistant host after the latest user.
+    let lastUserIndex = -1
+    for (let i = deduped.length - 1; i >= 0; i -= 1) {
+      if (deduped[i]?.role === 'user') {
+        lastUserIndex = i
+        break
+      }
+    }
     const liveId =
       realtimeStreamingMessageId ||
       (() => {
-        for (let i = deduped.length - 1; i >= 0; i -= 1) {
+        for (let i = deduped.length - 1; i > lastUserIndex; i -= 1) {
           const row = deduped[i] as {
             role?: string
             __streamingStatus?: string
@@ -1831,12 +1840,14 @@ export function ChatScreen({
             id?: string
           }
           if (row?.role !== 'assistant') continue
-          if (row.__streamingStatus !== 'streaming') continue
-          return (
-            (typeof row.messageId === 'string' && row.messageId) ||
-            (typeof row.id === 'string' && row.id) ||
-            null
-          )
+          const id =
+            (typeof row.messageId === 'string' && row.messageId.trim()) ||
+            (typeof row.id === 'string' && row.id.trim()) ||
+            ''
+          if (!id) continue
+          if (row.__streamingStatus === 'streaming') return id
+          // Settled write-through host for this turn — keep folding.
+          if (id.startsWith('assistant:')) return id
         }
         return null
       })()

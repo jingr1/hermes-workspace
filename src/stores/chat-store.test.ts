@@ -109,13 +109,21 @@ describe('splitInlineThinking', () => {
 describe('chat-store history merge thinking preservation', () => {
   it('keeps realtime thinking when history poll returns text-only assistant', () => {
     const sessionKey = 'thinking-merge-session'
+    const runId = 'run-thinking-merge'
+    const liveId = `assistant:${runId}`
     const store = useChatStore.getState()
     store.clearSession(sessionKey)
+    store.beginStreamingTurn({
+      sessionKey,
+      messageId: liveId,
+      runId,
+    })
 
     store.processEvent({
       type: 'thinking',
       text: 'Inspect the files first.',
       sessionKey,
+      runId,
       transport: 'send-stream',
     })
     store.processEvent({
@@ -123,12 +131,14 @@ describe('chat-store history merge thinking preservation', () => {
       text: 'All set.',
       fullReplace: true,
       sessionKey,
+      runId,
       transport: 'send-stream',
     })
     store.processEvent({
       type: 'done',
       state: 'complete',
       sessionKey,
+      runId,
       transport: 'send-stream',
     })
 
@@ -156,6 +166,16 @@ describe('chat-store history merge thinking preservation', () => {
       { type: 'thinking', thinking: 'Inspect the files first.' },
       { type: 'text', text: 'All set.' },
     ])
+    // Must keep write-through identity — swapping to hist-assistant remounts
+    // the list row and jumps the transcript.
+    const mergedId =
+      typeof (assistant as { messageId?: unknown })?.messageId === 'string'
+        ? (assistant as { messageId: string }).messageId
+        : typeof (assistant as { id?: unknown })?.id === 'string'
+          ? (assistant as { id: string }).id
+          : ''
+    expect(mergedId).toBe(liveId)
+    expect(mergedId).not.toBe('hist-assistant')
   })
 })
 

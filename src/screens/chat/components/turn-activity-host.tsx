@@ -8,6 +8,7 @@
 
 import { memo, useMemo } from 'react'
 import { AssistantAvatar } from '@/components/avatars'
+import { cn } from '@/lib/utils'
 import {
   projectTurnActivity,
   type TurnActivityVM,
@@ -56,8 +57,8 @@ function TurnActivityHostComponent({
 
   const hasContent =
     vm.thinkingText.length > 0 || vm.toolSections.length > 0
-  // Avatar stays for the whole open turn (same as ThinkingBubble). Only the
-  // glow pulse is reserved for the empty-gap frame before first content.
+  // Glow only before first thinking/tools — after content arrives the card
+  // is the busy chrome, not the avatar ring.
   const pulseAvatar = vm.turnBusy && !hasContent
 
   return (
@@ -71,7 +72,10 @@ function TurnActivityHostComponent({
     >
       <AssistantAvatar
         size={24}
-        className={pulseAvatar ? 'thinking-avatar-glow' : undefined}
+        className={cn(
+          'shrink-0',
+          pulseAvatar ? 'thinking-avatar-glow' : undefined,
+        )}
         alt={pulseAvatar ? 'Working' : undefined}
       />
       <div className="min-w-0 flex-1">

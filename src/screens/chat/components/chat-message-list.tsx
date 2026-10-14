@@ -1532,6 +1532,7 @@ function ChatMessageListComponent({
             hasToolCalls ? toolResultsByCallId : undefined
           }
           forceActionsVisible={forceActionsVisible}
+          isLastAssistant={forceActionsVisible}
           wrapperClassName={spacingClass}
           wrapperDataMessageId={stableId}
           bubbleClassName={
@@ -1588,10 +1589,9 @@ function ChatMessageListComponent({
       }
     }
 
-    // Scroll to bottom only if the user is already near the bottom.
-    // Always `auto` here — switching to `smooth` on settle (isStreaming
-    // flip) was a visible jump after the stream finished. Smooth stays on
-    // the explicit scroll-to-bottom button.
+    // Scroll only while content is growing. Do NOT depend on `isStreaming` —
+    // settle flips that bit with no new text and was forcing a re-scroll
+    // that felt like a page jump after the last token.
     if (isNearBottomRef.current) {
       frameId = window.requestAnimationFrame(() => scrollToBottom('auto'))
     }
@@ -1602,7 +1602,6 @@ function ChatMessageListComponent({
   }, [
     loading,
     visibleEntries.length,
-    isStreaming,
     sessionKey,
     scrollToBottom,
     streamingText,
@@ -2182,8 +2181,26 @@ function getToolGroupClass(
 }
 
 function getStableMessageId(message: ChatMessage, index: number): string {
-  // Tutti / managed contract: durable messageId first so growing stream text
-  // does not remount the bubble (fingerprint keys caused reload UX).
+  // Tutti / managed contract: durable turn identity first so settle does not
+  // remount when history swaps `assistant:<runId>` → `msg-N`.
+  const role = message.role || 'assistant'
+  if (role === 'assistant') {
+    const runId =
+      typeof (message as { runId?: unknown }).runId === 'string'
+        ? (message as { runId: string }).runId.trim()
+        : ''
+    if (runId) return `assistant:${runId}`
+    for (const key of ['messageId', 'id'] as const) {
+      const value = (message as Record<string, unknown>)[key]
+      if (
+        typeof value === 'string' &&
+        value.trim().startsWith('assistant:')
+      ) {
+        return value.trim()
+      }
+    }
+  }
+
   for (const key of ['messageId', 'id', 'uuid', 'clientId'] as const) {
     const value = (message as Record<string, unknown>)[key]
     if (typeof value === 'string' && value.trim().length > 0) {
@@ -2193,7 +2210,6 @@ function getStableMessageId(message: ChatMessage, index: number): string {
 
   if (message.__optimisticId) return message.__optimisticId
 
-  const role = message.role || 'assistant'
   const text = textFromMessage(message)
   if (role === 'assistant' && text.trim().length > 0) {
     const fingerprint = djb2(`${text.length}:${text.slice(0, 160)}`)

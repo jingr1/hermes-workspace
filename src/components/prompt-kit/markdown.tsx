@@ -646,11 +646,10 @@ function MarkdownComponent({
     [streaming, visibleSource],
   )
 
-  // Same blank-line split + key scheme for live and settled. Flipping
-  // `streaming` used to switch `-stream-` keys → `-block-` keys (and
-  // marked.lexer boundaries), which remounted every markdown block and
-  // felt like a transcript refresh after the turn finished.
-  const sourceForBlocks = streaming ? stabilizedSource : preparedSource
+  // Always split the stabilized visible source. Switching stabilized →
+  // prepared on settle remounted blocks whenever the tail stabilizer had
+  // closed a fence / stripped a partial token (transcript jump).
+  const sourceForBlocks = stabilizedSource
   const blocks = useMemo(() => {
     const parts = splitStreamingMarkdownBlocks(sourceForBlocks)
     return parts.map((block, index) => ({

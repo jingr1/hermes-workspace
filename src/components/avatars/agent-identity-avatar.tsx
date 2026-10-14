@@ -74,7 +74,16 @@ export function AgentIdentityAvatar({
       data-agent-identity-avatar={presentation.provider}
       data-agent-identity-initials={presentation.initials ?? undefined}
     >
-      <span className="absolute inset-0 overflow-hidden rounded-full ring-1 ring-black/5">
+      <span
+        data-avatar-clip=""
+        className={cn(
+          'absolute inset-0 overflow-hidden rounded-full',
+          // Static edge ring only when not busy-pulsing (parent adds
+          // thinking-avatar-glow → inset pulse on this same clip).
+          !String(className ?? '').includes('thinking-avatar-glow') &&
+            'ring-1 ring-black/5',
+        )}
+      >
         <img
           src={presentation.src}
           alt=""

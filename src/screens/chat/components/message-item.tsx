@@ -2163,8 +2163,16 @@ function MessageItemComponent({
   const previousTextLengthRef = useRef(initialDisplayText.length)
 
   // Track if this is a newly appeared message (for fade-in animation)
+  // Skip fade-in on settle remounts / late history swaps — that flash is the
+  // "avatar 闪烁" users report when the list key briefly churns.
   const isNewRef = useRef(true)
-  const [isNew, setIsNew] = useState(true)
+  const [isNew, setIsNew] = useState(() => {
+    const status = (message as { __streamingStatus?: unknown }).__streamingStatus
+    if (status === 'complete' || status === 'error') return false
+    const ts = rawTimestamp(message)
+    if (typeof ts === 'number' && Date.now() - ts > 2000) return false
+    return true
+  })
   useEffect(() => {
     if (!isNewRef.current) return
     isNewRef.current = false
@@ -2692,11 +2700,14 @@ function MessageItemComponent({
       data-chat-message-role={role}
       data-chat-message-id={wrapperDataMessageId}
       style={{
-        // `content-visibility: auto` can drop hit-testing on the action row
-        // under the bubble. The Retry control lives on that row, so keep the
-        // row fully interactive while it is showing.
+        // `content-visibility: auto` creates containment that clips paints
+        // outside the box — including the busy avatar outline on the left
+        // edge. Keep visible while streaming / retry so the ring is not cut.
         contentVisibility:
-          isUser && (isFailed || isStuckSending) ? 'visible' : 'auto',
+          (isUser && (isFailed || isStuckSending)) ||
+          (isEmptyStreamingShell && !hasActivityContent)
+            ? 'visible'
+            : 'auto',
         containIntrinsicSize: 'auto 160px',
         ...(typeof wrapperScrollMarginTop === 'number'
           ? { scrollMarginTop: `${wrapperScrollMarginTop}px` }
@@ -2789,9 +2800,9 @@ function MessageItemComponent({
             <AssistantAvatar
               size={24}
               className={cn(
-                'mt-0.5',
-                // Glow on the avatar box itself — a wrapper size-* ring drifts
-                // from the 24px image and looks like a mismatched halo.
+                'mt-0.5 shrink-0',
+                // Glow only for empty-gap Working — once ACTIVITY/reply
+                // exists, drop the ring (busy chrome moves to the card).
                 isEmptyStreamingShell &&
                   !hasActivityContent &&
                   'thinking-avatar-glow',
@@ -3012,22 +3023,40 @@ function MessageItemComponent({
           )}
         </Message>
       )}
-      {hasAssistantMetadata ? (
-        <div className="flex flex-wrap justify-end gap-x-2 gap-y-0.5 pl-10 pr-1 mt-0.5 font-mono text-[10px] tabular-nums text-primary-400 leading-relaxed">
-          {usageMetadata.inputTokens !== null && (
-            <span>↑{formatCompactNumber(usageMetadata.inputTokens)}</span>
+      {/* Reserve the usage row for the live last assistant so settle does not
+          suddenly insert a new strip under the bubble (height jump). */}
+      {!isUser && isLastAssistant ? (
+        <div
+          className={cn(
+            'flex flex-wrap justify-end gap-x-2 gap-y-0.5 pl-10 pr-1 mt-0.5 font-mono text-[10px] tabular-nums text-primary-400 leading-relaxed min-h-[14px]',
+            !hasAssistantMetadata && 'invisible',
           )}
-          {usageMetadata.outputTokens !== null && (
-            <span>↓{formatCompactNumber(usageMetadata.outputTokens)}</span>
-          )}
-          {usageMetadata.cacheReadTokens !== null && (
-            <span>R{formatCompactNumber(usageMetadata.cacheReadTokens)}</span>
-          )}
-          {usageMetadata.cacheWriteTokens !== null && (
-            <span>W{formatCompactNumber(usageMetadata.cacheWriteTokens)}</span>
-          )}
-          {usageMetadata.modelLabel && (
-            <span className="opacity-60">{usageMetadata.modelLabel}</span>
+          aria-hidden={!hasAssistantMetadata}
+        >
+          {hasAssistantMetadata ? (
+            <>
+              {usageMetadata.inputTokens !== null && (
+                <span>↑{formatCompactNumber(usageMetadata.inputTokens)}</span>
+              )}
+              {usageMetadata.outputTokens !== null && (
+                <span>↓{formatCompactNumber(usageMetadata.outputTokens)}</span>
+              )}
+              {usageMetadata.cacheReadTokens !== null && (
+                <span>
+                  R{formatCompactNumber(usageMetadata.cacheReadTokens)}
+                </span>
+              )}
+              {usageMetadata.cacheWriteTokens !== null && (
+                <span>
+                  W{formatCompactNumber(usageMetadata.cacheWriteTokens)}
+                </span>
+              )}
+              {usageMetadata.modelLabel && (
+                <span className="opacity-60">{usageMetadata.modelLabel}</span>
+              )}
+            </>
+          ) : (
+            <span>&nbsp;</span>
           )}
         </div>
       ) : null}

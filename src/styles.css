@@ -700,21 +700,40 @@ code {
    Shimmer Thinking Bubble — premium animated thinking indicator
    ═══════════════════════════════════════════════════════════════ */
 
-/* Avatar pulsing glow ring */
-@keyframes thinking-avatar-glow {
+/*
+ * Busy avatar pulse — a real border ring on a ::after that covers the
+ * avatar box (same size, no layout shift). Opacity pulse stays readable
+ * on dark portraits; inset box-shadow was nearly invisible.
+ */
+@keyframes thinking-avatar-glow-ring {
   0%,
   100% {
-    box-shadow: 0 0 0 0
-      color-mix(in srgb, var(--color-accent-500) 0%, transparent);
+    opacity: 0.35;
   }
   50% {
-    box-shadow: 0 0 0 4px
-      color-mix(in srgb, var(--color-accent-500) 35%, transparent);
+    opacity: 1;
   }
 }
 
 .thinking-avatar-glow {
-  animation: thinking-avatar-glow 2s ease-in-out infinite;
+  border-radius: 9999px;
+}
+
+.thinking-avatar-glow > [data-avatar-clip] {
+  /* Drop static ring-1 while the pulse ring is on. */
+  box-shadow: none !important;
+}
+
+.thinking-avatar-glow::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 2px solid var(--color-accent-500, #6366f1);
+  box-sizing: border-box;
+  pointer-events: none;
+  z-index: 2;
+  animation: thinking-avatar-glow-ring 2s ease-in-out infinite;
 }
 
 /* Shimmer sweep across bubble */
@@ -801,11 +820,16 @@ code {
 
 @media (prefers-reduced-motion: reduce) {
   .thinking-avatar-glow,
+  .thinking-avatar-glow > [data-avatar-clip],
   .thinking-shimmer-sweep,
   .thinking-dot,
   .thinking-label {
     animation: none;
     opacity: 1;
+  }
+
+  .thinking-avatar-glow::after {
+    opacity: 0.7;
   }
 }
 

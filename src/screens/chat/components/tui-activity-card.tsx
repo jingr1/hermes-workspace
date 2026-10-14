@@ -480,11 +480,11 @@ function TuiActivityCardComponent({
       <div
         ref={bodyRef}
         className={cn(
-          'flex flex-col gap-1.5 px-2 transition-all duration-300 ease-in-out overflow-hidden',
+          // Keep the same max-height for streaming and settled — flipping
+          // 280px ↔ 1000px on settle reflows the bubble below (transcript jump).
+          'flex flex-col gap-1.5 px-2 transition-[max-height,padding] duration-300 ease-in-out overflow-hidden',
           cardOpen
-            ? isStreaming
-              ? 'max-h-[min(40vh,280px)] overflow-y-auto py-3'
-              : 'max-h-[1000px] py-3'
+            ? 'max-h-[min(40vh,280px)] overflow-y-auto py-3'
             : 'max-h-0 py-0',
         )}
       >
