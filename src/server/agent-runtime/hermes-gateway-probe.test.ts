@@ -80,7 +80,7 @@ describe('probeHermesProfileGateway', () => {
     expect(probeProfileGateway).toHaveBeenCalledTimes(2)
 
     await probeHermesProfileGateway('aider')
-    // Negative TTL is short; still within 250ms so second call may be cached.
+    // Negative TTL is short but still covers back-to-back list polls.
     expect(probeProfileGateway).toHaveBeenCalledTimes(2)
   })
 })

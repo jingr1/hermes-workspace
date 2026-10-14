@@ -118,11 +118,20 @@ export { agoraxAgentTargetIdForBackend, type AgoraxManagedAgentBackend }
  * It returns the embedded daemon's canonical JSON projections without creating an Agorax
  * session store or translating them into the legacy managed-chat schema.
  */
+/** Share one /v1/agent-targets fetch across all managed backends in probeAll. */
+const AGENT_TARGETS_CACHE_TTL_MS = 15_000
+
 export class AgoraxManagedAgentHttpClient {
   private readonly baseUrl: string
   private readonly workspaceId: string
   private readonly headers: Record<string, string>
   private readonly fetchImpl: typeof fetch
+  private agentTargetsCache: {
+    at: number
+    agents: Array<Record<string, unknown>>
+  } | null = null
+  private agentTargetsInflight: Promise<Array<Record<string, unknown>>> | null =
+    null
 
   constructor(options: AgoraxManagedAgentHttpClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, '')
@@ -135,14 +144,35 @@ export class AgoraxManagedAgentHttpClient {
     this.fetchImpl = options.fetchImpl ?? fetch
   }
 
+  private async listAgentTargets(): Promise<Array<Record<string, unknown>>> {
+    if (
+      this.agentTargetsCache &&
+      Date.now() - this.agentTargetsCache.at < AGENT_TARGETS_CACHE_TTL_MS
+    ) {
+      return this.agentTargetsCache.agents
+    }
+    if (this.agentTargetsInflight) return this.agentTargetsInflight
+
+    this.agentTargetsInflight = (async () => {
+      const response = await this.requestJson<{
+        agents?: Array<Record<string, unknown>>
+      }>('/v1/agent-targets', {
+        method: 'GET',
+        signal: AbortSignal.timeout(2_000),
+      })
+      const agents = Array.isArray(response.agents) ? response.agents : []
+      this.agentTargetsCache = { at: Date.now(), agents }
+      return agents
+    })().finally(() => {
+      this.agentTargetsInflight = null
+    })
+    return this.agentTargetsInflight
+  }
+
   async probe(backend: AgoraxManagedAgentBackend): Promise<AgentProbeResult> {
-    const response = await this.requestJson<{
-      agents?: Array<Record<string, unknown>>
-    }>('/v1/agent-targets', { method: 'GET' })
+    const agents = await this.listAgentTargets()
     const targetId = agoraxAgentTargetIdForBackend(backend)
-    const target = response.agents?.find(
-      (candidate) => candidate.id === targetId,
-    )
+    const target = agents.find((candidate) => candidate.id === targetId)
     if (!target) {
       return {
         available: false,

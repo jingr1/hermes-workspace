@@ -37,12 +37,20 @@ async function loadMod() {
   return import('./gateway-ports')
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   process.env = { ...originalEnv }
+  const mod = await loadMod()
+  mod.clearPortAssignmentCache()
 })
 
-afterEach(() => {
+afterEach(async () => {
   process.env = { ...originalEnv }
+  try {
+    const mod = await loadMod()
+    mod.clearPortAssignmentCache()
+  } catch {
+    // module may not have loaded
+  }
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true })
   }

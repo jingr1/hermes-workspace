@@ -67,9 +67,20 @@ class UnavailableAdapter implements AgentRuntimeAdapter {
   async interrupt(): Promise<void> {}
 }
 
+type ProbeAllRow = {
+  agentId: string
+  runtime: string
+  execution: string
+} & AgentProbeResult
+
+/** Coalesce concurrent /api/agents polls onto one probeAll. */
+const PROBE_ALL_CACHE_TTL_MS = 15_000
+
 export class AgentRuntimeRouter {
   private readonly adapters = new Map<string, AgentRuntimeAdapter>()
   readonly registry: AgentsRegistry
+  private probeAllCache: { at: number; rows: Array<ProbeAllRow> } | null = null
+  private probeAllInflight: Promise<Array<ProbeAllRow>> | null = null
 
   constructor(input?: {
     repoRoot?: string
@@ -126,18 +137,38 @@ export class AgentRuntimeRouter {
     return this.adapters.get(agentId) ?? null
   }
 
-  async probeAll(): Promise<
-    Array<
-      {
-        agentId: string
-        runtime: string
-        execution: string
-      } & AgentProbeResult
-    >
-  > {
+  /** Drop probeAll memo (tests / after registry rebuild). */
+  clearProbeAllCache(): void {
+    this.probeAllCache = null
+    this.probeAllInflight = null
+  }
+
+  async probeAll(options?: { fresh?: boolean }): Promise<Array<ProbeAllRow>> {
+    const fresh = options?.fresh === true
+    if (
+      !fresh &&
+      this.probeAllCache &&
+      Date.now() - this.probeAllCache.at < PROBE_ALL_CACHE_TTL_MS
+    ) {
+      return this.probeAllCache.rows
+    }
+    // Stale-while-revalidate: serve the last snapshot immediately and refresh
+    // in the background so GET /api/agents stays off the slow probe path.
+    if (!fresh && this.probeAllCache && !this.probeAllInflight) {
+      void this.refreshProbeAll()
+      return this.probeAllCache.rows
+    }
+    if (this.probeAllInflight) {
+      if (!fresh && this.probeAllCache) return this.probeAllCache.rows
+      return this.probeAllInflight
+    }
+    return this.refreshProbeAll()
+  }
+
+  private refreshProbeAll(): Promise<Array<ProbeAllRow>> {
     // Probe in parallel — sequential health checks stall /api/agents/status
     // when several profile gateways are down (each waits the fetch timeout).
-    return Promise.all(
+    this.probeAllInflight = Promise.all(
       this.registry.agents.map(async (decl) => {
         const adapter = this.adapters.get(decl.id)
         if (!adapter) {
@@ -166,6 +197,15 @@ export class AgentRuntimeRouter {
         }
       }),
     )
+      .then((rows) => {
+        this.probeAllCache = { at: Date.now(), rows }
+        return rows
+      })
+      .finally(() => {
+        this.probeAllInflight = null
+      })
+
+    return this.probeAllInflight
   }
 }
 

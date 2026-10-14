@@ -4,7 +4,21 @@ import { normalizeSessions, textFromMessage } from './utils'
 import type { ChatMessage, SessionSummary } from './types'
 
 describe('chat utils workspace directive cleanup', () => {
-  it('hides workspace_context directives from user-visible message text', () => {
+  it('hides Workspace::v1 prefixes from user-visible message text', () => {
+    const message: ChatMessage = {
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text: '[Workspace::v1: /Users/aurora/workspace]\nRun the tests',
+        },
+      ],
+    }
+
+    expect(textFromMessage(message)).toBe('Run the tests')
+  })
+
+  it('still strips legacy XML workspace_context from message text', () => {
     const message: ChatMessage = {
       role: 'user',
       content: [
@@ -18,13 +32,13 @@ describe('chat utils workspace directive cleanup', () => {
     expect(textFromMessage(message)).toBe('Run the tests')
   })
 
-  it('strips workspace_context directives from session previews and derived titles', () => {
+  it('strips workspace prefixes from session previews and derived titles', () => {
     const sessions = normalizeSessions([
       {
         key: 'session-1',
         friendlyId: 'session-1',
         preview:
-          '<workspace_context active="true" name="Home" path="/Users/aurora/workspace" />\n\nReview the open PRs',
+          '[Workspace::v1: /Users/aurora/workspace]\nReview the open PRs',
       },
       {
         key: 'session-2',
@@ -37,5 +51,21 @@ describe('chat utils workspace directive cleanup', () => {
     expect(sessions[0]?.preview).toBe('Review the open PRs')
     expect(sessions[0]?.derivedTitle).toBe('Review the open PRs')
     expect(sessions[1]?.derivedTitle).toBe('Fix Docker publish')
+  })
+
+  it('drops truncated metadata-only titles so auto-rename can run', () => {
+    const sessions = normalizeSessions([
+      {
+        key: 'session-3',
+        friendlyId: 'session-3',
+        title: '<workspace_context active="true"… #6',
+        label: '<workspace_context active="true"… #6',
+        derivedTitle: '<workspace_context active="true"… #6',
+      },
+    ] satisfies Array<SessionSummary>)
+
+    expect(sessions[0]?.title).toBeUndefined()
+    expect(sessions[0]?.label).toBeUndefined()
+    expect(sessions[0]?.derivedTitle).toBeUndefined()
   })
 })

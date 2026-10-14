@@ -16,6 +16,17 @@ describe('isGenericTitle', () => {
     expect(isGenericTitle('  Local Chat  ')).toBe(true)
   })
 
+  it('treats injected workspace prefixes (incl. truncated) as generic', () => {
+    expect(isGenericTitle('[Workspace::v1: /tmp/proj]')).toBe(true)
+    expect(isGenericTitle('[Workspace::v1: /tmp/proj… #2')).toBe(true)
+    expect(isGenericTitle('<workspace_context active="true"… #6')).toBe(true)
+    expect(
+      isGenericTitle(
+        '<workspace_context active="true" name="Home" path="/x" />',
+      ),
+    ).toBe(true)
+  })
+
   it('keeps real user-derived titles non-generic', () => {
     expect(isGenericTitle('Refactor auth middleware')).toBe(false)
     expect(isGenericTitle('Local development setup notes')).toBe(false)

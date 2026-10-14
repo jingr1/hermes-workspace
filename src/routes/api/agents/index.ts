@@ -80,11 +80,14 @@ export const Route = createFileRoute('/api/agents/')({
         if (!isAuthenticated(request)) {
           return json({ error: 'Unauthorized' }, { status: 401 })
         }
+        const t0 = Date.now()
         startAgentStatusWatcher()
         const router = getAgentRuntimeRouter()
         const probes = await router.probeAll()
+        const tProbe = Date.now()
         const probeById = new Map(probes.map((p) => [p.agentId, p]))
         const groupChatMap = loadGroupChatActivity()
+        const tActivity = Date.now()
 
         const agents: Array<AgentWithStatus> = []
         for (const decl of router.registry.agents) {
@@ -126,7 +129,19 @@ export const Route = createFileRoute('/api/agents/')({
           )
         }
 
-        return json({ agents, checkedAt: Date.now() })
+        const totalMs = Date.now() - t0
+        return json(
+          { agents, checkedAt: Date.now() },
+          {
+            headers: {
+              'Server-Timing': [
+                `probe;dur=${tProbe - t0}`,
+                `activity;dur=${tActivity - tProbe}`,
+                `total;dur=${totalMs}`,
+              ].join(', '),
+            },
+          },
+        )
       },
     },
   },

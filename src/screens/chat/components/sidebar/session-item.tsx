@@ -67,6 +67,13 @@ function normalizeTitleValue(value: string | undefined): string | null {
   const trimmed = value.trim()
   if (trimmed.length === 0) return null
   if (isUuidLike(trimmed)) return null
+  // Injected workspace prefixes are not display titles (see isGenericTitle).
+  if (
+    /^\[Workspace(?:::v1)?:/i.test(trimmed) ||
+    /^<workspace_context\b/i.test(trimmed)
+  ) {
+    return null
+  }
   return trimmed
 }
 

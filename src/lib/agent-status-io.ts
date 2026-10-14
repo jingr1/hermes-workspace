@@ -17,11 +17,35 @@ import {
   type UnifiedAgentStatus,
 } from './agent-status'
 
+/** Avoid re-opening collab.db on every /api/agents poll (group-chat tick contention). */
+const GROUP_CHAT_ACTIVITY_TTL_MS = 2_000
+let groupChatActivityCache: {
+  at: number
+  value: Map<string, GroupChatActivity>
+} | null = null
+
+export function clearGroupChatActivityCache(): void {
+  groupChatActivityCache = null
+}
+
 export function loadGroupChatActivity(): Map<string, GroupChatActivity> {
+  if (
+    groupChatActivityCache &&
+    Date.now() - groupChatActivityCache.at < GROUP_CHAT_ACTIVITY_TTL_MS
+  ) {
+    return groupChatActivityCache.value
+  }
+
   const dbPath = getCollabDbPath()
-  if (!existsSync(dbPath)) return new Map()
-  const db = openSqliteDatabase(dbPath, true)
+  if (!existsSync(dbPath)) {
+    const empty = new Map<string, GroupChatActivity>()
+    groupChatActivityCache = { at: Date.now(), value: empty }
+    return empty
+  }
+
+  let db: ReturnType<typeof openSqliteDatabase> | null = null
   try {
+    db = openSqliteDatabase(dbPath, true)
     const onlineRows = db
       .prepare(
         `SELECT participant_id, MAX(online) as online
@@ -57,9 +81,20 @@ export function loadGroupChatActivity(): Map<string, GroupChatActivity> {
         })
       }
     }
+    groupChatActivityCache = { at: Date.now(), value: activity }
     return activity
+  } catch {
+    // Prefer last-known presence over failing the agents list on SQLITE_BUSY.
+    if (groupChatActivityCache) return groupChatActivityCache.value
+    const empty = new Map<string, GroupChatActivity>()
+    groupChatActivityCache = { at: Date.now(), value: empty }
+    return empty
   } finally {
-    db.close()
+    try {
+      db?.close()
+    } catch {
+      // ignore
+    }
   }
 }
 

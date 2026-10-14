@@ -46,7 +46,7 @@ type FallbackRunAdapter = {
   interrupt: (runId: string, reason: string) => Promise<void>
 }
 
-const PROBE_CACHE_MS = 5_000
+const PROBE_CACHE_MS = 15_000
 
 /**
  * Adapter boundary for the Agorax Managed Agent runtime backed by the embedded
@@ -60,6 +60,7 @@ export class AgoraxManagedAgentBridge {
   private readonly fallback: FallbackRunAdapter | null
   private readonly fallbackRunIds = new Set<string>()
   private probeCache: { at: number; result: AgentProbeResult } | null = null
+  private probeInflight: Promise<AgentProbeResult> | null = null
 
   constructor(
     private readonly backend: AgoraxManagedAgentBackend,
@@ -71,38 +72,44 @@ export class AgoraxManagedAgentBridge {
   }
 
   /**
-   * True when the daemon serves this backend's catalog target
-   * (`local:claude-code`, `local:codex`, …). All managed backends are
-   * daemon-hosted; optional `fallback` is a test seam only.
+   * One transport.probe() per TTL window. The previous path called probe twice
+   * on a cache miss (daemonAvailable + probe) and still re-fetched on a warm
+   * hit — that multiplied /v1/agent-targets traffic under probeAll.
    */
-  private async daemonAvailable(): Promise<boolean> {
+  private async refreshProbe(): Promise<AgentProbeResult> {
     if (this.probeCache && Date.now() - this.probeCache.at < PROBE_CACHE_MS) {
-      return this.probeCache.result.available
+      return this.probeCache.result
     }
-    let result: AgentProbeResult
-    try {
-      result = await this.transport.probe(this.backend)
-    } catch (error) {
-      result = {
-        available: false,
-        detail: error instanceof Error ? error.message : String(error),
+    if (this.probeInflight) return this.probeInflight
+
+    this.probeInflight = (async () => {
+      let result: AgentProbeResult
+      try {
+        result = await this.transport.probe(this.backend)
+      } catch (error) {
+        result = {
+          available: false,
+          detail: error instanceof Error ? error.message : String(error),
+        }
       }
-    }
-    this.probeCache = { at: Date.now(), result }
-    return result.available
+      this.probeCache = { at: Date.now(), result }
+      return result
+    })().finally(() => {
+      this.probeInflight = null
+    })
+    return this.probeInflight
+  }
+
+  /** True when the daemon serves this backend's catalog target. */
+  private async daemonAvailable(): Promise<boolean> {
+    return (await this.refreshProbe()).available
   }
 
   async probe(): Promise<AgentProbeResult> {
-    if (await this.daemonAvailable()) {
-      return this.transport.probe(this.backend)
-    }
+    const result = await this.refreshProbe()
+    if (result.available) return result
     if (this.fallback) return this.fallback.probe()
-    return (
-      this.probeCache?.result ?? {
-        available: false,
-        detail: `Agorax managed target for ${this.backend} is unavailable`,
-      }
-    )
+    return result
   }
 
   async startRun(

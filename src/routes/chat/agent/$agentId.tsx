@@ -22,7 +22,16 @@ const loadAgentWorkspace = () =>
     default: module.AgentWorkspace,
   }))
 
+// Warm the workspace chunk on route match so agent switches do not pay a
+// second Suspense spinner after the first chat paint.
+void loadAgentWorkspace()
+
 const AgentWorkspace = lazy(loadAgentWorkspace)
+
+/** True when registry is already in store — agent switches remount without a blank loader. */
+export function canPaintChatAgentShell(): boolean {
+  return useAgentStore.getState().agents.length > 0
+}
 
 const chatAgentSearchSchema = z.object({
   session: z.string().optional().catch(undefined),
@@ -66,7 +75,10 @@ function ChatAgentRoute() {
   const agentId = typeof params.agentId === 'string' ? params.agentId : ''
   const setActiveAgentId = useAgentStore((s) => s.setActiveAgentId)
   const setActiveSessionId = useAgentStore((s) => s.setActiveSessionId)
-  const [seeded, setSeeded] = useState(false)
+  // Cold /chat entry waits for the registry. Agent↔agent navigations remount
+  // this route; seeded useState resets — init from store.agents so the shell
+  // stays and only the session pane swaps.
+  const [seeded, setSeeded] = useState(() => canPaintChatAgentShell())
 
   // Seed agents once, then keep activeAgentId in sync with the URL agent param.
   // Do NOT re-run this when only ?session= changes — clearing the session on
@@ -192,6 +204,7 @@ function ChatAgentRoute() {
     }
 
     if (useAgentStore.getState().agents.length === 0) {
+      // Cold entry only — never flip seeded off on agent↔agent switches.
       fetchAgents()
         .then((data) => {
           if (cancelled) return

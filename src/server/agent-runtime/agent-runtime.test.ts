@@ -401,4 +401,34 @@ agents:
     expect(dev.available).toBe(true) // hermes gateway probe (mocked healthy)
     expect(dev.detail).toMatch(/hermes gateway/)
   })
+
+  it('probeAll coalesces concurrent callers and serves TTL cache', async () => {
+    const { probeHermesProfileGateway } = await import(
+      './hermes-gateway-probe'
+    )
+    const probeSpy = vi.mocked(probeHermesProfileGateway)
+    probeSpy.mockClear()
+
+    const router = new AgentRuntimeRouter({
+      rawYaml: `
+version: 1
+agents:
+  - id: dev
+    runtime: hermes
+    profile: developer
+`,
+    })
+
+    const [a, b] = await Promise.all([router.probeAll(), router.probeAll()])
+    expect(a).toEqual(b)
+    expect(probeSpy).toHaveBeenCalledTimes(1)
+
+    probeSpy.mockClear()
+    await router.probeAll()
+    expect(probeSpy).toHaveBeenCalledTimes(0)
+
+    probeSpy.mockClear()
+    await router.probeAll({ fresh: true })
+    expect(probeSpy).toHaveBeenCalledTimes(1)
+  })
 })

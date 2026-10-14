@@ -3,7 +3,7 @@
  *
  * When terminal.backend is not "local", workspace paths live on the target
  * machine — not on the Workspace host. Local stat() must not gate workspace
- * selection or workspace_context injection.
+ * selection or `[Workspace::v1: …]` injection.
  */
 import path from 'node:path'
 import { isBlockedSystemPath } from './workspace-path-policy'

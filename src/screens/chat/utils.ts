@@ -6,7 +6,10 @@ import type {
   SessionTitleStatus,
   ToolCallContent,
 } from './types'
-import { stripWorkspaceDirective } from '../../lib/workspace-message-scope'
+import {
+  isWorkspaceMetadataTitle,
+  stripWorkspaceDirective,
+} from '../../lib/workspace-message-scope'
 
 export function deriveFriendlyIdFromKey(key: string | undefined): string {
   if (!key) return 'main'
@@ -206,6 +209,23 @@ function deriveTitleSource(
   return undefined
 }
 
+/**
+ * Drop gateway titles that are only the injected workspace prefix (or that
+ * prefix plus user text we can recover). Never fall back to the dirty raw
+ * string — that blocks auto-rename and pollutes the sidebar.
+ */
+function sanitizeSessionTitleField(
+  raw: string | undefined | null,
+): string | undefined {
+  if (typeof raw !== 'string') return undefined
+  const trimmed = raw.trim()
+  if (!trimmed) return undefined
+  const cleaned = cleanUserText(trimmed).trim()
+  if (cleaned && !isWorkspaceMetadataTitle(cleaned)) return cleaned
+  if (isWorkspaceMetadataTitle(trimmed)) return undefined
+  return cleaned || undefined
+}
+
 export function normalizeSessions(
   rows: Array<SessionSummary> | undefined,
 ): Array<SessionMeta> {
@@ -221,23 +241,11 @@ export function normalizeSessions(
         ? session.friendlyId.trim()
         : deriveFriendlyIdFromKey(key)
 
-    const label =
-      typeof session.label === 'string' && session.label.trim().length > 0
-        ? session.label.trim()
-        : undefined
-    const explicitTitle =
-      typeof session.title === 'string' && session.title.trim().length > 0
-        ? cleanUserText(session.title.trim()) || session.title.trim()
-        : undefined
+    const label = sanitizeSessionTitleField(session.label)
+    const explicitTitle = sanitizeSessionTitleField(session.title)
     const derivedTitle =
-      typeof session.derivedTitle === 'string' &&
-      session.derivedTitle.trim().length > 0
-        ? cleanUserText(session.derivedTitle.trim()) ||
-          session.derivedTitle.trim()
-        : typeof session.preview === 'string' &&
-            session.preview.trim().length > 0
-          ? cleanUserText(session.preview.trim()) || session.preview.trim()
-          : undefined
+      sanitizeSessionTitleField(session.derivedTitle) ??
+      sanitizeSessionTitleField(session.preview)
     const titleStatus = deriveTitleStatus(
       label,
       explicitTitle,
@@ -251,6 +259,11 @@ export function normalizeSessions(
       session.titleSource,
     )
 
+    const previewCleaned =
+      typeof session.preview === 'string'
+        ? sanitizeSessionTitleField(session.preview) ?? null
+        : (session.preview ?? null)
+
     return {
       key,
       friendlyId: friendlyIdCandidate,
@@ -263,10 +276,7 @@ export function normalizeSessions(
       titleStatus,
       titleSource,
       titleError: session.titleError ?? null,
-      preview:
-        typeof session.preview === 'string'
-          ? cleanUserText(session.preview) || session.preview.trim() || null
-          : (session.preview ?? null),
+      preview: previewCleaned,
     }
   })
 }

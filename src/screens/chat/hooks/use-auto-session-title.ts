@@ -6,6 +6,7 @@ import {
   updateSessionTitleState,
   useSessionTitleInfo,
 } from '../session-title-store'
+import { isWorkspaceMetadataTitle } from '../../../lib/workspace-message-scope'
 import { textFromMessage } from '../utils'
 import { useProfiles } from './use-profiles'
 import type { ChatMessage, SessionMeta } from '../types'
@@ -27,6 +28,9 @@ const GENERIC_TITLE_PATTERNS = [
 export function isGenericTitle(title: string): boolean {
   const trimmed = title.trim()
   if (!trimmed || trimmed === 'New Session') return true
+  // Gateway often stores the injected workspace prefix (possibly truncated
+  // with a `#N` disambiguator) as the session title — treat as untitled.
+  if (isWorkspaceMetadataTitle(trimmed)) return true
   return GENERIC_TITLE_PATTERNS.some((pattern) => pattern.test(trimmed))
 }
 

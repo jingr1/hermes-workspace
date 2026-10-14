@@ -6,9 +6,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 import YAML from 'yaml'
 import {
-  listProfiles,
+  getProfilesRoot,
   resolveProfileHermesHome,
   isLiveNamedProfile,
+  isNamedProfileDeleted,
 } from './profiles-browser'
 import { ensureSwarmProfileConfig } from './swarm-profile-config'
 import { getStateDir } from './workspace-state-dir'
@@ -315,11 +316,34 @@ export function ensureProfileApiServerEnv(
   }
 }
 
+/**
+ * Profile names that own a gateway port. Names only — never call heavy
+ * `listProfiles()` (YAML + recursive skill/session walks). That path was
+ * invoked from every `resolveProfileGatewayPort` during `/api/agents`
+ * probeAll and blocked the event loop for multiple seconds.
+ */
 export function listManagedProfileNames(): string[] {
   const names = new Set<string>(['default'])
   try {
-    for (const profile of listProfiles()) {
-      if (profile.name) names.add(profile.name)
+    const profilesRoot = getProfilesRoot()
+    if (!fs.existsSync(profilesRoot)) {
+      return ['default']
+    }
+    for (const entry of fs.readdirSync(profilesRoot, { withFileTypes: true })) {
+      const name = entry.name
+      if (!name || name === 'default' || name.startsWith('.')) continue
+      if (isNamedProfileDeleted(name)) continue
+      const profilePath = path.join(profilesRoot, name)
+      if (entry.isDirectory()) {
+        names.add(name)
+        continue
+      }
+      if (!entry.isSymbolicLink()) continue
+      try {
+        if (fs.statSync(profilePath).isDirectory()) names.add(name)
+      } catch {
+        // dangling symlink
+      }
     }
   } catch {
     // filesystem listing can fail in tests / missing dirs
@@ -336,9 +360,35 @@ function nextFreePort(used: Set<number>, preferred: number): number {
   return port
 }
 
+const PORT_ASSIGNMENT_TTL_MS = 30_000
+let portAssignmentCache: {
+  at: number
+  hermesRoot: string
+  namesKey: string
+  ports: Record<string, number>
+} | null = null
+
+/** Drop memoized ports (profile create/delete, tests). */
+export function clearPortAssignmentCache(): void {
+  portAssignmentCache = null
+}
+
 function ensurePortAssignments(): Record<string, number> {
-  const persisted = loadPersistedPorts()
+  // Names listing is cheap (readdir). Rebuild only when the set changes or
+  // the TTL expires — never re-walk skills/sessions for every port lookup.
+  const hermesRoot = resolveProfileHermesHome('default')
   const names = listManagedProfileNames()
+  const namesKey = names.join('\0')
+  if (
+    portAssignmentCache &&
+    portAssignmentCache.hermesRoot === hermesRoot &&
+    portAssignmentCache.namesKey === namesKey &&
+    Date.now() - portAssignmentCache.at < PORT_ASSIGNMENT_TTL_MS
+  ) {
+    return portAssignmentCache.ports
+  }
+
+  const persisted = loadPersistedPorts()
   const used = new Set<number>()
   const next: Record<string, number> = {}
 
@@ -377,6 +427,12 @@ function ensurePortAssignments(): Record<string, number> {
     names.some((name) => persisted[name] !== next[name]) ||
     Object.keys(persisted).some((name) => !managed.has(name))
   if (changed) persistPorts(next)
+  portAssignmentCache = {
+    at: Date.now(),
+    hermesRoot,
+    namesKey,
+    ports: next,
+  }
   return next
 }
 

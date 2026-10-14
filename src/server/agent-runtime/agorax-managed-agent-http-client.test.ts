@@ -43,6 +43,8 @@ describe('AgoraxManagedAgentHttpClient', () => {
       available: false,
       detail: 'Agorax managed target extension:kimi-code is disabled',
     })
+    // Both backends share one catalog fetch within the TTL window.
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
     expect(fetchImpl).toHaveBeenCalledWith(
       'http://127.0.0.1:9120/v1/agent-targets',
       expect.objectContaining({ method: 'GET' }),
