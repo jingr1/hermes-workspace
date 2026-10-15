@@ -3,6 +3,7 @@ import { json } from '@tanstack/react-start'
 import { isAuthenticated } from '../../../server/auth-middleware'
 import {
   readKnowledgeBaseConfig,
+  writeKnowledgeBaseConfig,
   type KnowledgeBaseConfig,
 } from '../../../server/knowledge-config'
 import { syncKnowledgeSource } from '../../../server/knowledge-browser'
@@ -27,8 +28,6 @@ export const Route = createFileRoute('/api/knowledge/sync')({
         }
 
         if (config) {
-          const { writeKnowledgeBaseConfig } =
-            await import('../../../server/knowledge-config')
           writeKnowledgeBaseConfig(config)
         }
 

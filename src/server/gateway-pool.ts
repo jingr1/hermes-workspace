@@ -29,6 +29,12 @@ import {
   profileOwnsPort as profileOwnsPortUnchecked,
   readProcessHermesHome,
 } from './gateway-port-owner'
+import {
+  ensureGatewayLifecycleScheduler,
+  evictBeforeGatewayStart,
+  shouldApplyGatewayRoute,
+  touchGatewayLease,
+} from './gateway-lifecycle'
 
 export {
   GATEWAY_BASE_PORT,
@@ -202,7 +208,6 @@ async function applyRouteIfActive(
   // Pool-on chat addresses each profile directly. Rewriting HERMES_API here
   // would retarget every other in-flight 1:1 turn.
   if (isGatewayPoolEnabled()) return
-  const { shouldApplyGatewayRoute } = await import('./gateway-lifecycle')
   if (!shouldApplyGatewayRoute(profileName, getActiveProfileName())) return
   await applyRoute(url)
 }
@@ -236,7 +241,6 @@ async function ensureProfileGatewayLocked(
     profileOwnsPort(name, port) &&
     (await isHermesAgentHealthy(port, 250))
   ) {
-    const { touchGatewayLease } = await import('./gateway-lifecycle')
     touchGatewayLease(name)
     return {
       ok: true,
@@ -277,7 +281,6 @@ async function ensureProfileGatewayLocked(
   const healthy = await isHermesAgentHealthy(port, 250)
   const forceReplace = options.forceReplace === true || (healthy && !owned)
 
-  const { evictBeforeGatewayStart } = await import('./gateway-lifecycle')
   await evictBeforeGatewayStart(name)
 
   const spawned = await spawnProfileGateway({
@@ -299,7 +302,6 @@ async function ensureProfileGatewayLocked(
   if (spawned.ok && (await ownedHealthy())) {
     bindProfileToPort(name, port)
     await applyRouteIfActive(name, url)
-    const { touchGatewayLease } = await import('./gateway-lifecycle')
     touchGatewayLease(name)
     return {
       ...spawned,
@@ -325,7 +327,6 @@ async function ensureProfileGatewayLocked(
     if (retried.ok && (await ownedHealthy())) {
       bindProfileToPort(name, port)
       await applyRouteIfActive(name, url)
-      const { touchGatewayLease } = await import('./gateway-lifecycle')
       touchGatewayLease(name)
       return {
         ...retried,
@@ -372,8 +373,6 @@ export async function ensureProfileGateway(
       started: false,
     }
   }
-  const { ensureGatewayLifecycleScheduler } =
-    await import('./gateway-lifecycle')
   ensureGatewayLifecycleScheduler()
   const key = `${name}:${options.forceReplace ? 'replace' : 'ensure'}`
   const existing = ensurePromises.get(key)
