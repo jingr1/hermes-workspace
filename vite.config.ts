@@ -596,7 +596,10 @@ const config = defineConfig(({ mode, command }) => {
           )
           result = result.replace(/process\.env/g, '{}')
           result = result.replace(/process\.platform/g, '"browser"')
-          return result
+          if (result === code) return null
+          // Empty map: string replaces are tiny; returning a bare string makes
+          // Vite warn that sourcemaps are likely incorrect.
+          return { code: result, map: { mappings: '' } }
         },
       },
       // Copy pty-helper.py into the server assets directory after build

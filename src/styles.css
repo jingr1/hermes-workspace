@@ -1,6 +1,13 @@
 @import '@fontsource-variable/lexend';
 @import 'tailwindcss';
 
+/* Do not scan build artifacts as Tailwind sources — electron/server-bundle.cjs
+   is ~25MB and still embeds removed hermesworld landing classes
+   (e.g. url('/hermesworld-world.png')), which only produces Vite warnings. */
+@source not '../electron';
+@source not '../.agorax';
+@source not '../dist';
+
 /* Tailwind v4 — enable dark: variant on .dark class (set by __root.tsx) */
 @variant dark (&:where(.dark, .dark *));
 
