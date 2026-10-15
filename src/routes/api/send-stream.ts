@@ -2047,22 +2047,34 @@ export const Route = createFileRoute('/api/send-stream')({
                           )
                         }
 
+                        // Final flush so done.message carries thinking-stripped
+                        // body text (Tutti settling backfill / host stamp).
+                        const finalDisplayText = publishInlineThinking(
+                          sessionKeyFromEvent,
+                          runId,
+                        )
+                        const doneContent: Array<Record<string, string>> = []
+                        if (thinkingAccumulated.trim()) {
+                          doneContent.push({
+                            type: 'thinking',
+                            thinking: thinkingAccumulated.trim(),
+                          })
+                        }
+                        if (finalDisplayText.trim()) {
+                          doneContent.push({
+                            type: 'text',
+                            text: finalDisplayText.trim(),
+                          })
+                        }
                         const translated = {
                           state: 'complete',
                           sessionKey: sessionKeyFromEvent,
                           runId,
-                          // Carry accumulated reasoning so the client can settle
-                          // Activity with thinking even when history omits it.
-                          ...(thinkingAccumulated.trim()
+                          ...(doneContent.length > 0
                             ? {
                                 message: {
                                   role: 'assistant',
-                                  content: [
-                                    {
-                                      type: 'thinking',
-                                      thinking: thinkingAccumulated.trim(),
-                                    },
-                                  ],
+                                  content: doneContent,
                                 },
                               }
                             : {}),

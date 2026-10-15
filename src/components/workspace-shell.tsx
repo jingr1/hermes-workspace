@@ -37,8 +37,12 @@ import { useSwipeNavigation } from '@/hooks/use-swipe-navigation'
 const ChatPanel = lazy(() =>
   import('@/components/chat-panel').then((m) => ({ default: m.ChatPanel })),
 )
+const LoginScreen = lazy(() =>
+  import('@/components/auth/login-screen').then((m) => ({
+    default: m.LoginScreen,
+  })),
+)
 import { ChatPanelToggle } from '@/components/chat-panel-toggle'
-import { LoginScreen } from '@/components/auth/login-screen'
 import { MobileTabBar } from '@/components/mobile-tab-bar'
 import { MobileHamburgerMenu } from '@/components/mobile-hamburger-menu'
 import { MobilePageHeader } from '@/components/mobile-page-header'
@@ -47,8 +51,13 @@ import { MobileTerminalInput } from '@/components/terminal/mobile-terminal-input
 import { ClaudeReconnectBanner } from '@/components/claude-reconnect-banner'
 import { useMobileKeyboard } from '@/hooks/use-mobile-keyboard'
 import { SystemMetricsFooter } from '@/components/system-metrics-footer'
-import { CommandPalette } from '@/components/command-palette'
 import { useSettings } from '@/hooks/use-settings'
+
+const CommandPalette = lazy(() =>
+  import('@/components/command-palette').then((m) => ({
+    default: m.CommandPalette,
+  })),
+)
 import { TerminalWorkspaceLazy } from '@/lib/terminal-workspace-lazy'
 import { useTerminalPanelStore } from '@/stores/terminal-panel-store'
 // ActivityTicker moved to dashboard-only (too noisy for global header)
@@ -347,7 +356,11 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
 
   // Show login screen if auth is required and not authenticated
   if (authState.authRequired && !authState.authenticated) {
-    return <LoginScreen />
+    return (
+      <Suspense fallback={null}>
+        <LoginScreen />
+      </Suspense>
+    )
   }
 
   const shellStyle: React.CSSProperties & Record<'--titlebar-h', string> = {
@@ -537,7 +550,9 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
         />
       ) : null}
       {!isChromeFreeSurface ? (
-        <CommandPalette pathname={pathname} sessions={sessions} />
+        <Suspense fallback={null}>
+          <CommandPalette pathname={pathname} sessions={sessions} />
+        </Suspense>
       ) : null}
     </>
   )

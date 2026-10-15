@@ -75,6 +75,20 @@ describe('hermes-agent-engine', () => {
         if (url.includes('/api/runs/') && url.includes('/stop')) {
           return new Response(JSON.stringify({ ok: true }), { status: 200 })
         }
+        if (url.includes('/api/history')) {
+          return new Response(
+            JSON.stringify({
+              messages: [
+                { role: 'user', content: [{ type: 'text', text: 'hello' }] },
+                {
+                  role: 'assistant',
+                  content: [{ type: 'text', text: 'hi' }],
+                },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
         return new Response('not found', { status: 404 })
       }),
     )
@@ -255,6 +269,12 @@ describe('hermes-agent-engine', () => {
             approval_id: 'appr-1',
           })
           return new Response(JSON.stringify({ ok: true }), { status: 200 })
+        }
+        if (url.includes('/api/history')) {
+          return new Response(
+            JSON.stringify({ messages: [] }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
         }
         return new Response('not found', { status: 404 })
       },
@@ -539,6 +559,281 @@ describe('hermes-agent-engine', () => {
       'user:c1',
       'assistant:run-live',
     ])
+    coordinator.dispose()
+  })
+
+  it('selectHermesChatState stays busy and folds dual hosts while settling', () => {
+    const workspaceId = 'ws'
+    const commandPort = createHermesCommandPort({
+      workspaceId,
+      getMapping: async () => null,
+      putMapping: async (m) => m,
+      onActivityEvent: () => undefined,
+    })
+    const engine = createHermesAgentEngine({ workspaceId, commandPort })
+    const now = 1_700_000_100_000
+    engine.dispatch({
+      type: 'session/detailSnapshotReceived',
+      workspaceId,
+      session: {
+        ...createHermesSessionSkeleton({
+          workspaceId,
+          agentSessionId: 'settle-busy',
+          nowUnixMs: now,
+        }),
+        activeTurnId: 'turn-settle',
+        activeTurn: {
+          agentSessionId: 'settle-busy',
+          turnId: 'turn-settle',
+          phase: 'settling',
+          origin: 'user_prompt',
+          outcome: 'completed',
+          error: null,
+          startedAtUnixMs: now,
+          settledAtUnixMs: null,
+          updatedAtUnixMs: now,
+        },
+        latestTurn: {
+          agentSessionId: 'settle-busy',
+          turnId: 'turn-settle',
+          phase: 'settling',
+          origin: 'user_prompt',
+          outcome: 'completed',
+          error: null,
+          startedAtUnixMs: now,
+          settledAtUnixMs: null,
+          updatedAtUnixMs: now,
+        },
+      },
+      childSessions: [],
+      turns: [
+        {
+          agentSessionId: 'settle-busy',
+          turnId: 'turn-settle',
+          phase: 'settling',
+          origin: 'user_prompt',
+          outcome: 'completed',
+          error: null,
+          startedAtUnixMs: now,
+          settledAtUnixMs: null,
+          updatedAtUnixMs: now,
+        },
+      ],
+      messages: [],
+      observedAtUnixMs: now,
+    })
+    engine.dispatch({
+      type: 'message/snapshotReceived',
+      messages: [
+        {
+          workspaceId,
+          agentSessionId: 'settle-busy',
+          messageId: 'user:u1',
+          version: 1,
+          sequence: 1,
+          turnId: 'turn-settle',
+          role: 'user',
+          kind: 'text',
+          status: null,
+          payload: { text: 'hi' },
+          occurredAtUnixMs: now,
+        },
+        {
+          workspaceId,
+          agentSessionId: 'settle-busy',
+          messageId: 'assistant:run-1:thinking',
+          version: 2,
+          sequence: 2,
+          turnId: 'turn-settle',
+          role: 'assistant_thinking',
+          kind: 'reasoning',
+          status: 'streaming',
+          payload: { text: 'thinking…' },
+          occurredAtUnixMs: now + 1,
+        },
+        {
+          workspaceId,
+          agentSessionId: 'settle-busy',
+          messageId: 'assistant:run-1',
+          version: 3,
+          sequence: 3,
+          turnId: 'turn-settle',
+          role: 'assistant',
+          kind: 'text',
+          status: 'streaming',
+          payload: { text: '' },
+          occurredAtUnixMs: now + 2,
+        },
+      ],
+    })
+
+    const chat = selectHermesChatState(engine.getSnapshot(), 'settle-busy')
+    expect(chat.activeTurn?.phase).toBe('settling')
+    expect(chat.turnBusy).toBe(true)
+    expect(chat.isStreaming).toBe(true)
+    expect(chat.messages.filter((m) => m.role === 'assistant')).toHaveLength(1)
+    expect(chat.messages[1]?.id).toBe('assistant:run-1')
+  })
+
+  it('commandPort stamps done.message text after thinking-only stream', async () => {
+    const store = mappingStore()
+    await store.put({
+      agentSessionId: 'agent-stamp',
+      turnId: 'turn-prev',
+      gatewaySessionId: 'gw-stamp',
+      assignmentId: null,
+      hermesRunId: null,
+      bridgeKind: 'hermes-native',
+      updatedAtUnixMs: Date.now(),
+    })
+    const phases: string[] = []
+    const textDeltaValues: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.includes('/api/send-stream')) {
+          const encoder = new TextEncoder()
+          const stream = new ReadableStream({
+            start(controller) {
+              controller.enqueue(
+                encoder.encode(
+                  `event: started\ndata: ${JSON.stringify({ runId: 'run-stamp' })}\n\n`,
+                ),
+              )
+              controller.enqueue(
+                encoder.encode(
+                  `event: thinking\ndata: ${JSON.stringify({ text: 'plan only', runId: 'run-stamp' })}\n\n`,
+                ),
+              )
+              controller.enqueue(
+                encoder.encode(
+                  `event: done\ndata: ${JSON.stringify({
+                    state: 'complete',
+                    runId: 'run-stamp',
+                    message: {
+                      role: 'assistant',
+                      content: [
+                        { type: 'thinking', thinking: 'plan only' },
+                        { type: 'text', text: 'final stamped answer' },
+                      ],
+                    },
+                  })}\n\n`,
+                ),
+              )
+              controller.close()
+            },
+          })
+          return new Response(stream, {
+            status: 200,
+            headers: {
+              'Content-Type': 'text/event-stream',
+              'X-Hermes-Session-Key': 'gw-stamp',
+            },
+          })
+        }
+        if (url.includes('/api/history')) {
+          return new Response(
+            JSON.stringify({
+              messages: [
+                { role: 'user', content: [{ type: 'text', text: 'q' }] },
+                {
+                  role: 'assistant',
+                  content: [{ type: 'text', text: 'final stamped answer' }],
+                },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response('not found', { status: 404 })
+      }),
+    )
+
+    const workspaceId = 'ws'
+    const engine = createHermesAgentEngine({
+      workspaceId,
+      commandPort: createHermesCommandPort({
+        workspaceId,
+        getMapping: store.get,
+        putMapping: store.put,
+        onActivityEvent: () => undefined,
+      }),
+    })
+    const projectSnapshot = createAgentActivitySnapshotProjector(workspaceId)
+    const coordinator = createAgentActivityWorkspaceEventCoordinator({
+      engine,
+      notificationScheduler: {
+        schedule(delayMs, task) {
+          const timer = setTimeout(task, delayMs)
+          return { cancel: () => clearTimeout(timer) }
+        },
+      },
+      readCanonicalSnapshot: () => projectSnapshot(engine.getSnapshot()),
+      workspaceId,
+    })
+    const commandPort = createHermesCommandPort({
+      workspaceId,
+      getMapping: store.get,
+      putMapping: store.put,
+      onActivityEvent: (event) => {
+        coordinator.ingestEvent(event as never)
+        if (event.eventType === 'turn_update') {
+          const turn = (event.data as { turn?: { phase?: string } }).turn
+          if (turn?.phase) phases.push(turn.phase)
+        }
+        if (
+          event.eventType === 'message_delta' &&
+          (event.data as { kind?: string }).kind === 'text'
+        ) {
+          const content = (event.data as { content?: { value?: string } })
+            .content
+          if (content?.value) textDeltaValues.push(content.value)
+        }
+      },
+    })
+    hydrateHermesAgentEngine(
+      engine,
+      createHermesSessionSkeleton({
+        workspaceId,
+        agentSessionId: 'agent-stamp',
+      }),
+    )
+    ingestHermesUserPromptMessage({
+      engine,
+      workspaceId,
+      agentSessionId: 'agent-stamp',
+      clientSubmitId: 'c-stamp',
+      text: 'q',
+    })
+
+    const result = (await commandPort.effects.sendInput(
+      {
+        clientSubmitId: 'c-stamp',
+        workspaceId,
+        agentSessionId: 'agent-stamp',
+        content: [{ type: 'text', text: 'q' }],
+      },
+      { commandId: 'cmd-stamp', origin: 'engine' },
+    )) as { turn: { phase: string } }
+
+    expect(result.turn.phase).toBe('settled')
+    expect(phases).toContain('settling')
+    expect(phases[phases.length - 1]).toBe('settled')
+    expect(phases.indexOf('settling')).toBeLessThan(phases.lastIndexOf('settled'))
+    expect(textDeltaValues).toContain('final stamped answer')
+
+    const chat = selectHermesChatState(engine.getSnapshot(), 'agent-stamp', {
+      sessionMessages: coordinator.project(
+        projectSnapshot(engine.getSnapshot()),
+      ).sessionMessagesById['agent-stamp'],
+    })
+    expect(chat.turnBusy).toBe(false)
+    const assistant = chat.messages.find((m) => m.role === 'assistant')
+    const textPart = (
+      assistant?.content as Array<{ type?: string; text?: string }>
+    )?.find((p) => p.type === 'text')
+    expect(textPart?.text).toBe('final stamped answer')
     coordinator.dispose()
   })
 

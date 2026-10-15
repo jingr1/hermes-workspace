@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   foldTrailingAssistantThinking,
-  messagePlainText,
   reconcileHistoryResponse,
 } from '@/lib/chat-history-reconcile'
 import { useChatStream } from '../../../hooks/use-chat-stream'
@@ -10,6 +9,7 @@ import { useChatStore } from '../../../stores/chat-store'
 import { appendHistoryMessage, chatQueryKeys, fetchHistory } from '../chat-queries'
 import { toast } from '../../../components/ui/toast'
 import { textFromMessage } from '../utils'
+import { hasFinalAssistantWriteThrough } from '../chat-screen-utils'
 import { snapshotOptimisticUserMessages } from './optimistic-message-reinject'
 import type { ChatMessage, HistoryResponse } from '../types'
 import type { StreamingState } from '../../../stores/chat-store'
@@ -332,12 +332,10 @@ export function useRealtimeChatHistory({
                 '',
             }
 
-            const livePlain = completedAssistant
-              ? messagePlainText(completedAssistant)
-              : ''
+            // Thinking-only ≠ complete write-through (Tutti settle): must still
+            // quiet-fetch history when final assistant text is missing.
             const liveTurnComplete =
-              livePlain.length > 0 ||
-              thinkingSource.__streamingThinking.length > 0 ||
+              hasFinalAssistantWriteThrough(realtimeMessages as ChatMessage[]) ||
               store.streamingState.has(effectiveSessionKey)
 
             if (liveTurnComplete) {

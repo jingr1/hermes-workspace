@@ -27,6 +27,7 @@ import {
   createOptimisticMessage,
   createResponseWaitSnapshot,
   isRetryableUserMessage,
+  hasFinalAssistantWriteThrough,
   shouldCancelStreamOnSessionNav,
   shouldClearWaitingForAssistantMessage,
   shouldHandoffStreamOnProfileNav,
@@ -1151,7 +1152,7 @@ export function ChatScreen({
   }, [lastCompletedRunAt, waitingForResponse, streamFinish])
 
   // Hard failsafe: if waiting for 5s+ and SSE missed the done event, refetch
-  // history only when there is no live write-through row (empty settle recovery).
+  // history only when there is no final assistant text (thinking-only ≠ complete).
   useEffect(() => {
     if (!waitingForResponse) return
     const fallback = window.setTimeout(() => {
@@ -1159,7 +1160,9 @@ export function ChatScreen({
       const key = resolvedSessionKey || sessionKeyForHistory
       if (
         key &&
-        (useChatStore.getState().realtimeMessages.get(key)?.length ?? 0) > 0
+        hasFinalAssistantWriteThrough(
+          useChatStore.getState().realtimeMessages.get(key),
+        )
       ) {
         return
       }
@@ -1195,13 +1198,13 @@ export function ChatScreen({
         if (cancelled || !data.ok) return
 
         const decision = shouldSettleWaitingFromActiveRun(data.run)
-        const hasLiveWriteThrough =
-          (useChatStore.getState().realtimeMessages.get(resolvedSessionKey)
-            ?.length ?? 0) > 0
+        const hasLiveWriteThrough = hasFinalAssistantWriteThrough(
+          useChatStore.getState().realtimeMessages.get(resolvedSessionKey),
+        )
         if (decision === 'keep') {
           missingRunCount = 0
-          // Still registered — only poll history when live write-through is
-          // empty (interrupt echo recovery). Live turns own the bubble.
+          // Still registered — only poll history when final assistant text is
+          // missing (thinking-only must not skip refetch).
           if (!hasLiveWriteThrough) refreshHistoryRef.current()
           return
         }

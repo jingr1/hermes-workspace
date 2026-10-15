@@ -146,6 +146,51 @@ const config = defineConfig(({ mode, command }) => {
       // server-side code in Docker (kills runtime env var access).
       // Client-side process.env is handled per-environment below.
     },
+    build: {
+      // Mermaid / Excalidraw lazy chunks legitimately exceed 500 kB; keep the
+      // warning for unexpected growth above that band.
+      chunkSizeWarningLimit: 900,
+      rollupOptions: {
+        output: {
+          // Conservative vendor splits only. Broad @tanstack/zod grouping
+          // trips Rollup `getVariableForExportName` under TanStack Start's
+          // dual client/SSR graph — keep those on the natural graph.
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return
+            const pnpmMatch = id.match(
+              /\/node_modules\/\.pnpm\/[^/]+\/node_modules\/(@[^/]+\/[^/]+|[^/]+)\//,
+            )
+            const normalMatch = id.match(
+              /\/node_modules\/(@[^/]+\/[^/]+|[^/]+)\//,
+            )
+            const pkg = pnpmMatch?.[1] ?? normalMatch?.[1]
+            if (!pkg) return
+
+            if (
+              pkg === 'react' ||
+              pkg === 'react-dom' ||
+              pkg === 'scheduler'
+            ) {
+              return 'vendor-react'
+            }
+            if (
+              pkg === 'motion' ||
+              pkg === 'framer-motion' ||
+              pkg === 'motion-dom' ||
+              pkg === 'motion-utils'
+            ) {
+              return 'vendor-motion'
+            }
+            if (pkg === 'katex' || pkg === 'rehype-katex') {
+              return 'vendor-katex'
+            }
+            if (pkg === 'prismjs') {
+              return 'vendor-prism'
+            }
+          },
+        },
+      },
+    },
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),

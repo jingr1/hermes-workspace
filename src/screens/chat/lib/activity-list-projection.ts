@@ -6,7 +6,10 @@
  */
 
 import type { AgentActivityMessage } from '@agorax/agent-activity-core'
-import { thinkingTextFromPayload } from '@/lib/chat-message-parts'
+import {
+  thinkingTextFromMessage,
+  thinkingTextFromPayload,
+} from '@/lib/chat-message-parts'
 import { projectLiveAssistantMessage } from '@/lib/chat-turn-identity'
 import type { ChatMessage } from '../types'
 import {
@@ -234,9 +237,9 @@ export function projectActivityMessagesToChat(
     out.push(foldActivityFamilyToChat(family, streamingMessageId))
     index = cursor
   }
-  // Safety net: pending host + history/runId echo of the same reply can land
-  // as two consecutive assistant bubbles (suffix duplicate). Collapse to one.
-  return collapseAdjacentAssistantEchoes(out)
+  // Safety nets: (1) suffix text echoes (2) every post-user assistant fragment
+  // into one host — thinking-only + reply must not paint as two MessageItems.
+  return foldAssistantsPerUserTurn(collapseAdjacentAssistantEchoes(out))
 }
 
 function assistantPlainText(message: ChatMessage): string {
@@ -321,6 +324,182 @@ export function collapseAdjacentAssistantEchoes(
       continue
     }
     out.push(message)
+  }
+  return out
+}
+
+function toolCallsFromChatMessage(message: ChatMessage): Array<{
+  id: string
+  name: string
+  phase: string
+  args?: unknown
+  preview?: string
+  result?: string
+}> {
+  const stream = Array.isArray(
+    (message as { __streamToolCalls?: unknown }).__streamToolCalls,
+  )
+    ? (
+        (message as {
+          __streamToolCalls: Array<{
+            id?: string
+            name?: string
+            phase?: string
+            args?: unknown
+            preview?: string
+            result?: string
+          }>
+        }).__streamToolCalls
+      )
+    : []
+  if (stream.length > 0) {
+    return stream.map((toolCall, index) => ({
+      id: toolCall.id || `tool-${index}`,
+      name: toolCall.name || 'tool',
+      phase: toolCall.phase || 'complete',
+      args: toolCall.args,
+      preview: toolCall.preview,
+      result: toolCall.result,
+    }))
+  }
+  if (!Array.isArray(message.content)) return []
+  const out: Array<{
+    id: string
+    name: string
+    phase: string
+    args?: unknown
+  }> = []
+  for (const part of message.content) {
+    if (!part || typeof part !== 'object') continue
+    const type = (part as { type?: unknown }).type
+    if (type !== 'toolCall' && type !== 'tool-call' && type !== 'tool_call') {
+      continue
+    }
+    out.push({
+      id:
+        (typeof (part as { id?: unknown }).id === 'string' &&
+          (part as { id: string }).id) ||
+        `tool-${out.length}`,
+      name:
+        (typeof (part as { name?: unknown }).name === 'string' &&
+          (part as { name: string }).name) ||
+        'tool',
+      phase: 'complete',
+      args: (part as { arguments?: unknown }).arguments,
+    })
+  }
+  return out
+}
+
+function mergeAssistantHostGroup(hosts: readonly ChatMessage[]): ChatMessage {
+  let thinking = ''
+  let text = ''
+  let tools: ReturnType<typeof toolCallsFromChatMessage> = []
+  let streaming = false
+  let timestamp = 0
+  let hostId = ''
+  let runId: string | null = null
+  for (const host of hosts) {
+    const id = String(host.messageId ?? host.id ?? '')
+    if (!hostId || id.includes(':pending:')) hostId = id || hostId
+    if (
+      !runId &&
+      typeof (host as { runId?: unknown }).runId === 'string' &&
+      (host as { runId: string }).runId &&
+      (host as { runId: string }).runId !== 'pending'
+    ) {
+      runId = (host as { runId: string }).runId
+    }
+    if (
+      (host as { __streamingStatus?: unknown }).__streamingStatus ===
+      'streaming'
+    ) {
+      streaming = true
+    }
+    timestamp = Math.max(
+      timestamp,
+      typeof host.timestamp === 'number' ? host.timestamp : 0,
+    )
+    const partThinking = thinkingTextFromMessage(host).trim()
+    if (partThinking) {
+      thinking = thinking
+        ? thinking.length >= partThinking.length
+          ? thinking
+          : partThinking
+        : partThinking
+    }
+    const partText = assistantPlainText(host)
+    if (partText) {
+      text = text
+        ? text.length >= partText.length
+          ? text
+          : partText
+        : partText
+    }
+    const partTools = toolCallsFromChatMessage(host)
+    if (partTools.length > 0) {
+      const seen = new Set(tools.map((tool) => tool.id))
+      for (const tool of partTools) {
+        if (seen.has(tool.id)) continue
+        seen.add(tool.id)
+        tools.push(tool)
+      }
+    }
+  }
+  if (!hostId) hostId = String(hosts[0]?.messageId ?? hosts[0]?.id ?? 'assistant')
+  if (!runId && hostId.startsWith('assistant:')) {
+    const rest = hostId.slice('assistant:'.length)
+    const bare = rest.includes(':pending:')
+      ? null
+      : rest.split(':')[0] || null
+    if (bare && bare !== 'pending' && bare !== 'history') runId = bare
+  }
+  const projected = projectLiveAssistantMessage({
+    messageId: hostId,
+    runId,
+    text,
+    thinking,
+    toolCalls: tools,
+    streaming,
+    timestamp: timestamp || Date.now(),
+  })
+  return {
+    ...projected,
+    id: hostId,
+    messageId: hostId,
+  }
+}
+
+/**
+ * Contract §2/§4: one assistant list host per user turn. Thinking-only rows
+ * that landed beside the reply (different Activity family / turnId) must fold
+ * back — otherwise MessageItem paints a stray Activity under the bubble.
+ */
+export function foldAssistantsPerUserTurn(
+  messages: readonly ChatMessage[],
+): ChatMessage[] {
+  const out: ChatMessage[] = []
+  let index = 0
+  while (index < messages.length) {
+    const message = messages[index]!
+    if (message.role !== 'assistant') {
+      out.push(message)
+      index += 1
+      continue
+    }
+    const group: ChatMessage[] = [message]
+    let cursor = index + 1
+    while (
+      cursor < messages.length &&
+      messages[cursor]?.role === 'assistant'
+    ) {
+      group.push(messages[cursor]!)
+      cursor += 1
+    }
+    out.push(
+      group.length === 1 ? group[0]! : mergeAssistantHostGroup(group),
+    )
+    index = cursor
   }
   return out
 }

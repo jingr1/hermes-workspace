@@ -118,7 +118,7 @@ describe('hermesSseToActivityEvents', () => {
     })
   })
 
-  it('maps tool + done to tool_call delta and settled turn', () => {
+  it('maps tool + successful done to settling (not settled)', () => {
     let state = createHermesActivityAdapterState()
     ;({ state } = hermesSseToActivityEvents(ctx, state, 'started', {
       runId: 'run-x',
@@ -147,13 +147,92 @@ describe('hermesSseToActivityEvents', () => {
     expect(done.events[0]).toMatchObject({
       eventType: 'turn_update',
       data: {
+        activeTurnId: 'turn-1',
         turn: {
           turnId: 'turn-1',
-          phase: 'settled',
+          phase: 'settling',
           outcome: 'completed',
         },
       },
     })
+  })
+
+  it('maps failed/interrupted done straight to settled', () => {
+    let state = createHermesActivityAdapterState()
+    ;({ state } = hermesSseToActivityEvents(ctx, state, 'started', {
+      runId: 'run-fail',
+    }))
+    const failed = hermesSseToActivityEvents(ctx, state, 'done', {
+      runId: 'run-fail',
+      state: 'error',
+      errorMessage: 'boom',
+    })
+    expect(failed.events[0]).toMatchObject({
+      eventType: 'turn_update',
+      data: {
+        activeTurnId: null,
+        turn: { phase: 'settled', outcome: 'failed' },
+      },
+    })
+
+    ;({ state } = hermesSseToActivityEvents(ctx, state, 'started', {
+      runId: 'run-int',
+    }))
+    const interrupted = hermesSseToActivityEvents(ctx, state, 'done', {
+      runId: 'run-int',
+      state: 'interrupted',
+    })
+    expect(interrupted.events[0]).toMatchObject({
+      eventType: 'turn_update',
+      data: {
+        activeTurnId: null,
+        turn: { phase: 'settled', outcome: 'interrupted' },
+      },
+    })
+  })
+
+  it('applies done.message text/thinking deltas before settling', () => {
+    let state = createHermesActivityAdapterState()
+    ;({ state } = hermesSseToActivityEvents(ctx, state, 'started', {
+      runId: 'run-msg',
+    }))
+    const done = hermesSseToActivityEvents(ctx, state, 'done', {
+      runId: 'run-msg',
+      state: 'complete',
+      message: {
+        role: 'assistant',
+        content: [
+          { type: 'thinking', thinking: 'plan' },
+          { type: 'text', text: 'final answer' },
+        ],
+      },
+    })
+    expect(done.state.lastText).toBe('final answer')
+    expect(done.state.lastThinking).toBe('plan')
+    expect(done.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          eventType: 'message_delta',
+          data: expect.objectContaining({
+            kind: 'reasoning',
+            content: { operation: 'set', value: 'plan' },
+          }),
+        }),
+        expect.objectContaining({
+          eventType: 'message_delta',
+          data: expect.objectContaining({
+            kind: 'text',
+            content: { operation: 'set', value: 'final answer' },
+          }),
+        }),
+        expect.objectContaining({
+          eventType: 'turn_update',
+          data: expect.objectContaining({
+            turn: expect.objectContaining({ phase: 'settling' }),
+          }),
+        }),
+      ]),
+    )
   })
 
   it('maps approval SSE to a pending interaction_update', () => {

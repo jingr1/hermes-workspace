@@ -128,6 +128,42 @@ export function shouldSettleWaitingFromActiveRun(
   return 'keep'
 }
 
+/**
+ * Complete live write-through for empty-settle recovery.
+ * Thinking-only / tool-only rows do NOT count — Tutti settle requires a final
+ * assistant text host (or an explicit error bubble) before skipping history refetch.
+ */
+export function hasFinalAssistantWriteThrough(
+  messages: readonly ChatMessage[] | undefined | null,
+): boolean {
+  if (!messages || messages.length === 0) return false
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i]
+    if (!message || message.role !== 'assistant') continue
+    if ((message as { isError?: boolean }).isError) return true
+    if (!Array.isArray(message.content)) {
+      const text =
+        typeof (message as { text?: unknown }).text === 'string'
+          ? (message as { text: string }).text.trim()
+          : ''
+      if (text) return true
+      continue
+    }
+    for (const part of message.content) {
+      if (!part || typeof part !== 'object') continue
+      const rec = part as Record<string, unknown>
+      if (
+        rec.type === 'text' &&
+        typeof rec.text === 'string' &&
+        rec.text.trim().length > 0
+      ) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
 export function advanceStickyStreamingText(params: {
   isStreaming: boolean
   runId: string | null

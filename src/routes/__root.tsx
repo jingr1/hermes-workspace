@@ -5,21 +5,17 @@ import {
   createRootRoute,
 } from '@tanstack/react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import appCss from '../styles.css?url'
 import { getRootSurfaceState } from './-root-layout-state'
 import { fetchClaudeAuthStatus } from '@/lib/claude-auth'
 import type { AuthStatus } from '@/lib/claude-auth'
-import { SearchModal } from '@/components/search/search-modal'
 import { UsageMeter } from '@/components/usage-meter'
 import { TerminalShortcutListener } from '@/components/terminal-shortcut-listener'
 import { GlobalShortcutListener } from '@/components/global-shortcut-listener'
 import { WorkspaceShell } from '@/components/workspace-shell'
-import { MobilePromptTrigger } from '@/components/mobile-prompt/MobilePromptTrigger'
 import { Toaster } from '@/components/ui/toast'
 import { AttentionToaster } from '@/components/attention-toaster'
-import { OnboardingTour } from '@/components/onboarding/onboarding-tour'
-import { KeyboardShortcutsModal } from '@/components/keyboard-shortcuts-modal'
 import { UpdateCenterNotifier } from '@/components/update-center-notifier'
 import {
   applyInterfacePreferences,
@@ -28,14 +24,44 @@ import {
 } from '@/hooks/use-settings'
 import { useApplyChatWidth } from '@/hooks/use-chat-settings'
 import {
-  AgoraxOnboarding,
   ONBOARDING_COMPLETE_EVENT,
   ONBOARDING_KEY,
   readOnboardingComplete,
   writeOnboardingComplete,
-} from '@/components/onboarding/agorax-onboarding'
+} from '@/components/onboarding/onboarding-storage'
 import { ErrorBoundary } from '@/components/error-boundary'
-import { LoginScreen } from '@/components/auth/login-screen'
+
+// Heavy first-visit / optional chrome — keep out of the eager entry chunk.
+const LoginScreen = lazy(() =>
+  import('@/components/auth/login-screen').then((m) => ({
+    default: m.LoginScreen,
+  })),
+)
+const AgoraxOnboarding = lazy(() =>
+  import('@/components/onboarding/agorax-onboarding').then((m) => ({
+    default: m.AgoraxOnboarding,
+  })),
+)
+const SearchModal = lazy(() =>
+  import('@/components/search/search-modal').then((m) => ({
+    default: m.SearchModal,
+  })),
+)
+const KeyboardShortcutsModal = lazy(() =>
+  import('@/components/keyboard-shortcuts-modal').then((m) => ({
+    default: m.KeyboardShortcutsModal,
+  })),
+)
+const MobilePromptTrigger = lazy(() =>
+  import('@/components/mobile-prompt/MobilePromptTrigger').then((m) => ({
+    default: m.MobilePromptTrigger,
+  })),
+)
+const OnboardingTour = lazy(() =>
+  import('@/components/onboarding/onboarding-tour').then((m) => ({
+    default: m.OnboardingTour,
+  })),
+)
 
 // Content Security Policy used to be emitted here as a `<meta http-equiv>`
 // tag. That made the workspace unusable when the Cloudflare JS Challenge
@@ -402,8 +428,12 @@ function RootLayout() {
     <QueryClientProvider client={queryClient}>
       <Toaster />
       <AttentionToaster />
-      {mounted && rootSurfaceState.showLogin ? <LoginScreen /> : null}
-      {mounted && rootSurfaceState.showOnboarding ? <AgoraxOnboarding /> : null}
+      <Suspense fallback={null}>
+        {mounted && rootSurfaceState.showLogin ? <LoginScreen /> : null}
+        {mounted && rootSurfaceState.showOnboarding ? (
+          <AgoraxOnboarding />
+        ) : null}
+      </Suspense>
       {rootSurfaceState.showWorkspaceShell ? (
         <>
           <GlobalShortcutListener />
@@ -417,17 +447,19 @@ function RootLayout() {
               <Outlet />
             </ErrorBoundary>
           </WorkspaceShell>
-          <SearchModal />
+          <Suspense fallback={null}>
+            <SearchModal />
+            <KeyboardShortcutsModal />
+            {rootSurfaceState.showPostOnboardingOverlays ? (
+              <>
+                <MobilePromptTrigger />
+                <OnboardingTour />
+              </>
+            ) : null}
+          </Suspense>
           {/* Keep UsageMeter mounted so search-modal OPEN_USAGE still works even when the pill is hidden by default. */}
           <UsageMeter visible={settings.showUsageMeter} />
-          <KeyboardShortcutsModal />
           <UpdateCenterNotifier />
-          {rootSurfaceState.showPostOnboardingOverlays ? (
-            <>
-              <MobilePromptTrigger />
-              <OnboardingTour />
-            </>
-          ) : null}
         </>
       ) : null}
     </QueryClientProvider>

@@ -1,4 +1,13 @@
-import { createContext, memo, useContext, useId, useMemo, useRef } from 'react'
+import {
+  Suspense,
+  createContext,
+  lazy,
+  memo,
+  useContext,
+  useId,
+  useMemo,
+  useRef,
+} from 'react'
 import type { ComponentProps } from 'react'
 import ReactMarkdown from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
@@ -9,8 +18,6 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import { CodeBlock } from './code-block'
 import { extractLanguageFromClassName } from './code-block/utils'
-import { ExcalidrawEmbed, ExcalidrawFromUrl } from './embeds/excalidraw-embed'
-import { MermaidEmbed } from './embeds/mermaid-embed'
 import type { Components } from 'react-markdown'
 import { normalizeMathDelimiters } from '@/lib/markdown-math'
 import {
@@ -24,6 +31,22 @@ import {
 } from '@/lib/streaming-markdown'
 import { cn } from '@/lib/utils'
 import 'katex/dist/katex.min.css'
+
+// Excalidraw / Mermaid are multi‑MB optional embeds — keep them off the
+// markdown sync graph so chat message paint does not pay for diagram runtimes.
+const ExcalidrawEmbed = lazy(() =>
+  import('./embeds/excalidraw-embed').then((m) => ({
+    default: m.ExcalidrawEmbed,
+  })),
+)
+const ExcalidrawFromUrl = lazy(() =>
+  import('./embeds/excalidraw-embed').then((m) => ({
+    default: m.ExcalidrawFromUrl,
+  })),
+)
+const MermaidEmbed = lazy(() =>
+  import('./embeds/mermaid-embed').then((m) => ({ default: m.MermaidEmbed })),
+)
 
 /**
  * Rewrite Workspace-local `MEDIA:<path>` tokens emitted by Hermes Agent to the
@@ -178,10 +201,18 @@ const INITIAL_COMPONENTS: Partial<Components> = {
 
     if (isFencedCodeBlock(className ?? '', content)) {
       if (fenceLanguage === 'mermaid') {
-        return <MermaidEmbed code={content} className="w-full my-2" />
+        return (
+          <Suspense fallback={null}>
+            <MermaidEmbed code={content} className="w-full my-2" />
+          </Suspense>
+        )
       }
       if (fenceLanguage === 'excalidraw') {
-        return <ExcalidrawEmbed code={content} className="w-full my-2" />
+        return (
+          <Suspense fallback={null}>
+            <ExcalidrawEmbed code={content} className="w-full my-2" />
+          </Suspense>
+        )
       }
       return (
         <CodeBlock
@@ -225,11 +256,13 @@ const INITIAL_COMPONENTS: Partial<Components> = {
       src
     ) {
       return (
-        <ExcalidrawFromUrl
-          src={src}
-          title={typeof title === 'string' ? title : undefined}
-          className="w-full my-2"
-        />
+        <Suspense fallback={null}>
+          <ExcalidrawFromUrl
+            src={src}
+            title={typeof title === 'string' ? title : undefined}
+            className="w-full my-2"
+          />
+        </Suspense>
       )
     }
 

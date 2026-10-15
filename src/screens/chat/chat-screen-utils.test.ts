@@ -4,6 +4,7 @@ import {
   advanceStickyStreamingText,
   buildChatNavKey,
   createResponseWaitSnapshot,
+  hasFinalAssistantWriteThrough,
   isRetryableUserMessage,
   isTerminalActiveRunStatus,
   profileNameFromNavKey,
@@ -305,6 +306,51 @@ describe('response wait detection', () => {
         ],
         snapshot,
       ),
+    ).toBe(true)
+  })
+})
+
+describe('hasFinalAssistantWriteThrough', () => {
+  it('rejects thinking-only / empty assistant rows', () => {
+    expect(hasFinalAssistantWriteThrough([])).toBe(false)
+    expect(
+      hasFinalAssistantWriteThrough([
+        {
+          role: 'assistant',
+          content: [{ type: 'thinking', thinking: 'plan only' }],
+        } as never,
+      ]),
+    ).toBe(false)
+    expect(
+      hasFinalAssistantWriteThrough([
+        {
+          role: 'assistant',
+          content: [{ type: 'tool_use', name: 'read_file' }],
+        } as never,
+      ]),
+    ).toBe(false)
+  })
+
+  it('accepts final text or explicit error bubbles', () => {
+    expect(
+      hasFinalAssistantWriteThrough([
+        {
+          role: 'assistant',
+          content: [
+            { type: 'thinking', thinking: 'plan' },
+            { type: 'text', text: 'answer' },
+          ],
+        } as never,
+      ]),
+    ).toBe(true)
+    expect(
+      hasFinalAssistantWriteThrough([
+        {
+          role: 'assistant',
+          content: [],
+          isError: true,
+        } as never,
+      ]),
     ).toBe(true)
   })
 })

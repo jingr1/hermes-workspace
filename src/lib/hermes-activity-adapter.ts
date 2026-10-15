@@ -112,8 +112,8 @@ export function hermesSseToActivityEvents(
   }
 
   const turnUpdate = (
-    phase: 'running' | 'settled',
-    outcome: 'completed' | 'failed' | 'canceled' | null,
+    phase: 'running' | 'settling' | 'settled',
+    outcome: 'completed' | 'failed' | 'canceled' | 'interrupted' | null,
     errorMessage?: string,
   ): AgentActivityUpdatedEvent => {
     const ts = occurredAtUnixMs
@@ -124,6 +124,8 @@ export function hermesSseToActivityEvents(
         ...base,
         eventType: 'turn_update',
         occurredAtUnixMs: ts,
+        // Tutti: settling keeps the turn active so fold/busy stay on until
+        // commandPort finishes authoritative backfill → settled.
         activeTurnId: phase === 'settled' ? null : ctx.turnId,
         turn: {
           turnId: ctx.turnId,
@@ -140,6 +142,76 @@ export function hermesSseToActivityEvents(
         },
       },
     } as AgentActivityUpdatedEvent
+  }
+
+  /** Apply done.message content parts onto the same host before settle phase. */
+  const applyDoneMessageDeltas = (message: unknown): void => {
+    if (!message || typeof message !== 'object') return
+    const content = (message as { content?: unknown }).content
+    if (!Array.isArray(content)) return
+    for (const part of content) {
+      if (!part || typeof part !== 'object') continue
+      const rec = part as Record<string, unknown>
+      const type = readString(rec.type)
+      if (type === 'thinking' || type === 'redacted_thinking') {
+        const thinking =
+          readString(rec.thinking) || readString(rec.text)
+        if (!thinking.trim() || !next.thinkingMessageId) continue
+        if (thinking === next.lastThinking) continue
+        const hadThinking = next.lastThinking.length > 0
+        let appendText = thinking
+        if (thinking.startsWith(next.lastThinking)) {
+          appendText = thinking.slice(next.lastThinking.length)
+        }
+        next = { ...next, lastThinking: thinking }
+        if (!appendText) continue
+        events.push({
+          ...base,
+          eventType: 'message_delta',
+          data: {
+            ...base,
+            messageId: next.thinkingMessageId,
+            turnId: ctx.turnId,
+            role: 'assistant_thinking',
+            kind: 'reasoning',
+            occurredAtUnixMs,
+            content: hadThinking
+              ? { operation: 'append_text', text: appendText }
+              : { operation: 'set', value: thinking },
+            status: 'streaming',
+          },
+        })
+        continue
+      }
+      if (type === 'text') {
+        const text = readString(rec.text)
+        if (!text.trim() || !next.assistantMessageId) continue
+        if (text === next.lastText) continue
+        const useSet =
+          next.lastText.length === 0 || !text.startsWith(next.lastText)
+        const appendText = useSet
+          ? text
+          : text.slice(next.lastText.length)
+        next = { ...next, lastText: text }
+        if (!appendText && !useSet) continue
+        events.push({
+          ...base,
+          eventType: 'message_delta',
+          data: {
+            ...base,
+            messageId: next.assistantMessageId,
+            turnId: ctx.turnId,
+            role: 'assistant',
+            kind: 'text',
+            occurredAtUnixMs,
+            content: useSet
+              ? { operation: 'set', value: text }
+              : { operation: 'append_text', text: appendText },
+            status: 'streaming',
+          },
+        })
+      }
+    }
   }
 
   switch (event) {
@@ -315,15 +387,33 @@ export function hermesSseToActivityEvents(
         stateName === 'error' ||
         stateName === 'failed' ||
         typeof data.errorMessage === 'string'
-      events.push(
-        turnUpdate(
-          'settled',
-          failed ? 'failed' : 'completed',
-          failed && typeof data.errorMessage === 'string'
-            ? data.errorMessage
-            : undefined,
-        ),
-      )
+      const interrupted =
+        stateName === 'interrupted' || stateName === 'canceled'
+      // Stamp any carried message body onto the live host before phase change.
+      applyDoneMessageDeltas(data.message)
+      if (failed) {
+        events.push(
+          turnUpdate(
+            'settled',
+            'failed',
+            typeof data.errorMessage === 'string'
+              ? data.errorMessage
+              : undefined,
+          ),
+        )
+        break
+      }
+      if (interrupted) {
+        events.push(
+          turnUpdate(
+            'settled',
+            stateName === 'canceled' ? 'canceled' : 'interrupted',
+          ),
+        )
+        break
+      }
+      // Tutti: success done enters settling; commandPort backfills then settles.
+      events.push(turnUpdate('settling', 'completed'))
       break
     }
 

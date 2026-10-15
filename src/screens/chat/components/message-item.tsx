@@ -2540,7 +2540,8 @@ function MessageItemComponent({
   const hasActivityContent =
     finalToolSections.length > 0 ||
     Boolean(thinking && thinking.trim().length > 0)
-  // Activity (thinking/tools) always sits above the reply bubble — one host.
+  // Activity (thinking/tools) shares the avatar row: face left, Activity then
+  // reply stacked in the content column — one MessageItem host.
   // Settled turns rely on TuiActivityCard default-collapsed (!isStreaming).
   // Avatar must not unmount when `isStreaming` flickers — also honor durable
   // `__streamingStatus` / pending host id until text arrives.
@@ -2691,159 +2692,32 @@ function MessageItemComponent({
     )
   }
 
-  return (
-    <div
-      ref={wrapperRef}
-      data-chat-message-role={role}
-      data-chat-message-id={wrapperDataMessageId}
-      style={{
-        // `content-visibility: auto` creates containment that clips paints
-        // outside the box — including the busy avatar outline on the left
-        // edge. Keep visible while streaming / retry so the ring is not cut.
-        contentVisibility:
-          (isUser && (isFailed || isStuckSending)) ||
-          shouldRenderAssistantAvatarRow
-            ? 'visible'
-            : 'auto',
-        containIntrinsicSize: 'auto 160px',
-        ...(typeof wrapperScrollMarginTop === 'number'
-          ? { scrollMarginTop: `${wrapperScrollMarginTop}px` }
-          : null),
-      }}
-      className={cn(
-        'group relative flex flex-col',
-        hasText || hasAttachments || hasSelectionCards
-          ? 'gap-0.5 md:gap-1'
-          : 'gap-0',
-        wrapperClassName,
-        isUser ? 'items-end' : 'items-start',
-        !isUser && isNew && 'animate-[message-fade-in_0.4s_ease-out]',
-      )}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      {/* Thinking/tools above the reply bubble on this same MessageItem. */}
-      {!isUser && !hideActivityCard && hasActivityContent ? (
-        <div className="w-full max-w-[var(--chat-content-max-width)] flex order-first">
-          <div className="w-6 shrink-0" aria-hidden />
-          <div className="min-w-0 flex-1">
-            <TuiActivityCard
-              toolSections={finalToolSections}
-              thinking={thinking}
-              isStreaming={effectiveIsStreaming}
-              expandAll={expandAllToolSections}
-              formatLabel={formatToolDisplayLabel}
-              formatArg={keyArgLabel}
-            />
-          </div>
-        </div>
-      ) : null}
-      {effectiveIsStreaming && hasLifecycleEvents && !hasToolCalls && (
-        <div className="w-full max-w-[var(--chat-content-max-width)] flex flex-col gap-1">
-          {lifecycleEvents.map((event, index) => (
-            <LifecycleEventCard
-              key={`${event.timestamp}-${index}-${event.text}`}
-              text={event.text}
-              emoji={event.emoji}
-              isError={event.isError}
-            />
-          ))}
-        </div>
-      )}
-      {/* Narration messages (tool-call activity) — compact collapsible row */}
-      {!isUser && (message as any).__isNarration && hasText && (
-        <div className="w-full max-w-[var(--chat-content-max-width)]">
-          <details className="group/narration rounded-lg border border-primary-200/50 bg-primary-50/30 hover:bg-primary-50 dark:hover:bg-primary-800/50 transition-colors">
-            <summary className="flex items-center gap-2 cursor-pointer select-none px-3 py-2 list-none [&::-webkit-details-marker]:hidden">
-              <span className="size-6 flex items-center justify-center rounded-full bg-accent-500/15 shrink-0">
-                <span className="text-xs">⚡</span>
-              </span>
-              <span className="text-xs font-medium truncate flex-1 text-primary-700">
-                {displayText.slice(0, 120)}
-                {displayText.length > 120 ? '...' : ''}
-              </span>
-              <HugeiconsIcon
-                icon={ArrowDown01Icon}
-                size={16}
-                strokeWidth={1.5}
-                className="text-primary-400 shrink-0 transition-transform group-open/narration:rotate-180"
-              />
-            </summary>
-            <div className="px-3 pb-3 pt-1 text-[13px] text-primary-600 whitespace-pre-wrap text-pretty max-h-[400px] overflow-y-auto">
-              {displayText}
-            </div>
-          </details>
-        </div>
-      )}
-      {/* Tool calls now render inline inside the assistant bubble, not above it */}
 
-      {(isUser
-        ? shouldRenderMessageBubble
-        : shouldRenderAssistantAvatarRow) &&
-        !(message as any).__isNarration && (
-        <Message
-          className={cn(
-            'gap-2 md:gap-3',
-            isUser ? 'flex-row-reverse' : '',
-          )}
-        >
-          {isUser ? (
-            <UserAvatar
-              size={24}
-              className="mt-0.5"
-              src={profileAvatarDataUrl}
-              alt={profileDisplayName}
-            />
-          ) : (
-            <AssistantAvatar
-              size={24}
-              className={cn(
-                'mt-0.5 shrink-0',
-                // Glow for empty-gap host — face stays even if isStreaming flickers.
-                isEmptyStreamingShell &&
-                  !hasActivityContent &&
-                  'thinking-avatar-glow',
-              )}
-              alt={
-                isEmptyStreamingShell && !hasActivityContent
-                  ? 'Working'
-                  : undefined
-              }
-            />
-          )}
-          {isEmptyStreamingShell ||
-          (!isUser && !shouldRenderMessageBubble) ? (
-            // Pre-token / waiting: avatar stays mounted; no Working card.
-            <div className="min-h-6 min-w-0 max-w-[80%]" aria-hidden />
-          ) : (
-          <div
-            data-chat-message-bubble={isUser ? 'user' : 'assistant'}
-            className={cn(
-              // relative: absolute "Sent" overlay must not affect bubble height
-              'relative break-words whitespace-normal min-w-0 flex flex-col gap-2 px-3 py-2 max-w-[80%]',
-              '',
-              !isUser
-                ? 'border rounded-2xl rounded-tl-sm'
-                : 'text-white rounded-2xl rounded-tr-sm',
-              isQueued && isUser && !isFailed && 'opacity-70',
-              isFailed && isUser && 'bg-red-50/50 border border-red-300',
-              bubbleClassName,
-            )}
-            style={
-              !isUser
-                ? {
-                    background: 'var(--chat-assistant-bg)',
-                    borderColor: 'var(--chat-assistant-border)',
-                    color: 'var(--chat-assistant-foreground)',
-                  }
-                : {
-                    background: 'var(--chat-user-bg)',
-                    borderColor: 'var(--chat-user-border)',
-                    color: 'var(--chat-user-foreground)',
-                  }
+  const messageBubble = (
+    <div
+      data-chat-message-bubble={isUser ? 'user' : 'assistant'}
+      className={cn(
+        'relative break-words whitespace-normal min-w-0 flex flex-col gap-2 px-3 py-2',
+        isUser ? 'max-w-[80%] text-white rounded-2xl rounded-tr-sm' : 'w-full border rounded-2xl rounded-tl-sm',
+        isQueued && isUser && !isFailed && 'opacity-70',
+        isFailed && isUser && 'bg-red-50/50 border border-red-300',
+        bubbleClassName,
+      )}
+      style={
+        !isUser
+          ? {
+              background: 'var(--chat-assistant-bg)',
+              borderColor: 'var(--chat-assistant-border)',
+              color: 'var(--chat-assistant-foreground)',
             }
-          >
-            {hasAttachments && (
+          : {
+              background: 'var(--chat-user-bg)',
+              borderColor: 'var(--chat-user-border)',
+              color: 'var(--chat-user-foreground)',
+            }
+      }
+    >
+      {hasAttachments && (
               <div className="flex flex-wrap gap-2">
                 {attachments.map((attachment) => {
                   const source = attachmentSource(attachment)
@@ -3005,7 +2879,134 @@ function MessageItemComponent({
                 Sent
               </span>
             ) : null}
-          </div>
+    </div>
+  )
+
+
+  return (
+    <div
+      ref={wrapperRef}
+      data-chat-message-role={role}
+      data-chat-message-id={wrapperDataMessageId}
+      style={{
+        // `content-visibility: auto` creates containment that clips paints
+        // outside the box — including the busy avatar outline on the left
+        // edge. Keep visible while streaming / retry so the ring is not cut.
+        contentVisibility:
+          (isUser && (isFailed || isStuckSending)) ||
+          shouldRenderAssistantAvatarRow
+            ? 'visible'
+            : 'auto',
+        containIntrinsicSize: 'auto 160px',
+        ...(typeof wrapperScrollMarginTop === 'number'
+          ? { scrollMarginTop: `${wrapperScrollMarginTop}px` }
+          : null),
+      }}
+      className={cn(
+        'group relative flex flex-col',
+        hasText || hasAttachments || hasSelectionCards
+          ? 'gap-0.5 md:gap-1'
+          : 'gap-0',
+        wrapperClassName,
+        isUser ? 'items-end' : 'items-start',
+        !isUser && isNew && 'animate-[message-fade-in_0.4s_ease-out]',
+      )}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      {/* Narration messages (tool-call activity) — compact collapsible row */}
+      {!isUser && (message as any).__isNarration && hasText && (
+        <div className="w-full max-w-[var(--chat-content-max-width)]">
+          <details className="group/narration rounded-lg border border-primary-200/50 bg-primary-50/30 hover:bg-primary-50 dark:hover:bg-primary-800/50 transition-colors">
+            <summary className="flex items-center gap-2 cursor-pointer select-none px-3 py-2 list-none [&::-webkit-details-marker]:hidden">
+              <span className="size-6 flex items-center justify-center rounded-full bg-accent-500/15 shrink-0">
+                <span className="text-xs">⚡</span>
+              </span>
+              <span className="text-xs font-medium truncate flex-1 text-primary-700">
+                {displayText.slice(0, 120)}
+                {displayText.length > 120 ? '...' : ''}
+              </span>
+              <HugeiconsIcon
+                icon={ArrowDown01Icon}
+                size={16}
+                strokeWidth={1.5}
+                className="text-primary-400 shrink-0 transition-transform group-open/narration:rotate-180"
+              />
+            </summary>
+            <div className="px-3 pb-3 pt-1 text-[13px] text-primary-600 whitespace-pre-wrap text-pretty max-h-[400px] overflow-y-auto">
+              {displayText}
+            </div>
+          </details>
+        </div>
+      )}
+      {/* Tool calls now render inline inside the assistant bubble, not above it */}
+
+      {(isUser
+        ? shouldRenderMessageBubble
+        : shouldRenderAssistantAvatarRow) &&
+        !(message as any).__isNarration && (
+        <Message
+          className={cn(
+            'gap-2 md:gap-3',
+            isUser ? 'flex-row-reverse' : 'items-start',
+          )}
+        >
+          {isUser ? (
+            <UserAvatar
+              size={24}
+              className="mt-0.5"
+              src={profileAvatarDataUrl}
+              alt={profileDisplayName}
+            />
+          ) : (
+            <AssistantAvatar
+              size={24}
+              className={cn(
+                'mt-0.5 shrink-0',
+                // Glow for empty-gap host — face stays even if isStreaming flickers.
+                isEmptyStreamingShell &&
+                  !hasActivityContent &&
+                  'thinking-avatar-glow',
+              )}
+              alt={
+                isEmptyStreamingShell && !hasActivityContent
+                  ? 'Working'
+                  : undefined
+              }
+            />
+          )}
+          {!isUser ? (
+            <div className="flex min-w-0 max-w-[80%] flex-1 flex-col gap-1">
+              {!hideActivityCard && hasActivityContent ? (
+                <TuiActivityCard
+                  toolSections={finalToolSections}
+                  thinking={thinking}
+                  isStreaming={effectiveIsStreaming}
+                  expandAll={expandAllToolSections}
+                  formatLabel={formatToolDisplayLabel}
+                  formatArg={keyArgLabel}
+                />
+              ) : null}
+              {effectiveIsStreaming && hasLifecycleEvents && !hasToolCalls ? (
+                <div className="flex flex-col gap-1">
+                  {lifecycleEvents.map((event, index) => (
+                    <LifecycleEventCard
+                      key={`${event.timestamp}-${index}-${event.text}`}
+                      text={event.text}
+                      emoji={event.emoji}
+                      isError={event.isError}
+                    />
+                  ))}
+                </div>
+              ) : null}
+              {isEmptyStreamingShell && !hasActivityContent ? (
+                <div className="min-h-6 min-w-0" aria-hidden />
+              ) : shouldRenderMessageBubble ? (
+                messageBubble
+              ) : null}
+            </div>
+          ) : (
+            messageBubble
           )}
         </Message>
       )}

@@ -4,6 +4,19 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { cn } from '@/lib/utils'
 import { ProviderLogo } from '@/components/provider-logo'
+import {
+  readOnboardingComplete,
+  writeOnboardingComplete,
+  dispatchOnboardingCompletionChanged,
+} from './onboarding-storage'
+
+export {
+  ONBOARDING_KEY,
+  ONBOARDING_COMPLETE_EVENT,
+  readOnboardingComplete,
+  writeOnboardingComplete,
+  dispatchOnboardingCompletionChanged,
+} from './onboarding-storage'
 
 const KNOWN_PROVIDER_PREFIXES = [
   'openrouter',
@@ -28,49 +41,6 @@ function stripProviderPrefix(model: string): string {
     return model.slice(slash + 1)
   }
   return model
-}
-
-export const ONBOARDING_KEY = 'agorax-onboarding-complete'
-const LEGACY_ONBOARDING_KEY = 'claude-onboarding-complete'
-export const ONBOARDING_COMPLETE_EVENT = 'agorax:onboarding-complete'
-
-export function readOnboardingComplete(): boolean {
-  if (typeof window === 'undefined') return false
-  try {
-    if (localStorage.getItem(ONBOARDING_KEY) === 'true') return true
-    if (localStorage.getItem(LEGACY_ONBOARDING_KEY) === 'true') {
-      localStorage.setItem(ONBOARDING_KEY, 'true')
-      localStorage.removeItem(LEGACY_ONBOARDING_KEY)
-      return true
-    }
-  } catch {
-    return false
-  }
-  return false
-}
-
-export function writeOnboardingComplete(completed: boolean): void {
-  if (typeof window === 'undefined') return
-  try {
-    if (completed) {
-      localStorage.setItem(ONBOARDING_KEY, 'true')
-      localStorage.removeItem(LEGACY_ONBOARDING_KEY)
-    } else {
-      localStorage.removeItem(ONBOARDING_KEY)
-      localStorage.removeItem(LEGACY_ONBOARDING_KEY)
-    }
-  } catch {
-    // Ignore quota / private-mode failures.
-  }
-}
-
-function dispatchOnboardingCompletionChanged(completed: boolean) {
-  if (typeof window === 'undefined') return
-  window.dispatchEvent(
-    new CustomEvent(ONBOARDING_COMPLETE_EVENT, {
-      detail: { completed },
-    }),
-  )
 }
 
 type Step = 'welcome' | 'connect' | 'provider' | 'test' | 'done'

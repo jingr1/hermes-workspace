@@ -44,6 +44,14 @@ import {
   visibleErrorText,
 } from './activity-message-mapper'
 import {
+  assistantPlainTextFromHistoryMessage,
+  hermesAssistantTextStampDelta,
+  hermesSettledTurnUpdate,
+  pickAuthoritativeAssistantText,
+  shouldFetchHistoryForSettle,
+  shouldStampAssistantText,
+} from '@/lib/hermes-turn-settle-backfill'
+import {
   createHermesActivityAdapterState,
   hermesSseToActivityEvents,
   type HermesActivityAdapterState,
@@ -389,8 +397,11 @@ export function createHermesCommandPort(
             thinkingMessageId: `${pendingAssistantId}:thinking`,
           }
           let hermesRunId: string | null = null
+          let streamPhase: 'none' | 'settling' | 'settled' = 'none'
           let settledOutcome: AgentActivityTurn['outcome'] = null
           let settledError: string | undefined
+          /** True when a success `done` carried body text (skip history stamp). */
+          let doneCarriedFinalText = false
           const now = () => Date.now()
 
           const ingestFrame = async (
@@ -402,6 +413,15 @@ export function createHermesCommandPort(
               (typeof data.run_id === 'string' && data.run_id.trim()) ||
               null
             if (payloadRun) hermesRunId = payloadRun
+
+            if (event === 'done') {
+              const doneText = assistantPlainTextFromHistoryMessage(
+                data.message as
+                  | { role?: string; content?: unknown; text?: unknown }
+                  | undefined,
+              )
+              if (doneText) doneCarriedFinalText = true
+            }
 
             const ctx = {
               workspaceId: options.workspaceId,
@@ -451,11 +471,15 @@ export function createHermesCommandPort(
                     }
                   }
                 ).turn
+                if (turn?.phase === 'settling') {
+                  streamPhase = 'settling'
+                }
                 if (turn?.phase === 'settled') {
+                  streamPhase = 'settled'
                   settledOutcome =
                     (turn.outcome as AgentActivityTurn['outcome']) ??
                     'completed'
-                  settledError = turn.error?.message
+                  settledError = turn.error?.message ?? settledError
                 }
               }
             }
@@ -540,35 +564,115 @@ export function createHermesCommandPort(
 
           await parseSseStream(response.body, input.signal, ingestFrame)
 
+          const resolvedGateway =
+            (await options.getMapping(agentSessionId))?.gatewaySessionId ??
+            gatewaySessionId
+
           if (hermesRunId) {
             await persistMapping({
               agentSessionId,
-              gatewaySessionId:
-                (await options.getMapping(agentSessionId))?.gatewaySessionId ??
-                gatewaySessionId,
+              gatewaySessionId: resolvedGateway,
               turnId,
               hermesRunId,
             })
           }
 
-          // Stream ended without a settle frame — force completed settle.
-          if (!settledOutcome) {
-            const { state: nextAdapter, events } = hermesSseToActivityEvents(
-              {
+          const terminalFailed =
+            streamPhase === 'settled' &&
+            (settledOutcome === 'failed' ||
+              settledOutcome === 'canceled' ||
+              settledOutcome === 'interrupted')
+
+          // Tutti: success path stays in settling until authoritative backfill,
+          // then emits settled. Failures already settled from the adapter.
+          if (!terminalFailed) {
+            if (streamPhase === 'none') {
+              const { state: nextAdapter, events } = hermesSseToActivityEvents(
+                {
+                  workspaceId: options.workspaceId,
+                  agentSessionId,
+                  turnId,
+                  runId: hermesRunId,
+                },
+                adapter,
+                'done',
+                { state: 'complete', runId: hermesRunId },
+              )
+              adapter = nextAdapter
+              for (const activityEvent of events) {
+                options.onActivityEvent(activityEvent)
+              }
+              streamPhase = 'settling'
+              settledOutcome = settledOutcome ?? 'completed'
+            }
+
+            // History stamp only when done.message did not carry final text
+            // (avoid settle-path latency on the common complete path).
+            if (
+              shouldFetchHistoryForSettle({
+                doneCarriedFinalText,
+                liveText: adapter.lastText,
+              })
+            ) {
+              try {
+                const historySessionKey = resolvedGateway || agentSessionId
+                const query = new URLSearchParams({
+                  limit: '80',
+                  sessionKey: historySessionKey,
+                  friendlyId: historySessionKey,
+                })
+                if (profileName) query.set('profile', profileName)
+                const historyRes = await fetch(
+                  `/api/history?${query.toString()}`,
+                  { signal: input.signal },
+                )
+                if (historyRes.ok) {
+                  const historyJson = (await historyRes.json()) as {
+                    messages?: Array<{
+                      role?: string
+                      content?: unknown
+                      text?: unknown
+                    }>
+                  }
+                  const authText = pickAuthoritativeAssistantText(
+                    historyJson.messages ?? [],
+                    0,
+                  )
+                  if (
+                    shouldStampAssistantText(adapter.lastText, authText) &&
+                    adapter.assistantMessageId
+                  ) {
+                    options.onActivityEvent(
+                      hermesAssistantTextStampDelta({
+                        workspaceId: options.workspaceId,
+                        agentSessionId,
+                        turnId,
+                        messageId: adapter.assistantMessageId,
+                        text: authText,
+                        nowUnixMs: now(),
+                      }),
+                    )
+                    adapter = { ...adapter, lastText: authText }
+                  }
+                }
+              } catch {
+                // Best-effort; settle even if history is unavailable.
+              }
+            }
+
+            const settleTs = now()
+            options.onActivityEvent(
+              hermesSettledTurnUpdate({
                 workspaceId: options.workspaceId,
                 agentSessionId,
                 turnId,
-                runId: hermesRunId,
-              },
-              adapter,
-              'done',
-              { state: 'complete', runId: hermesRunId },
+                outcome: settledOutcome ?? 'completed',
+                errorMessage: settledError,
+                nowUnixMs: settleTs,
+              }),
             )
-            adapter = nextAdapter
-            for (const activityEvent of events) {
-              options.onActivityEvent(activityEvent)
-            }
-            settledOutcome = 'completed'
+            streamPhase = 'settled'
+            settledOutcome = settledOutcome ?? 'completed'
           }
 
           const ts = now()
@@ -583,9 +687,7 @@ export function createHermesCommandPort(
           const session = createHermesSessionSkeleton({
             workspaceId: options.workspaceId,
             agentSessionId,
-            providerSessionId:
-              (await options.getMapping(agentSessionId))?.gatewaySessionId ??
-              gatewaySessionId,
+            providerSessionId: resolvedGateway,
             nowUnixMs: ts,
           })
           options.onSendCompleted?.(clientSubmitId)

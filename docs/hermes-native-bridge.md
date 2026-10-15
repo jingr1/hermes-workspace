@@ -68,12 +68,15 @@ AgentSessionEngine
 - **列表投影同源：** `projectActivityMessagesToChat` + `selectAssistantStreamingMessageId`（`activity-list-projection.ts`）同时服务 `selectHermesChatState` 与 `selectManagedAgentChatState`。禁止一边 fold、一边 1:1 map。
 - **send 种壳同源：** `ingestEngineUserPromptMessage`（Hermes / managed 共用）在 submit 前写入 `user:<clientSubmitId>` + `assistant:pending:<session>:<turn>`；`applyOpenAssistantStreamingChrome` 优先 pending host，并用 `foldOpenTurnIntoLiveHost` 吞掉 daemon/SSE 旁路行。
 
-### 2.3 Settle
+### 2.3 Settle（Tutti 对齐：`running → settling → settled`）
 
-- `done` / `error` → `turn_update` `phase=settled`
-- **禁止**用 history 页整段替换已投影正文
-- Reconcile = 补洞 / stamp id / version，不是换皮
-- **开 turn 期间**：`foldOpenTurnIntoLiveHost` 把 last-user 之后的工具/中间正文并进唯一 `assistant:<runId>`；有线程内 host 时底部 Thinking pill 必须关（禁止 `liveToolActivity` 单独点亮）
+- 成功 `done` → `turn_update` `phase=settling`（`activeTurnId` 保持；composer busy / fold 仍开）
+- commandPort 在 settling 内：先用 `done.message` stamp 终稿 text；**仅当 done 未带正文** 才 `/api/history` 补洞（更长才写），再发 `phase=settled`
+- `error` / failed / interrupted `done` → 直接 `phase=settled`（失败无需等补洞）
+- Composer busy 跟 `phase !== settled`（见 `selectHermesChatState`）
+- **禁止**用 history 页整段替换已投影正文；Reconcile = 补洞 / stamp id / version，不是换皮
+- **禁止**在成功 `done` 瞬间开输入框（须等 settled）
+- **开 turn / settling 期间**：`foldOpenTurnIntoLiveHost` 把 last-user 之后的工具/中间正文并进唯一 host；有线程内 host 时底部 Thinking pill 必须关（禁止 `liveToolActivity` 单独点亮）
 
 ### 2.4 Chat turn 分阶段（A–D）
 
