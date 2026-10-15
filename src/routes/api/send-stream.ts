@@ -27,6 +27,10 @@ import {
 } from '../../server/stream-client-disconnect'
 import { getChatMode } from '../../server/gateway-capabilities'
 import {
+  ensureChatGateway,
+  enterChatGateway,
+} from '../../server/chat-gateway'
+import {
   appendLocalMessage,
   ensureLocalSession,
   getLocalMessages,
@@ -492,8 +496,6 @@ export const Route = createFileRoute('/api/send-stream')({
         const requestedProfile =
           typeof body.profileName === 'string' ? body.profileName.trim() : ''
         try {
-          const { ensureChatGateway, enterChatGateway } =
-            await import('../../server/chat-gateway')
           enterChatGateway(await ensureChatGateway(requestedProfile))
         } catch (error) {
           const errorMsg =

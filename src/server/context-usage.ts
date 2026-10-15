@@ -3,6 +3,7 @@ import {
   dashboardFetch,
   ensureGatewayProbed,
   getCapabilities,
+  shouldUseDashboard,
 } from '@/server/gateway-capabilities'
 import { listSessions } from '@/server/hermes-api'
 import {
@@ -370,7 +371,6 @@ async function fetchGatewayJson(
     )
     if (gatewayPayload) return gatewayPayload
 
-    const { shouldUseDashboard } = await import('./gateway-capabilities')
     if (!shouldUseDashboard()) return null
 
     return await parseJsonObject(

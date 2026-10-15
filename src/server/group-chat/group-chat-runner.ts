@@ -87,7 +87,7 @@ import {
   shouldLogRoomError,
 } from './runner-state'
 import { getMemberSessionMessages } from './agent-session-manager'
-import { maybeSummarizeRoom } from './summaries'
+import { getContextForMember, maybeSummarizeRoom } from './summaries'
 import type { GroupMember, GroupTurnResult, Room, RoomMessage } from './types'
 
 /** Prefer an explicit Hermes profile; never pass managed agent ids as gateway profiles. */
@@ -733,9 +733,7 @@ async function runMemberTurn(
   members: Array<GroupMember>,
   cwd: string | null,
 ): Promise<GroupTurnResult> {
-  const { summary } = await import('./summaries').then((m) =>
-    m.getContextForMember(room.id),
-  )
+  const { summary } = getContextForMember(room.id)
   const prompt = buildTurnContext(
     room.title,
     members,

@@ -10,6 +10,8 @@
  * and routes them through the generic-json adapter.
  */
 import { readHubSources } from '../mcp-hub-sources-store'
+import { listProfileMcpServers } from '../mcp-profile-config'
+import { getActiveProfileName } from '../profiles-browser'
 import { fetchLocalFile } from './sources/local-file'
 import { fetchMcpGet } from './sources/mcp-get'
 import { fetchGenericJson } from './sources/generic-json'
@@ -35,8 +37,6 @@ const PER_SOURCE_TIMEOUT_MS = 8_000
 /** Read installed mcp server names from local profile config.yaml. */
 async function getInstalledNames(): Promise<Set<string>> {
   try {
-    const { listProfileMcpServers } = await import('../mcp-profile-config')
-    const { getActiveProfileName } = await import('../profiles-browser')
     const servers = listProfileMcpServers(getActiveProfileName() || 'default')
     return new Set(servers.map((s) => s.name))
   } catch {

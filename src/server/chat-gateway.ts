@@ -16,6 +16,10 @@ import {
 } from './gateway-capabilities'
 import { getProfileGatewayUrl, isGatewayPoolEnabled } from './gateway-ports'
 import { getActiveProfileName } from './profiles-browser'
+import {
+  ensureActiveProfileGateway,
+  ensureProfileGateway,
+} from './gateway-pool'
 
 export type ChatGatewayTarget = {
   profile: string
@@ -64,7 +68,6 @@ export async function ensureChatGateway(
 ): Promise<ChatGatewayTarget> {
   const profile = normalizeProfile(profileName)
   if (!isGatewayPoolEnabled()) {
-    const { ensureActiveProfileGateway } = await import('./gateway-pool')
     await ensureActiveProfileGateway()
     return {
       profile,
@@ -73,7 +76,6 @@ export async function ensureChatGateway(
     }
   }
 
-  const { ensureProfileGateway } = await import('./gateway-pool')
   const ensured = await ensureProfileGateway(profile)
   if (!ensured.ok) {
     throw new Error(ensured.error || `gateway for ${profile} is unavailable`)

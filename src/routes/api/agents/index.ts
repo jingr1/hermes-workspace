@@ -14,6 +14,7 @@ import {
   loadGroupChatActivity,
   deriveAgentPresenceForAgent,
 } from '../../../lib/agent-status-io'
+import { probeHermesProfileGateway } from '../../../server/agent-runtime/hermes-gateway-probe'
 
 function buildStatusSnapshot(
   snapshot: NonNullable<ReturnType<typeof getAgentStatusSnapshot>>,
@@ -99,8 +100,6 @@ export const Route = createFileRoute('/api/agents/')({
         }
 
         if (!agents.some((agent) => agent.agentId === 'default')) {
-          const { probeHermesProfileGateway } =
-            await import('../../../server/agent-runtime/hermes-gateway-probe')
           const probe = await probeHermesProfileGateway('default')
           agents.unshift(
             buildAgentPayload(

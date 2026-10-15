@@ -8,6 +8,10 @@ import {
   ensureGatewayEnhancedProbed,
   getGatewayMode,
 } from '../../server/gateway-capabilities'
+import {
+  getGatewayPoolStatus,
+  isGatewayPoolEnabled,
+} from '../../server/gateway-pool'
 
 export const Route = createFileRoute('/api/gateway-status')({
   server: {
@@ -23,8 +27,6 @@ export const Route = createFileRoute('/api/gateway-status')({
         void ensureGatewayEnhancedProbed().catch(() => {})
         let pool: unknown = null
         try {
-          const { getGatewayPoolStatus, isGatewayPoolEnabled } =
-            await import('../../server/gateway-pool')
           if (isGatewayPoolEnabled()) {
             pool = {
               enabled: true,

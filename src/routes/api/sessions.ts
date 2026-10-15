@@ -19,7 +19,14 @@ import {
   listLocalSessions,
   updateLocalSessionTitle,
 } from '../../server/local-session-store'
-import { listSessionsForProfile } from '../../server/profiles-browser'
+import {
+  getActiveProfileName,
+  listSessionsForProfile,
+} from '../../server/profiles-browser'
+import {
+  ensureChatGateway,
+  enterChatGateway,
+} from '../../server/chat-gateway'
 
 export const Route = createFileRoute('/api/sessions')({
   server: {
@@ -60,8 +67,6 @@ export const Route = createFileRoute('/api/sessions')({
         // state.db (same codepath as ?profile=), merging local portable
         // sessions. Gateway/dashboard are not required for listing.
         try {
-          const { getActiveProfileName } =
-            await import('../../server/profiles-browser')
           const activeProfile = getActiveProfileName() || 'default'
           const fsSessions = listSessionsForProfile(activeProfile)
           const result: Array<any> = fsSessions.map((s) => ({
@@ -122,8 +127,6 @@ export const Route = createFileRoute('/api/sessions')({
         const requestedProfile =
           typeof body.profileName === 'string' ? body.profileName.trim() : ''
         try {
-          const { ensureChatGateway, enterChatGateway } =
-            await import('../../server/chat-gateway')
           enterChatGateway(await ensureChatGateway(requestedProfile))
         } catch (error) {
           return json(

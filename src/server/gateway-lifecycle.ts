@@ -10,12 +10,18 @@
  * opt back into time-based eviction.
  */
 import { getActiveProfileName } from './profiles-browser'
-import { stopProfileGateway } from './hermes-agent'
+import {
+  isHermesAgentHealthy,
+  stopProfileGateway,
+} from './hermes-agent'
 import {
   isGatewayPoolEnabled,
   listManagedProfileNames,
+  listPersistedOrphanProfilePorts,
   PINNED_GATEWAY_PROFILE,
+  resolveProfileGatewayPort,
 } from './gateway-ports'
+import { pidListeningOnPort } from './gateway-port-owner'
 
 export { PINNED_GATEWAY_PROFILE }
 
@@ -145,11 +151,10 @@ export function shouldApplyGatewayRoute(
 
 async function isProfileGatewayRunning(profileName: string): Promise<boolean> {
   try {
+    // Dynamic: breaks gateway-pool ↔ gateway-lifecycle cycle.
     const { probeProfileGateway } = await import('./gateway-pool')
     return await probeProfileGateway(profileName)
   } catch {
-    const { isHermesAgentHealthy } = await import('./hermes-agent')
-    const { resolveProfileGatewayPort } = await import('./gateway-ports')
     return isHermesAgentHealthy(resolveProfileGatewayPort(profileName), 250)
   }
 }
@@ -258,6 +263,7 @@ export async function ensureDefaultResidentGateway(): Promise<void> {
       touchGatewayLease(PINNED_GATEWAY_PROFILE)
       return
     }
+    // Dynamic: breaks gateway-pool ↔ gateway-lifecycle cycle.
     const { ensureProfileGateway } = await import('./gateway-pool')
     await ensureProfileGateway(PINNED_GATEWAY_PROFILE)
   } catch (error) {
@@ -317,11 +323,6 @@ export function ensureGatewayLifecycleScheduler(): void {
 /** Stop gateways for profiles removed from disk but still listed in gateway-pool.json. */
 export async function reconcileRemovedProfileGateways(): Promise<string[]> {
   if (!isGatewayPoolEnabled()) return []
-  const { listPersistedOrphanProfilePorts, resolveProfileGatewayPort } =
-    await import('./gateway-ports')
-  const { stopProfileGateway } = await import('./hermes-agent')
-  const { pidListeningOnPort } = await import('./gateway-port-owner')
-
   const orphans = listPersistedOrphanProfilePorts()
   if (orphans.length === 0) return []
 

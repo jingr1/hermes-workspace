@@ -24,6 +24,8 @@ import path from 'node:path'
 import os from 'node:os'
 import { getStateDir } from './workspace-state-dir'
 import { resolveProfileHermesHome, getActiveProfileName } from './profiles-browser'
+import { normalizeMcpList } from './mcp-normalize'
+import { isGatewayPoolEnabled } from './gateway-ports'
 
 type WorkspaceOverrides = {
   claudeApiUrl?: string
@@ -790,12 +792,6 @@ async function probeChatCompletions(): Promise<boolean> {
  * malformed body, capability is `false`.
  */
 async function probeMcp(dashboardAvailable: boolean): Promise<boolean> {
-  let normalizeMcpList: (body: unknown) => unknown
-  try {
-    ;({ normalizeMcpList } = await import('./mcp-normalize'))
-  } catch {
-    return false
-  }
   const validate = async (res: Response): Promise<boolean> => {
     if (!res.ok) return false
     const body = (await res.json().catch(() => null)) as unknown
@@ -1027,15 +1023,10 @@ function logCapabilities(next: GatewayCapabilities): void {
 }
 
 async function autoDetectGatewayUrl(): Promise<void> {
-  try {
-    const { isGatewayPoolEnabled } = await import('./gateway-ports')
-    if (isGatewayPoolEnabled()) {
-      // The pool already has a stable port per profile. Probes must not
-      // swing the process-global URL onto whichever profile is selected.
-      return
-    }
-  } catch {
-    // port map unavailable — fall through to legacy detection
+  if (isGatewayPoolEnabled()) {
+    // The pool already has a stable port per profile. Probes must not
+    // swing the process-global URL onto whichever profile is selected.
+    return
   }
 
   if (process.env.HERMES_API_URL) return

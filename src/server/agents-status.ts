@@ -12,6 +12,7 @@ import {
   deriveAgentPresenceForAgent,
   loadGroupChatActivity,
 } from '../lib/agent-status-io'
+import { probeHermesProfileGateway } from './agent-runtime/hermes-gateway-probe'
 
 export type AgentsStatusPayload = {
   agents: Array<AgentStatusEntry>
@@ -174,8 +175,6 @@ export async function buildAgentsStatusPayload(): Promise<AgentsStatusPayload> {
     }
   })
 
-  const { probeHermesProfileGateway } =
-    await import('./agent-runtime/hermes-gateway-probe')
   const orphanEntries = await Promise.all(
     router.registry.orphanProfiles.map(async (profile) => {
       const probe = await probeHermesProfileGateway(profile)

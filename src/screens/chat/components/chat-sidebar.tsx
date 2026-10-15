@@ -48,6 +48,7 @@ import {
 } from '@/hooks/use-chat-settings'
 import { StatusDot } from '@/components/status-indicator'
 import { applyTheme, useSettingsStore } from '@/hooks/use-settings'
+import { setTheme, type ThemeId } from '@/lib/theme'
 
 /** Tutti-adjacent nav chrome: slightly heavier stroke than Hugeicons default. */
 const NAV_ICON_STROKE = 2
@@ -92,10 +93,7 @@ function ThemeToggleMini() {
           (isDark
             ? `${currentDataTheme}-light`
             : currentDataTheme.replace(/-light$/, ''))
-        // Import and call setTheme to persist and apply
-        import('@/lib/theme').then(({ setTheme }) => {
-          setTheme(nextDataTheme as any)
-        })
+        setTheme(nextDataTheme as ThemeId)
         // Also update settings hook
         const nextMode = nextDataTheme.endsWith('-light') ? 'light' : 'dark'
         applyTheme(nextMode)

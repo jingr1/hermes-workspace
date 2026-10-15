@@ -18,6 +18,7 @@
  *   "No LLM provider configured".
  */
 import { getHermesApiClient } from '../hermes-api-profile'
+import { getMessages } from '../hermes-api'
 import { runManagedTurn } from '../agent-runtime/run-managed-turn'
 import {
   ensureManagedChatSession,
@@ -316,7 +317,7 @@ async function pickReplyFromSession(
         : undefined
     const messages = client
       ? await client.getMessages(sessionId)
-      : await import('../hermes-api').then((m) => m.getMessages(sessionId))
+      : await getMessages(sessionId)
     const picked = pickGroupTurnReply(
       messages.map((m) => ({ role: m.role, content: m.content })),
       before,
@@ -410,7 +411,7 @@ async function executeHermesMemberTurn(
           : undefined
       const pre = client
         ? await client.getMessages(sessionId)
-        : await import('../hermes-api').then((m) => m.getMessages(sessionId))
+        : await getMessages(sessionId)
       before = pre.length
     } catch {
       before = 0

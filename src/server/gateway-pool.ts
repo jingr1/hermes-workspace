@@ -6,13 +6,17 @@
 import path from 'node:path'
 import {
   getActiveProfileName,
+  isLiveNamedProfile,
   resolveProfileHermesHome,
+  setActiveProfile,
 } from './profiles-browser'
 import {
   isHermesAgentHealthy,
   spawnProfileGateway,
+  startHermesAgent,
   type StartHermesAgentResult,
 } from './hermes-agent'
+import { applyProfileGatewayRoute } from './gateway-capabilities'
 import {
   PINNED_GATEWAY_PROFILE,
   bindProfileToPort,
@@ -197,7 +201,6 @@ export async function getGatewayPoolStatus(): Promise<Array<PooledGateway>> {
 }
 
 async function applyRoute(url: string): Promise<void> {
-  const { applyProfileGatewayRoute } = await import('./gateway-capabilities')
   applyProfileGatewayRoute(url)
 }
 
@@ -219,7 +222,6 @@ async function ensureProfileGatewayLocked(
   const name = (profileName || 'default').trim() || 'default'
   const hermesHome = resolveProfileHermesHome(name)
   if (name !== PINNED_GATEWAY_PROFILE) {
-    const { isLiveNamedProfile } = await import('./profiles-browser')
     if (!isLiveNamedProfile(name)) {
       return {
         ok: false,
@@ -389,7 +391,6 @@ export async function ensureActiveProfileGateway(options?: {
   forceReplace?: boolean
 }): Promise<EnsureGatewayResult> {
   if (!isGatewayPoolEnabled()) {
-    const { startHermesAgent } = await import('./hermes-agent')
     const started = await startHermesAgent({
       profileName: getActiveProfileName(),
       forceReplace: options?.forceReplace,
@@ -415,7 +416,6 @@ export async function ensureActiveProfileGateway(options?: {
       result.error.includes('does not exist')
     ) {
       try {
-        const { setActiveProfile } = await import('./profiles-browser')
         setActiveProfile(PINNED_GATEWAY_PROFILE)
       } catch {
         /* ignore */

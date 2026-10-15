@@ -52,6 +52,7 @@ import type { DashboardOverview } from '@/server/dashboard-aggregator'
 import { getUnavailableReason } from '@/lib/feature-gates'
 import { cn } from '@/lib/utils'
 import { applyTheme, useSettingsStore } from '@/hooks/use-settings'
+import { setTheme, type ThemeId } from '@/lib/theme'
 import { openHamburgerMenu } from '@/components/mobile-hamburger-menu'
 import { useFeatureAvailable } from '@/hooks/use-feature-available'
 
@@ -918,9 +919,7 @@ export function DashboardScreen() {
             const nextDataTheme =
               LIGHT_DARK_PAIRS[cur] ||
               (isDark ? 'claude-official-light' : 'claude-official')
-            import('@/lib/theme').then(({ setTheme }) => {
-              setTheme(nextDataTheme as any)
-            })
+            setTheme(nextDataTheme as ThemeId)
             const nextMode = nextDataTheme.endsWith('-light') ? 'light' : 'dark'
             applyTheme(nextMode)
             updateSettings({ theme: nextMode })
