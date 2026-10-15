@@ -878,7 +878,6 @@ export function ChatScreen({
     lastCompletedRunAt,
     connectionState,
     isRealtimeStreaming,
-    realtimeStreamingText,
     realtimeStreamingThinking,
     realtimeStreamingMessageId,
     realtimeLifecycleEvents,
@@ -1172,7 +1171,7 @@ export function ChatScreen({
   // Settle probe (recovery latch only): while send-path waiting is set, probe
   // active-run even if SSE reports connected. After gateway interrupt the run
   // is often already gone and no `done` arrives — without this, waiting stuck
-  // until the 120s failsafe. Does not drive Working (listTurnBusy = Engine).
+  // until the 120s failsafe. Does not drive Working (hermesTurnBusy = Engine).
   useEffect(() => {
     if (!waitingForResponse || !resolvedSessionKey) return
 
@@ -1699,37 +1698,34 @@ export function ChatScreen({
   // Composer / queue / edit: Engine busy + local AbortController + sending.
   // waitingForResponse stays recovery-only.
   const interactionBusy = hermesTurnBusy || localIsStreaming || sending
-  // Working / TurnActivityHost: Engine only (already includes isSubmitting).
-  // Do not OR local/store streaming — that was a second busy skin.
-  const listTurnBusy = hermesTurnBusy
   // Portable keeps local Abort streaming; Hermes 1:1 chrome follows Engine.
   const activeIsRealtimeStreaming = isPortableMode
     ? localIsStreaming
     : hermesEngineChat.isStreaming || localIsStreaming
-  const activeRealtimeStreamingText = isPortableMode
-    ? localStreamingText
-    : realtimeStreamingText
-  // Sticky text only while the turn is live — bridges empty tool-phase frames.
-  // After settle, MessageItem reads Engine content (no completedStreaming
-  // overlay handoff).
+  // Portable sticky text bridges empty tool-phase frames. Hermes 1:1 list
+  // reads Engine message content — no chat-store streamingText overlay.
   const stickyStreamingTextRef = useRef<{ runId: string | null; text: string }>(
     {
       runId: null,
       text: '',
     },
   )
-  stickyStreamingTextRef.current = advanceStickyStreamingText({
-    isStreaming: activeIsRealtimeStreaming,
-    runId: streamingRunId ?? null,
-    rawText: activeRealtimeStreamingText,
-    smoothedText: activeRealtimeStreamingText,
-    previousState: stickyStreamingTextRef.current,
-  })
-  const stableActiveStreamingText = activeIsRealtimeStreaming
-    ? activeRealtimeStreamingText || stickyStreamingTextRef.current.text
-    : ''
+  if (isPortableMode) {
+    stickyStreamingTextRef.current = advanceStickyStreamingText({
+      isStreaming: activeIsRealtimeStreaming,
+      runId: streamingRunId ?? null,
+      rawText: localStreamingText,
+      smoothedText: localStreamingText,
+      previousState: stickyStreamingTextRef.current,
+    })
+  }
+  const stableActiveStreamingText =
+    isPortableMode && activeIsRealtimeStreaming
+      ? localStreamingText || stickyStreamingTextRef.current.text
+      : ''
 
   // Hermes 1:1: Engine projection is the list. Portable keeps legacy merge.
+  // Identity dedupe is owned by reconcile (turn stamp), not UI text collapse.
   const finalDisplayMessages = useMemo(() => {
     if (!isPortableMode) {
       return hermesEngineChat.messages
@@ -4431,7 +4427,7 @@ export function ChatScreen({
                 }
                 notice={null}
                 noticePosition="end"
-                turnBusy={listTurnBusy}
+                turnBusy={hermesTurnBusy}
                 sessionKey={activeCanonicalKey}
                 pinToTop={false}
                 pinGroupMinHeight={pinGroupMinHeight}
@@ -4440,20 +4436,25 @@ export function ChatScreen({
                 bottomOffset={isMobile ? mobileScrollBottomOffset : 0}
                 isStreaming={derivedStreamingInfo.isStreaming}
                 streamingMessageId={derivedStreamingInfo.streamingMessageId}
+                // Hermes 1:1: Engine message owns text/thinking/tools.
+                // chat-store streaming sidecars are portable-only (dual-source
+                // overlays caused Activity/body forks after Phase D).
                 streamingText={
-                  activeIsRealtimeStreaming
+                  isPortableMode && activeIsRealtimeStreaming
                     ? stableActiveStreamingText || undefined
                     : undefined
                 }
                 streamingThinking={
-                  activeIsRealtimeStreaming
+                  isPortableMode && activeIsRealtimeStreaming
                     ? realtimeStreamingThinking || undefined
                     : undefined
                 }
-                lifecycleEvents={realtimeLifecycleEvents}
+                lifecycleEvents={
+                  isPortableMode ? realtimeLifecycleEvents : undefined
+                }
                 hideSystemMessages
-                activeToolCalls={activeToolCalls}
-                liveToolActivity={liveToolActivity}
+                activeToolCalls={isPortableMode ? activeToolCalls : undefined}
+                liveToolActivity={isPortableMode ? liveToolActivity : undefined}
                 researchCard={researchCard}
                 isCompacting={isCompacting}
               />

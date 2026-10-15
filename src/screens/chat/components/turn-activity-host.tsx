@@ -1,9 +1,9 @@
 /**
- * Single activity host for an open turn's thinking/tools chrome.
+ * Live-turn Activity host (Working → thinking/tools) for the whole busy turn.
  *
- * Reply text stays on the durable MessageItem for the whole turn — settle only
- * flips streaming→complete on that same row. Do not park narration on this host
- * and remount it into MessageItem (that handoff jumps the transcript).
+ * Same card from submit through reply streaming — MessageItem only adds the
+ * text bubble underneath. Do not remount Working into MessageItem when
+ * assistant:<runId> appears or when the first token lands.
  */
 
 import { memo, useMemo } from 'react'

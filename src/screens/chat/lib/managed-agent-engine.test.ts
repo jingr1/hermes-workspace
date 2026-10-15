@@ -3,6 +3,7 @@ import {
   createManagedAgentCommandPort,
   createManagedAgentEngine,
   hydrateManagedAgentEngine,
+  ingestManagedUserPromptMessage,
   managedAgentTargetId,
   managedSessionSettingsPatch,
   selectManagedAgentChatState,
@@ -117,6 +118,76 @@ describe('Managed Agent Engine adapter', () => {
     engine.dispose()
   })
 
+  it('ingestManagedUserPromptMessage seeds pending host homologous with Hermes', () => {
+    const engine = createManagedAgentEngine({
+      workspaceId: 'workspace-1',
+      commandPort: { kind: 'typed', effects: unsupportedEffects(), execute: async () => undefined },
+    })
+    ingestManagedUserPromptMessage({
+      engine,
+      workspaceId: 'workspace-1',
+      agentSessionId: 'session-1',
+      clientSubmitId: 'c-m1',
+      text: 'hello managed',
+    })
+    const chat = selectManagedAgentChatState(engine.getSnapshot(), 'session-1', {
+      isSubmitting: true,
+    })
+    expect(chat.messages.map((m) => m.id)).toEqual([
+      'user:c-m1',
+      'assistant:pending:session-1:c-m1',
+    ])
+    expect(chat.isStreaming).toBe(true)
+    expect(chat.turnBusy).toBe(true)
+    expect(chat.streamingMessageId).toBe('assistant:pending:session-1:c-m1')
+    engine.dispose()
+  })
+
+  it('folds daemon turn orphan into the pending host while open', () => {
+    const engine = createManagedAgentEngine({
+      workspaceId: 'workspace-1',
+      commandPort: { kind: 'typed', effects: unsupportedEffects(), execute: async () => undefined },
+    })
+    ingestManagedUserPromptMessage({
+      engine,
+      workspaceId: 'workspace-1',
+      agentSessionId: 'session-1',
+      clientSubmitId: 'c-fold',
+      text: 'ping',
+      occurredAtUnixMs: 1_700_000_000_000,
+    })
+    engine.dispatch({
+      type: 'message/snapshotReceived',
+      messages: [
+        {
+          workspaceId: 'workspace-1',
+          agentSessionId: 'session-1',
+          messageId: 'daemon-asst-1',
+          turnId: 'daemon-turn-uuid',
+          role: 'assistant',
+          kind: 'text',
+          status: 'streaming',
+          payload: { text: 'pong from daemon' },
+          version: 1_700_000_000_002,
+          sequence: 1_700_000_000_002,
+          occurredAtUnixMs: 1_700_000_000_002,
+        },
+      ],
+    })
+    const chat = selectManagedAgentChatState(engine.getSnapshot(), 'session-1', {
+      isSubmitting: true,
+    })
+    expect(chat.messages.map((m) => m.id)).toEqual([
+      'user:c-fold',
+      'assistant:pending:session-1:c-fold',
+    ])
+    expect(chat.messages[1]).toMatchObject({
+      content: [{ type: 'text', text: 'pong from daemon' }],
+    })
+    expect(chat.streamingMessageId).toBe('assistant:pending:session-1:c-fold')
+    engine.dispose()
+  })
+
   it('keeps processing indicator while the active turn is running even with host content', () => {
     const engine = createManagedAgentEngine({
       workspaceId: 'workspace-1',
@@ -216,19 +287,21 @@ describe('Managed Agent Engine adapter', () => {
       interactions: [],
     })
 
-    expect(selectManagedAgentChatState(engine.getSnapshot(), 'session-1').activeToolCalls).toEqual([
+    const state = selectManagedAgentChatState(engine.getSnapshot(), 'session-1')
+    expect(state.activeToolCalls).toEqual([
       { id: 'tool-1', name: 'read_file', phase: 'running', args: { path: 'README.md' } },
     ])
-    expect(selectManagedAgentChatState(engine.getSnapshot(), 'session-1').messages).toEqual([
-      {
-        id: 'tool-1',
-        role: 'assistant',
-        content: [{ type: 'toolCall', id: 'tool-1', name: 'read_file', arguments: { path: 'README.md' } }],
-        timestamp: 1,
-        toolName: 'read_file',
-        details: { input: { path: 'README.md' } },
-      },
-    ])
+    // Same-turn Activity rows fold to one host (shared with Hermes).
+    expect(state.messages).toHaveLength(1)
+    expect(state.messages[0]).toMatchObject({
+      id: 'tool-1',
+      role: 'assistant',
+    })
+    expect(
+      (state.messages[0]?.content as Array<{ type?: string; name?: string }>).some(
+        (part) => part.type === 'toolCall' && part.name === 'read_file',
+      ),
+    ).toBe(true)
     engine.dispose()
   })
 
@@ -266,14 +339,77 @@ describe('Managed Agent Engine adapter', () => {
       interactions: [],
     })
 
-    expect(selectManagedAgentChatState(engine.getSnapshot(), 'session-1').messages).toEqual([
-      {
-        id: 'reasoning-1',
-        role: 'assistant',
-        content: [{ type: 'thinking', thinking: 'Let me check the config first.' }],
-        timestamp: 1,
+    const state = selectManagedAgentChatState(engine.getSnapshot(), 'session-1')
+    expect(state.messages).toHaveLength(1)
+    expect(state.messages[0]).toMatchObject({
+      id: 'reasoning-1',
+      role: 'assistant',
+    })
+    expect(state.messages[0]?.content?.[0]).toMatchObject({
+      type: 'thinking',
+      thinking: 'Let me check the config first.',
+    })
+    engine.dispose()
+  })
+
+  it('folds reasoning + text into one assistant host (shared with Hermes)', () => {
+    const engine = createManagedAgentEngine({
+      workspaceId: 'workspace-1',
+      commandPort: { kind: 'typed', effects: unsupportedEffects(), execute: async () => undefined },
+    })
+    const settled = {
+      ...turn(),
+      phase: 'settled' as const,
+      outcome: 'succeeded' as const,
+      settledAtUnixMs: 2,
+    }
+    hydrateManagedAgentEngine(engine, {
+      ...detailDefaults,
+      workspaceId: 'workspace-1',
+      session: {
+        ...session(),
+        activeTurnId: null,
+        activeTurn: null,
+        latestTurn: settled,
       },
-    ])
+      turns: [settled],
+      messages: [
+        {
+          workspaceId: 'workspace-1',
+          agentSessionId: 'session-1',
+          messageId: 'reasoning-1',
+          turnId: 'turn-1',
+          role: 'assistant',
+          kind: 'reasoning',
+          payload: { text: '用户在问有没有待审批。', source: 'runtime' },
+          version: 1,
+          sequence: 1,
+          occurredAtUnixMs: 1,
+        },
+        {
+          workspaceId: 'workspace-1',
+          agentSessionId: 'session-1',
+          messageId: 'asst-1',
+          turnId: 'turn-1',
+          role: 'assistant',
+          kind: 'text',
+          payload: { text: '目前没有。' },
+          version: 2,
+          sequence: 2,
+          occurredAtUnixMs: 2,
+        },
+      ],
+      interactions: [],
+    })
+    const state = selectManagedAgentChatState(engine.getSnapshot(), 'session-1')
+    expect(state.messages).toHaveLength(1)
+    expect(state.messages[0]).toMatchObject({
+      id: 'asst-1',
+      role: 'assistant',
+    })
+    const content = state.messages[0]?.content as Array<{ type?: string }>
+    expect(content?.some((part) => part.type === 'thinking')).toBe(true)
+    expect(content?.some((part) => part.type === 'text')).toBe(true)
     engine.dispose()
   })
 
@@ -297,25 +433,26 @@ describe('Managed Agent Engine adapter', () => {
     const state = selectManagedAgentChatState(engine.getSnapshot(), 'session-1')
     // Terminal tool calls leave the active list.
     expect(state.activeToolCalls).toEqual([])
-    expect(state.messages).toEqual([
-      {
-        id: 'tool-1',
-        role: 'assistant',
-        content: [{ type: 'toolCall', id: 'tool-1', name: 'bash', arguments: { command: 'ls' } }],
-        timestamp: 1,
-        toolName: 'bash',
-        details: { input: { command: 'ls' }, output: 'README.md\nsrc' },
-      },
-      {
-        id: 'tool-2',
-        role: 'assistant',
-        content: [{ type: 'toolCall', id: 'tool-2', name: 'bash', arguments: { command: 'false' } }],
-        timestamp: 2,
-        toolName: 'bash',
-        details: { input: { command: 'false' }, error: 'command exited 1' },
-        isError: true,
-      },
-    ])
+    // Same turn → one host carrying both tool cards.
+    expect(state.messages).toHaveLength(1)
+    expect(state.messages[0]).toMatchObject({ id: 'tool-1', role: 'assistant' })
+    const streamTools = (
+      state.messages[0] as { __streamToolCalls?: Array<{ id: string; phase: string; result?: string }> }
+    ).__streamToolCalls
+    expect(streamTools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'tool-1',
+          phase: 'complete',
+          result: 'README.md\nsrc',
+        }),
+        expect.objectContaining({
+          id: 'tool-2',
+          phase: 'error',
+          result: 'command exited 1',
+        }),
+      ]),
+    )
     engine.dispose()
   })
 
@@ -388,10 +525,11 @@ describe('Managed Agent Engine adapter', () => {
       interactions: [],
     })
 
-    expect(selectManagedAgentChatState(engine.getSnapshot(), 'session-1').error)
-      .toBe('Claude API: rate limit exceeded')
-    expect(selectManagedAgentChatState(engine.getSnapshot(), 'session-1').messages[0]?.content)
-      .toEqual([{ type: 'text', text: 'Claude API: rate limit exceeded' }])
+    const visible = selectManagedAgentChatState(engine.getSnapshot(), 'session-1')
+    expect(visible.error).toBe('Claude API: rate limit exceeded')
+    expect(visible.messages[0]?.content).toEqual([
+      { type: 'text', text: 'Claude API: rate limit exceeded' },
+    ])
     engine.dispose()
   })
 
@@ -504,14 +642,13 @@ describe('Managed Agent Engine adapter', () => {
         occurredAtUnixMs: 1,
       }],
     })
-    expect(state.messages).toEqual([
-      {
-        id: 'message-1',
-        role: 'assistant',
-        content: [{ type: 'text', text: 'canonical live' }],
-        timestamp: 1,
-      },
-    ])
+    expect(state.messages).toHaveLength(1)
+    expect(state.messages[0]).toMatchObject({
+      id: 'message-1',
+      role: 'assistant',
+      content: [{ type: 'text', text: 'canonical live' }],
+      timestamp: 1,
+    })
     expect(state.activeTurn?.turnId).toBe('turn-1')
     engine.dispose()
   })

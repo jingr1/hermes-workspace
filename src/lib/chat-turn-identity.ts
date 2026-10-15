@@ -2,7 +2,7 @@
  * Tutti-aligned chat turn identity helpers shared by Hermes write-through
  * and (conceptually) managed-agent messageId rows.
  *
- * See docs/chat-turn-identity-contract.md.
+ * See docs/hermes-native-bridge.md §2.
  */
 
 import { normalizeToolCallArgs } from './chat-message-parts'

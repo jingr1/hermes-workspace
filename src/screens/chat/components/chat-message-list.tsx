@@ -13,6 +13,7 @@ import {
 import { collapseRecentDuplicateUserMessages } from '../chat-queries'
 import { MessageItem } from './message-item'
 import { normalizeToolCallArgs } from '@/lib/chat-message-parts'
+import { stableChatMessageKey } from '@/lib/chat-turn-identity'
 import { TuiActivityCard } from './tui-activity-card'
 import { ScrollToBottomButton } from './scroll-to-bottom-button'
 import { ResearchCard } from './research-card'
@@ -31,67 +32,6 @@ import { hapticTap } from '@/lib/haptics'
 import { CHAT_OPEN_MESSAGE_SEARCH_EVENT } from '@/screens/chat/chat-events'
 import { useChatStore } from '@/stores/chat-store'
 import { useChatSettingsStore } from '@/hooks/use-chat-settings'
-import { TurnActivityHost } from './turn-activity-host'
-import type { TuiToolSection } from './tui-activity-card'
-
-function formatTurnActivityLabel(
-  name: string,
-  _args?: Record<string, unknown>,
-): string {
-  const trimmed = name.trim()
-  if (!trimmed) return 'tool'
-  return trimmed.replace(/_/g, ' ')
-}
-
-function formatTurnActivityArg(
-  name: string,
-  args?: Record<string, unknown>,
-): string | null {
-  if (!args || typeof args !== 'object') return null
-  const preferred = ['path', 'file_path', 'command', 'query', 'pattern', 'url']
-  for (const key of preferred) {
-    const value = args[key]
-    if (typeof value === 'string' && value.trim()) {
-      const text = value.trim()
-      return text.length > 48 ? `${text.slice(0, 45)}…` : text
-    }
-  }
-  return null
-}
-
-function toolSectionsFromActiveCalls(
-  activeToolCalls: Array<{
-    id: string
-    name: string
-    phase: string
-    args?: unknown
-  }>,
-): Array<TuiToolSection> {
-  return activeToolCalls.map((toolCall, index) => {
-    const phase = toolCall.phase || 'calling'
-    const isError = phase === 'error'
-    const isComplete =
-      phase === 'done' ||
-      phase === 'complete' ||
-      phase === 'completed' ||
-      phase === 'result'
-    return {
-      key: toolCall.id || `${toolCall.name}-${index}`,
-      type: toolCall.name || 'tool',
-      input:
-        toolCall.args && typeof toolCall.args === 'object'
-          ? (toolCall.args as Record<string, unknown>)
-          : undefined,
-      outputText: '',
-      errorText: isError ? 'Tool failed' : undefined,
-      state: isError
-        ? 'output-error'
-        : isComplete
-          ? 'output-available'
-          : 'input-available',
-    }
-  })
-}
 
 const TOOL_EMOJIS: Record<string, string> = {
   web_search: '🔍',
@@ -570,9 +510,8 @@ export function streamingMessageHasVisibleContent(
     streamingThinking?: string
     hasToolActivity?: boolean
     /**
-     * When true, thinking/tools alone do not count as visible body — used so
-     * the MessageItem row stays hidden until reply text exists while
-     * TurnActivityHost owns activity chrome.
+     * When true, thinking/tools alone do not count as visible body — empty
+     * streaming shells still render via MessageItem avatar glow.
      */
     replyBodyOnly?: boolean
   },
@@ -592,8 +531,7 @@ export function streamingMessageHasVisibleContent(
   if (options?.replyBodyOnly) return false
   if (options?.hasToolActivity) return true
   if (options?.streamingThinking?.trim()) return true
-  // Sidecar thinking/tools count so the row is not display:none while
-  // TurnActivityHost shows live activity from the same message.
+  // Sidecar thinking/tools count so the MessageItem host stays visible.
   if (assistantHasWorkingSurface(message)) return true
   return false
 }
@@ -744,9 +682,7 @@ type ChatMessageListProps = {
   emptyState?: React.ReactNode
   notice?: React.ReactNode
   noticePosition?: 'start' | 'end'
-  /**
-   * Unique agorax busy authority for TurnActivityHost.
-   */
+  /** Busy turn — empty-gap chrome lives on the open MessageItem. */
   turnBusy?: boolean
   sessionKey?: string
   pinToTop: boolean
@@ -807,9 +743,6 @@ function ChatMessageListComponent({
   const showConversationOutline = useChatSettingsStore(
     (s) => s.settings.showConversationOutline === true,
   )
-  // Heartbeat fills empty-gap Working until thinking/tools arrive (TurnActivityHost).
-  // Research/compact ThinkingBubble still reads the same store field.
-  const heartbeatActivity = useChatStore((s) => s.heartbeatActivity)
   const hideActivityCards = activityDisplayMode === 'hidden'
   const streamActivityMode = activityDisplayMode === 'stream'
   const anchorRef = useRef<HTMLDivElement | null>(null)
@@ -828,7 +761,6 @@ function ChatMessageListComponent({
   const [unreadCount, setUnreadCount] = useState(0)
   const [expandAllToolSections, setExpandAllToolSections] = useState(false)
 
-  // Activity feed delay: elapsed seconds for TurnActivityHost chrome.
   // Research/compact fallback ThinkingBubble stays simple for the first 10s.
   const THINKING_ACTIVITY_DELAY_S = 10
   const [thinkingElapsed, setThinkingElapsed] = useState(0)
@@ -999,11 +931,6 @@ function ChatMessageListComponent({
   const displayEntries = useMemo<Array<DisplayEntry>>(
     () => buildDisplayEntries(displayMessages),
     [displayMessages],
-  )
-
-  const liveTurnToolSections = useMemo(
-    () => toolSectionsFromActiveCalls(activeToolCalls),
-    [activeToolCalls],
   )
 
   const normalizedMessageSearch = useMemo(
@@ -1284,39 +1211,8 @@ function ChatMessageListComponent({
     researchCard && researchCard.steps.length > 0,
   )
 
-  // When the durable live row is already in the list, empty Working lives
-  // inside that MessageItem (same avatar). Footer host is only a fallback
-  // before beginStreamingTurn lands the row.
-  const hasLiveStreamingRow = Boolean(
-    isStreaming &&
-      streamingMessageId &&
-      visibleEntries.some(({ message }) => {
-        const messageId =
-          message.__optimisticId ||
-          (message as { messageId?: unknown }).messageId ||
-          (message as { id?: unknown }).id
-        return messageId === streamingMessageId
-      }),
-  )
-  // After SSE settle, isStreaming may drop while Engine turnBusy is still
-  // true. Without this gate the footer Working host mounts under the settled
-  // bubble and then vanishes — a post-stream jump.
-  const hasAssistantInOpenTurn = (() => {
-    let lastUser = -1
-    for (let i = visibleEntries.length - 1; i >= 0; i -= 1) {
-      if (visibleEntries[i]?.message.role === 'user') {
-        lastUser = i
-        break
-      }
-    }
-    for (let i = lastUser + 1; i < visibleEntries.length; i += 1) {
-      if (visibleEntries[i]?.message.role === 'assistant') return true
-    }
-    return false
-  })()
-
-  // Single host: turnBusy mounts TurnActivityHost (even with empty content).
-  // Compacting / research still use the bottom status area.
+  // Busy chrome lives on the open-turn MessageItem (avatar glow → Activity →
+  // bubble). No list-footer TurnActivityHost — that was a second Working host.
   const thinkingAreaVisible =
     turnBusy || showResearchCard || isCompacting
 
@@ -1519,12 +1415,6 @@ function ChatMessageListComponent({
       entryIndex + 1 < visibleEntries.length &&
       visibleEntries[entryIndex + 1]?.message.role === 'assistant'
     const effectiveOnRetry = hasAssistantReply ? undefined : onRetryMessage
-
-    // One durable MessageItem for the whole turn — including the empty
-    // pre-token frame. Do NOT mount a sibling TurnActivityHost (different
-    // avatar size) and later reveal MessageItem; that avatar handoff jumps.
-    // Empty Working lives beside MessageItem's own AssistantAvatar.
-    // Footer TurnActivityHost is only before this live row exists.
 
     return (
       <div
@@ -2073,10 +1963,7 @@ function ChatMessageListComponent({
                         expandAllToolSections={
                           expandAllToolSections || streamActivityMode
                         }
-                        hideActivityCard={
-                          hideActivityCards ||
-                          (turnBusy && messageIsStreaming)
-                        }
+                        hideActivityCard={hideActivityCards}
                         isLastAssistant={forceActionsVisible}
                       />
                     )
@@ -2125,26 +2012,6 @@ function ChatMessageListComponent({
                 ) : null}
               </>
             )}
-            {/* Fallback only before beginStreamingTurn inserts the durable row.
-                Busy bit = turnBusy only — never OR isStreaming. Once the live
-                row (or any open-turn assistant) exists, do not remount Working
-                in the footer — that flash after SSE settle jumps the transcript. */}
-            {turnBusy &&
-            !hideActivityCards &&
-            !hasLiveStreamingRow &&
-            !hasAssistantInOpenTurn ? (
-              <div className="flex flex-col gap-1 py-1.5 px-1 animate-in fade-in duration-300 md:gap-1.5 md:py-2">
-                <TurnActivityHost
-                  turnBusy
-                  thinkingText={streamingThinking || heartbeatActivity}
-                  toolSections={liveTurnToolSections}
-                  thinkingElapsedSeconds={thinkingElapsed}
-                  expandAll={expandAllToolSections || streamActivityMode}
-                  formatLabel={formatTurnActivityLabel}
-                  formatArg={formatTurnActivityArg}
-                />
-              </div>
-            ) : null}
             {!turnBusy && (showResearchCard || isCompacting) ? (
               <div
                 className="flex flex-col gap-1 py-1.5 px-1 animate-in fade-in duration-300 md:gap-1.5 md:py-2"
@@ -2221,78 +2088,9 @@ function getToolGroupClass(
 }
 
 function getStableMessageId(message: ChatMessage, index: number): string {
-  // Tutti / managed contract: durable turn identity first so settle does not
-  // remount when history swaps `assistant:<runId>` → `msg-N`.
-  const role = message.role || 'assistant'
-  if (role === 'assistant') {
-    const runId =
-      typeof (message as { runId?: unknown }).runId === 'string'
-        ? (message as { runId: string }).runId.trim()
-        : ''
-    if (runId) return `assistant:${runId}`
-    for (const key of ['messageId', 'id'] as const) {
-      const value = (message as Record<string, unknown>)[key]
-      if (
-        typeof value === 'string' &&
-        value.trim().startsWith('assistant:')
-      ) {
-        return value.trim()
-      }
-    }
-  }
-
-  for (const key of ['messageId', 'id', 'uuid', 'clientId'] as const) {
-    const value = (message as Record<string, unknown>)[key]
-    if (typeof value === 'string' && value.trim().length > 0) {
-      return value.trim()
-    }
-  }
-
-  if (message.__optimisticId) return message.__optimisticId
-
-  const text = textFromMessage(message)
-  if (role === 'assistant' && text.trim().length > 0) {
-    const fingerprint = djb2(`${text.length}:${text.slice(0, 160)}`)
-    return `assistant-${fingerprint}`
-  }
-
-  const timestamp = getRawMessageTimestamp(message)
-  const fingerprint = djb2(text.slice(0, 120))
-  if (timestamp) {
-    return `${role}-${timestamp}-${fingerprint}`
-  }
-
-  return `${role}-${fingerprint}-${index}`
-}
-
-/** djb2 string hash — fast, decent distribution, no deps */
-function djb2(str: string): string {
-  let hash = 5381
-  for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) + hash + str.charCodeAt(i)) | 0
-  }
-  return (hash >>> 0).toString(36)
-}
-
-function getRawMessageTimestamp(message: ChatMessage): number | null {
-  const candidates = [
-    (message as any).createdAt,
-    (message as any).created_at,
-    (message as any).timestamp,
-    (message as any).time,
-    (message as any).ts,
-  ]
-  for (const candidate of candidates) {
-    if (typeof candidate === 'number' && Number.isFinite(candidate)) {
-      if (candidate < 1_000_000_000_000) return candidate * 1000
-      return candidate
-    }
-    if (typeof candidate === 'string') {
-      const parsed = Date.parse(candidate)
-      if (!Number.isNaN(parsed)) return parsed
-    }
-  }
-  return null
+  // Single chokepoint with chat-turn-identity — prefer durable id over
+  // body fingerprint so settle / history stamp does not remount the row.
+  return stableChatMessageKey(message, index, textFromMessage)
 }
 
 function areChatMessageListEqual(

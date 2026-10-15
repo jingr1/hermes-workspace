@@ -1,5 +1,6 @@
 import {
   createAgentSessionEngine,
+  normalizeAgentActivitySession,
   selectEngineActiveTurn,
   selectEngineLatestTurn,
   selectEngineInteractionsForSession,
@@ -7,6 +8,7 @@ import {
   selectSessionMessages,
   type AgentActivityMessage,
   type AgentActivitySendInputResult,
+  type AgentActivitySession,
   type AgentActivitySessionDetailSnapshot,
   type AgentActivitySubmitInteractiveResult,
   type AgentActivityTurnCancelResponse,
@@ -31,10 +33,21 @@ import {
   managedAgentInteractionResponseFromJson,
 } from '@/lib/managed-agent-runtime/command-dtos'
 import {
-  thinkingContentFromText,
-  thinkingTextFromPayload,
-} from '@/lib/chat-message-parts'
-import type { ChatMessage } from '../types'
+  projectActivityMessagesToChat,
+  selectAssistantStreamingMessageId,
+} from './activity-list-projection'
+import { applyOpenAssistantStreamingChrome } from './engine-open-assistant-stream'
+import { ingestEngineUserPromptMessage } from './engine-user-prompt-ingest'
+import {
+  activityMessageToChatMessage,
+  systemNoticeText,
+  visibleErrorText,
+} from './activity-message-mapper'
+
+export {
+  activityMessageToChatMessage,
+  selectAssistantStreamingMessageId as selectManagedStreamingMessageId,
+}
 
 /**
  * Diff composer picks against the live session settings. Returns null when
@@ -378,6 +391,72 @@ export {
   managedAgentTargetId,
 } from '@/lib/managed-agent-runtime/agent-targets'
 
+export function createManagedSessionSkeleton(input: {
+  workspaceId: string
+  agentSessionId: string
+  agentTargetId?: string
+  title?: string
+  nowUnixMs?: number
+}): AgentActivitySession {
+  const now = input.nowUnixMs ?? Date.now()
+  return normalizeAgentActivitySession({
+    workspaceId: input.workspaceId,
+    agentSessionId: input.agentSessionId,
+    provider: 'managed',
+    providerSessionId: input.agentSessionId,
+    agentTargetId: input.agentTargetId?.trim() || 'managed',
+    cwd: '',
+    title: input.title?.trim() || 'Chat',
+    activeTurnId: null,
+    latestTurnInteractions: [],
+    pendingInteractions: [],
+    createdAtUnixMs: now,
+    updatedAtUnixMs: now,
+    startedAtUnixMs: now,
+    lastEventUnixMs: now,
+  })
+}
+
+/**
+ * Same send-time shell as Hermes (`ingestEngineUserPromptMessage`).
+ * Call before `submitPrompt` / activate-with-initial with the same clientSubmitId.
+ */
+export function ingestManagedUserPromptMessage(input: {
+  engine: AgentSessionEngine
+  workspaceId: string
+  agentSessionId: string
+  clientSubmitId: string
+  text: string
+  occurredAtUnixMs?: number
+  agentTargetId?: string
+}): void {
+  ingestEngineUserPromptMessage({
+    engine: input.engine,
+    workspaceId: input.workspaceId,
+    agentSessionId: input.agentSessionId,
+    clientSubmitId: input.clientSubmitId,
+    text: input.text,
+    occurredAtUnixMs: input.occurredAtUnixMs,
+    ensureSession: ({ workspaceId, agentSessionId }) => {
+      const now = Date.now()
+      input.engine.dispatch({
+        type: 'session/detailSnapshotReceived',
+        workspaceId,
+        session: createManagedSessionSkeleton({
+          workspaceId,
+          agentSessionId,
+          agentTargetId: input.agentTargetId,
+          nowUnixMs: now,
+        }),
+        childSessions: [],
+        turns: [],
+        messages: [],
+        observedAtUnixMs: now,
+      })
+    },
+  })
+}
+
 export function hydrateManagedAgentEngine(
   engine: AgentSessionEngine,
   detail: ManagedAgentActivityDetail,
@@ -479,17 +558,6 @@ export function selectManagedAgentChatState(
   const sessionMessages =
     options?.sessionMessages ??
     (agentSessionId ? selectSessionMessages(state, agentSessionId) : [])
-  const messages = sessionMessages.map((message) =>
-    toChatMessage({
-      messageId: message.messageId,
-      role: message.role,
-      kind: message.kind,
-      payload: message.payload,
-      occurredAtUnixMs: message.occurredAtUnixMs,
-      status: message.status,
-      semantics: message.semantics ?? null,
-    }),
-  )
   const latestTurn = selectEngineLatestTurn(state, agentSessionId)
   const projectedActiveTurn = selectEngineActiveTurn(state, agentSessionId)
   const activeTurn = projectedActiveTurn &&
@@ -514,8 +582,22 @@ export function selectManagedAgentChatState(
     ? terminalTurn.error?.message ?? null
     : null
   const turnActive = activeTurn !== null && activeTurn.phase !== 'settled'
+  const submitting = options?.isSubmitting === true
+  const activityStreamingId = turnActive
+    ? selectAssistantStreamingMessageId(sessionMessages, activeTurn.turnId)
+    : null
+  // Homologous with selectHermesChatState — pending shell + foldOpenTurn.
+  const chrome = applyOpenAssistantStreamingChrome({
+    messages: projectActivityMessagesToChat(
+      sessionMessages,
+      activityStreamingId,
+    ),
+    activityStreamingId,
+    turnActive,
+    submitting,
+  })
   return {
-    messages,
+    messages: chrome.messages,
     activeTurn,
     latestTurn,
     fileChanges: latestTurn?.fileChanges ?? null,
@@ -525,16 +607,11 @@ export function selectManagedAgentChatState(
     sessionTitle: agentSessionId
       ? selectEngineSession(state, agentSessionId)?.title?.trim() || null
       : null,
-    isStreaming: turnActive,
-    /**
-     * Unique agorax busy bit for TurnActivityHost.
-     * Content only changes the host interior — never whether it mounts.
-     */
-    turnBusy: turnActive || options?.isSubmitting === true,
+    isStreaming: chrome.isStreaming,
+    /** Busy for composer / list; Activity chrome lives on MessageItem. */
+    turnBusy: chrome.turnBusy,
     /** Assistant message id that should receive live streaming chrome. */
-    streamingMessageId: turnActive
-      ? selectManagedStreamingMessageId(sessionMessages, activeTurn.turnId)
-      : null,
+    streamingMessageId: chrome.streamingMessageId,
     error: terminalError ??
       (visibleError
         ? visibleErrorText(visibleError.payload)
@@ -597,155 +674,6 @@ function normalizeActiveToolPhase(status: string | null | undefined): string {
   return resolved || 'running'
 }
 
-export function selectManagedStreamingMessageId(
-  sessionMessages: readonly AgentActivityMessage[],
-  activeTurnId: string,
-): string | null {
-  for (let index = sessionMessages.length - 1; index >= 0; index -= 1) {
-    const message = sessionMessages[index]
-    if (!message || message.turnId !== activeTurnId) continue
-    if (!isAssistantLaneRole(message.role)) continue
-    if (isProcessingHostMessage(message)) {
-      return message.messageId
-    }
-  }
-  // Orphan turnId: fall back to the latest trailing host message.
-  for (let index = sessionMessages.length - 1; index >= 0; index -= 1) {
-    const message = sessionMessages[index]
-    if (!message) continue
-    if (message.role === 'user') break
-    if (isProcessingHostMessage(message)) {
-      return message.messageId
-    }
-  }
-  return null
-}
-
-/**
- * Live ACP thought deltas use role `assistant_thinking` + kind `reasoning`.
- * Durable reporter remaps that to role `assistant` + kind `reasoning`.
- */
-function isAssistantLaneRole(role: string): boolean {
-  return role === 'assistant' || role === 'assistant_thinking'
-}
-
-function isProcessingHostMessage(message: AgentActivityMessage): boolean {
-  if (!isAssistantLaneRole(message.role)) return false
-  if (isToolCallKind(message.kind)) return true
-  if (message.kind === 'reasoning' || message.role === 'assistant_thinking') {
-    return thinkingTextFromPayload(message.payload).trim().length > 0
-  }
-  if (message.kind === 'text') {
-    return visibleErrorText(message.payload).trim().length > 0
-  }
-  return (
-    typeof message.payload.text === 'string' &&
-    message.payload.text.trim().length > 0
-  )
-}
-
-/** Shared Activity → ChatMessage projection (Hermes + managed list lanes). */
-export function activityMessageToChatMessage(message: {
-  messageId: string
-  role: string
-  kind: string
-  payload: Record<string, unknown>
-  occurredAtUnixMs: number
-  status?: string | null
-  semantics?: {
-    noticeCommand?: string
-    noticeCommandStatus?: string
-  } | null
-}): ChatMessage {
-  return toChatMessage(message)
-}
-
-function toChatMessage(message: {
-  messageId: string
-  role: string
-  kind: string
-  payload: Record<string, unknown>
-  occurredAtUnixMs: number
-  status?: string | null
-  semantics?: {
-    noticeCommand?: string
-    noticeCommandStatus?: string
-  } | null
-}): ChatMessage {
-  const notice = noticeCommandSystemLine(message.semantics)
-  if (notice) {
-    return {
-      role: 'system',
-      content: [{ type: 'text', text: notice }],
-      timestamp: message.occurredAtUnixMs,
-    }
-  }
-  if (isToolCallKind(message.kind)) {
-    const error = firstNonEmptyString(
-      message.payload.error,
-      message.payload.errorMessage,
-    )
-    const rawOutput = message.payload.output
-    return {
-      id: message.messageId,
-      role: message.role,
-      content: [{
-        type: 'toolCall',
-        id: message.messageId,
-        name: toolNameFromPayload(message.payload),
-        arguments: record(message.payload.input ?? message.payload.arguments),
-      }],
-      timestamp: message.occurredAtUnixMs,
-      // Legacy top-level contract consumed by the chat list's attached-tool
-      // rendering (toolName/type resolution and readToolArgs(details)).
-      toolName: toolNameFromPayload(message.payload),
-      details: {
-        input: record(message.payload.input ?? message.payload.arguments),
-        ...(rawOutput != null ? { output: rawOutput } : {}),
-        ...(error ? { error } : {}),
-      },
-      ...(message.status === 'failed' || error ? { isError: true } : {}),
-    }
-  }
-  if (message.kind === 'reasoning' || message.role === 'assistant_thinking') {
-    const thinkingPart = thinkingContentFromText(
-      thinkingTextFromPayload(message.payload),
-    )
-    return {
-      id: message.messageId,
-      // Chat list / MessageItem only treat `assistant` as the bot lane.
-      role: 'assistant',
-      content: thinkingPart ? [thinkingPart] : [],
-      timestamp: message.occurredAtUnixMs,
-      ...(message.status === 'failed' ? { isError: true } : {}),
-    }
-  }
-  const text = message.kind === 'text'
-    ? visibleUserOrAssistantText(message.role, message.payload)
-    : typeof message.payload.text === 'string'
-      ? message.payload.text
-      : ''
-  return {
-    id: message.messageId,
-    role: message.role,
-    content: [{ type: 'text', text }],
-    timestamp: message.occurredAtUnixMs,
-    ...(message.status === 'failed' ? { isError: true } : {}),
-  }
-}
-
-/** Prefer displayPrompt for user bubbles when skills were injected into content. */
-function visibleUserOrAssistantText(
-  role: string,
-  payload: Record<string, unknown>,
-): string {
-  if (role === 'user') {
-    const display = firstNonEmptyString(payload.displayPrompt)
-    if (display) return display
-  }
-  return visibleErrorText(payload)
-}
-
 // Daemon canonical kinds: "tool_call" (payload toolName/input); "tool" with
 // name/arguments is the legacy shim shape kept for replayed durable rows.
 function isToolCallKind(kind: string): boolean {
@@ -753,8 +681,12 @@ function isToolCallKind(kind: string): boolean {
 }
 
 function isTerminalToolStatus(status: string | null | undefined): boolean {
-  return status === 'completed' || status === 'failed' ||
-    status === 'canceled' || status === 'error'
+  return (
+    status === 'completed' ||
+    status === 'failed' ||
+    status === 'canceled' ||
+    status === 'error'
+  )
 }
 
 function toolNameFromPayload(payload: Record<string, unknown>): string {
@@ -771,61 +703,8 @@ function firstNonEmptyString(...values: Array<unknown>): string | null {
   return null
 }
 
-function visibleErrorText(payload: Record<string, unknown>): string {
-  if (payload.kind !== 'agent_visible_error') {
-    return typeof payload.text === 'string' ? payload.text : ''
-  }
-  const origin = typeof payload.origin === 'string' ? payload.origin : ''
-  const detail = typeof payload.detail === 'string' ? payload.detail.trim() : ''
-  if (origin === 'provider' && detail) return detail
-  for (const key of ['text', 'content', 'detail', 'errorMessage', 'error']) {
-    const value = payload[key]
-    if (typeof value === 'string' && value.trim()) return value
-  }
-  return ''
-}
-
-function systemNoticeText(payload: Record<string, unknown>): string {
-  for (const key of ['detail', 'content', 'errorMessage', 'error', 'text']) {
-    const value = payload[key]
-    if (typeof value === 'string' && value.trim()) return value
-  }
-  return ''
-}
-
-function noticeCommandSystemLine(
-  semantics:
-    | {
-        noticeCommand?: string
-        noticeCommandStatus?: string
-      }
-    | null
-    | undefined,
-): string | null {
-  const command = semantics?.noticeCommand?.trim()
-  if (!command) return null
-  const status = semantics?.noticeCommandStatus?.trim()
-  const labels: Record<string, string> = {
-    compact: 'Compacting context',
-    review: 'Reviewing changes',
-    undo: 'Undoing last action',
-    goal: 'Updating goal',
-  }
-  const label = labels[command] ?? command
-  if (!status || status === 'running' || status === 'started') {
-    return `${label}…`
-  }
-  if (status === 'completed' || status === 'succeeded') {
-    return `${label} complete`
-  }
-  if (status === 'failed' || status === 'error') {
-    return `${label} failed`
-  }
-  return `${label} (${status})`
-}
-
 function record(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : undefined
 }

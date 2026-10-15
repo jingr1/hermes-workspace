@@ -41,6 +41,7 @@ import {
   createManagedAgentEngine,
   hydrateManagedAgentEngine,
   hydrateManagedAgentSessionDetail,
+  ingestManagedUserPromptMessage,
   managedSessionSettingsPatch,
   selectManagedAgentChatState,
   subscribeManagedAgentEngine,
@@ -632,11 +633,21 @@ export function useManagedAgentChat({
         if (generation !== activityGenerationRef.current) {
           throw new Error('Managed Agent session changed before activation')
         }
+        const clientSubmitId = crypto.randomUUID()
+        // Homologous with Hermes: seed user + empty pending host before runtime.
+        ingestManagedUserPromptMessage({
+          engine: chatRuntime.engine,
+          workspaceId: chatRuntime.workspaceId,
+          agentSessionId: sessionId,
+          clientSubmitId,
+          text,
+          agentTargetId: managedAgentTargetIdForRuntime(runtime, agentId),
+        })
         const accepted = chatRuntime.engine.activateSession({
           mode: 'new',
           agentSessionId: sessionId,
           agentTargetId: managedAgentTargetIdForRuntime(runtime, agentId),
-          clientSubmitId: crypto.randomUUID(),
+          clientSubmitId,
           requestId: crypto.randomUUID(),
           initialTurnExpected: true,
           initialContent: promptContent,
@@ -668,9 +679,17 @@ export function useManagedAgentChat({
             settings: settingsPatch,
           })
         }
+        const clientSubmitId = crypto.randomUUID()
+        ingestManagedUserPromptMessage({
+          engine: chatRuntime.engine,
+          workspaceId: chatRuntime.workspaceId,
+          agentSessionId,
+          clientSubmitId,
+          text,
+        })
         chatRuntime.engine.submitPrompt({
           agentSessionId,
-          clientSubmitId: crypto.randomUUID(),
+          clientSubmitId,
           content: promptContent,
           displayPrompt: text,
           routing: 'auto',

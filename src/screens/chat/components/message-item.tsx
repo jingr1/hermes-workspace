@@ -2112,7 +2112,8 @@ function MessageItemComponent({
   bubbleClassName,
   isStreaming = false,
   streamingText,
-  streamingThinking,
+  // Kept for call-site / memo equality; thinking is durable-row only.
+  streamingThinking: _streamingThinking,
   simulateStreaming: _simulateStreaming = false,
   streamingKey: _streamingKey,
   expandAllToolSections = false,
@@ -2130,16 +2131,8 @@ function MessageItemComponent({
     typeof message.__streamingText === 'string'
       ? message.__streamingText
       : undefined
-  const messageStreamingThinking =
-    typeof message.__streamingThinking === 'string'
-      ? message.__streamingThinking
-      : undefined
   const remoteStreamingText =
     streamingText !== undefined ? streamingText : messageStreamingText
-  const remoteStreamingThinking =
-    streamingThinking !== undefined
-      ? streamingThinking
-      : messageStreamingThinking
   // Only treat as streaming if explicitly passed isStreaming prop (active stream)
   // Ignore stale __streamingStatus from history
   const remoteStreamingActive = isStreaming === true
@@ -2440,50 +2433,7 @@ function MessageItemComponent({
       ]),
     [streamToolCalls, embeddedStreamToolCalls, contentStreamToolCalls],
   )
-  const hasStreamToolCalls = effectiveStreamToolCalls.length > 0
-  const effectiveLifecycleEvents = lifecycleEvents
-  const hasLifecycleEvents = effectiveLifecycleEvents.length > 0
-  const activeStreamToolLabels = useMemo(() => {
-    const labels: Array<string> = []
-    const seen = new Set<string>()
-
-    for (const toolCall of effectiveStreamToolCalls) {
-      if (toolCall.phase !== 'calling' && toolCall.phase !== 'running') continue
-      const label = formatToolDisplayLabel(
-        toolCall.name,
-        toolCall.args as Record<string, unknown> | undefined,
-      )
-      if (!label || seen.has(label)) continue
-      seen.add(label)
-      labels.push(label)
-    }
-
-    return labels
-  }, [effectiveStreamToolCalls])
-  const thinkingStatusLabel =
-    activeStreamToolLabels.length > 0
-      ? `⚡ Running ${activeStreamToolLabels.join(', ')}...`
-      : '💭 Thinking...'
-  const [thinkingElapsedSeconds, setThinkingElapsedSeconds] = useState(0)
-  useEffect(() => {
-    if (!thinking || hasText) {
-      setThinkingElapsedSeconds(0)
-      return
-    }
-
-    const startedAt = rawTimestamp(message) ?? Date.now()
-    const tick = () => {
-      const elapsedSeconds = Math.max(
-        0,
-        Math.floor((Date.now() - startedAt) / 1000),
-      )
-      setThinkingElapsedSeconds(elapsedSeconds)
-    }
-
-    tick()
-    const interval = window.setInterval(tick, 1000)
-    return () => window.clearInterval(interval)
-  }, [hasText, message, thinking, thinkingStatusLabel])
+  const hasLifecycleEvents = lifecycleEvents.length > 0
   const toolParts = useMemo(() => {
     return toolCalls.map((toolCall) => {
       const resultMessage = toolCall.id
@@ -2590,24 +2540,50 @@ function MessageItemComponent({
   const hasActivityContent =
     finalToolSections.length > 0 ||
     Boolean(thinking && thinking.trim().length > 0)
-  // Full Activity above the bubble only while live / empty-gap / tools.
-  // Settled thinking + reply text stays a compact disclosure under the bubble
-  // — keeping a "seen live" latch left turn N's Activity open forever and
-  // made send N+1 look like it refreshed the previous bubble.
-  const showActivityAboveBubble =
-    hasActivityContent &&
-    (effectiveIsStreaming || !hasText || hasToolCalls)
-  const showSettleOnlyThinking =
-    Boolean(thinking && thinking.trim().length > 0) &&
-    !showActivityAboveBubble &&
-    hasText &&
-    !hasToolCalls
-  // Keep the same AssistantAvatar mounted for the whole live turn — including
-  // the empty pre-token frame — so Working→bubble never remounts the avatar.
-  const isEmptyStreamingShell =
+  // Activity (thinking/tools) always sits above the reply bubble — one host.
+  // Settled turns rely on TuiActivityCard default-collapsed (!isStreaming).
+  // Avatar must not unmount when `isStreaming` flickers — also honor durable
+  // `__streamingStatus` / pending host id until text arrives.
+  const messageMarkedStreaming =
+    (message as { __streamingStatus?: unknown }).__streamingStatus ===
+    'streaming'
+  const durableHostId =
+    (typeof (message as { messageId?: unknown }).messageId === 'string' &&
+      (message as { messageId: string }).messageId) ||
+    (typeof (message as { id?: unknown }).id === 'string' &&
+      (message as { id: string }).id) ||
+    ''
+  const isPendingHost = durableHostId.includes(':pending:')
+  // Once the host face has appeared, keep it mounted through streaming
+  // flicker / id handoff until reply text arrives.
+  const [assistantAvatarLatched, setAssistantAvatarLatched] = useState(false)
+  useEffect(() => {
+    if (isUser || hasText) return
+    if (
+      effectiveIsStreaming ||
+      messageMarkedStreaming ||
+      isPendingHost ||
+      hasActivityContent
+    ) {
+      setAssistantAvatarLatched(true)
+    }
+  }, [
+    isUser,
+    hasText,
+    effectiveIsStreaming,
+    messageMarkedStreaming,
+    isPendingHost,
+    hasActivityContent,
+  ])
+  const keepAssistantHostChrome =
     !isUser &&
-    effectiveIsStreaming &&
     !hasText &&
+    (effectiveIsStreaming ||
+      messageMarkedStreaming ||
+      isPendingHost ||
+      assistantAvatarLatched)
+  const isEmptyStreamingShell =
+    keepAssistantHostChrome &&
     !hasAttachments &&
     !hasInlineImages &&
     !hasSelectionCards
@@ -2618,6 +2594,15 @@ function MessageItemComponent({
     hasSelectionCards ||
     isEmptyStreamingShell ||
     (effectiveIsStreaming && hasRevealedText)
+  // Assistant face stays up for Activity-only / pending / bubble — never gate
+  // solely on the transient isStreaming prop.
+  const shouldRenderAssistantAvatarRow =
+    !isUser &&
+    !(message as { __isNarration?: unknown }).__isNarration &&
+    (shouldRenderMessageBubble ||
+      hasActivityContent ||
+      keepAssistantHostChrome ||
+      assistantAvatarLatched)
 
   // 'queued' = delivered to server, waiting for response (busy/backlogged)
   // 'sending' = still in flight to the server API (should clear in <1s)
@@ -2717,7 +2702,7 @@ function MessageItemComponent({
         // edge. Keep visible while streaming / retry so the ring is not cut.
         contentVisibility:
           (isUser && (isFailed || isStuckSending)) ||
-          (isEmptyStreamingShell && !hasActivityContent)
+          shouldRenderAssistantAvatarRow
             ? 'visible'
             : 'auto',
         containIntrinsicSize: 'auto 160px',
@@ -2737,10 +2722,8 @@ function MessageItemComponent({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Thinking/tools above the assistant bubble for the whole turn.
-          Empty pre-token Working sits beside the avatar below — not a sibling
-          list-level TurnActivityHost (that remounted a different avatar). */}
-      {!isUser && !hideActivityCard && showActivityAboveBubble ? (
+      {/* Thinking/tools above the reply bubble on this same MessageItem. */}
+      {!isUser && !hideActivityCard && hasActivityContent ? (
         <div className="w-full max-w-[var(--chat-content-max-width)] flex order-first">
           <div className="w-6 shrink-0" aria-hidden />
           <div className="min-w-0 flex-1">
@@ -2757,7 +2740,7 @@ function MessageItemComponent({
       ) : null}
       {effectiveIsStreaming && hasLifecycleEvents && !hasToolCalls && (
         <div className="w-full max-w-[var(--chat-content-max-width)] flex flex-col gap-1">
-          {effectiveLifecycleEvents.map((event, index) => (
+          {lifecycleEvents.map((event, index) => (
             <LifecycleEventCard
               key={`${event.timestamp}-${index}-${event.text}`}
               text={event.text}
@@ -2794,7 +2777,10 @@ function MessageItemComponent({
       )}
       {/* Tool calls now render inline inside the assistant bubble, not above it */}
 
-      {shouldRenderMessageBubble && !(message as any).__isNarration && (
+      {(isUser
+        ? shouldRenderMessageBubble
+        : shouldRenderAssistantAvatarRow) &&
+        !(message as any).__isNarration && (
         <Message
           className={cn(
             'gap-2 md:gap-3',
@@ -2813,8 +2799,7 @@ function MessageItemComponent({
               size={24}
               className={cn(
                 'mt-0.5 shrink-0',
-                // Glow only for empty-gap Working — once ACTIVITY/reply
-                // exists, drop the ring (busy chrome moves to the card).
+                // Glow for empty-gap host — face stays even if isStreaming flickers.
                 isEmptyStreamingShell &&
                   !hasActivityContent &&
                   'thinking-avatar-glow',
@@ -2826,24 +2811,9 @@ function MessageItemComponent({
               }
             />
           )}
-          {isEmptyStreamingShell &&
-          !hasActivityContent &&
-          !hideActivityCard ? (
-            <div className="min-w-0 flex-1 max-w-[80%]">
-              <TuiActivityCard
-                toolSections={[]}
-                thinking={null}
-                isStreaming
-                keepMountedWhileBusy
-                statusTitle="⚡ Working"
-                expandAll={expandAllToolSections}
-                formatLabel={formatToolDisplayLabel}
-                formatArg={keyArgLabel}
-              />
-            </div>
-          ) : isEmptyStreamingShell && hasActivityContent ? (
-            // Reserve the avatar column while activity renders above; first
-            // reply token fills the bubble without remounting the avatar.
+          {isEmptyStreamingShell ||
+          (!isUser && !shouldRenderMessageBubble) ? (
+            // Pre-token / waiting: avatar stays mounted; no Working card.
             <div className="min-h-6 min-w-0 max-w-[80%]" aria-hidden />
           ) : (
           <div
@@ -3045,20 +3015,10 @@ function MessageItemComponent({
         <div
           className={cn(
             'flex flex-wrap justify-end gap-x-2 gap-y-0.5 pl-10 pr-1 mt-0.5 font-mono text-[10px] tabular-nums text-primary-400 leading-relaxed min-h-[14px]',
-            !hasAssistantMetadata && !showSettleOnlyThinking && 'invisible',
+            !hasAssistantMetadata && 'invisible',
           )}
-          aria-hidden={!hasAssistantMetadata && !showSettleOnlyThinking}
+          aria-hidden={!hasAssistantMetadata}
         >
-          {showSettleOnlyThinking ? (
-            <details className="mr-auto max-w-full text-left text-primary-400 open:mb-0.5">
-              <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden">
-                Thinking
-              </summary>
-              <div className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap text-primary-500">
-                {thinking}
-              </div>
-            </details>
-          ) : null}
           {hasAssistantMetadata ? (
             <>
               {usageMetadata.inputTokens !== null && (
@@ -3081,9 +3041,9 @@ function MessageItemComponent({
                 <span className="opacity-60">{usageMetadata.modelLabel}</span>
               )}
             </>
-          ) : !showSettleOnlyThinking ? (
+          ) : (
             <span>&nbsp;</span>
-          ) : null}
+          )}
         </div>
       ) : null}
 

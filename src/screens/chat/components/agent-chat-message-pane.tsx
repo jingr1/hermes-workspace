@@ -33,12 +33,12 @@ export function AgentChatMessagePane({
   loading = false,
 }: {
   messages: Array<ChatMessage>
-  /** Unique agorax busy authority for TurnActivityHost. */
+  /** Busy turn — chrome on the open MessageItem. */
   turnBusy?: boolean
   /** Turn-active: message-level live chrome / Stop, not the bottom pill. */
   isStreaming?: boolean
   streamingMessageId?: string | null
-  /** Hermes SSE overlay; managed usually embeds thinking on the message. */
+  /** Portable/Hermes legacy sidecar; Engine hosts embed thinking via fold. */
   streamingText?: string
   streamingThinking?: string
   sessionKey: string

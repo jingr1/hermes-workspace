@@ -727,9 +727,10 @@ code {
 .thinking-avatar-glow::after {
   content: '';
   position: absolute;
-  inset: 0;
+  /* Sit outside the avatar so the pulse reads as a larger ring. */
+  inset: -4px;
   border-radius: 9999px;
-  border: 2px solid var(--color-accent-500, #6366f1);
+  border: 3px solid var(--color-accent-500, #6366f1);
   box-sizing: border-box;
   pointer-events: none;
   z-index: 2;

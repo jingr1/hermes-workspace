@@ -79,8 +79,10 @@ describe('buildDisplayEntries', () => {
       textMessage('a1', 'assistant', 'Here you go.'),
     ])
 
-    // Reasoning keeps its own entry; the tool-only message is deferred and
-    // attaches to the next text reply instead of rendering standalone.
+    // List-layer attach is a legacy safety net for pre-fold rows. Engine
+    // projection (projectActivityMessagesToChat) folds reasoning+tools+text
+    // into one host before the list; when unfolder rows still arrive, tools
+    // attach to the next text reply and reasoning stays its own entry.
     expect(entries.map((entry) => entry.message.id)).toEqual(['u1', 'r1', 'a1'])
     expect(entries[2].attachedToolMessages).toHaveLength(1)
     expect(entries[2].attachedToolMessages[0]).toMatchObject({

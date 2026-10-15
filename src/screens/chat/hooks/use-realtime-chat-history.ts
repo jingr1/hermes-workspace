@@ -263,7 +263,13 @@ export function useRealtimeChatHistory({
               | Array<unknown>
               | undefined
 
-            if (realtimeMessages.length > 0 && Array.isArray(historyMessages)) {
+            // Portable only: splice chat-store into RQ history. Hermes 1:1 list
+            // is Engine-primary — merging here dual-wrote msg-N + assistant:runId.
+            if (
+              portableMode &&
+              realtimeMessages.length > 0 &&
+              Array.isArray(historyMessages)
+            ) {
               const historyTexts = new Set(
                 historyMessages.map((m: unknown) => {
                   const raw = m as Record<string, unknown>
@@ -594,8 +600,6 @@ export function useRealtimeChatHistory({
     realtimeStreamingThinking,
     realtimeStreamingMessageId,
     realtimeLifecycleEvents,
-    completedStreamingText: completedStreamingTextRef,
-    completedStreamingThinking: completedStreamingThinkingRef,
     clearCompletedStreaming,
     streamingRunId: streamingState?.runId ?? null,
     activeToolCalls: streamingState?.toolCalls ?? EMPTY_TOOL_CALLS,

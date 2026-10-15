@@ -60,6 +60,44 @@ describe('hermesSseToActivityEvents', () => {
     })
   })
 
+  it('keeps pre-seeded pending host across started→runId (no second row)', () => {
+    const pendingId = 'assistant:pending:sess-1:c-seed'
+    let state = {
+      ...createHermesActivityAdapterState(),
+      assistantMessageId: pendingId,
+      thinkingMessageId: `${pendingId}:thinking`,
+    }
+    const started = hermesSseToActivityEvents(ctx, state, 'started', {
+      runId: 'run-seed',
+    })
+    state = started.state
+    expect(state.assistantMessageId).toBe(pendingId)
+    expect(started.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          eventType: 'message_delta',
+          data: expect.objectContaining({
+            messageId: pendingId,
+            content: { operation: 'set', value: '' },
+          }),
+        }),
+      ]),
+    )
+    const chunk = hermesSseToActivityEvents(ctx, state, 'chunk', {
+      runId: 'run-seed',
+      text: 'Answer',
+      fullReplace: true,
+    })
+    expect(chunk.events[0]).toMatchObject({
+      data: { messageId: pendingId, content: { operation: 'set', value: 'Answer' } },
+    })
+    expect(chunk.events.every((e) => {
+      if (e.eventType !== 'message_delta') return true
+      const id = (e.data as { messageId?: string }).messageId ?? ''
+      return !id.startsWith('assistant:run-')
+    })).toBe(true)
+  })
+
   it('maps thinking to assistant_thinking / reasoning deltas', () => {
     let state = createHermesActivityAdapterState()
     ;({ state } = hermesSseToActivityEvents(ctx, state, 'started', {

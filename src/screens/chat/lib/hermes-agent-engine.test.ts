@@ -403,7 +403,7 @@ describe('hermes-agent-engine', () => {
     coordinator.dispose()
   })
 
-  it('reconcileHermesHistoryIntoEngine retains live Engine rows missing from stale history', () => {
+  it('reconcile keeps older history + trailing live turn when history lags', () => {
     const workspaceId = 'ws'
     const commandPort = createHermesCommandPort({
       workspaceId,
@@ -445,39 +445,225 @@ describe('hermes-agent-engine', () => {
         },
       ],
     })
-    expect(count).toBe(2)
-    const chat = selectHermesChatState(engine.getSnapshot(), 'stale-1', {
-      sessionMessages: coordinator.project(projectSnapshot(engine.getSnapshot()))
-        .sessionMessagesById['stale-1'],
+    expect(count).toBe(3)
+    const chat = selectHermesChatState(engine.getSnapshot(), 'stale-1')
+    expect(chat.messages.map((m) => m.id)).toEqual([
+      'old-u',
+      'user:fresh',
+      'assistant:pending:stale-1:fresh',
+    ])
+    coordinator.dispose()
+  })
+
+  it('reconcile stamps live assistant:runId over history msg-N for the same turn', () => {
+    const workspaceId = 'ws'
+    const commandPort = createHermesCommandPort({
+      workspaceId,
+      getMapping: async () => null,
+      putMapping: async (m) => m,
+      onActivityEvent: () => undefined,
     })
-    expect(chat.messages.map((m) => m.id)).toEqual(['old-u', 'user:fresh'])
-    // Same text under a gateway id collapses the optimistic user row.
+    const engine = createHermesAgentEngine({ workspaceId, commandPort })
+    const projectSnapshot = createAgentActivitySnapshotProjector(workspaceId)
+    const coordinator = createAgentActivityWorkspaceEventCoordinator({
+      engine,
+      notificationScheduler: {
+        schedule(delayMs, task) {
+          const timer = setTimeout(task, delayMs)
+          return { cancel: () => clearTimeout(timer) }
+        },
+      },
+      readCanonicalSnapshot: () => projectSnapshot(engine.getSnapshot()),
+      workspaceId,
+    })
+    hydrateHermesAgentEngine(
+      engine,
+      createHermesSessionSkeleton({
+        workspaceId,
+        agentSessionId: 'dup-1',
+      }),
+    )
+    engine.dispatch({
+      type: 'message/snapshotReceived',
+      messages: [
+        {
+          workspaceId,
+          agentSessionId: 'dup-1',
+          messageId: 'user:c1',
+          version: 1,
+          sequence: 1,
+          turnId: 'turn-c1',
+          role: 'user',
+          kind: 'text',
+          status: null,
+          payload: { text: '你在干嘛？', clientSubmitId: 'c1' },
+          occurredAtUnixMs: 1,
+        },
+        {
+          workspaceId,
+          agentSessionId: 'dup-1',
+          messageId: 'assistant:run-live',
+          version: 2,
+          sequence: 2,
+          turnId: 'turn-c1',
+          role: 'assistant',
+          kind: 'text',
+          status: 'completed',
+          payload: { text: '在待命，等你安排任务。' },
+          occurredAtUnixMs: 2,
+        },
+      ],
+    })
     reconcileHermesHistoryIntoEngine({
       engine,
       coordinator,
       workspaceId,
-      agentSessionId: 'stale-1',
+      agentSessionId: 'dup-1',
       historyMessages: [
         {
           role: 'user',
-          id: 'old-u',
-          content: [{ type: 'text', text: 'old' }],
+          id: 'msg-1',
+          content: [{ type: 'text', text: '你在干嘛？' }],
           timestamp: 1,
         },
         {
-          role: 'user',
-          id: 'gw-user',
-          content: [{ type: 'text', text: 'new prompt' }],
+          role: 'assistant',
+          id: 'msg-2',
+          content: [{ type: 'text', text: '在待命，等你安排任务。' }],
           timestamp: 2,
         },
       ],
     })
-    const after = selectHermesChatState(engine.getSnapshot(), 'stale-1')
-    expect(after.messages.map((m) => m.id)).toEqual(['old-u', 'gw-user'])
+    const chat = selectHermesChatState(engine.getSnapshot(), 'dup-1')
+    expect(chat.messages.map((m) => m.id)).toEqual([
+      'user:c1',
+      'assistant:run-live',
+    ])
     coordinator.dispose()
   })
 
-  it('ingestHermesUserPromptMessage seeds Engine user row', () => {
+  it('selectHermesChatState folds thinking + text into one assistant host', () => {
+    const workspaceId = 'ws'
+    const commandPort = createHermesCommandPort({
+      workspaceId,
+      getMapping: async () => null,
+      putMapping: async (m) => m,
+      onActivityEvent: () => undefined,
+    })
+    const engine = createHermesAgentEngine({ workspaceId, commandPort })
+    hydrateHermesAgentEngine(
+      engine,
+      createHermesSessionSkeleton({
+        workspaceId,
+        agentSessionId: 'fold-1',
+      }),
+    )
+    engine.dispatch({
+      type: 'message/snapshotReceived',
+      messages: [
+        {
+          workspaceId,
+          agentSessionId: 'fold-1',
+          messageId: 'user:u1',
+          version: 1,
+          sequence: 1,
+          turnId: 'turn-1',
+          role: 'user',
+          kind: 'text',
+          status: null,
+          payload: { text: '有需要我审批的吗？' },
+          occurredAtUnixMs: 1,
+        },
+        {
+          workspaceId,
+          agentSessionId: 'fold-1',
+          messageId: 'assistant:run-1:thinking',
+          version: 2,
+          sequence: 2,
+          turnId: 'turn-1',
+          role: 'assistant_thinking',
+          kind: 'reasoning',
+          status: 'completed',
+          payload: { text: '用户在问有没有待审批。' },
+          occurredAtUnixMs: 2,
+        },
+        {
+          workspaceId,
+          agentSessionId: 'fold-1',
+          messageId: 'assistant:run-1',
+          version: 3,
+          sequence: 3,
+          turnId: 'turn-1',
+          role: 'assistant',
+          kind: 'text',
+          status: 'completed',
+          payload: { text: '目前没有。' },
+          occurredAtUnixMs: 3,
+        },
+      ],
+    })
+    const chat = selectHermesChatState(engine.getSnapshot(), 'fold-1')
+    expect(chat.messages).toHaveLength(2)
+    expect(chat.messages[1]).toMatchObject({
+      id: 'assistant:run-1',
+      role: 'assistant',
+    })
+    const content = chat.messages[1]?.content as Array<{ type?: string }>
+    expect(content?.some((part) => part.type === 'thinking')).toBe(true)
+    expect(content?.some((part) => part.type === 'text')).toBe(true)
+  })
+
+  it('pending assistant host survives started→assistant:runId fold', () => {
+    const workspaceId = 'ws'
+    const commandPort = createHermesCommandPort({
+      workspaceId,
+      getMapping: async () => null,
+      putMapping: async (m) => m,
+      onActivityEvent: () => undefined,
+    })
+    const engine = createHermesAgentEngine({ workspaceId, commandPort })
+    const occurredAtUnixMs = 1_700_000_000_000
+    ingestHermesUserPromptMessage({
+      engine,
+      workspaceId,
+      agentSessionId: 'host-1',
+      clientSubmitId: 'c-host',
+      text: 'ping',
+      occurredAtUnixMs,
+    })
+    engine.dispatch({
+      type: 'message/snapshotReceived',
+      messages: [
+        {
+          workspaceId,
+          agentSessionId: 'host-1',
+          messageId: 'assistant:run-live',
+          version: occurredAtUnixMs + 2,
+          sequence: occurredAtUnixMs + 2,
+          turnId: 'turn-c-host',
+          role: 'assistant',
+          kind: 'text',
+          status: 'streaming',
+          payload: { text: 'pong' },
+          occurredAtUnixMs: occurredAtUnixMs + 2,
+        },
+      ],
+    })
+    const chat = selectHermesChatState(engine.getSnapshot(), 'host-1', {
+      isSubmitting: true,
+    })
+    expect(chat.messages.map((m) => m.id)).toEqual([
+      'user:c-host',
+      'assistant:pending:host-1:c-host',
+    ])
+    expect(chat.messages[1]).toMatchObject({
+      __streamingStatus: 'streaming',
+      content: [{ type: 'text', text: 'pong' }],
+    })
+    expect(chat.streamingMessageId).toBe('assistant:pending:host-1:c-host')
+  })
+
+  it('ingestHermesUserPromptMessage seeds user + empty assistant host', () => {
     const workspaceId = 'ws'
     const commandPort = createHermesCommandPort({
       workspaceId,
@@ -493,13 +679,24 @@ describe('hermes-agent-engine', () => {
       clientSubmitId: 'c-99',
       text: 'hello engine',
     })
-    const chat = selectHermesChatState(engine.getSnapshot(), 'send-1')
+    const chat = selectHermesChatState(engine.getSnapshot(), 'send-1', {
+      isSubmitting: true,
+    })
     expect(chat.messages).toEqual([
       expect.objectContaining({
         id: 'user:c-99',
         role: 'user',
         content: [{ type: 'text', text: 'hello engine' }],
       }),
+      expect.objectContaining({
+        id: 'assistant:pending:send-1:c-99',
+        role: 'assistant',
+        __streamingStatus: 'streaming',
+        content: [],
+      }),
     ])
+    expect(chat.isStreaming).toBe(true)
+    expect(chat.streamingMessageId).toBe('assistant:pending:send-1:c-99')
+    expect(chat.turnBusy).toBe(true)
   })
 })

@@ -28,8 +28,21 @@ import {
   type AgentSessionEngineState,
   type EngineTypedCommandPort,
 } from '@agorax/agent-activity-core'
-import { hermesHistoryMessagesToActivity } from '@/lib/hermes-history-to-activity'
-import { activityMessageToChatMessage } from './managed-agent-engine'
+import { assistantMessageIdForRun } from '@/lib/chat-turn-identity'
+import {
+  hermesHistoryMessagesToActivity,
+  mergeHermesHistoryWithLiveByTurnIdentity,
+} from '@/lib/hermes-history-to-activity'
+import {
+  projectActivityMessagesToChat,
+  selectAssistantStreamingMessageId,
+} from './activity-list-projection'
+import { applyOpenAssistantStreamingChrome } from './engine-open-assistant-stream'
+import { ingestEngineUserPromptMessage } from './engine-user-prompt-ingest'
+import {
+  systemNoticeText,
+  visibleErrorText,
+} from './activity-message-mapper'
 import {
   createHermesActivityAdapterState,
   hermesSseToActivityEvents,
@@ -363,8 +376,18 @@ export function createHermesCommandPort(
             hermesRunId: null,
           })
 
-          let adapter: HermesActivityAdapterState =
-            createHermesActivityAdapterState()
+          // Same pending host as ingestHermesUserPromptMessage — started must
+          // not mint a second assistant:<runId> row (duplicate bubbles).
+          const pendingAssistantId = assistantMessageIdForRun(
+            null,
+            agentSessionId,
+            clientSubmitId,
+          )
+          let adapter: HermesActivityAdapterState = {
+            ...createHermesActivityAdapterState(),
+            assistantMessageId: pendingAssistantId,
+            thinkingMessageId: `${pendingAssistantId}:thinking`,
+          }
           let hermesRunId: string | null = null
           let settledOutcome: AgentActivityTurn['outcome'] = null
           let settledError: string | undefined
@@ -856,47 +879,15 @@ export function reconcileHermesHistoryIntoEngine(input: {
   const current =
     input.projectedMessages ??
     selectSessionMessages(input.engine.getSnapshot(), agentSessionId)
-  // History is the base; retain Engine/overlay rows history has not caught yet
-  // (live assistant deltas + user:clientSubmitId before gateway ids land).
-  const historyIds = new Set(historyMapped.map((row) => row.messageId))
-  const historyUserTexts = new Set(
-    historyMapped
-      .filter((row) => row.role === 'user')
-      .map((row) =>
-        typeof row.payload.text === 'string' ? row.payload.text.trim() : '',
-      )
-      .filter(Boolean),
-  )
-  const retained = current.filter((row) => {
-    if (historyIds.has(row.messageId)) return false
-    if (row.role === 'user') {
-      const text =
-        typeof row.payload.text === 'string' ? row.payload.text.trim() : ''
-      if (text && historyUserTexts.has(text)) return false
-    }
-    return true
+  // Turn-ordinal identity stamp (contract §4): live owns messageId for the
+  // paired turn; history fills older gaps / payload. Never append msg-N beside
+  // assistant:<runId> for the same user-turn.
+  const messages = mergeHermesHistoryWithLiveByTurnIdentity({
+    workspaceId,
+    agentSessionId,
+    history: historyMapped,
+    live: current,
   })
-  const messages: AgentActivityDurableMessage[] = [
-    ...historyMapped,
-    ...retained.map((row, index) => ({
-      workspaceId,
-      agentSessionId,
-      messageId: row.messageId,
-      version: historyMapped.length + index + 1,
-      sequence: historyMapped.length + index + 1,
-      turnId: row.turnId,
-      role: row.role,
-      kind: row.kind,
-      status: row.status ?? null,
-      semantics: row.semantics,
-      payload: { ...row.payload },
-      occurredAtUnixMs: row.occurredAtUnixMs,
-    })),
-  ].map((row, index) => ({
-    ...row,
-    version: index + 1,
-    sequence: index + 1,
-  }))
   const turns = [
     ...(session.activeTurn ? [session.activeTurn] : []),
     ...(session.latestTurn &&
@@ -926,7 +917,10 @@ export function reconcileHermesHistoryIntoEngine(input: {
   return messages.length
 }
 
-/** Optimistic user row before gateway history echoes the prompt. */
+/**
+ * Optimistic user row + empty assistant host before SSE `started`.
+ * Same turnId as commandPort send so later assistant:<runId> folds onto this host.
+ */
 export function ingestHermesUserPromptMessage(input: {
   engine: AgentSessionEngine
   workspaceId: string
@@ -935,39 +929,20 @@ export function ingestHermesUserPromptMessage(input: {
   text: string
   occurredAtUnixMs?: number
 }): void {
-  const agentSessionId = input.agentSessionId.trim()
-  const clientSubmitId = input.clientSubmitId.trim()
-  const text = input.text.trim()
-  if (!agentSessionId || !clientSubmitId || !text) return
-  const workspaceId = input.workspaceId.trim() || 'default'
-  if (!selectEngineSession(input.engine.getSnapshot(), agentSessionId)) {
-    hydrateHermesAgentEngine(
-      input.engine,
-      createHermesSessionSkeleton({ workspaceId, agentSessionId }),
-    )
-  }
-  const occurredAtUnixMs = input.occurredAtUnixMs ?? Date.now()
-  const message: AgentActivityDurableMessage = {
-    workspaceId,
-    agentSessionId,
-    messageId: `user:${clientSubmitId}`,
-    version: occurredAtUnixMs,
-    sequence: occurredAtUnixMs,
-    turnId: `turn-${clientSubmitId}`,
-    role: 'user',
-    kind: 'text',
-    status: null,
-    payload: { text, content: text, clientSubmitId, displayPrompt: text },
-    occurredAtUnixMs,
-  }
-  input.engine.dispatch({
-    type: 'message/snapshotReceived',
-    messages: [message],
+  ingestEngineUserPromptMessage({
+    ...input,
+    ensureSession: ({ workspaceId, agentSessionId }) => {
+      hydrateHermesAgentEngine(
+        input.engine,
+        createHermesSessionSkeleton({ workspaceId, agentSessionId }),
+      )
+    },
   })
 }
 
 /**
- * Hermes chat VM — mirrors selectManagedAgentChatState for busy / open-turn.
+ * Hermes chat VM — same list fold as selectManagedAgentChatState
+ * (projectActivityMessagesToChat). Approvals stay gateway-native.
  */
 export function selectHermesChatState(
   state: AgentSessionEngineState,
@@ -989,34 +964,34 @@ export function selectHermesChatState(
       ? null
       : projectedActiveTurn
   const turnActive = activeTurn !== null && activeTurn.phase !== 'settled'
-  const streamingMessageId = turnActive
-    ? selectHermesStreamingMessageId(sessionMessages, activeTurn.turnId)
+  const submitting = options?.isSubmitting === true
+  const activityStreamingId = turnActive
+    ? selectAssistantStreamingMessageId(sessionMessages, activeTurn.turnId)
     : null
-  const messages = sessionMessages.map((message) => {
-    const chat = activityMessageToChatMessage({
-      messageId: message.messageId,
-      role: message.role,
-      kind: message.kind,
-      payload: message.payload,
-      occurredAtUnixMs: message.occurredAtUnixMs,
-      status: message.status,
-      semantics: message.semantics ?? null,
-    })
-    // List chrome keys off messageId + streamingMessageId prop; stamp both
-    // id fields and live status so MessageItem matches managed.
-    const stamped: ChatMessage = {
-      ...chat,
-      id: message.messageId,
-      messageId: message.messageId,
-      ...(streamingMessageId && message.messageId === streamingMessageId
-        ? { __streamingStatus: 'streaming' as const }
-        : message.status === 'streaming'
-          ? { __streamingStatus: 'streaming' as const }
-          : {}),
-    }
-    return stamped
+  const chrome = applyOpenAssistantStreamingChrome({
+    messages: projectActivityMessagesToChat(
+      sessionMessages,
+      activityStreamingId,
+    ),
+    activityStreamingId,
+    turnActive,
+    submitting,
   })
   const terminalTurn = activeTurn ?? latestTurn
+  const visibleError = sessionMessages.find(
+    (message) =>
+      message.role === 'assistant' &&
+      message.kind === 'text' &&
+      message.payload.kind === 'agent_visible_error' &&
+      visibleErrorText(message.payload).length > 0,
+  )
+  const providerNotice = sessionMessages.find(
+    (message) =>
+      message.role === 'assistant' &&
+      message.kind === 'text' &&
+      message.payload.kind === 'agent_system_notice' &&
+      systemNoticeText(message.payload).length > 0,
+  )
   const terminalError =
     terminalTurn?.phase === 'settled' && terminalTurn.outcome === 'failed'
       ? terminalTurn.error?.message ?? null
@@ -1029,17 +1004,23 @@ export function selectHermesChatState(
     : []
 
   return {
-    messages,
+    messages: chrome.messages,
     activeTurn,
     latestTurn,
     sessionTitle: agentSessionId
       ? selectEngineSession(state, agentSessionId)?.title?.trim() || null
       : null,
-    isStreaming: turnActive,
-    /** Unique busy bit for TurnActivityHost / interactionBusy. */
-    turnBusy: turnActive || options?.isSubmitting === true,
-    streamingMessageId,
-    error: terminalError,
+    isStreaming: chrome.isStreaming,
+    /** Busy for composer / list; Activity chrome lives on MessageItem. */
+    turnBusy: chrome.turnBusy,
+    streamingMessageId: chrome.streamingMessageId,
+    error:
+      terminalError ??
+      (visibleError
+        ? visibleErrorText(visibleError.payload)
+        : providerNotice && terminalTurn?.phase === 'settled'
+          ? systemNoticeText(providerNotice.payload)
+          : null),
     /** Pending Hermes gateway approvals for ManagedAgentInteractionPanel. */
     interactions,
   }
@@ -1048,17 +1029,9 @@ export function selectHermesChatState(
 /** Re-export for callers that need to join response settlement state. */
 export type { AgentActivityInteraction }
 
-export function selectHermesStreamingMessageId(
-  sessionMessages: readonly AgentActivityMessage[],
-  activeTurnId: string,
-): string | null {
-  for (let index = sessionMessages.length - 1; index >= 0; index -= 1) {
-    const message = sessionMessages[index]
-    if (!message || message.turnId !== activeTurnId) continue
-    if (message.role === 'assistant' || message.role === 'assistant_thinking') {
-      return message.messageId
-    }
-  }
-  return null
-}
+/** @deprecated Use selectAssistantStreamingMessageId — same implementation. */
+export const selectHermesStreamingMessageId = selectAssistantStreamingMessageId
+
+/** @deprecated Use projectActivityMessagesToChat — same implementation. */
+export const projectHermesActivityMessagesToChat = projectActivityMessagesToChat
 

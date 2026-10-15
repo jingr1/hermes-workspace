@@ -1,7 +1,7 @@
 /**
  * Hermes runtime adapter → unified Agent Activity events.
  *
- * Layering (see docs/chat-turn-identity-contract.md):
+ * Layering (see docs/hermes-native-bridge.md §2):
  *   Runtime (Hermes SSE) → this adapter → AgentSessionEngine contract
  *   Runtime (managed CLI) → daemon → same contract
  *
