@@ -228,6 +228,7 @@ import { Route as ApiSessionsSessionKeyCompressRouteImport } from './routes/api/
 import { Route as ApiSessionsSessionKeyActiveRunRouteImport } from './routes/api/sessions/$sessionKey.active-run'
 import { Route as ApiRunsRunIdStopRouteImport } from './routes/api/runs/$runId.stop'
 import { Route as ApiRunsRunIdSteerRouteImport } from './routes/api/runs/$runId.steer'
+import { Route as ApiRunsRunIdApprovalRouteImport } from './routes/api/runs/$runId.approval'
 import { Route as ApiRoomsRoomIdPendingTurnsRouteImport } from './routes/api/rooms/$roomId/pending-turns'
 import { Route as ApiRoomsRoomIdParticipantsRouteImport } from './routes/api/rooms/$roomId/participants'
 import { Route as ApiRoomsRoomIdMessagesRouteImport } from './routes/api/rooms/$roomId/messages'
@@ -1382,6 +1383,11 @@ const ApiRunsRunIdSteerRoute = ApiRunsRunIdSteerRouteImport.update({
   path: '/api/runs/$runId/steer',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiRunsRunIdApprovalRoute = ApiRunsRunIdApprovalRouteImport.update({
+  id: '/api/runs/$runId/approval',
+  path: '/api/runs/$runId/approval',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiRoomsRoomIdPendingTurnsRoute =
   ApiRoomsRoomIdPendingTurnsRouteImport.update({
     id: '/pending-turns',
@@ -1873,6 +1879,7 @@ export interface FileRoutesByFullPath {
   '/api/rooms/$roomId/messages': typeof ApiRoomsRoomIdMessagesRouteWithChildren
   '/api/rooms/$roomId/participants': typeof ApiRoomsRoomIdParticipantsRouteWithChildren
   '/api/rooms/$roomId/pending-turns': typeof ApiRoomsRoomIdPendingTurnsRouteWithChildren
+  '/api/runs/$runId/approval': typeof ApiRunsRunIdApprovalRoute
   '/api/runs/$runId/steer': typeof ApiRunsRunIdSteerRoute
   '/api/runs/$runId/stop': typeof ApiRunsRunIdStopRoute
   '/api/sessions/$sessionKey/active-run': typeof ApiSessionsSessionKeyActiveRunRoute
@@ -2135,6 +2142,7 @@ export interface FileRoutesByTo {
   '/api/rooms/$roomId/messages': typeof ApiRoomsRoomIdMessagesRouteWithChildren
   '/api/rooms/$roomId/participants': typeof ApiRoomsRoomIdParticipantsRouteWithChildren
   '/api/rooms/$roomId/pending-turns': typeof ApiRoomsRoomIdPendingTurnsRouteWithChildren
+  '/api/runs/$runId/approval': typeof ApiRunsRunIdApprovalRoute
   '/api/runs/$runId/steer': typeof ApiRunsRunIdSteerRoute
   '/api/runs/$runId/stop': typeof ApiRunsRunIdStopRoute
   '/api/sessions/$sessionKey/active-run': typeof ApiSessionsSessionKeyActiveRunRoute
@@ -2401,6 +2409,7 @@ export interface FileRoutesById {
   '/api/rooms/$roomId/messages': typeof ApiRoomsRoomIdMessagesRouteWithChildren
   '/api/rooms/$roomId/participants': typeof ApiRoomsRoomIdParticipantsRouteWithChildren
   '/api/rooms/$roomId/pending-turns': typeof ApiRoomsRoomIdPendingTurnsRouteWithChildren
+  '/api/runs/$runId/approval': typeof ApiRunsRunIdApprovalRoute
   '/api/runs/$runId/steer': typeof ApiRunsRunIdSteerRoute
   '/api/runs/$runId/stop': typeof ApiRunsRunIdStopRoute
   '/api/sessions/$sessionKey/active-run': typeof ApiSessionsSessionKeyActiveRunRoute
@@ -2668,6 +2677,7 @@ export interface FileRouteTypes {
     | '/api/rooms/$roomId/messages'
     | '/api/rooms/$roomId/participants'
     | '/api/rooms/$roomId/pending-turns'
+    | '/api/runs/$runId/approval'
     | '/api/runs/$runId/steer'
     | '/api/runs/$runId/stop'
     | '/api/sessions/$sessionKey/active-run'
@@ -2930,6 +2940,7 @@ export interface FileRouteTypes {
     | '/api/rooms/$roomId/messages'
     | '/api/rooms/$roomId/participants'
     | '/api/rooms/$roomId/pending-turns'
+    | '/api/runs/$runId/approval'
     | '/api/runs/$runId/steer'
     | '/api/runs/$runId/stop'
     | '/api/sessions/$sessionKey/active-run'
@@ -3195,6 +3206,7 @@ export interface FileRouteTypes {
     | '/api/rooms/$roomId/messages'
     | '/api/rooms/$roomId/participants'
     | '/api/rooms/$roomId/pending-turns'
+    | '/api/runs/$runId/approval'
     | '/api/runs/$runId/steer'
     | '/api/runs/$runId/stop'
     | '/api/sessions/$sessionKey/active-run'
@@ -3415,6 +3427,7 @@ export interface RootRouteChildren {
   ApiAgentsClaudeCodeModelsRoute: typeof ApiAgentsClaudeCodeModelsRoute
   ApiAgentsCodexImplConfigRoute: typeof ApiAgentsCodexImplConfigRoute
   ApiAgentsCodexImplModelsRoute: typeof ApiAgentsCodexImplModelsRoute
+  ApiRunsRunIdApprovalRoute: typeof ApiRunsRunIdApprovalRoute
   ApiRunsRunIdSteerRoute: typeof ApiRunsRunIdSteerRoute
   ApiRunsRunIdStopRoute: typeof ApiRunsRunIdStopRoute
   ApiMissionsMissionIdIndexRoute: typeof ApiMissionsMissionIdIndexRoute
@@ -4963,6 +4976,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiRunsRunIdSteerRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/runs/$runId/approval': {
+      id: '/api/runs/$runId/approval'
+      path: '/api/runs/$runId/approval'
+      fullPath: '/api/runs/$runId/approval'
+      preLoaderRoute: typeof ApiRunsRunIdApprovalRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/rooms/$roomId/pending-turns': {
       id: '/api/rooms/$roomId/pending-turns'
       path: '/pending-turns'
@@ -5909,6 +5929,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentsClaudeCodeModelsRoute: ApiAgentsClaudeCodeModelsRoute,
   ApiAgentsCodexImplConfigRoute: ApiAgentsCodexImplConfigRoute,
   ApiAgentsCodexImplModelsRoute: ApiAgentsCodexImplModelsRoute,
+  ApiRunsRunIdApprovalRoute: ApiRunsRunIdApprovalRoute,
   ApiRunsRunIdSteerRoute: ApiRunsRunIdSteerRoute,
   ApiRunsRunIdStopRoute: ApiRunsRunIdStopRoute,
   ApiMissionsMissionIdIndexRoute: ApiMissionsMissionIdIndexRoute,

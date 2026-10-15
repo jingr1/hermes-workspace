@@ -890,6 +890,29 @@ code {
   contain: paint;
 }
 
+/* Inline caret on the last markdown block — must NOT be a block sibling
+   after the Markdown root (that added a full line and jumped on settle). */
+.chat-streaming-content > :last-child::after {
+  content: '';
+  display: inline-block;
+  width: 0.125rem;
+  height: 1em;
+  margin-inline-start: 0.125rem;
+  vertical-align: text-bottom;
+  background-color: var(--color-accent-500, var(--theme-accent, #f97316));
+  animation: chat-streaming-caret-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes chat-streaming-caret-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
 .chat-streaming-message .chat-streaming-content > :last-child {
   animation: stream-reveal 0.6s cubic-bezier(0.22, 1, 0.36, 1);
   will-change: opacity, filter, transform;

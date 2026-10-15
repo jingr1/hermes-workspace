@@ -2590,6 +2590,18 @@ function MessageItemComponent({
   const hasActivityContent =
     finalToolSections.length > 0 ||
     Boolean(thinking && thinking.trim().length > 0)
+  // Full Activity above the bubble only while live / empty-gap / tools.
+  // Settled thinking + reply text stays a compact disclosure under the bubble
+  // — keeping a "seen live" latch left turn N's Activity open forever and
+  // made send N+1 look like it refreshed the previous bubble.
+  const showActivityAboveBubble =
+    hasActivityContent &&
+    (effectiveIsStreaming || !hasText || hasToolCalls)
+  const showSettleOnlyThinking =
+    Boolean(thinking && thinking.trim().length > 0) &&
+    !showActivityAboveBubble &&
+    hasText &&
+    !hasToolCalls
   // Keep the same AssistantAvatar mounted for the whole live turn — including
   // the empty pre-token frame — so Working→bubble never remounts the avatar.
   const isEmptyStreamingShell =
@@ -2728,7 +2740,7 @@ function MessageItemComponent({
       {/* Thinking/tools above the assistant bubble for the whole turn.
           Empty pre-token Working sits beside the avatar below — not a sibling
           list-level TurnActivityHost (that remounted a different avatar). */}
-      {!isUser && !hideActivityCard && hasActivityContent ? (
+      {!isUser && !hideActivityCard && showActivityAboveBubble ? (
         <div className="w-full max-w-[var(--chat-content-max-width)] flex order-first">
           <div className="w-6 shrink-0" aria-hidden />
           <div className="min-w-0 flex-1">
@@ -2837,7 +2849,8 @@ function MessageItemComponent({
           <div
             data-chat-message-bubble={isUser ? 'user' : 'assistant'}
             className={cn(
-              'break-words whitespace-normal min-w-0 flex flex-col gap-2 px-3 py-2 max-w-[80%]',
+              // relative: absolute "Sent" overlay must not affect bubble height
+              'relative break-words whitespace-normal min-w-0 flex flex-col gap-2 px-3 py-2 max-w-[80%]',
               '',
               !isUser
                 ? 'border rounded-2xl rounded-tl-sm'
@@ -2983,7 +2996,9 @@ function MessageItemComponent({
                       markdown
                       streaming={remoteStreamingActive}
                       className={cn(
-                        'text-primary-900 bg-transparent w-full text-pretty transition-all duration-100',
+                        // No transition-all: settle flips streaming chrome and
+                        // animating layout/box props reads as a transcript jump.
+                        'text-primary-900 bg-transparent w-full text-pretty',
                         effectiveIsStreaming && 'chat-streaming-content',
                       )}
                     >
@@ -3002,15 +3017,16 @@ function MessageItemComponent({
                       )}
                     </div>
                   ) : null}
-                  {effectiveIsStreaming && parsedInlineArtifacts.cleanedText ? (
-                    <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-accent-500 align-text-bottom" />
-                  ) : null}
+                  {/* Streaming caret is CSS ::after on .chat-streaming-content
+                      last child — a block sibling here added ~24px that vanished
+                      on settle and shoved the transcript (stick-to-bottom). */}
                 </div>
               ) : null)}
-            {/* Sent indicator — message delivered, waiting for response */}
-            {isUser && isQueued && (
+            {/* Out of flow — unmounting "Sent" on reply used to shrink the user
+                bubble (~23px) in the same settle frame as the caret. */}
+            {isUser && isQueued ? (
               <span
-                className="self-end text-[10px]"
+                className="pointer-events-none absolute bottom-1.5 end-3 text-[10px]"
                 style={{
                   color:
                     'color-mix(in srgb, var(--chat-user-foreground) 60%, transparent)',
@@ -3018,7 +3034,7 @@ function MessageItemComponent({
               >
                 Sent
               </span>
-            )}
+            ) : null}
           </div>
           )}
         </Message>
@@ -3029,10 +3045,20 @@ function MessageItemComponent({
         <div
           className={cn(
             'flex flex-wrap justify-end gap-x-2 gap-y-0.5 pl-10 pr-1 mt-0.5 font-mono text-[10px] tabular-nums text-primary-400 leading-relaxed min-h-[14px]',
-            !hasAssistantMetadata && 'invisible',
+            !hasAssistantMetadata && !showSettleOnlyThinking && 'invisible',
           )}
-          aria-hidden={!hasAssistantMetadata}
+          aria-hidden={!hasAssistantMetadata && !showSettleOnlyThinking}
         >
+          {showSettleOnlyThinking ? (
+            <details className="mr-auto max-w-full text-left text-primary-400 open:mb-0.5">
+              <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden">
+                Thinking
+              </summary>
+              <div className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap text-primary-500">
+                {thinking}
+              </div>
+            </details>
+          ) : null}
           {hasAssistantMetadata ? (
             <>
               {usageMetadata.inputTokens !== null && (
@@ -3055,9 +3081,9 @@ function MessageItemComponent({
                 <span className="opacity-60">{usageMetadata.modelLabel}</span>
               )}
             </>
-          ) : (
+          ) : !showSettleOnlyThinking ? (
             <span>&nbsp;</span>
-          )}
+          ) : null}
         </div>
       ) : null}
 

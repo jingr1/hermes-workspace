@@ -10,6 +10,13 @@
 
 import type { AgentActivityUpdatedEvent } from '@agorax/agent-activity-core'
 import { assistantMessageIdForRun } from './chat-turn-identity'
+import {
+  hermesApprovalToInteraction,
+  isHermesApprovalRequestEvent,
+  isHermesApprovalRespondedEvent,
+  normalizeHermesApprovalPayload,
+  resolveHermesApprovalChoice,
+} from './hermes-approval'
 
 export type HermesSseEventName =
   | 'started'
@@ -139,6 +146,24 @@ export function hermesSseToActivityEvents(
     case 'started': {
       next = ensureIds(ctx, next, payloadRunId)
       events.push(turnUpdate('running', null))
+      // Seed overlay anchor so first chunk append is not rejected
+      // (append_without_anchor). Empty set creates the durable assistant row.
+      if (next.assistantMessageId) {
+        events.push({
+          ...base,
+          eventType: 'message_delta',
+          data: {
+            ...base,
+            messageId: next.assistantMessageId,
+            turnId: ctx.turnId,
+            role: 'assistant',
+            kind: 'text',
+            occurredAtUnixMs,
+            content: { operation: 'set', value: '' },
+            status: 'streaming',
+          },
+        })
+      }
       break
     }
 
@@ -153,24 +178,29 @@ export function hermesSseToActivityEvents(
         readString(data.chunk)
       if (!incoming && event === 'chunk') break
 
+      const hadText = next.lastText.length > 0
       let appendText = incoming
+      let useSet = !hadText
       if (fullReplace || event === 'assistant') {
         if (incoming.startsWith(next.lastText)) {
           appendText = incoming.slice(next.lastText.length)
         } else if (incoming === next.lastText) {
           appendText = ''
         } else {
-          // Non-prefix replace: emit set via append of full text after reset.
+          // Non-prefix replace: full set (cannot append onto stale prefix).
           appendText = incoming
-          next = { ...next, lastText: '' }
+          useSet = true
         }
         next = { ...next, lastText: incoming }
       } else {
         next = { ...next, lastText: next.lastText + incoming }
       }
 
-      if (!appendText || !next.assistantMessageId) break
+      if ((!appendText && !useSet) || !next.assistantMessageId) break
+      if (!appendText && useSet && !next.lastText) break
 
+      // First body / non-prefix replace must use `set` so overlay can create
+      // or replace the row without append_without_anchor.
       events.push({
         ...base,
         eventType: 'message_delta',
@@ -181,7 +211,9 @@ export function hermesSseToActivityEvents(
           role: 'assistant',
           kind: 'text',
           occurredAtUnixMs,
-          content: { operation: 'append_text', text: appendText },
+          content: useSet
+            ? { operation: 'set', value: next.lastText || appendText }
+            : { operation: 'append_text', text: appendText },
           status: 'streaming',
         },
       })
@@ -195,11 +227,14 @@ export function hermesSseToActivityEvents(
       if (!thinking.trim() || !next.thinkingMessageId) break
 
       const prev = next.lastThinking
+      const hadThinking = prev.length > 0
       let appendText = thinking
       if (thinking.startsWith(prev)) {
         appendText = thinking.slice(prev.length)
       } else if (thinking === prev) {
         appendText = ''
+      } else {
+        appendText = thinking
       }
       next = { ...next, lastThinking: thinking }
       if (!appendText) break
@@ -214,7 +249,9 @@ export function hermesSseToActivityEvents(
           role: 'assistant_thinking',
           kind: 'reasoning',
           occurredAtUnixMs,
-          content: { operation: 'append_text', text: appendText },
+          content: hadThinking
+            ? { operation: 'append_text', text: appendText }
+            : { operation: 'set', value: thinking },
           status: 'streaming',
         },
       })
@@ -300,8 +337,84 @@ export function hermesSseToActivityEvents(
       break
     }
 
-    default:
+    case 'approval':
+    case 'approval.request':
+    case 'hermes.approval.request': {
+      next = ensureIds(ctx, next, payloadRunId)
+      if (!isHermesApprovalRequestEvent(event, data)) break
+      const normalized = normalizeHermesApprovalPayload(data, next.runId)
+      if (!normalized) break
+      if (normalized.runId) {
+        next = ensureIds(ctx, next, normalized.runId)
+      }
+      const interaction = hermesApprovalToInteraction({
+        workspaceId: ctx.workspaceId,
+        agentSessionId: ctx.agentSessionId,
+        turnId: ctx.turnId,
+        approval: normalized,
+        status: 'pending',
+        nowUnixMs: occurredAtUnixMs,
+      })
+      events.push({
+        ...base,
+        eventType: 'interaction_update',
+        data: {
+          ...base,
+          eventType: 'interaction_update',
+          occurredAtUnixMs,
+          interaction,
+        },
+      })
       break
+    }
+
+    case 'approval.responded':
+    case 'hermes.approval.responded': {
+      next = ensureIds(ctx, next, payloadRunId)
+      if (!isHermesApprovalRespondedEvent(event, data)) break
+      const normalized = normalizeHermesApprovalPayload(data, next.runId)
+      if (!normalized) break
+      const choice = resolveHermesApprovalChoice({
+        optionId: readString(data.choice),
+        action: readString(data.choice),
+      })
+      const interaction = hermesApprovalToInteraction({
+        workspaceId: ctx.workspaceId,
+        agentSessionId: ctx.agentSessionId,
+        turnId: ctx.turnId,
+        approval: normalized,
+        status: 'answered',
+        choice,
+        nowUnixMs: occurredAtUnixMs,
+      })
+      events.push({
+        ...base,
+        eventType: 'interaction_update',
+        data: {
+          ...base,
+          eventType: 'interaction_update',
+          occurredAtUnixMs,
+          interaction,
+        },
+      })
+      break
+    }
+
+    default: {
+      // Gateway may put the event name only inside the JSON payload.
+      if (isHermesApprovalRequestEvent(event, data)) {
+        return hermesSseToActivityEvents(ctx, state, 'approval', data)
+      }
+      if (isHermesApprovalRespondedEvent(event, data)) {
+        return hermesSseToActivityEvents(
+          ctx,
+          state,
+          'approval.responded',
+          data,
+        )
+      }
+      break
+    }
   }
 
   return { state: next, events }

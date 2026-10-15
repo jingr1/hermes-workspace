@@ -9,6 +9,8 @@ import {
   createHermesCommandPort,
   createHermesSessionSkeleton,
   hydrateHermesAgentEngine,
+  ingestHermesUserPromptMessage,
+  reconcileHermesHistoryIntoEngine,
   selectHermesChatState,
 } from './hermes-agent-engine'
 import type { AgoraxRunMapping } from '@/server/agent-runtime/hermes-native-bridge'
@@ -201,6 +203,130 @@ describe('hermes-agent-engine', () => {
     expect(calls.some((u) => u.includes('/api/runs/run-live/stop'))).toBe(true)
   })
 
+  it('approval SSE projects pending interaction and respond relays choice', async () => {
+    const store = mappingStore()
+    await store.put({
+      agentSessionId: 'agent-appr',
+      turnId: null,
+      gatewaySessionId: 'gw-appr',
+      assignmentId: null,
+      hermesRunId: 'run-appr',
+      bridgeKind: 'hermes-native',
+      updatedAtUnixMs: Date.now(),
+    })
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+        if (url.includes('/api/send-stream')) {
+          const encoder = new TextEncoder()
+          const stream = new ReadableStream({
+            start(controller) {
+              controller.enqueue(
+                encoder.encode(
+                  `event: started\ndata: ${JSON.stringify({ runId: 'run-appr' })}\n\n`,
+                ),
+              )
+              controller.enqueue(
+                encoder.encode(
+                  `event: approval\ndata: ${JSON.stringify({
+                    event: 'approval.request',
+                    run_id: 'run-appr',
+                    approval_id: 'appr-1',
+                    command: 'rm -rf /tmp/x',
+                    choices: ['once', 'deny'],
+                  })}\n\n`,
+                ),
+              )
+              controller.enqueue(
+                encoder.encode(
+                  `event: done\ndata: ${JSON.stringify({ state: 'complete', runId: 'run-appr' })}\n\n`,
+                ),
+              )
+              controller.close()
+            },
+          })
+          return new Response(stream, { status: 200 })
+        }
+        if (url.includes('/api/runs/') && url.includes('/approval')) {
+          expect(init?.method).toBe('POST')
+          expect(JSON.parse(String(init?.body))).toMatchObject({
+            choice: 'once',
+            approval_id: 'appr-1',
+          })
+          return new Response(JSON.stringify({ ok: true }), { status: 200 })
+        }
+        return new Response('not found', { status: 404 })
+      },
+    )
+
+    const workspaceId = 'ws-appr'
+    let engineRef: ReturnType<typeof createHermesAgentEngine> | null = null
+    let coordinatorRef: ReturnType<
+      typeof createAgentActivityWorkspaceEventCoordinator
+    > | null = null
+
+    const commandPort = createHermesCommandPort({
+      workspaceId,
+      getMapping: store.get,
+      putMapping: store.put,
+      onActivityEvent: (event) => {
+        coordinatorRef?.ingestEvent(event)
+      },
+    })
+    const engine = createHermesAgentEngine({ workspaceId, commandPort })
+    engineRef = engine
+    const projectSnapshot = createAgentActivitySnapshotProjector(workspaceId)
+    coordinatorRef = createAgentActivityWorkspaceEventCoordinator({
+      engine,
+      notificationScheduler: {
+        schedule(delayMs, task) {
+          const timer = setTimeout(task, delayMs)
+          return { cancel: () => clearTimeout(timer) }
+        },
+      },
+      readCanonicalSnapshot: () => projectSnapshot(engine.getSnapshot()),
+      workspaceId,
+    })
+    hydrateHermesAgentEngine(
+      engine,
+      createHermesSessionSkeleton({
+        workspaceId,
+        agentSessionId: 'agent-appr',
+        providerSessionId: 'gw-appr',
+      }),
+    )
+
+    await commandPort.effects.sendInput(
+      {
+        workspaceId,
+        agentSessionId: 'agent-appr',
+        clientSubmitId: 'submit-appr',
+        content: [{ type: 'text', text: 'please run' }],
+      },
+      { commandId: 'cmd-appr', origin: 'engine', signal: undefined },
+    )
+
+    const chat = selectHermesChatState(engine.getSnapshot(), 'agent-appr')
+    expect(chat.interactions.map((i) => i.requestId)).toContain('appr-1')
+    const turnId = chat.interactions[0]!.turnId
+
+    const accepted = engine.submitInteractionResponse({
+      agentSessionId: 'agent-appr',
+      turnId,
+      requestId: 'appr-1',
+      optionId: 'once',
+    })
+    expect(accepted).toBe(true)
+
+    await vi.waitFor(() => {
+      const after = selectHermesChatState(engineRef!.getSnapshot(), 'agent-appr')
+      expect(
+        after.interactions.find((i) => i.requestId === 'appr-1'),
+      ).toBeUndefined()
+    })
+  })
+
   it('selectHermesChatState lights busy while submitting', () => {
     const workspaceId = 'ws'
     const commandPort = createHermesCommandPort({
@@ -223,5 +349,157 @@ describe('hermes-agent-engine', () => {
     expect(busy.turnBusy).toBe(true)
     const idle = selectHermesChatState(engine.getSnapshot(), 's1')
     expect(idle.turnBusy).toBe(false)
+  })
+
+  it('reconcileHermesHistoryIntoEngine hydrates list from history ids', () => {
+    const workspaceId = 'ws'
+    const commandPort = createHermesCommandPort({
+      workspaceId,
+      getMapping: async () => null,
+      putMapping: async (m) => m,
+      onActivityEvent: () => undefined,
+    })
+    const engine = createHermesAgentEngine({ workspaceId, commandPort })
+    const projectSnapshot = createAgentActivitySnapshotProjector(workspaceId)
+    const coordinator = createAgentActivityWorkspaceEventCoordinator({
+      engine,
+      notificationScheduler: {
+        schedule(delayMs, task) {
+          const timer = setTimeout(task, delayMs)
+          return { cancel: () => clearTimeout(timer) }
+        },
+      },
+      readCanonicalSnapshot: () => projectSnapshot(engine.getSnapshot()),
+      workspaceId,
+    })
+    const count = reconcileHermesHistoryIntoEngine({
+      engine,
+      coordinator,
+      workspaceId,
+      agentSessionId: 'hist-1',
+      historyMessages: [
+        {
+          role: 'user',
+          id: 'u1',
+          content: [{ type: 'text', text: 'ping' }],
+          timestamp: 1,
+        },
+        {
+          role: 'assistant',
+          id: 'assistant:run-h',
+          messageId: 'assistant:run-h',
+          content: [{ type: 'text', text: 'pong' }],
+          timestamp: 2,
+        },
+      ],
+    })
+    expect(count).toBe(2)
+    const chat = selectHermesChatState(engine.getSnapshot(), 'hist-1', {
+      sessionMessages: coordinator.project(projectSnapshot(engine.getSnapshot()))
+        .sessionMessagesById['hist-1'],
+    })
+    expect(chat.messages.map((m) => m.id)).toEqual(['u1', 'assistant:run-h'])
+    expect(chat.messages[1]?.content).toEqual([{ type: 'text', text: 'pong' }])
+    coordinator.dispose()
+  })
+
+  it('reconcileHermesHistoryIntoEngine retains live Engine rows missing from stale history', () => {
+    const workspaceId = 'ws'
+    const commandPort = createHermesCommandPort({
+      workspaceId,
+      getMapping: async () => null,
+      putMapping: async (m) => m,
+      onActivityEvent: () => undefined,
+    })
+    const engine = createHermesAgentEngine({ workspaceId, commandPort })
+    const projectSnapshot = createAgentActivitySnapshotProjector(workspaceId)
+    const coordinator = createAgentActivityWorkspaceEventCoordinator({
+      engine,
+      notificationScheduler: {
+        schedule(delayMs, task) {
+          const timer = setTimeout(task, delayMs)
+          return { cancel: () => clearTimeout(timer) }
+        },
+      },
+      readCanonicalSnapshot: () => projectSnapshot(engine.getSnapshot()),
+      workspaceId,
+    })
+    ingestHermesUserPromptMessage({
+      engine,
+      workspaceId,
+      agentSessionId: 'stale-1',
+      clientSubmitId: 'fresh',
+      text: 'new prompt',
+    })
+    const count = reconcileHermesHistoryIntoEngine({
+      engine,
+      coordinator,
+      workspaceId,
+      agentSessionId: 'stale-1',
+      historyMessages: [
+        {
+          role: 'user',
+          id: 'old-u',
+          content: [{ type: 'text', text: 'old' }],
+          timestamp: 1,
+        },
+      ],
+    })
+    expect(count).toBe(2)
+    const chat = selectHermesChatState(engine.getSnapshot(), 'stale-1', {
+      sessionMessages: coordinator.project(projectSnapshot(engine.getSnapshot()))
+        .sessionMessagesById['stale-1'],
+    })
+    expect(chat.messages.map((m) => m.id)).toEqual(['old-u', 'user:fresh'])
+    // Same text under a gateway id collapses the optimistic user row.
+    reconcileHermesHistoryIntoEngine({
+      engine,
+      coordinator,
+      workspaceId,
+      agentSessionId: 'stale-1',
+      historyMessages: [
+        {
+          role: 'user',
+          id: 'old-u',
+          content: [{ type: 'text', text: 'old' }],
+          timestamp: 1,
+        },
+        {
+          role: 'user',
+          id: 'gw-user',
+          content: [{ type: 'text', text: 'new prompt' }],
+          timestamp: 2,
+        },
+      ],
+    })
+    const after = selectHermesChatState(engine.getSnapshot(), 'stale-1')
+    expect(after.messages.map((m) => m.id)).toEqual(['old-u', 'gw-user'])
+    coordinator.dispose()
+  })
+
+  it('ingestHermesUserPromptMessage seeds Engine user row', () => {
+    const workspaceId = 'ws'
+    const commandPort = createHermesCommandPort({
+      workspaceId,
+      getMapping: async () => null,
+      putMapping: async (m) => m,
+      onActivityEvent: () => undefined,
+    })
+    const engine = createHermesAgentEngine({ workspaceId, commandPort })
+    ingestHermesUserPromptMessage({
+      engine,
+      workspaceId,
+      agentSessionId: 'send-1',
+      clientSubmitId: 'c-99',
+      text: 'hello engine',
+    })
+    const chat = selectHermesChatState(engine.getSnapshot(), 'send-1')
+    expect(chat.messages).toEqual([
+      expect.objectContaining({
+        id: 'user:c-99',
+        role: 'user',
+        content: [{ type: 'text', text: 'hello engine' }],
+      }),
+    ])
   })
 })

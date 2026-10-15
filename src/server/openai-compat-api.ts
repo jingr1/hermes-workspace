@@ -148,6 +148,10 @@ export type StreamChunkType =
       // keep working.
       status?: 'running' | 'completed'
     }
+  | {
+      type: 'approval' | 'approval.responded'
+      data: Record<string, unknown>
+    }
 
 function readString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
@@ -245,16 +249,35 @@ export async function* parseOpenAIStream(
         }
 
         try {
-          const parsed = JSON.parse(payload) as {
-            choices?: Array<{
-              delta?: {
-                content?: string | null
-                reasoning?: string | null
-                reasoning_content?: string | null
-              }
-            }>
+          const parsed = JSON.parse(payload) as Record<string, unknown>
+          const payloadEvent = readString(
+            parsed.event || parsed.type || eventName,
+          ).toLowerCase()
+          if (
+            payloadEvent === 'approval.request' ||
+            payloadEvent === 'hermes.approval.request'
+          ) {
+            yield { type: 'approval' as const, data: parsed }
+            continue
           }
-          const d = parsed.choices?.[0]?.delta
+          if (
+            payloadEvent === 'approval.responded' ||
+            payloadEvent === 'hermes.approval.responded'
+          ) {
+            yield { type: 'approval.responded' as const, data: parsed }
+            continue
+          }
+
+          const choices = Array.isArray(parsed.choices)
+            ? (parsed.choices as Array<{
+                delta?: {
+                  content?: string | null
+                  reasoning?: string | null
+                  reasoning_content?: string | null
+                }
+              }>)
+            : null
+          const d = choices?.[0]?.delta
           const content = d?.content || ''
           const reasoning = d?.reasoning || d?.reasoning_content || ''
           // Emit reasoning first when present so it is routed to the thinking

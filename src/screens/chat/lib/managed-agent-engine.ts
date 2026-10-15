@@ -644,6 +644,22 @@ function isProcessingHostMessage(message: AgentActivityMessage): boolean {
   )
 }
 
+/** Shared Activity → ChatMessage projection (Hermes + managed list lanes). */
+export function activityMessageToChatMessage(message: {
+  messageId: string
+  role: string
+  kind: string
+  payload: Record<string, unknown>
+  occurredAtUnixMs: number
+  status?: string | null
+  semantics?: {
+    noticeCommand?: string
+    noticeCommandStatus?: string
+  } | null
+}): ChatMessage {
+  return toChatMessage(message)
+}
+
 function toChatMessage(message: {
   messageId: string
   role: string

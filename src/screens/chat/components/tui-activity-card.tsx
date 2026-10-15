@@ -375,7 +375,12 @@ function TuiActivityCardComponent({
   formatArg,
 }: TuiActivityCardProps) {
   const bodyRef = useRef<HTMLDivElement | null>(null)
-  const [cardOpen, setCardOpen] = useState(true)
+  // Start open only while the turn is live (or forced). Settled thinking that
+  // first mounts after done used to open fully (~100px+) above the bubble and
+  // shove the transcript — keep that first paint collapsed to the header.
+  const [cardOpen, setCardOpen] = useState(
+    () => Boolean(expandAll) || isStreaming || keepMountedWhileBusy,
+  )
   const hasThinking = !!(thinking && thinking.trim().length > 0)
   const hasTools = toolSections.length > 0
   const { visible: visibleTools, hiddenCount } = useMemo(

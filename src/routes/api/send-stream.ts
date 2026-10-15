@@ -1075,6 +1075,37 @@ export const Route = createFileRoute('/api/send-stream')({
                   let thinking = ''
                   let toolEventCount = 0
                   for await (const chunk of stream) {
+                    if (
+                      chunk.type === 'approval' ||
+                      chunk.type === 'approval.responded'
+                    ) {
+                      const approvalRunId =
+                        typeof chunk.data.run_id === 'string' &&
+                        chunk.data.run_id.trim()
+                          ? chunk.data.run_id.trim()
+                          : typeof chunk.data.runId === 'string' &&
+                              chunk.data.runId.trim()
+                            ? chunk.data.runId.trim()
+                            : runId
+                      if (approvalRunId) {
+                        bindLiveSendRun(approvalRunId, portableSessionKey)
+                        activeRunId = approvalRunId
+                      }
+                      sendEvent(chunk.type, {
+                        ...chunk.data,
+                        event:
+                          chunk.type === 'approval'
+                            ? 'approval.request'
+                            : 'approval.responded',
+                        runId: approvalRunId,
+                        run_id: approvalRunId,
+                        sessionKey: portableSessionKey,
+                      })
+                      if (chunk.type === 'approval') {
+                        lastActivity = 'Waiting for approval...'
+                      }
+                      continue
+                    }
                     if (chunk.type === 'reasoning') {
                       thinking += chunk.text
                       persistActiveRun((runSessionKey, activeId) =>
@@ -1399,13 +1430,53 @@ export const Route = createFileRoute('/api/send-stream')({
                       const runId =
                         typeof data.run_id === 'string' && data.run_id.trim()
                           ? data.run_id
-                          : (activeRunId ?? undefined)
+                          : typeof data.runId === 'string' && data.runId.trim()
+                            ? data.runId
+                            : (activeRunId ?? undefined)
 
                       if (runId) {
                         // Alias gateway run ids to the same AbortController so
                         // either Workspace or Hermes run id can Stop the turn.
                         bindLiveSendRun(runId, sessionKeyFromEvent)
                         if (!activeRunId) activeRunId = runId
+                      }
+
+                      // Dangerous-command / MCP trust-gate approvals (hermes-webui
+                      // parity). Forward as a first-class SSE event so the Hermes
+                      // activity adapter can project an Interaction card.
+                      {
+                        const payloadEvent = String(
+                          data.event || data.type || event || '',
+                        )
+                          .trim()
+                          .toLowerCase()
+                        if (
+                          payloadEvent === 'approval.request' ||
+                          payloadEvent === 'hermes.approval.request'
+                        ) {
+                          sendEvent('approval', {
+                            ...data,
+                            event: 'approval.request',
+                            runId,
+                            run_id: runId,
+                            sessionKey: sessionKeyFromEvent,
+                          })
+                          lastActivity = 'Waiting for approval...'
+                          return
+                        }
+                        if (
+                          payloadEvent === 'approval.responded' ||
+                          payloadEvent === 'hermes.approval.responded'
+                        ) {
+                          sendEvent('approval.responded', {
+                            ...data,
+                            event: 'approval.responded',
+                            runId,
+                            run_id: runId,
+                            sessionKey: sessionKeyFromEvent,
+                          })
+                          return
+                        }
                       }
 
                       // Tool calls already on this frame. Don't wait for the

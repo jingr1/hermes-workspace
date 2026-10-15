@@ -43,7 +43,7 @@
 
 - **Managed**：daemon 已发 Activity；`event-bridge` 只转发。  
 - **Hermes**：`hermesSseToActivityEvents` 把 `started|chunk|thinking|tool|done` 译成同一套 `message_delta` / `turn_update`。  
-- UI **不**直接吃 Hermes SSE 业务语义；目标态只订 Engine（当前 Hermes 1:1 仍经过渡路径 `chat-store` write-through，与合同对齐，待 native bridge 接线后切 Engine）。
+- UI **不**直接吃 Hermes SSE 业务语义；Hermes 1:1 列表与 busy 只订 Engine（`selectHermesChatState`）。`chat-store` write-through 仅作 SSE 侧信道 / portable 遗留，**不是**列表真相源。
 
 ## 4. Settle
 
@@ -59,10 +59,10 @@
 | A | Identity + Hermes write-through（不换皮） | ✅ |
 | B | Hermes SSE → Activity 纯 adapter | ✅ `hermes-activity-adapter.ts` |
 | C | Native bridge 真接线：send-stream → adapter → Engine | ✅ `createHermesAgentEngine` + commandPort（`/api/send-stream` / `/api/runs/.../stop` 仅 port 内）；`agorax_run_mapping` 落 collab.db；SSE→adapter→`coordinator.ingestEvent` |
-| D | Hermes 1:1 UI 只订 Engine（与 managed 同 hook 投影） | ✅ `useHermesEngineChatState`；`turnBusy` / `interactionBusy` ← Engine（不再 OR waiting）。已删 `hermes-turn-store`、二次 `done`、`showProcessingIndicator` 双 prop；pending id 必须带 turnKey；heartbeat → TurnActivityHost 空档；sticky 仅 live turn；`useActiveRunCheck` remount 只 clear-orphan（不 `setSessionWaiting`）；`waitingForResponse` 仅 send/recovery settle probe，不驱动 Working / `isStreaming`；history merge **保留** `assistant:<runId>`（禁止换成 `msg-N` 导致 list key remount 跳变） |
+| D | Hermes 1:1 UI 只订 Engine（与 managed 同 hook 投影） | ✅ `useHermesEngineChatState`；**列表** ← `hermesEngineChat.messages`（非 portable）；`turnBusy` / `streamingMessageId` / `interactionBusy` ← Engine；history → `reconcileHermesHistoryIntoEngine`（authoritative + 保留尚未入库的 overlay/user 行；idle 才跑）；send → `ingestHermesUserPromptMessage`；adapter `started`/首包 `set` 锚点（避免 `append_without_anchor`）；投影共用 `activityMessageToChatMessage`。`waitingForResponse` 仅 settle probe；portable 仍走旧 history⊕store merge |
 
 ## 6. 明确不做
 
-- 在 UI 里维护两套 merge（Hermes history cache vs managed Engine）作为终态  
+- 在 UI 里维护两套 merge（Hermes history cache vs Engine overlay）作为列表终态 — Hermes 1:1 已切 Engine-primary  
 - 把 Swarm tmux 伪装成 managed child Session  
 - 用正文 fingerprint 当 React key

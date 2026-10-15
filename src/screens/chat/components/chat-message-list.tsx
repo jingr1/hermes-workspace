@@ -1298,6 +1298,22 @@ function ChatMessageListComponent({
         return messageId === streamingMessageId
       }),
   )
+  // After SSE settle, isStreaming may drop while Engine turnBusy is still
+  // true. Without this gate the footer Working host mounts under the settled
+  // bubble and then vanishes — a post-stream jump.
+  const hasAssistantInOpenTurn = (() => {
+    let lastUser = -1
+    for (let i = visibleEntries.length - 1; i >= 0; i -= 1) {
+      if (visibleEntries[i]?.message.role === 'user') {
+        lastUser = i
+        break
+      }
+    }
+    for (let i = lastUser + 1; i < visibleEntries.length; i += 1) {
+      if (visibleEntries[i]?.message.role === 'assistant') return true
+    }
+    return false
+  })()
 
   // Single host: turnBusy mounts TurnActivityHost (even with empty content).
   // Compacting / research still use the bottom status area.
@@ -1573,14 +1589,36 @@ function ChatMessageListComponent({
     return () => window.clearInterval(timer)
   }, [])
 
-  // Simple: scroll to bottom when messages change and we should stick
+  // Auto-scroll only when live content *grows*. Settle clears streamingText /
+  // thinking / toolCalls / lifecycle — those shrinks used to re-fire
+  // scrollToBottom and felt like a post-stream page refresh.
+  const scrollGrowthRef = useRef({
+    text: 0,
+    thinking: 0,
+    tools: 0,
+    messages: 0,
+    lifecycle: 0,
+  })
   useEffect(() => {
     if (loading) return
     let frameId: number | null = null
     const sessionChanged = prevSessionKeyRef.current !== sessionKey
     prevSessionKeyRef.current = sessionKey
 
-    // Always scroll on session change (instant)
+    const text = (streamingText ?? '').length
+    const thinking = (streamingThinking ?? '').length
+    const tools = activeToolCalls.length
+    const messages = visibleEntries.length
+    const lifecycle = lifecycleEvents.length
+    const prev = scrollGrowthRef.current
+    const grew =
+      text > prev.text ||
+      thinking > prev.thinking ||
+      tools > prev.tools ||
+      messages > prev.messages ||
+      lifecycle > prev.lifecycle
+    scrollGrowthRef.current = { text, thinking, tools, messages, lifecycle }
+
     if (sessionChanged) {
       stickToBottomRef.current = true
       frameId = window.requestAnimationFrame(() => scrollToBottom('auto'))
@@ -1589,9 +1627,8 @@ function ChatMessageListComponent({
       }
     }
 
-    // Scroll only while content is growing. Do NOT depend on `isStreaming` —
-    // settle flips that bit with no new text and was forcing a re-scroll
-    // that felt like a page jump after the last token.
+    if (!grew) return
+
     if (isNearBottomRef.current) {
       frameId = window.requestAnimationFrame(() => scrollToBottom('auto'))
     }
@@ -1608,7 +1645,6 @@ function ChatMessageListComponent({
     streamingThinking,
     activeToolCalls.length,
     lifecycleEvents.length,
-    contentStyle,
   ])
 
   useEffect(() => {
@@ -2091,8 +2127,12 @@ function ChatMessageListComponent({
             )}
             {/* Fallback only before beginStreamingTurn inserts the durable row.
                 Busy bit = turnBusy only — never OR isStreaming. Once the live
-                row exists, Working is inside MessageItem (same avatar). */}
-            {turnBusy && !hideActivityCards && !hasLiveStreamingRow ? (
+                row (or any open-turn assistant) exists, do not remount Working
+                in the footer — that flash after SSE settle jumps the transcript. */}
+            {turnBusy &&
+            !hideActivityCards &&
+            !hasLiveStreamingRow &&
+            !hasAssistantInOpenTurn ? (
               <div className="flex flex-col gap-1 py-1.5 px-1 animate-in fade-in duration-300 md:gap-1.5 md:py-2">
                 <TurnActivityHost
                   turnBusy

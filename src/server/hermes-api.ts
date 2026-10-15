@@ -353,6 +353,29 @@ export async function stopRun(
   return hermesPost(`/v1/runs/${encodeURIComponent(trimmedRunId)}/stop`, {})
 }
 
+/**
+ * Resolve a pending dangerous-command / trust-gate approval for a live run.
+ * Gateway contract: POST /v1/runs/{run_id}/approval
+ * body `{ choice: once|session|always|deny, approval_id? }`
+ */
+export async function respondRunApproval(
+  runId: string,
+  input: { choice: string; approvalId?: string | null },
+): Promise<Record<string, unknown>> {
+  const trimmedRunId = runId.trim()
+  const choice = String(input.choice || '').trim().toLowerCase()
+  if (!trimmedRunId) throw new Error('runId required')
+  if (!choice) throw new Error('choice required')
+  const approvalId = String(input.approvalId || '').trim()
+  return hermesPost(
+    `/v1/runs/${encodeURIComponent(trimmedRunId)}/approval`,
+    {
+      choice,
+      ...(approvalId ? { approval_id: approvalId } : {}),
+    },
+  )
+}
+
 // ── Conversion helpers (Claude → Chat format) ─────────────────
 
 /** Convert a HermesMessage to the ChatMessage format the frontend expects */

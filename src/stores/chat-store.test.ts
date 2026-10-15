@@ -64,6 +64,7 @@ describe('streaming chunk thinking separation', () => {
     useChatStore.getState().processEvent({
       type: 'chunk',
       sessionKey,
+      runId: 'run-think-leak',
       text: '<think>I should inspect the files</think>\nHere is the fix.',
       fullReplace: true,
     })
@@ -276,6 +277,7 @@ describe('thinking + visible content through the stream store', () => {
       type: 'thinking',
       text: 'Let me inspect the configuration first.',
       sessionKey,
+      runId: 'run-e2e-1',
       transport: 'send-stream',
     })
     store.processEvent({
@@ -283,6 +285,7 @@ describe('thinking + visible content through the stream store', () => {
       text: 'I checked the config. Here is the answer.',
       fullReplace: true,
       sessionKey,
+      runId: 'run-e2e-1',
       transport: 'send-stream',
     })
 
@@ -300,6 +303,7 @@ describe('thinking + visible content through the stream store', () => {
       type: 'thinking',
       text: 'reasoning trace',
       sessionKey,
+      runId: 'run-e2e-2',
       transport: 'send-stream',
     })
     store.processEvent({
@@ -307,12 +311,14 @@ describe('thinking + visible content through the stream store', () => {
       text: 'final answer text',
       fullReplace: true,
       sessionKey,
+      runId: 'run-e2e-2',
       transport: 'send-stream',
     })
     store.processEvent({
       type: 'done',
       state: 'complete',
       sessionKey,
+      runId: 'run-e2e-2',
       transport: 'send-stream',
     })
 
@@ -393,6 +399,7 @@ describe('thinking + visible content through the stream store', () => {
       type: 'thinking',
       text: 'live reasoning before tools',
       sessionKey,
+      runId: 'run-done-think',
       transport: 'send-stream',
     })
     store.processEvent({
@@ -401,12 +408,14 @@ describe('thinking + visible content through the stream store', () => {
       name: 'read_file',
       toolCallId: 'tc-1',
       sessionKey,
+      runId: 'run-done-think',
       transport: 'send-stream',
     })
     store.processEvent({
       type: 'done',
       state: 'complete',
       sessionKey,
+      runId: 'run-done-think',
       transport: 'send-stream',
       message: {
         role: 'assistant',
@@ -524,8 +533,60 @@ describe('thinking + visible content through the stream store', () => {
     )
   })
 
-  it('empty done after beginStreamingTurn removes the seeded write-through host', () => {
-    const sessionKey = 'e2e-empty-done-clears-seed'
+  it('beginStreamingTurn keeps prior settled write-through (no history remount)', () => {
+    const sessionKey = 'e2e-keep-settled-on-next-turn'
+    resetStore(sessionKey)
+    const store = useChatStore.getState()
+
+    store.beginStreamingTurn({
+      sessionKey,
+      messageId: 'assistant:run-prev',
+      runId: 'run-prev',
+    })
+    store.processEvent({
+      type: 'chunk',
+      text: 'first reply',
+      fullReplace: true,
+      sessionKey,
+      runId: 'run-prev',
+      transport: 'send-stream',
+    })
+    store.processEvent({
+      type: 'done',
+      state: 'complete',
+      sessionKey,
+      runId: 'run-prev',
+      transport: 'send-stream',
+    })
+
+    store.beginStreamingTurn({
+      sessionKey,
+      messageId: 'assistant:pending:next-turn',
+    })
+
+    const assistants = store
+      .getRealtimeMessages(sessionKey)
+      .filter((message) => message.role === 'assistant')
+    expect(
+      assistants.some(
+        (message) => (message as { id?: string }).id === 'assistant:run-prev',
+      ),
+    ).toBe(true)
+    expect(
+      assistants.some(
+        (message) =>
+          (message as { id?: string }).id === 'assistant:pending:next-turn',
+      ),
+    ).toBe(true)
+    expect(
+      assistants.find(
+        (message) => (message as { id?: string }).id === 'assistant:run-prev',
+      )?.__streamingStatus,
+    ).toBe('complete')
+  })
+
+  it('empty done after beginStreamingTurn keeps the seeded host for finishStream', () => {
+    const sessionKey = 'e2e-empty-done-keeps-seed'
     resetStore(sessionKey)
     const store = useChatStore.getState()
     const messageId = `assistant:pending:${sessionKey}:turn-empty`
@@ -544,7 +605,30 @@ describe('thinking + visible content through the stream store', () => {
       transport: 'send-stream',
     })
 
-    expect(store.getRealtimeMessages(sessionKey)).toEqual([])
+    // Premature empty done must leave Working anchored; finishStream settles next.
+    expect(
+      store
+        .getRealtimeMessages(sessionKey)
+        .some((message) => (message as { id?: string }).id === messageId),
+    ).toBe(true)
+    expect(store.getStreamingState(sessionKey)?.messageId).toBe(messageId)
+
+    store.processEvent({
+      type: 'done',
+      state: 'complete',
+      sessionKey,
+      transport: 'send-stream',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'text', text: '你好' }],
+      },
+    })
+
+    const assistant = store
+      .getRealtimeMessages(sessionKey)
+      .find((message) => message.role === 'assistant')
+    const content = assistant?.content as Array<{ type: string; text?: string }>
+    expect(content.find((part) => part.type === 'text')?.text).toBe('你好')
     expect(store.getStreamingState(sessionKey)).toBeNull()
   })
 })

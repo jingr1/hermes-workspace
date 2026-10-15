@@ -449,11 +449,11 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
         ...(payload as Record<string, unknown>),
       }
 
-      // Single settle: SSE `done` already called processStoreEvent. Only settle
-      // here when the stream ended without a prior done (e.g. `complete` event
-      // or waitForHermesSendCompleted). Never re-upsert after streamingState
-      // was cleared — that minted blank assistant rows.
+      // Prefer live streamingState. If a premature empty SSE `done` cleared it
+      // before refs were flushed, still settle when we have final text/thinking
+      // so Working is not replaced by a blank gap.
       const stillLive = useChatStore.getState().getStreamingState(sessionKey)
+      const hasFinalContent = Boolean(finalText.trim() || thinking.trim())
       if (stillLive) {
         processStoreEvent({
           type: 'done',
@@ -463,6 +463,26 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
           sessionKey,
           transport: 'send-stream',
         })
+      } else if (hasFinalContent) {
+        const settleId =
+          durableId ||
+          (completedRunId
+            ? assistantMessageIdForRun(completedRunId, sessionKey)
+            : null)
+        if (settleId) {
+          processStoreEvent({
+            type: 'done',
+            state: 'complete',
+            message: {
+              ...message,
+              id: settleId,
+              messageId: settleId,
+            },
+            runId: completedRunId ?? undefined,
+            sessionKey,
+            transport: 'send-stream',
+          })
+        }
       }
 
       onComplete?.(message)
@@ -974,6 +994,13 @@ export function useStreamingMessage(options: UseStreamingMessageOptions = {}) {
 
       try {
         runtime.ensureSessionHydrated(params.sessionKey)
+        // Engine-primary list: user bubble must exist before SSE (Hermes does
+        // not echo user prompts on the stream).
+        runtime.ingestUserPrompt({
+          agentSessionId: params.sessionKey,
+          clientSubmitId,
+          text: params.message,
+        })
         runtime.setPendingSendOptions(clientSubmitId, {
           friendlyId: params.friendlyId,
           history: params.history,

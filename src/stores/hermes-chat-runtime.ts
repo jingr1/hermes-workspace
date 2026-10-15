@@ -18,10 +18,13 @@ import {
   createHermesCommandPort,
   createHermesSessionSkeleton,
   hydrateHermesAgentEngine,
+  ingestHermesUserPromptMessage,
+  reconcileHermesHistoryIntoEngine,
   selectHermesChatState,
 } from '@/screens/chat/lib/hermes-agent-engine'
 import type { AgoraxRunMapping } from '@/server/agent-runtime/hermes-native-bridge'
 import type { HermesSseEventName } from '@/lib/hermes-activity-adapter'
+import type { ChatMessage } from '@/screens/chat/types'
 
 export type HermesPendingSendOptions = {
   friendlyId?: string
@@ -40,6 +43,17 @@ export type HermesChatRuntime = {
   getMapping: (agentSessionId: string) => Promise<AgoraxRunMapping | null>
   putMapping: (mapping: AgoraxRunMapping) => Promise<AgoraxRunMapping>
   ensureSessionHydrated: (agentSessionId: string) => void
+  /** Idle-path history → Engine (skip while turnBusy / submitting). */
+  reconcileHistory: (
+    agentSessionId: string,
+    historyMessages: readonly ChatMessage[],
+    historyRevision?: number,
+  ) => number
+  ingestUserPrompt: (input: {
+    agentSessionId: string
+    clientSubmitId: string
+    text: string
+  }) => void
   setPendingSendOptions: (
     clientSubmitId: string,
     options: HermesPendingSendOptions,
@@ -284,6 +298,35 @@ export function getHermesChatRuntime(
         hermesRunId: mappingCache.get(sid)?.hermesRunId ?? null,
         bridgeKind: 'hermes-native',
         updatedAtUnixMs: Date.now(),
+      })
+    },
+    reconcileHistory(agentSessionId, historyMessages, historyRevision) {
+      const sid = agentSessionId.trim()
+      if (!sid) return 0
+      const snap = engine.getSnapshot()
+      if (selectSessionIsSubmitting(snap, sid)) return 0
+      const busy = selectHermesChatState(snap, sid).turnBusy
+      if (busy) return 0
+      const projected =
+        coordinator.project(projectSnapshot(snap)).sessionMessagesById[sid] ??
+        []
+      return reconcileHermesHistoryIntoEngine({
+        engine,
+        coordinator,
+        workspaceId: id,
+        agentSessionId: sid,
+        historyMessages,
+        historyRevision,
+        projectedMessages: projected,
+      })
+    },
+    ingestUserPrompt(input) {
+      ingestHermesUserPromptMessage({
+        engine,
+        workspaceId: id,
+        agentSessionId: input.agentSessionId,
+        clientSubmitId: input.clientSubmitId,
+        text: input.text,
       })
     },
     setPendingSendOptions(clientSubmitId, options) {

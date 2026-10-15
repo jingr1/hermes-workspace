@@ -10,12 +10,16 @@ import {
   createAgentSessionEngine,
   normalizeAgentActivitySession,
   selectEngineActiveTurn,
+  selectEngineInteractionsForSession,
   selectEngineLatestTurn,
   selectEngineSession,
   selectSessionMessages,
+  type AgentActivityDurableMessage,
+  type AgentActivityInteraction,
   type AgentActivityMessage,
   type AgentActivitySendInputResult,
   type AgentActivitySession,
+  type AgentActivitySubmitInteractiveResult,
   type AgentActivityTurn,
   type AgentActivityTurnCancelResponse,
   type AgentActivityUpdatedEvent,
@@ -24,12 +28,19 @@ import {
   type AgentSessionEngineState,
   type EngineTypedCommandPort,
 } from '@agorax/agent-activity-core'
+import { hermesHistoryMessagesToActivity } from '@/lib/hermes-history-to-activity'
+import { activityMessageToChatMessage } from './managed-agent-engine'
 import {
   createHermesActivityAdapterState,
   hermesSseToActivityEvents,
   type HermesActivityAdapterState,
   type HermesSseEventName,
 } from '@/lib/hermes-activity-adapter'
+import {
+  hermesApprovalRespondBody,
+  hermesApprovalToInteraction,
+  resolveHermesApprovalChoice,
+} from '@/lib/hermes-approval'
 import { readResolvedSessionHeaders } from '@/lib/send-stream-session-headers'
 import type { AgoraxRunMapping } from '@/server/agent-runtime/hermes-native-bridge'
 import type { ChatMessage } from '../types'
@@ -220,6 +231,8 @@ export function createHermesCommandPort(
   options: HermesCommandPortOptions,
 ): EngineTypedCommandPort {
   const profileName = options.profileName?.trim() || undefined
+  /** approvalId → gateway run id (survives until respond / turn settle). */
+  const approvalRunIds = new Map<string, string>()
 
   const persistMapping = async (
     partial: Partial<AgoraxRunMapping> & { agentSessionId: string },
@@ -384,6 +397,27 @@ export function createHermesCommandPort(
 
             for (const activityEvent of events) {
               options.onActivityEvent(activityEvent)
+              if (activityEvent.eventType === 'interaction_update') {
+                const interaction = (
+                  activityEvent.data as {
+                    interaction?: AgentActivityInteraction
+                  }
+                ).interaction
+                const approvalId = interaction?.requestId?.trim()
+                const metaRun =
+                  interaction?.metadata &&
+                  typeof interaction.metadata === 'object' &&
+                  typeof (interaction.metadata as { hermesRunId?: unknown })
+                    .hermesRunId === 'string'
+                    ? String(
+                        (interaction.metadata as { hermesRunId: string })
+                          .hermesRunId,
+                      ).trim()
+                    : ''
+                if (approvalId && metaRun) {
+                  approvalRunIds.set(approvalId, metaRun)
+                }
+              }
               if (activityEvent.eventType === 'turn_update') {
                 const turn = (
                   activityEvent.data as {
@@ -633,7 +667,115 @@ export function createHermesCommandPort(
       renameSession: unavailable('renameSession'),
       setSessionPinned: unavailable('setSessionPinned'),
       updateSessionSettings: unavailable('updateSessionSettings'),
-      respondToInteraction: unavailable('respondToInteraction'),
+      respondToInteraction: async (
+        input,
+        effectOptions,
+      ): Promise<AgentActivitySubmitInteractiveResult> => {
+        const agentSessionId = input.agentSessionId.trim()
+        const turnId = input.turnId.trim()
+        const requestId = input.requestId.trim()
+        if (!agentSessionId || !turnId || !requestId) {
+          throw new Error('Hermes approval response requires session/turn/request ids')
+        }
+
+        const choice = resolveHermesApprovalChoice({
+          optionId: input.optionId,
+          action: input.action,
+          payload: input.payload ?? null,
+        })
+        if (!choice) {
+          throw new Error(
+            'Hermes approval choice must be once|session|always|deny',
+          )
+        }
+
+        const mapping = await options.getMapping(agentSessionId)
+        const gatewaySessionId =
+          mapping?.gatewaySessionId?.trim() || agentSessionId
+        const hermesRunId =
+          approvalRunIds.get(requestId)?.trim() ||
+          mapping?.hermesRunId?.trim() ||
+          ''
+        if (!hermesRunId) {
+          throw new Error(
+            'No Hermes run id bound for this approval — wait for approval.request or retry',
+          )
+        }
+
+        const response = await fetch(
+          `/api/runs/${encodeURIComponent(hermesRunId)}/approval`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(
+              hermesApprovalRespondBody({
+                choice,
+                approvalId: requestId,
+                profileName,
+              }),
+            ),
+            signal: effectOptions?.signal ?? input.signal,
+          },
+        )
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => '')
+          throw new Error(
+            errorText ||
+              `Hermes approval relay failed: ${response.status}`,
+          )
+        }
+
+        const now = Date.now()
+        const answered = hermesApprovalToInteraction({
+          workspaceId: options.workspaceId,
+          agentSessionId,
+          turnId,
+          approval: {
+            approvalId: requestId,
+            runId: hermesRunId,
+            tool: 'terminal',
+            command: '',
+            description: 'Approval resolved',
+            patternKey: '',
+            patternKeys: [],
+            riskLevel: 'high',
+            choices: [choice],
+            allowPermanent: choice === 'always',
+            rawApprovalIdPresent: true,
+          },
+          status: 'answered',
+          choice,
+          nowUnixMs: now,
+        })
+        const activityEvent: AgentActivityUpdatedEvent = {
+          workspaceId: options.workspaceId,
+          agentSessionId,
+          eventType: 'interaction_update',
+          data: {
+            workspaceId: options.workspaceId,
+            agentSessionId,
+            eventType: 'interaction_update',
+            occurredAtUnixMs: now,
+            interaction: answered,
+          },
+        }
+        options.onActivityEvent(activityEvent)
+        approvalRunIds.delete(requestId)
+
+        const session = createHermesSessionSkeleton({
+          workspaceId: options.workspaceId,
+          agentSessionId,
+          providerSessionId: gatewaySessionId,
+          nowUnixMs: now,
+        })
+        return {
+          session: {
+            ...session,
+            pendingInteractions: [],
+            latestTurnInteractions: [answered],
+          },
+        }
+      },
     },
     execute: unavailable('execute'),
   }
@@ -658,6 +800,172 @@ export function hydrateHermesAgentEngine(
   })
 }
 
+export type HermesHistoryReconcileCoordinator = {
+  reconcileAuthoritativeHistory: (
+    agentSessionId: string,
+    messages: readonly AgentActivityDurableMessage[],
+    turns: readonly AgentActivityTurn[],
+  ) => void
+}
+
+/**
+ * Authoritative history → Engine message bucket + overlay (managed homology).
+ * Call when history is idle (not mid-turn) so replace cannot wipe live rows.
+ */
+export function reconcileHermesHistoryIntoEngine(input: {
+  engine: AgentSessionEngine
+  coordinator: HermesHistoryReconcileCoordinator
+  workspaceId: string
+  agentSessionId: string
+  historyMessages: readonly ChatMessage[]
+  historyRevision?: number
+  /**
+   * Overlay projection (preferred). Live assistant deltas live here, not in
+   * the Engine bucket — stale history must not wipe them.
+   */
+  projectedMessages?: readonly AgentActivityMessage[]
+}): number {
+  const agentSessionId = input.agentSessionId.trim()
+  const workspaceId = input.workspaceId.trim() || 'default'
+  if (!agentSessionId) return 0
+
+  const existing = selectEngineSession(input.engine.getSnapshot(), agentSessionId)
+  if (!existing) {
+    hydrateHermesAgentEngine(
+      input.engine,
+      createHermesSessionSkeleton({
+        workspaceId,
+        agentSessionId,
+      }),
+    )
+  }
+  const live = selectEngineSession(input.engine.getSnapshot(), agentSessionId)
+  // historyAuthoritative requires iterable interaction arrays on session.
+  const session = normalizeAgentActivitySession({
+    ...(live ??
+      createHermesSessionSkeleton({ workspaceId, agentSessionId })),
+    latestTurnInteractions: live?.latestTurnInteractions ?? [],
+    pendingInteractions: live?.pendingInteractions ?? [],
+  })
+
+  const historyMapped = hermesHistoryMessagesToActivity({
+    workspaceId,
+    agentSessionId,
+    messages: input.historyMessages,
+  })
+  const current =
+    input.projectedMessages ??
+    selectSessionMessages(input.engine.getSnapshot(), agentSessionId)
+  // History is the base; retain Engine/overlay rows history has not caught yet
+  // (live assistant deltas + user:clientSubmitId before gateway ids land).
+  const historyIds = new Set(historyMapped.map((row) => row.messageId))
+  const historyUserTexts = new Set(
+    historyMapped
+      .filter((row) => row.role === 'user')
+      .map((row) =>
+        typeof row.payload.text === 'string' ? row.payload.text.trim() : '',
+      )
+      .filter(Boolean),
+  )
+  const retained = current.filter((row) => {
+    if (historyIds.has(row.messageId)) return false
+    if (row.role === 'user') {
+      const text =
+        typeof row.payload.text === 'string' ? row.payload.text.trim() : ''
+      if (text && historyUserTexts.has(text)) return false
+    }
+    return true
+  })
+  const messages: AgentActivityDurableMessage[] = [
+    ...historyMapped,
+    ...retained.map((row, index) => ({
+      workspaceId,
+      agentSessionId,
+      messageId: row.messageId,
+      version: historyMapped.length + index + 1,
+      sequence: historyMapped.length + index + 1,
+      turnId: row.turnId,
+      role: row.role,
+      kind: row.kind,
+      status: row.status ?? null,
+      semantics: row.semantics,
+      payload: { ...row.payload },
+      occurredAtUnixMs: row.occurredAtUnixMs,
+    })),
+  ].map((row, index) => ({
+    ...row,
+    version: index + 1,
+    sequence: index + 1,
+  }))
+  const turns = [
+    ...(session.activeTurn ? [session.activeTurn] : []),
+    ...(session.latestTurn &&
+    session.latestTurn.turnId !== session.activeTurn?.turnId
+      ? [session.latestTurn]
+      : []),
+  ]
+  const historyRevision =
+    input.historyRevision ??
+    Math.max(1, messages.reduce((max, row) => Math.max(max, row.version), 0))
+
+  input.engine.dispatch({
+    type: 'session/historyAuthoritativeSnapshotReceived',
+    workspaceId,
+    agentSessionId,
+    session,
+    childSessions: [],
+    turns,
+    messages,
+    historyRevision,
+  })
+  input.coordinator.reconcileAuthoritativeHistory(
+    agentSessionId,
+    messages,
+    turns,
+  )
+  return messages.length
+}
+
+/** Optimistic user row before gateway history echoes the prompt. */
+export function ingestHermesUserPromptMessage(input: {
+  engine: AgentSessionEngine
+  workspaceId: string
+  agentSessionId: string
+  clientSubmitId: string
+  text: string
+  occurredAtUnixMs?: number
+}): void {
+  const agentSessionId = input.agentSessionId.trim()
+  const clientSubmitId = input.clientSubmitId.trim()
+  const text = input.text.trim()
+  if (!agentSessionId || !clientSubmitId || !text) return
+  const workspaceId = input.workspaceId.trim() || 'default'
+  if (!selectEngineSession(input.engine.getSnapshot(), agentSessionId)) {
+    hydrateHermesAgentEngine(
+      input.engine,
+      createHermesSessionSkeleton({ workspaceId, agentSessionId }),
+    )
+  }
+  const occurredAtUnixMs = input.occurredAtUnixMs ?? Date.now()
+  const message: AgentActivityDurableMessage = {
+    workspaceId,
+    agentSessionId,
+    messageId: `user:${clientSubmitId}`,
+    version: occurredAtUnixMs,
+    sequence: occurredAtUnixMs,
+    turnId: `turn-${clientSubmitId}`,
+    role: 'user',
+    kind: 'text',
+    status: null,
+    payload: { text, content: text, clientSubmitId, displayPrompt: text },
+    occurredAtUnixMs,
+  }
+  input.engine.dispatch({
+    type: 'message/snapshotReceived',
+    messages: [message],
+  })
+}
+
 /**
  * Hermes chat VM — mirrors selectManagedAgentChatState for busy / open-turn.
  */
@@ -672,9 +980,6 @@ export function selectHermesChatState(
   const sessionMessages =
     options?.sessionMessages ??
     (agentSessionId ? selectSessionMessages(state, agentSessionId) : [])
-  const messages = sessionMessages.map((message) =>
-    hermesActivityMessageToChat(message),
-  )
   const latestTurn = selectEngineLatestTurn(state, agentSessionId)
   const projectedActiveTurn = selectEngineActiveTurn(state, agentSessionId)
   const activeTurn =
@@ -684,11 +989,44 @@ export function selectHermesChatState(
       ? null
       : projectedActiveTurn
   const turnActive = activeTurn !== null && activeTurn.phase !== 'settled'
+  const streamingMessageId = turnActive
+    ? selectHermesStreamingMessageId(sessionMessages, activeTurn.turnId)
+    : null
+  const messages = sessionMessages.map((message) => {
+    const chat = activityMessageToChatMessage({
+      messageId: message.messageId,
+      role: message.role,
+      kind: message.kind,
+      payload: message.payload,
+      occurredAtUnixMs: message.occurredAtUnixMs,
+      status: message.status,
+      semantics: message.semantics ?? null,
+    })
+    // List chrome keys off messageId + streamingMessageId prop; stamp both
+    // id fields and live status so MessageItem matches managed.
+    const stamped: ChatMessage = {
+      ...chat,
+      id: message.messageId,
+      messageId: message.messageId,
+      ...(streamingMessageId && message.messageId === streamingMessageId
+        ? { __streamingStatus: 'streaming' as const }
+        : message.status === 'streaming'
+          ? { __streamingStatus: 'streaming' as const }
+          : {}),
+    }
+    return stamped
+  })
   const terminalTurn = activeTurn ?? latestTurn
   const terminalError =
     terminalTurn?.phase === 'settled' && terminalTurn.outcome === 'failed'
       ? terminalTurn.error?.message ?? null
       : null
+
+  const interactions = agentSessionId
+    ? selectEngineInteractionsForSession(state, agentSessionId).filter(
+        (interaction) => interaction.status === 'pending',
+      )
+    : []
 
   return {
     messages,
@@ -700,12 +1038,15 @@ export function selectHermesChatState(
     isStreaming: turnActive,
     /** Unique busy bit for TurnActivityHost / interactionBusy. */
     turnBusy: turnActive || options?.isSubmitting === true,
-    streamingMessageId: turnActive
-      ? selectHermesStreamingMessageId(sessionMessages, activeTurn.turnId)
-      : null,
+    streamingMessageId,
     error: terminalError,
+    /** Pending Hermes gateway approvals for ManagedAgentInteractionPanel. */
+    interactions,
   }
 }
+
+/** Re-export for callers that need to join response settlement state. */
+export type { AgentActivityInteraction }
 
 export function selectHermesStreamingMessageId(
   sessionMessages: readonly AgentActivityMessage[],
@@ -721,28 +1062,3 @@ export function selectHermesStreamingMessageId(
   return null
 }
 
-function hermesActivityMessageToChat(
-  message: AgentActivityMessage,
-): ChatMessage {
-  if (message.kind === 'reasoning' || message.role === 'assistant_thinking') {
-    const text =
-      typeof message.payload.text === 'string' ? message.payload.text : ''
-    return {
-      id: message.messageId,
-      role: 'assistant',
-      content: text
-        ? [{ type: 'thinking' as const, thinking: text }]
-        : [],
-      timestamp: message.occurredAtUnixMs,
-    }
-  }
-  const text =
-    typeof message.payload.text === 'string' ? message.payload.text : ''
-  return {
-    id: message.messageId,
-    role: message.role === 'user' ? 'user' : 'assistant',
-    content: [{ type: 'text', text }],
-    timestamp: message.occurredAtUnixMs,
-    ...(message.status === 'failed' ? { isError: true } : {}),
-  }
-}

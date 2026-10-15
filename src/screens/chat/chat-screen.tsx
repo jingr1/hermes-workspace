@@ -33,6 +33,7 @@ import {
   shouldSettleWaitingFromActiveRun,
 } from './chat-screen-utils'
 import { useHermesEngineChatState } from './hooks/use-hermes-engine-chat'
+import { ManagedAgentInteractionPanel } from './components/managed-agent-interaction-panel'
 import { getHermesChatRuntime } from '@/stores/hermes-chat-runtime'
 import {
   findLastUserMessage,
@@ -1678,14 +1679,22 @@ export function ChatScreen({
     workspaceProfileName,
   ])
 
-  // Phase D: open-turn busy only from Engine (+ submitting overlay).
+  // Phase D: list + busy from Engine (+ submitting overlay). History reconciles
+  // into Engine when idle — UI no longer dual-merges history ⊕ chat-store.
   // waitingForResponse / pendingGeneration are recovery-only — never UI busy.
-  const { chatState: hermesEngineChat } = useHermesEngineChatState({
+  const {
+    chatState: hermesEngineChat,
+    interactionResponses: hermesInteractionResponses,
+    respondToInteraction: respondHermesInteraction,
+  } = useHermesEngineChatState({
     workspaceId: workspaceProfileName || activeProfileName || 'default',
     agentSessionId: resolvedSessionKey,
     profileName: workspaceProfileName || activeProfileName,
     isSubmitting: sending,
+    historyMessages,
+    historyReady: historyQuery.isSuccess || historyMessages.length > 0,
   })
+  const hermesPendingInteractions = hermesEngineChat.interactions
   const hermesTurnBusy = hermesEngineChat.turnBusy
   // Composer / queue / edit: Engine busy + local AbortController + sending.
   // waitingForResponse stays recovery-only.
@@ -1693,15 +1702,15 @@ export function ChatScreen({
   // Working / TurnActivityHost: Engine only (already includes isSubmitting).
   // Do not OR local/store streaming — that was a second busy skin.
   const listTurnBusy = hermesTurnBusy
-  // Fold / streamingText only — not busy authority.
+  // Portable keeps local Abort streaming; Hermes 1:1 chrome follows Engine.
   const activeIsRealtimeStreaming = isPortableMode
     ? localIsStreaming
-    : hermesTurnBusy || localIsStreaming || isRealtimeStreaming
+    : hermesEngineChat.isStreaming || localIsStreaming
   const activeRealtimeStreamingText = isPortableMode
     ? localStreamingText
     : realtimeStreamingText
   // Sticky text only while the turn is live — bridges empty tool-phase frames.
-  // After settle, MessageItem reads write-through content (no completedStreaming
+  // After settle, MessageItem reads Engine content (no completedStreaming
   // overlay handoff).
   const stickyStreamingTextRef = useRef<{ runId: string | null; text: string }>(
     {
@@ -1720,9 +1729,26 @@ export function ChatScreen({
     ? activeRealtimeStreamingText || stickyStreamingTextRef.current.text
     : ''
 
-  // Use realtime-merged messages for display (SSE + history)
-  // Re-apply display filter to realtime messages
+  // Hermes 1:1: Engine projection is the list. Portable keeps legacy merge.
   const finalDisplayMessages = useMemo(() => {
+    if (!isPortableMode) {
+      return hermesEngineChat.messages
+        .filter((msg) => {
+          if (msg.role === 'user') {
+            const text = stripQueuedWrapper(textFromMessage(msg))
+            if (text.startsWith('A subagent task')) return false
+            return true
+          }
+          if (msg.role === 'assistant' || msg.role === 'system') {
+            return (
+              msg.role === 'system' || assistantHasVisibleHostContent(msg)
+            )
+          }
+          return false
+        })
+        .map((msg) => stripQueuedWrapperFromUserMessage(msg))
+    }
+
     const filtered = realtimeMessages.filter((msg) => {
       if (msg.role === 'user') {
         const text = stripQueuedWrapper(textFromMessage(msg))
@@ -1785,8 +1811,6 @@ export function ChatScreen({
           existingTextMatch &&
           shouldCollapseTextDuplicate(existingTextMatch, msg)
         ) {
-          // Prefer the live durable host. Dropping it left history text in
-          // place, then the streaming branch appended a second bubble.
           const preferred = preferLiveAssistantOnCollision(
             existingTextMatch,
             msg,
@@ -1813,15 +1837,6 @@ export function ChatScreen({
       .filter((msg) => dedupedSet.has(msg))
       .map((msg) => stripQueuedWrapperFromUserMessage(msg))
 
-    // Tutti contract: chat-store write-through already upserts one durable
-    // assistant row (`assistant:<runId>`). Do not inject a second
-    // `streaming-current` placeholder — that was the Hermes/managed fork.
-    //
-    // Keep folding for the open turn *after* settle too. Gating liveId on
-    // `__streamingStatus === 'streaming'` dropped the fold the instant done
-    // flipped the row to `complete`, re-expanding orphans / reshaping the
-    // host (transcript jump). Prefer streamingMessageId, else the durable
-    // assistant host after the latest user.
     let lastUserIndex = -1
     for (let i = deduped.length - 1; i >= 0; i -= 1) {
       if (deduped[i]?.role === 'user') {
@@ -1846,7 +1861,6 @@ export function ChatScreen({
             ''
           if (!id) continue
           if (row.__streamingStatus === 'streaming') return id
-          // Settled write-through host for this turn — keep folding.
           if (id.startsWith('assistant:')) return id
         }
         return null
@@ -1867,6 +1881,8 @@ export function ChatScreen({
   }, [
     activeToolCalls,
     activeIsRealtimeStreaming,
+    hermesEngineChat.messages,
+    isPortableMode,
     realtimeMessages,
     realtimeStreamingMessageId,
     realtimeStreamingThinking,
@@ -1874,30 +1890,30 @@ export function ChatScreen({
     streamingRunId,
   ])
 
-  // Streaming chrome follows live Engine/SSE/local Abort only — never the
-  // waiting recovery latch (that used to keep isStreaming after settle).
+  // Hermes 1:1: Engine streamingMessageId. Portable: local Abort buffer.
   const derivedStreamingInfo = useMemo(() => {
+    if (!isPortableMode) {
+      return {
+        isStreaming: hermesEngineChat.isStreaming || localIsStreaming,
+        streamingMessageId:
+          hermesEngineChat.streamingMessageId ||
+          realtimeStreamingMessageId ||
+          null,
+      }
+    }
     if (!activeIsRealtimeStreaming) {
       return { isStreaming: false, streamingMessageId: null as string | null }
     }
-    const id = isPortableMode
-      ? localStreamingMessageId
-      : realtimeStreamingMessageId ||
-        (() => {
-          const last = finalDisplayMessages[finalDisplayMessages.length - 1]
-          if (last?.role !== 'assistant') return null
-          return (
-            (last as any).messageId ||
-            (last as any).id ||
-            (last as any).__optimisticId ||
-            null
-          )
-        })()
-    return { isStreaming: true, streamingMessageId: id }
+    return {
+      isStreaming: true,
+      streamingMessageId: localStreamingMessageId,
+    }
   }, [
-    finalDisplayMessages,
     activeIsRealtimeStreaming,
+    hermesEngineChat.isStreaming,
+    hermesEngineChat.streamingMessageId,
     isPortableMode,
+    localIsStreaming,
     localStreamingMessageId,
     realtimeStreamingMessageId,
   ])
@@ -4321,6 +4337,13 @@ export function ChatScreen({
             aboveComposer={
               showComposer ? (
                 <>
+                  {hermesChrome && hermesPendingInteractions.length > 0 ? (
+                    <ManagedAgentInteractionPanel
+                      interactions={hermesPendingInteractions}
+                      responses={hermesInteractionResponses}
+                      onRespond={respondHermesInteraction}
+                    />
+                  ) : null}
                   {btwCard ? (
                     <div className="px-3 pt-2 md:px-4">
                       <SideQuestionCard

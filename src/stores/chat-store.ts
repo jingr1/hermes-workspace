@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import {
+  assistantHasVisibleHostContent,
   assistantHasWorkingSurface,
   mergeAssistantThinkingFromSource,
   normalizeToolCallArgs,
@@ -1532,22 +1533,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
             persistRecoveryMessage(sessionKey, settled)
           }
         } else if (settledStreaming.messageId) {
-          // beginStreamingTurn seeds an empty write-through host. Empty settle
-          // must remove it — leaving `__streamingStatus:'streaming'` ghosts the
-          // empty-gap avatar with MessageItem still display:none.
-          const seededId = settledStreaming.messageId
-          const existing = state.realtimeMessages.get(sessionKey) ?? []
-          const nextRows = existing.filter(
-            (message) => getMessageId(message) !== seededId,
-          )
-          if (nextRows.length !== existing.length) {
-            realtimeMessages = new Map(state.realtimeMessages)
-            if (nextRows.length === 0) {
-              realtimeMessages.delete(sessionKey)
-            } else {
-              realtimeMessages.set(sessionKey, nextRows)
-            }
-          }
+          // Empty/premature `done` must NOT tear down the seeded host or
+          // streamingState. That wiped Working while Stop was still armed, and
+          // finishStream then saw stillLive=null so reply text in refs never
+          // settled — blank gap under the user bubble. Keep the live host;
+          // finishStream / a later content-bearing done / clearStreamingSession
+          // owns real teardown.
+          break
         }
 
         streamingMap.delete(sessionKey)
@@ -1611,13 +1603,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
     const streaming = new Map(get().streamingState)
     streaming.set(key, next)
-    // Drop the previous turn's write-through (already mirrored into history
-    // cache on settle). Keep only this turn's seeded host so we do not leak
-    // stale realtime rows forever after skipping clear-on-done.
-    const clearedRealtime = new Map(get().realtimeMessages)
-    clearedRealtime.set(key, [])
+    // Keep settled write-through rows. Wiping the whole realtime buffer forced
+    // turn N-1 back onto history merge (often msg-N + thinking reshape) the
+    // instant turn N started — first bubble remounted / Activity flashed.
+    // Only drop prior *live* hosts; clearStreamingSession still owns idle GC.
+    const existing = get().realtimeMessages.get(key) ?? []
+    const kept = existing.filter((message) => {
+      if (message.role !== 'assistant') return true
+      const status = (message as { __streamingStatus?: string }).__streamingStatus
+      if (status === 'streaming') return false
+      if (getMessageId(message) === id) return false
+      return assistantHasVisibleHostContent(message)
+    })
+    const seededRealtime = new Map(get().realtimeMessages)
+    seededRealtime.set(key, kept)
     const realtimeMessages = syncLiveAssistantRow(
-      clearedRealtime,
+      seededRealtime,
       key,
       next,
       { streaming: true, timestamp: now },

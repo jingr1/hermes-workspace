@@ -15,9 +15,22 @@ const ctx = {
 describe('hermesSseToActivityEvents', () => {
   it('maps started → turn running and allocates durable assistant id on chunks', () => {
     let state = createHermesActivityAdapterState()
-    ;({ state } = hermesSseToActivityEvents(ctx, state, 'started', {
+    const started = hermesSseToActivityEvents(ctx, state, 'started', {
       runId: 'run-9',
-    }))
+    })
+    state = started.state
+    expect(started.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ eventType: 'turn_update' }),
+        expect.objectContaining({
+          eventType: 'message_delta',
+          data: expect.objectContaining({
+            messageId: 'assistant:run-9',
+            content: { operation: 'set', value: '' },
+          }),
+        }),
+      ]),
+    )
     const mid = hermesSseToActivityEvents(ctx, state, 'chunk', {
       runId: 'run-9',
       text: 'Hello',
@@ -30,7 +43,7 @@ describe('hermesSseToActivityEvents', () => {
       data: {
         messageId: 'assistant:run-9',
         kind: 'text',
-        content: { operation: 'append_text', text: 'Hello' },
+        content: { operation: 'set', value: 'Hello' },
       },
     })
 
@@ -62,7 +75,7 @@ describe('hermesSseToActivityEvents', () => {
         messageId: 'assistant:run-t:thinking',
         role: 'assistant_thinking',
         kind: 'reasoning',
-        content: { operation: 'append_text', text: 'Plan A' },
+        content: { operation: 'set', value: 'Plan A' },
       },
     })
   })
@@ -100,6 +113,34 @@ describe('hermesSseToActivityEvents', () => {
           turnId: 'turn-1',
           phase: 'settled',
           outcome: 'completed',
+        },
+      },
+    })
+  })
+
+  it('maps approval SSE to a pending interaction_update', () => {
+    let state = createHermesActivityAdapterState()
+    ;({ state } = hermesSseToActivityEvents(ctx, state, 'started', {
+      runId: 'run-appr',
+    }))
+    const out = hermesSseToActivityEvents(ctx, state, 'approval', {
+      event: 'approval.request',
+      run_id: 'run-appr',
+      approval_id: 'appr-9',
+      command: 'echo hi',
+      description: 'Safe',
+      choices: ['once', 'deny'],
+    })
+    expect(out.events).toHaveLength(1)
+    expect(out.events[0]).toMatchObject({
+      eventType: 'interaction_update',
+      data: {
+        interaction: {
+          kind: 'approval',
+          status: 'pending',
+          requestId: 'appr-9',
+          turnId: 'turn-1',
+          metadata: { hermesRunId: 'run-appr' },
         },
       },
     })
